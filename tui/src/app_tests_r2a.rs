@@ -4573,3 +4573,442 @@ fn clock_clicks_insert_the_clicked_row_and_close_outside() {
     a.clock_mouse(left_click(60, 20));
     assert!(!a.visible.contains(Visible::CLOCK));
 }
+
+// ----- workspace files: hostile and failing cases ---------------------------------------------------
+
+#[test]
+fn workspace_open_refuses_a_root_folder_and_skips_files_outside_its_folders() {
+    let dir = tmp("ws-hostile");
+    std::fs::write(dir.join("in.txt"), "inside").unwrap();
+    std::fs::write(
+        dir.join("evil.vix-workspace"),
+        "folders = [\"/\"]\nfiles = []\n",
+    )
+    .unwrap();
+    let mut a = app_in(&dir);
+    a.workspace_open(&dir.join("evil.vix-workspace").to_string_lossy());
+    assert!(
+        a.messages
+            .items
+            .iter()
+            .any(|m| m.text == t!("msg.workspace_unsafe_root"))
+    );
+    assert_eq!(a.root, dir, "the root did not move");
+
+    let ws = format!(
+        "folders = [\"{}\"]\nfiles = [\"{}\", \"/etc/hosts\"]\n",
+        dir.display(),
+        dir.join("in.txt").display()
+    );
+    std::fs::write(dir.join("ok.vix-workspace"), ws).unwrap();
+    a.workspace_open(&dir.join("ok.vix-workspace").to_string_lossy());
+    assert!(a.editor.tabs.iter().any(|t| t.text() == "inside"));
+    assert!(
+        !a.editor
+            .tabs
+            .iter()
+            .any(|t| t.path.as_deref() == Some(Path::new("/etc/hosts")))
+    );
+    assert_eq!(
+        a.status,
+        t!(
+            "status.workspace_opened_skipped",
+            path = dir.join("ok.vix-workspace").display(),
+            count = 1
+        )
+        .to_string()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn workspace_open_with_no_folders_keeps_the_current_root() {
+    let dir = tmp("ws-empty");
+    std::fs::write(dir.join("e.vix-workspace"), "folders = []\nfiles = []\n").unwrap();
+    let mut a = app_in(&dir);
+    a.workspace_open(&dir.join("e.vix-workspace").to_string_lossy());
+    assert_eq!(a.workspace_folders, vec![dir.clone()]);
+    assert_eq!(
+        a.status,
+        t!(
+            "status.workspace_opened",
+            path = dir.join("e.vix-workspace").display()
+        )
+        .to_string()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn workspace_save_into_a_missing_directory_reports_the_failure() {
+    let dir = tmp("ws-save-fail");
+    let mut a = app_in(&dir);
+    a.workspace_save(&dir.join("no/such/dir/w.vix-workspace").to_string_lossy());
+    assert!(a.messages.items.iter().any(|m| {
+        m.text.starts_with(
+            t!("msg.save_failed", error = "")
+                .to_string()
+                .trim_end_matches(|c: char| !c.is_alphanumeric()),
+        )
+    }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- search error paths --------------------------------------------------------------------------------
+
+#[test]
+fn replace_commands_report_a_bad_regex_in_the_find_box() {
+    let mut a = app_with("abc\n");
+    a.run_action("edit.replace");
+    a.on_key(alt('r'));
+    type_str(&mut a, "(");
+    let bad = a.search.as_ref().unwrap().status.clone();
+    assert_ne!(bad, "");
+    a.search.as_mut().unwrap().status.clear();
+    a.replace_once();
+    assert_ne!(a.search.as_ref().unwrap().status, "");
+    a.search.as_mut().unwrap().status.clear();
+    a.replace_all();
+    assert_ne!(a.search.as_ref().unwrap().status, "");
+    assert_eq!(active_text(&a), "abc\n");
+    // An empty query is a no-op for both.
+    a.search.as_mut().unwrap().query.clear();
+    a.search.as_mut().unwrap().status.clear();
+    a.replace_once();
+    a.replace_all();
+    assert_eq!(a.search.as_ref().unwrap().status, "");
+}
+
+#[test]
+fn replace_all_replaces_with_capture_groups_in_regex_mode() {
+    let mut a = app_with("2024-05-06\n");
+    a.run_action("edit.replace");
+    a.on_key(alt('r'));
+    type_str(&mut a, r"(\d+)-(\d+)-(\d+)");
+    a.on_key(key(KeyCode::Tab));
+    type_str(&mut a, "$3/$2/$1");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(active_text(&a), "06/05/2024\n");
+}
+
+#[test]
+fn workspace_replace_reports_a_bad_regex_and_skips_unwritable_files() {
+    let (dir, mut a) = search_fixture("ws-badre");
+    start_replace(&mut a, "(", "x");
+    a.on_key(alt('r'));
+    a.workspace_search.as_mut().unwrap().query = "(".to_string();
+    a.workspace_replace_all();
+    assert!(a.workspace_search.as_ref().unwrap().status.len() > 3);
+    assert!(a.replace_confirm.is_none());
+    // A planned file whose directory vanished is reported, not written.
+    let ghost = dir.join("gone/dir/x.txt");
+    let changed = a.apply_file_plan(&[(ghost.clone(), "new".to_string())]);
+    assert!(changed.is_empty());
+    assert!(
+        a.messages
+            .items
+            .iter()
+            .any(|m| m.text.contains(&ghost.display().to_string()))
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- file-open races -------------------------------------------------------------------------------------
+
+#[test]
+fn a_binary_file_deleted_before_the_answer_reports_the_failure() {
+    let dir = tmp("binary-race");
+    let p = dir.join("blob.bin");
+    std::fs::write(&p, [0u8, 1, 2, 0xff, 0]).unwrap();
+    let mut a = app_in(&dir);
+    a.open_path(&p, false);
+    assert!(a.confirm.is_some());
+    std::fs::remove_file(&p).unwrap();
+    let before = a.messages.items.len();
+    a.on_key(key(KeyCode::Char('y')));
+    assert!(a.messages.items.len() > before);
+    assert!(a.edit_bytes_file.is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn byte_editor_save_to_a_vanished_directory_reports_the_failure() {
+    let (dir, mut a) = surface_app("surf-bytes-fail", "b.txt", "hello\n");
+    a.run_action("tools.edit_bytes");
+    a.edit_bytes_file = Some(dir.join("no/such/dir/out.bin"));
+    a.on_key(ctrl_s());
+    assert!(a.messages.items.iter().any(|m| {
+        m.text.starts_with(
+            t!("msg.save_failed", error = "")
+                .to_string()
+                .trim_end_matches(|c: char| !c.is_alphanumeric()),
+        )
+    }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn explorer_preview_respects_the_setting_and_reports_a_vanished_file() {
+    let dir = tmp("preview-edge");
+    std::fs::write(dir.join("a.txt"), "A").unwrap();
+    let mut a = app_in(&dir);
+    a.explorer.rebuild();
+    a.focus = Focus::Explorer;
+    a.settings.misc.preview_tabs = false;
+    let tabs = a.editor.tabs.len();
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.editor.tabs.len(), tabs, "previews are off");
+    a.settings.misc.preview_tabs = true;
+    let node = a.explorer.selected_node().unwrap().path.clone();
+    std::fs::remove_file(&node).unwrap();
+    let before = a.messages.items.len();
+    a.preview_selected();
+    assert!(a.messages.items.len() > before);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn explorer_paste_targets_the_selected_directory_or_the_parent_of_a_file() {
+    let dir = tmp("paste-target");
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    std::fs::write(dir.join("src.txt"), "S").unwrap();
+    let mut a = app_in(&dir);
+    a.explorer.rebuild();
+    a.clip = vec![dir.join("src.txt")];
+    let sub = a
+        .explorer
+        .nodes
+        .iter()
+        .position(|n| n.path.ends_with("sub"))
+        .unwrap();
+    a.explorer.selected = sub;
+    a.explorer_paste();
+    assert_eq!(read(&dir.join("sub/src.txt")), "S");
+    assert!(a.paste.is_none());
+    // With a file selected, the paste lands in its directory (a copy name).
+    a.explorer.rebuild();
+    let file = a
+        .explorer
+        .nodes
+        .iter()
+        .position(|n| n.path.ends_with("src.txt"))
+        .unwrap();
+    a.explorer.selected = file;
+    a.explorer_paste();
+    let copies = std::fs::read_dir(&dir).unwrap().count();
+    assert_eq!(copies, 3, "a copy of src.txt appeared next to it");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- saving options, revert, subprojects ----------------------------------------------------------------
+
+#[test]
+fn editorconfig_on_save_rules_override_the_global_settings() {
+    let dir = tmp("save-ec");
+    std::fs::write(
+        dir.join(".editorconfig"),
+        "root = true\n[*.txt]\ntrim_trailing_whitespace = true\ninsert_final_newline = false\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("f.txt"), "x  \ny").unwrap();
+    let mut a = app_in(&dir);
+    a.settings.typing.editorconfig = true;
+    a.settings.save.trim_trailing_whitespace = false;
+    a.settings.save.ensure_final_newline = true;
+    a.open_path(&dir.join("f.txt"), false);
+    let opts = a.save_options();
+    assert!(opts.trim_trailing_whitespace, ".editorconfig wins");
+    assert!(!opts.ensure_final_newline, ".editorconfig wins");
+    type_text(&mut a, "!");
+    a.run_action("file.save");
+    assert_eq!(read(&dir.join("f.txt")), "!x\ny");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn revert_discards_unsaved_edits_and_reports_unsaved_or_failed_cases() {
+    let dir = tmp("revert");
+    std::fs::write(dir.join("r.txt"), "disk\n").unwrap();
+    let mut a = app_in(&dir);
+    a.run_action("file.revert");
+    a.editor.new_tab_with_content("scratch");
+    a.run_action("file.revert");
+    assert_eq!(a.status, t!("status.revert_no_file").to_string());
+    a.open_path(&dir.join("r.txt"), false);
+    type_text(&mut a, "edit");
+    a.run_action("file.revert");
+    assert_eq!(active_text(&a), "disk\n");
+    assert!(!a.editor.active_tab().unwrap().dirty);
+    assert_eq!(
+        a.status,
+        t!("status.reverted", path = dir.join("r.txt").display()).to_string()
+    );
+    std::fs::remove_file(dir.join("r.txt")).unwrap();
+    let before = a.messages.items.len();
+    a.run_action("file.revert");
+    assert!(a.messages.items.len() > before);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn compare_and_insert_prompts_need_an_open_buffer() {
+    let mut a = app();
+    a.editor.tabs.clear();
+    a.run_action("tools.diff");
+    a.run_action("file.insert_file");
+    assert!(a.prompt.is_none());
+    a.editor.new_tab_with_content("x");
+    a.run_action("tools.diff");
+    assert!(matches!(prompt_kind(&a), Some(PromptKind::CompareFile)));
+    a.on_key(key(KeyCode::Esc));
+    a.run_action("file.insert_file");
+    assert!(matches!(prompt_kind(&a), Some(PromptKind::InsertFile)));
+}
+
+#[test]
+fn subproject_actions_scope_to_the_nearest_nested_project() {
+    let dir = tmp("subproject");
+    std::fs::write(dir.join("Cargo.toml"), "[workspace]\n").unwrap();
+    std::fs::create_dir_all(dir.join("crates/inner/src")).unwrap();
+    std::fs::write(
+        dir.join("crates/inner/Cargo.toml"),
+        "[package]\nname=\"inner\"\nversion=\"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("crates/inner/src/lib.rs"), "fn f() {}\n").unwrap();
+    std::fs::write(dir.join("top.txt"), "t\n").unwrap();
+    let mut a = app_in(&dir);
+    // No active file: no subproject.
+    a.run_action("project.subproject.compile");
+    assert_eq!(a.status, t!("status.project_no_subproject").to_string());
+    a.run_action("project.subproject.find_file");
+    assert_eq!(a.status, t!("status.project_no_subproject").to_string());
+    a.open_path(&dir.join("crates/inner/src/lib.rs"), false);
+    a.run_action("project.subproject.find_file");
+    assert!(a.palette.is_some());
+    assert_eq!(a.palette_file_scope.as_deref(), Some("crates/inner"));
+    a.palette = None;
+    let mut opened = 0;
+    for action in [
+        "project.subproject.configure",
+        "project.subproject.compile",
+        "project.subproject.test",
+        "project.subproject.install",
+        "project.subproject.package",
+        "project.subproject.run",
+    ] {
+        a.status.clear();
+        a.prompt = None;
+        a.run_action(action);
+        if a.prompt.is_some() {
+            assert!(
+                matches!(prompt_kind(&a), Some(PromptKind::ProjectCommand)),
+                "{action}"
+            );
+            let pending = a.pending_project_command.as_ref().expect("pending");
+            assert_eq!(
+                pending.dir.as_deref(),
+                Some(dir.join("crates/inner").as_path())
+            );
+            opened += 1;
+        } else {
+            assert_eq!(
+                a.status,
+                t!("status.project_no_command").to_string(),
+                "{action}"
+            );
+        }
+    }
+    assert!(opened >= 2, "a Rust crate has compile and test commands");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn project_test_at_point_needs_a_file_and_tasks_chooser_needs_tasks() {
+    let dir = tmp("test-at-point");
+    let mut a = app_in(&dir);
+    a.editor.new_tab_with_content("fn t() {}");
+    a.run_action("project.test_at_point");
+    assert_eq!(a.status, t!("status.project_test_no_file").to_string());
+    a.run_action("tools.tasks");
+    assert_eq!(a.status, t!("status.no_tasks").to_string());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn saving_a_file_this_user_cannot_write_offers_save_as_up_front() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tmp("not-writable");
+    let p = dir.join("ro.txt");
+    std::fs::write(&p, "locked\n").unwrap();
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o444)).unwrap();
+    let mut a = app_in(&dir);
+    a.open_path(&p, false);
+    if a.editor.active_tab().unwrap().fs_access != crate::editor::FsAccess::ReadOnly {
+        // Running as a user who can write anyway (root): nothing to assert.
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
+    type_text(&mut a, "x");
+    a.run_action("file.save");
+    assert_eq!(a.status, t!("status.file_not_writable").to_string());
+    assert!(matches!(prompt_kind(&a), Some(PromptKind::SaveAs)));
+    assert_eq!(read(&p), "locked\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- word highlight / zoom ---------------------------------------------------------------------------------
+
+#[test]
+fn word_highlight_marks_whole_word_occurrences_only() {
+    let mut a = app_with("foo foobar foo\n");
+    a.settings.editor_visual.highlight_word = false;
+    a.refresh_word_highlight(); // off: nothing
+    a.settings.editor_visual.highlight_word = true;
+    set_cur(&mut a, 1);
+    a.refresh_word_highlight();
+    let marks = a
+        .editor
+        .active_tab()
+        .unwrap()
+        .editor
+        .word_marks()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        marks,
+        vec![(0, 3), (11, 14)],
+        "foobar is not a whole-word match"
+    );
+    // On whitespace there is no word: the marks clear.
+    set_cur(&mut a, 3);
+    a.refresh_word_highlight();
+    a.refresh_word_highlight(); // unchanged key: cheap no-op
+    // A word that occurs once is not worth highlighting.
+    set_cur(&mut a, 5);
+    a.refresh_word_highlight();
+}
+
+#[test]
+fn terminal_zoom_sends_a_sequence_only_for_terminals_that_support_it() {
+    let term = std::env::var("TERM").unwrap_or_default();
+    let supported = term.contains("xterm") || term.contains("rxvt");
+    let mut a = app();
+    a.run_action("view.zoom_in");
+    let expected = if supported {
+        t!("status.zoom_sent").to_string()
+    } else {
+        t!("status.zoom_unsupported").to_string()
+    };
+    assert_eq!(a.status, expected);
+    a.run_action("view.zoom_out");
+    assert_eq!(a.status, expected);
+    a.run_action("view.zoom_reset");
+    if term.contains("rxvt") {
+        assert_eq!(a.status, t!("status.zoom_unsupported").to_string());
+    } else {
+        assert_eq!(a.status, expected);
+    }
+}
