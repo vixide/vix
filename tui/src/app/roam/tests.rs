@@ -499,7 +499,10 @@ fn renaming_a_file_to_its_title_slug() {
     unsaved.editor.new_tab_with_content("#+title: T\n");
     let status = unsaved.status.clone();
     unsaved.roam_action("node.rename_by_title");
-    assert_eq!(unsaved.status, status, "an unsaved buffer has no file to rename");
+    assert_eq!(
+        unsaved.status, status,
+        "an unsaved buffer has no file to rename"
+    );
 }
 
 #[test]

@@ -105,10 +105,7 @@ pub(crate) fn goto_line(app: &mut App, line: usize) {
 }
 
 pub(crate) fn last_error(app: &App) -> String {
-    app.messages
-        .items
-        .last()
-        .map_or_default(|m| m.text.clone())
+    app.messages.items.last().map_or_default(|m| m.text.clone())
 }
 
 pub(crate) fn dock_has(app: &App, line: &str) -> bool {
