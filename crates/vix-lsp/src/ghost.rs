@@ -138,6 +138,14 @@ mod tests {
     }
 
     #[test]
+    fn it_reports_what_it_was_computed_for() {
+        let g = ghost("suggestion");
+        assert_eq!(g.text(), "suggestion");
+        assert_eq!(g.revision(), 4);
+        assert_eq!(g.cursor(), 10);
+    }
+
+    #[test]
     fn empty_text_is_no_suggestion() {
         assert!(Ghost::new("", 0, 0).is_none());
     }

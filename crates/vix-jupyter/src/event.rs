@@ -88,3 +88,13 @@ pub enum KernelEvent {
     /// The kernel is gone. The last event.
     Dead(DeathReason),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_id_displays_bare() {
+        assert_eq!(RequestId("abc_1".into()).to_string(), "abc_1");
+    }
+}
