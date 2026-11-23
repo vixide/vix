@@ -8,6 +8,14 @@
 //!
 //! Spec: `crates/vix-terminal/spec/index.md`.
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// An ordered set of terminal tabs. Ids are never reused, so a reference by id
 /// (Cowork's shared terminal, T697) cannot silently move to another tab.
 ///
@@ -54,9 +62,15 @@ impl<T> Tabs<T> {
     /// its id.
     pub fn push(&mut self, item: T) -> u64 {
         let id = self.next_id;
-        self.next_id += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: one id per tab ever opened in one session, so a u64 cannot overflow"
+        )]
+        {
+            self.next_id += 1;
+        }
         self.items.push((id, item));
-        self.active = self.items.len() - 1;
+        self.active = sub_or(self.items.len(), 1, 0);
         self.shown = true;
         id
     }
@@ -135,14 +149,20 @@ impl<T> Tabs<T> {
     /// Activate the next tab, wrapping around.
     pub fn next(&mut self) {
         if !self.items.is_empty() {
-            self.active = (self.active + 1) % self.items.len();
+            let next = self.active.checked_add(1).filter(|n| *n < self.items.len());
+            // After the last tab comes the first.
+            self.active = next.unwrap_or(0);
         }
     }
 
     /// Activate the previous tab, wrapping around.
     pub fn prev(&mut self) {
         if !self.items.is_empty() {
-            self.active = (self.active + self.items.len() - 1) % self.items.len();
+            // Before the first tab comes the last.
+            self.active = self
+                .active
+                .checked_sub(1)
+                .unwrap_or_else(|| sub_or(self.items.len(), 1, 0));
         }
     }
 
@@ -163,11 +183,11 @@ impl<T> Tabs<T> {
         // active. (Removing the active tab itself keeps the index, which now
         // names its successor.)
         if index < self.active {
-            self.active -= 1;
+            self.active = sub_or(self.active, 1, 0);
         }
         // Removed the last tab while it was active: fall back to the new last.
         if self.active >= self.items.len() {
-            self.active = self.items.len().saturating_sub(1);
+            self.active = sub_or(self.items.len(), 1, 0);
         }
         if self.items.is_empty() {
             self.shown = false;
