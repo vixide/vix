@@ -142,3 +142,7 @@ Thread**.
 `history::decode` reads it, skipping blank or bad lines and sanitizing what
 it reads; `history::prune(messages, now_ms, days)` drops messages older
 than the cutoff and returns how many.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). History pruning, mention and code-reference parsing, thread anchoring and unread bookkeeping use `get`, `strip_prefix`, iterators and `checked_*`. **Declared (INBOX-F1):** a retention span or cutoff that does not fit keeps every message; counters and line numbers stop at the top of their type; an unread marker trimmed away points at the oldest kept message. **Kept as documented:** `Thread::new` still moves a line range past the end of the file to the last line (and an end before the start to the start), a documented clamp of a requested range that is open to a decision.

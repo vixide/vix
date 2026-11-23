@@ -19,6 +19,20 @@ use std::fmt;
 use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A reference to a place in a file. Lines and columns are 1-based.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CodeRef {
@@ -113,13 +127,17 @@ pub fn find_refs(body: &str) -> Vec<CodeRefMatch> {
 
 /// Parse one word `body[start..end]`.
 fn word_ref(body: &str, start: usize, end: usize) -> Option<CodeRefMatch> {
-    let word = &body[start..end];
+    let word = body.get(start..end)?;
     let trimmed_front = word.trim_start_matches(OPENERS);
-    let from = start + (word.len() - trimmed_front.len());
+    let from = add_or(
+        start,
+        sub_or(word.len(), trimmed_front.len(), 0),
+        usize::MAX,
+    );
     let core = trimmed_front.trim_end_matches(CLOSERS);
     let reference = parse_ref(core)?;
     Some(CodeRefMatch {
-        range: from..from + core.len(),
+        range: from..add_or(from, core.len(), usize::MAX),
         reference,
     })
 }
@@ -134,8 +152,8 @@ pub fn parse_ref(text: &str) -> Option<CodeRef> {
     // The first `:` whose remainder is a valid position splits path from
     // position, so `C:\x.rs:3` and `a:b/c.rs:3` still find their path.
     text.match_indices(':').find_map(|(at, _)| {
-        let path = &text[..at];
-        let (line, column, end_line) = parse_position(&text[at + 1..])?;
+        let path = text.get(..at)?;
+        let (line, column, end_line) = parse_position(text.get(at..)?.strip_prefix(':')?)?;
         looks_like_path(path).then(|| CodeRef {
             path: path.to_string(),
             line,
@@ -235,7 +253,7 @@ fn normalize(path: &Path) -> Option<PathBuf> {
                 out.pop();
             }
             Component::Normal(part) => {
-                depth += 1;
+                depth = depth.checked_add(1)?;
                 out.push(part);
             }
         }

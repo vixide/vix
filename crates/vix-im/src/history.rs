@@ -19,6 +19,14 @@ use crate::Message;
 /// Milliseconds in a day.
 const DAY_MS: i64 = 86_400_000;
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// One message as one JSON line, without the trailing newline.
 ///
 /// # Errors
@@ -65,10 +73,14 @@ pub fn decode(text: &str) -> Vec<Message> {
 pub fn prune(messages: &mut Vec<Message>, now_ms: i64, days: u32) -> usize {
     // Saturating, so absurd retention settings cannot overflow into a cutoff
     // in the future (which would silently delete all history).
-    let cutoff = now_ms.saturating_sub(i64::from(days).saturating_mul(DAY_MS));
+    // A span or cutoff that does not fit keeps everything (the earliest cutoff).
+    let cutoff = i64::from(days)
+        .checked_mul(DAY_MS)
+        .and_then(|span| now_ms.checked_sub(span))
+        .unwrap_or(i64::MIN);
     let before = messages.len();
     messages.retain(|m| m.time_utc >= cutoff);
-    before - messages.len()
+    sub_or(before, messages.len(), 0)
 }
 
 #[cfg(test)]

@@ -16,6 +16,12 @@
 
 use std::ops::Range;
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// How nicks (and channel names) fold before they are compared.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
@@ -135,14 +141,18 @@ pub fn find_mentions(body: &str) -> Vec<(Range<usize>, &str)> {
         if !starts {
             continue;
         }
-        let rest = &body[at + 1..];
+        let Some(rest) = body.get(at..).and_then(|from| from.strip_prefix('@')) else {
+            continue;
+        };
         let len = rest
             .char_indices()
             .find(|&(_, c)| !is_nick_char(c))
             .map_or(rest.len(), |(i, _)| i);
         // A bare `@` with no nick characters after it is not a mention.
-        if len > 0 {
-            found.push((at..at + 1 + len, &rest[..len]));
+        if len > 0
+            && let Some(nick) = rest.get(..len)
+        {
+            found.push((at..add_or(add_or(at, 1, usize::MAX), len, usize::MAX), nick));
         }
     }
     found
