@@ -16,7 +16,33 @@
 //!
 //! Owning spec: `crates/vix-edit-sql/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// What the host should do after [`Editor::handle_key`].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -266,7 +292,7 @@ impl Editor {
             KeyCode::PageUp => self.step(true, page.max(1)),
             KeyCode::PageDown => self.step(false, page.max(1)),
             KeyCode::Home => self.sel = 0,
-            KeyCode::End => self.sel = self.len().saturating_sub(1),
+            KeyCode::End => self.sel = sub_or(self.len(), 1, 0),
             KeyCode::Char('d') | KeyCode::Delete => self.delete(),
             KeyCode::Char('f') => self.format_selected(),
             KeyCode::Char('F') => self.format_all(),
@@ -281,9 +307,9 @@ impl Editor {
     /// Move the selection `n` rows up or down, clamped.
     fn step(&mut self, up: bool, n: usize) {
         if up {
-            self.sel = self.sel.saturating_sub(n);
+            self.sel = sub_or(self.sel, n, 0);
         } else {
-            self.sel = (self.sel + n).min(self.len().saturating_sub(1));
+            self.sel = add_or(self.sel, n, usize::MAX).min(sub_or(self.len(), 1, 0));
         }
     }
 
@@ -294,15 +320,16 @@ impl Editor {
             return;
         }
         let target = if up {
-            if self.sel == 0 {
+            let Some(earlier) = self.sel.checked_sub(1) else {
                 return;
-            }
-            self.sel - 1
+            };
+            earlier
         } else {
-            if self.sel + 1 >= n {
+            let later = add_or(self.sel, 1, usize::MAX);
+            if later >= n {
                 return;
             }
-            self.sel + 1
+            later
         };
         self.push_undo();
         self.statements.swap(self.sel, target);
@@ -318,7 +345,7 @@ impl Editor {
         self.push_undo();
         self.statements.remove(self.sel);
         if self.sel >= self.statements.len() {
-            self.sel = self.statements.len().saturating_sub(1);
+            self.sel = sub_or(self.statements.len(), 1, 0);
         }
         self.dirty = true;
     }
@@ -329,8 +356,9 @@ impl Editor {
             return;
         }
         self.push_undo();
-        let i = self.sel;
-        self.statements[i] = format_sql(&self.statements[i]);
+        if let Some(stmt) = self.statements.get_mut(self.sel) {
+            *stmt = format_sql(stmt);
+        }
         self.dirty = true;
     }
 
@@ -370,7 +398,7 @@ impl Editor {
                 sel: self.sel,
             });
             self.statements = prev.statements;
-            self.sel = prev.sel.min(self.statements.len().saturating_sub(1));
+            self.sel = prev.sel.min(sub_or(self.statements.len(), 1, 0));
             self.dirty = true;
         }
     }
@@ -383,7 +411,7 @@ impl Editor {
                 sel: self.sel,
             });
             self.statements = next.statements;
-            self.sel = next.sel.min(self.statements.len().saturating_sub(1));
+            self.sel = next.sel.min(sub_or(self.statements.len(), 1, 0));
             self.dirty = true;
         }
     }
@@ -517,29 +545,29 @@ pub fn split_statements(sql: &str) -> Vec<String> {
 /// ```
 #[must_use]
 pub fn format_sql(stmt: &str) -> String {
-    let mut out = String::with_capacity(stmt.len());
+    let mut out = String::new();
     let chars: Vec<char> = stmt.chars().collect();
+    let next = |i: usize| add_or(i, 1, usize::MAX);
     let mut i = 0;
     let (mut single, mut double, mut line_c, mut block_c) = (false, false, false, false);
-    while i < chars.len() {
-        let c = chars[i];
+    while let Some(&c) = chars.get(i) {
         if line_c {
             out.push(c);
             if c == '\n' {
                 line_c = false;
             }
-            i += 1;
+            i = next(i);
             continue;
         }
         if block_c {
             out.push(c);
-            if c == '*' && chars.get(i + 1) == Some(&'/') {
+            if c == '*' && chars.get(next(i)) == Some(&'/') {
                 out.push('/');
-                i += 2;
+                i = add_or(i, 2, usize::MAX);
                 block_c = false;
                 continue;
             }
-            i += 1;
+            i = next(i);
             continue;
         }
         if single {
@@ -547,7 +575,7 @@ pub fn format_sql(stmt: &str) -> String {
             if c == '\'' {
                 single = false;
             }
-            i += 1;
+            i = next(i);
             continue;
         }
         if double {
@@ -555,36 +583,39 @@ pub fn format_sql(stmt: &str) -> String {
             if c == '"' {
                 double = false;
             }
-            i += 1;
+            i = next(i);
             continue;
         }
         match c {
             '\'' => {
                 single = true;
                 out.push(c);
-                i += 1;
+                i = next(i);
             }
             '"' => {
                 double = true;
                 out.push(c);
-                i += 1;
+                i = next(i);
             }
-            '-' if chars.get(i + 1) == Some(&'-') => {
+            '-' if chars.get(next(i)) == Some(&'-') => {
                 line_c = true;
                 out.push(c);
-                i += 1;
+                i = next(i);
             }
-            '/' if chars.get(i + 1) == Some(&'*') => {
+            '/' if chars.get(next(i)) == Some(&'*') => {
                 block_c = true;
                 out.push(c);
-                i += 1;
+                i = next(i);
             }
             c if c.is_ascii_alphabetic() || c == '_' => {
                 let start = i;
-                while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
-                    i += 1;
+                while chars
+                    .get(i)
+                    .is_some_and(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
+                {
+                    i = next(i);
                 }
-                let word: String = chars[start..i].iter().collect();
+                let word: String = chars.get(start..i).unwrap_or(&[]).iter().collect();
                 if KEYWORDS.contains(&word.to_ascii_lowercase().as_str()) {
                     out.push_str(&word.to_ascii_uppercase());
                 } else {
@@ -593,7 +624,7 @@ pub fn format_sql(stmt: &str) -> String {
             }
             _ => {
                 out.push(c);
-                i += 1;
+                i = next(i);
             }
         }
     }
