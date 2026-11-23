@@ -37,10 +37,30 @@
 //!
 //! The owning spec is `crates/vix-menu/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
 extern crate vix_i18n;
 vix_i18n::surface!();
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// A single dropdown entry: a leaf action, a separator, or a submenu.
 #[derive(Clone, Copy)]
@@ -2707,7 +2727,9 @@ fn filter_items(items: &'static [Item], keep: ActionFilter) -> &'static [Item] {
 /// Build the View → Theme submenu items from the available theme names, leaking
 /// them to `'static`. Falls back to the bundled Dark/Light when none are set.
 fn theme_submenu() -> &'static [Item] {
-    let names = THEME_NAMES.get().cloned().unwrap_or_default();
+    // Before the theme names are set there are none to list (the fallback
+    // below then supplies Dark and Light).
+    let names: &[String] = THEME_NAMES.get().map_or(&[], Vec::as_slice);
     let mut items: Vec<Item> = names
         .iter()
         .map(|n| {
@@ -2927,14 +2949,31 @@ fn first_selectable(items: &[Item]) -> usize {
 fn label_starting(items: &[Item], from: usize, c: char) -> Option<usize> {
     let target = c.to_ascii_lowercase();
     let len = items.len();
-    (1..=len).map(|step| (from + step) % len).find(|&j| {
-        !items[j].is_separator()
-            && items[j]
-                .label()
-                .chars()
-                .next()
-                .is_some_and(|fc| fc.to_ascii_lowercase() == target)
-    })
+    (1..=len)
+        .filter_map(|step| wrap_next(from, step, len))
+        .find(|&j| {
+            items.get(j).is_some_and(|item| {
+                !item.is_separator()
+                    && item
+                        .label()
+                        .chars()
+                        .next()
+                        .is_some_and(|fc| fc.to_ascii_lowercase() == target)
+            })
+        })
+}
+
+/// `from` moved `step` places forward in a ring of `len` slots; `None` for an
+/// empty ring.
+fn wrap_next(from: usize, step: usize, len: usize) -> Option<usize> {
+    from.checked_add(step)?.checked_rem(len)
+}
+
+/// `from` moved one place back in a ring of `len` slots; `None` for an empty ring.
+fn wrap_prev(from: usize, len: usize) -> Option<usize> {
+    // `from` plus the length less one is `from - 1` modulo the length, without
+    // going below zero at index 0.
+    from.checked_add(len.checked_sub(1)?)?.checked_rem(len)
 }
 
 /// The next non-separator index after `from`, wrapping around.
@@ -2942,8 +2981,8 @@ fn next_selectable(items: &[Item], from: usize) -> usize {
     let len = items.len();
     let mut j = from;
     for _ in 0..len {
-        j = (j + 1) % len;
-        if !items[j].is_separator() {
+        j = wrap_next(j, 1, len).unwrap_or(j);
+        if items.get(j).is_none_or(|item| !item.is_separator()) {
             break;
         }
     }
@@ -2955,8 +2994,8 @@ fn prev_selectable(items: &[Item], from: usize) -> usize {
     let len = items.len();
     let mut j = from;
     for _ in 0..len {
-        j = (j + len - 1) % len;
-        if !items[j].is_separator() {
+        j = wrap_prev(j, len).unwrap_or(j);
+        if items.get(j).is_none_or(|item| !item.is_separator()) {
             break;
         }
     }
@@ -3070,12 +3109,17 @@ impl Menu {
         self.sub_open
     }
 
+    /// The items of top-level menu `i` (empty for an index with no menu).
+    fn items_of(&self, i: usize) -> &'static [Item] {
+        self.defs().get(i).map_or(&[], |def| def.items)
+    }
+
     /// The submenu items of the currently highlighted top item, if it has one.
     #[must_use]
     pub fn submenu_items(&self) -> Option<&'static [Item]> {
         let i = self.open?;
         let it = self.item?;
-        self.defs()[i].items[it].submenu
+        self.items_of(i).get(it).and_then(|item| item.submenu)
     }
 
     /// Whether the highlighted submenu item's own (third-level) submenu is open.
@@ -3108,7 +3152,7 @@ impl Menu {
             return;
         }
         let n = self.defs().len();
-        self.open_index((i + n - 1) % n);
+        self.open_index(wrap_prev(i, n).unwrap_or(i));
     }
 
     /// Move to the next top-level menu; or, if the highlighted item has a closed
@@ -3130,21 +3174,21 @@ impl Menu {
             return;
         }
         if let Some(it) = self.item
-            && let Some(sub) = self.defs()[i].items[it].submenu
+            && let Some(sub) = self.items_of(i).get(it).and_then(|item| item.submenu)
         {
             self.sub_open = true;
             self.sub = Some(first_selectable(sub));
             return;
         }
         let n = self.defs().len();
-        self.open_index((i + 1) % n);
+        self.open_index(wrap_next(i, 1, n).unwrap_or(i));
     }
 
     /// Highlight the previous selectable item in the deepest open level. With
     /// nothing highlighted yet, highlights the last selectable item.
     pub fn up(&mut self) {
         let Some(i) = self.open else { return };
-        let items = self.defs()[i].items;
+        let items = self.items_of(i);
         if self.subsub_open {
             if let Some(ss) = self.subsubmenu_items() {
                 self.subsub = Some(prev_selectable(ss, self.subsub.unwrap_or(0)));
@@ -3152,7 +3196,10 @@ impl Menu {
             return;
         }
         if self.sub_open {
-            if let Some(sub) = self.item.and_then(|it| items[it].submenu) {
+            if let Some(sub) = self
+                .item
+                .and_then(|it| items.get(it).and_then(|item| item.submenu))
+            {
                 self.sub = Some(prev_selectable(sub, self.sub.unwrap_or(0)));
             }
             return;
@@ -3170,7 +3217,7 @@ impl Menu {
     /// highlighted yet, highlights the first selectable item.
     pub fn down(&mut self) {
         let Some(i) = self.open else { return };
-        let items = self.defs()[i].items;
+        let items = self.items_of(i);
         if self.subsub_open {
             if let Some(ss) = self.subsubmenu_items() {
                 self.subsub = Some(match self.subsub {
@@ -3181,7 +3228,10 @@ impl Menu {
             return;
         }
         if self.sub_open {
-            if let Some(sub) = self.item.and_then(|it| items[it].submenu) {
+            if let Some(sub) = self
+                .item
+                .and_then(|it| items.get(it).and_then(|item| item.submenu))
+            {
                 self.sub = Some(match self.sub {
                     Some(s) => next_selectable(sub, s),
                     None => first_selectable(sub),
@@ -3199,16 +3249,16 @@ impl Menu {
     /// return the leaf action to run. Does nothing when nothing is highlighted.
     pub fn enter(&mut self) -> Option<&'static str> {
         let i = self.open?;
-        let items = self.defs()[i].items;
+        let items = self.items_of(i);
         let it_idx = self.item?;
         if self.subsub_open {
             let ss = self.subsubmenu_items()?;
-            let it = &ss[self.subsub?];
+            let it = ss.get(self.subsub?)?;
             return (!it.is_separator()).then_some(it.action);
         }
         if self.sub_open {
-            let sub = items[it_idx].submenu?;
-            let it = &sub[self.sub?];
+            let sub = items.get(it_idx)?.submenu?;
+            let it = sub.get(self.sub?)?;
             if it.submenu.is_some() {
                 // Open the third level; highlight nothing yet.
                 self.subsub_open = true;
@@ -3217,7 +3267,7 @@ impl Menu {
             }
             return (!it.is_separator()).then_some(it.action);
         }
-        let it = &items[it_idx];
+        let it = items.get(it_idx)?;
         if it.submenu.is_some() {
             // Open the submenu; highlight nothing yet.
             self.sub_open = true;
@@ -3233,10 +3283,10 @@ impl Menu {
     /// to step Save → Save As.
     pub fn type_ahead(&mut self, c: char) {
         let Some(i) = self.open else { return };
-        let items = self.defs()[i].items;
+        let items = self.items_of(i);
         if self.subsub_open {
             if let Some(ss) = self.subsubmenu_items() {
-                let from = self.subsub.unwrap_or_else(|| ss.len().saturating_sub(1));
+                let from = self.subsub.unwrap_or_else(|| sub_or(ss.len(), 1, 0));
                 if let Some(j) = label_starting(ss, from, c) {
                     self.subsub = Some(j);
                 }
@@ -3244,8 +3294,11 @@ impl Menu {
             return;
         }
         if self.sub_open {
-            if let Some(sub) = self.item.and_then(|it| items[it].submenu) {
-                let from = self.sub.unwrap_or_else(|| sub.len().saturating_sub(1));
+            if let Some(sub) = self
+                .item
+                .and_then(|it| items.get(it).and_then(|item| item.submenu))
+            {
+                let from = self.sub.unwrap_or_else(|| sub_or(sub.len(), 1, 0));
                 if let Some(j) = label_starting(sub, from, c) {
                     self.sub = Some(j);
                 }
@@ -3256,7 +3309,7 @@ impl Menu {
             if let Some(j) = label_starting(items, it, c) {
                 self.item = Some(j);
             }
-        } else if let Some(j) = label_starting(items, items.len().saturating_sub(1), c) {
+        } else if let Some(j) = label_starting(items, sub_or(items.len(), 1, 0), c) {
             // Nothing highlighted: search "from the last row" so the wrap-around
             // makes index 0 the first candidate and the first match from the
             // top wins.
@@ -3269,22 +3322,22 @@ impl Menu {
     #[must_use]
     pub fn selected_action(&self) -> Option<&'static str> {
         let i = self.open?;
-        let items = self.defs()[i].items;
+        let items = self.items_of(i);
         let it_idx = self.item?;
         if self.subsub_open {
             let ss = self.subsubmenu_items()?;
-            let it = &ss[self.subsub?];
+            let it = ss.get(self.subsub?)?;
             return (!it.is_separator()).then_some(it.action);
         }
         if self.sub_open {
-            let sub = items[it_idx].submenu?;
-            let it = &sub[self.sub?];
+            let sub = items.get(it_idx)?.submenu?;
+            let it = sub.get(self.sub?)?;
             if it.has_submenu() {
                 return None;
             }
             return (!it.is_separator()).then_some(it.action);
         }
-        let it = &items[it_idx];
+        let it = items.get(it_idx)?;
         if it.has_submenu() {
             return None;
         }
