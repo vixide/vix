@@ -27,6 +27,18 @@
 //! assert_eq!(Color::from_hsl("120, 100%, 50%").unwrap().to_hex(), "#00ff00");
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// An RGB color (8 bits per channel).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Color {
@@ -45,24 +57,28 @@ impl Color {
     /// trailing whitespace is ignored; every leading `#` is stripped. The
     /// three-digit form doubles each digit (`#f80` is `#ff8800`).
     ///
-    /// Caution: the six-digit branch slices the string by byte index, so a
-    /// six-*byte* input with a multibyte character can slice off a character
-    /// boundary; ASCII input is always safe.
+    /// Non-ASCII input is `None`, whatever its byte length.
     #[must_use]
     pub fn from_hex(text: &str) -> Option<Color> {
         let hex = text.trim().trim_start_matches('#');
         let (red, green, blue) = match hex.len() {
             3 => {
-                let digit = |i: usize| {
-                    let ch = hex.as_bytes()[i] as char;
+                let digit = |ch: char| {
                     // Short form: a digit `d` means `dd`, i.e. d * 0x11 = d * 17.
-                    ch.to_digit(16).and_then(|v| u8::try_from(v * 17).ok()) // 0xF -> 0xFF
+                    ch.to_digit(16)
+                        .and_then(|v| v.checked_mul(17))
+                        .and_then(|v| u8::try_from(v).ok()) // 0xF -> 0xFF
                 };
-                (digit(0)?, digit(1)?, digit(2)?)
+                let mut chars = hex.chars();
+                (
+                    digit(chars.next()?)?,
+                    digit(chars.next()?)?,
+                    digit(chars.next()?)?,
+                )
             }
             6 => {
-                let pair = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
-                (pair(0)?, pair(2)?, pair(4)?)
+                let pair = |from: usize, to: usize| u8::from_str_radix(hex.get(from..to)?, 16).ok();
+                (pair(0, 2)?, pair(2, 4)?, pair(4, 6)?)
             }
             _ => return None,
         };
@@ -79,15 +95,12 @@ impl Color {
     /// anything else (floats, percentages, 256) yields `None`.
     #[must_use]
     pub fn from_rgb(s: &str) -> Option<Color> {
-        let parts = triple(s, "rgb")?;
-        let v: Vec<u8> = parts
-            .iter()
-            .map(|p| p.trim().parse::<u8>().ok())
-            .collect::<Option<_>>()?;
+        let [red, green, blue] = triple(s, "rgb")?;
+        let byte = |part: &str| part.trim().parse::<u8>().ok();
         Some(Color {
-            r: v[0],
-            g: v[1],
-            b: v[2],
+            r: byte(&red)?,
+            g: byte(&green)?,
+            b: byte(&blue)?,
         })
     }
 
@@ -177,20 +190,17 @@ fn triple(s: &str, name: &str) -> Option<[String; 3]> {
     if let Some(rest) = lower.strip_prefix(name) {
         let rest = rest.trim_start();
         if rest.starts_with('(') && t.trim_end().ends_with(')') {
-            let open = t.find('(')? + 1;
+            let open = t.find('(')?.checked_add(1)?;
             let close = t.rfind(')')?;
-            t = t[open..close].to_string();
+            t = t.get(open..close)?.to_string();
         }
     }
-    let parts: Vec<&str> = t.split(',').collect();
-    if parts.len() != 3 {
+    let mut parts = t.split(',');
+    let (first, second, third) = (parts.next()?, parts.next()?, parts.next()?);
+    if parts.next().is_some() {
         return None;
     }
-    Some([
-        parts[0].to_string(),
-        parts[1].to_string(),
-        parts[2].to_string(),
-    ])
+    Some([first.to_string(), second.to_string(), third.to_string()])
 }
 
 /// Convert HSL (hue degrees, sat/light 0–1) to an RGB [`Color`].
@@ -199,7 +209,7 @@ fn hsl_to_rgb(hue: f64, sat: f64, light: f64) -> Color {
     // Standard HSL→RGB: `sector` is which of the six 60° wedges the hue is in,
     // `chroma` the color intensity, `mid` the intermediate channel's value.
     let sector = hue / 60.0;
-    let mid = chroma * (1.0 - (sector % 2.0 - 1.0).abs());
+    let mid = chroma * (1.0 - (sector.rem_euclid(2.0) - 1.0).abs());
     // Truncate toward zero to pick the 60-degree sector (matches `as u32`).
     let (red1, green1, blue1) = match floor_to_u32(sector) {
         0 => (chroma, mid, 0.0),
@@ -275,6 +285,26 @@ impl Field {
         }
     }
 
+    /// The next field in display order, wrapping from the last to the first.
+    #[must_use]
+    pub fn next(self) -> Field {
+        match self {
+            Field::Hex => Field::Rgb,
+            Field::Rgb => Field::Hsl,
+            Field::Hsl => Field::Hex,
+        }
+    }
+
+    /// The previous field in display order, wrapping from the first to the last.
+    #[must_use]
+    pub fn previous(self) -> Field {
+        match self {
+            Field::Hex => Field::Hsl,
+            Field::Rgb => Field::Hex,
+            Field::Hsl => Field::Rgb,
+        }
+    }
+
     /// Short uppercase label for the field row.
     #[must_use]
     pub fn label(self) -> &'static str {
@@ -330,27 +360,43 @@ impl Converter {
     /// Seed every field from `color`, keeping the current focus (including the
     /// focused one, which is overwritten in its canonical form).
     pub fn set_color(&mut self, color: Color) {
-        self.fields[Field::Hex.index()] = color.to_hex();
-        self.fields[Field::Rgb.index()] = color.to_rgb();
-        self.fields[Field::Hsl.index()] = color.to_hsl();
+        self.fields = [color.to_hex(), color.to_rgb(), color.to_hsl()];
+    }
+
+    /// The text of `field`.
+    fn field(&self, field: Field) -> &str {
+        let [hex, rgb, hsl] = &self.fields;
+        match field {
+            Field::Hex => hex,
+            Field::Rgb => rgb,
+            Field::Hsl => hsl,
+        }
+    }
+
+    /// The text of `field`, to edit.
+    fn field_mut(&mut self, field: Field) -> &mut String {
+        let [hex, rgb, hsl] = &mut self.fields;
+        match field {
+            Field::Hex => hex,
+            Field::Rgb => rgb,
+            Field::Hsl => hsl,
+        }
     }
 
     /// The focused field's text.
     #[must_use]
     pub fn current(&self) -> &str {
-        &self.fields[self.focus.index()]
+        self.field(self.focus)
     }
 
     /// Move focus to the next field (wrapping).
     pub fn focus_next(&mut self) {
-        let i = (self.focus.index() + 1) % 3;
-        self.focus = Field::ALL[i];
+        self.focus = self.focus.next();
     }
 
     /// Move focus to the previous field (wrapping).
     pub fn focus_prev(&mut self) {
-        let i = (self.focus.index() + 2) % 3;
-        self.focus = Field::ALL[i];
+        self.focus = self.focus.previous();
     }
 
     /// Set focus directly (e.g. from a mouse click on a row).
@@ -360,13 +406,13 @@ impl Converter {
 
     /// Append a character to the focused field and resync the others.
     pub fn push(&mut self, c: char) {
-        self.fields[self.focus.index()].push(c);
+        self.field_mut(self.focus).push(c);
         self.sync();
     }
 
     /// Delete the last character of the focused field and resync the others.
     pub fn backspace(&mut self) {
-        self.fields[self.focus.index()].pop();
+        self.field_mut(self.focus).pop();
         self.sync();
     }
 
@@ -375,7 +421,7 @@ impl Converter {
         if let Some(color) = self.color() {
             for field in Field::ALL {
                 if field != self.focus {
-                    self.fields[field.index()] = match field {
+                    *self.field_mut(field) = match field {
                         Field::Hex => color.to_hex(),
                         Field::Rgb => color.to_rgb(),
                         Field::Hsl => color.to_hsl(),
@@ -497,5 +543,13 @@ mod tests {
             assert!((i32::from(back.g) - i32::from(c.g)).unsigned_abs() <= 3);
             assert!((i32::from(back.b) - i32::from(c.b)).unsigned_abs() <= 3);
         }
+    }
+
+    #[test]
+    fn multibyte_hex_is_none_not_a_panic() {
+        // Six bytes, but not six ASCII digits: the slice boundary is not a char boundary.
+        assert_eq!(Color::from_hex("#éééé"), None);
+        assert_eq!(Color::from_hex("#aé"), None);
+        assert_eq!(Color::from_hex("é1"), None);
     }
 }
