@@ -554,3 +554,166 @@ fn handle_settings_bundle_flags(cli: &Cli, settings: &Settings) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{
+        KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    };
+
+    /// A fresh temp directory, canonical so paths compare equal.
+    fn temp(tag: &str) -> PathBuf {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("vix-main-{tag}-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.canonicalize().unwrap()
+    }
+
+    fn app_in(dir: &std::path::Path) -> App {
+        App::new(dir.to_path_buf(), Settings::default()).with_session_path(dir.join("session.toml"))
+    }
+
+    fn cli(args: &[&str]) -> Cli {
+        let mut full = vec!["vix"];
+        full.extend_from_slice(args);
+        Cli::try_parse_from(full).unwrap()
+    }
+
+    fn content(app: &mut App) -> String {
+        app.editor.active_tab_mut().unwrap().editor.get_content()
+    }
+
+    #[test]
+    fn the_workspace_root_is_the_remote_path_a_lone_folder_or_the_current_directory() {
+        let dir = temp("root");
+        // A remote target wins, and leaves the file list alone.
+        let mut c = cli(&[dir.to_str().unwrap()]);
+        assert_eq!(
+            workspace_root(&mut c, Some("/srv/app")),
+            PathBuf::from("/srv/app")
+        );
+        assert_eq!(c.files.len(), 1);
+        // A lone folder becomes the root and is no longer a file to open.
+        assert_eq!(workspace_root(&mut c, None), dir);
+        assert_eq!(c.files, Vec::<PathBuf>::new());
+        // A file, or nothing, means the current directory.
+        let file = dir.join("a.txt");
+        std::fs::write(&file, "x").unwrap();
+        let mut c = cli(&[file.to_str().unwrap()]);
+        assert_eq!(
+            workspace_root(&mut c, None),
+            std::env::current_dir().unwrap()
+        );
+        assert_eq!(c.files, vec![file]);
+        let mut c = cli(&[]);
+        assert_eq!(
+            workspace_root(&mut c, None),
+            std::env::current_dir().unwrap()
+        );
+    }
+
+    #[test]
+    fn version_modes_print_and_stop_while_a_normal_launch_continues() {
+        assert!(run_early_modes(&cli(&["--version"])));
+        assert!(run_early_modes(&cli(&["--version", "--json"])));
+        assert!(!run_early_modes(&cli(&[])));
+        assert!(!run_early_modes(&cli(&["some-file.txt"])));
+    }
+
+    #[test]
+    fn key_events_type_into_the_editor() {
+        let dir = temp("key");
+        let mut app = app_in(&dir);
+        handle_event(
+            &mut app,
+            Event::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE)),
+        );
+        handle_event(
+            &mut app,
+            Event::Key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE)),
+        );
+        assert_eq!(content(&mut app), "hi");
+    }
+
+    #[test]
+    fn paste_events_insert_the_text_as_one_edit() {
+        let dir = temp("paste");
+        let mut app = app_in(&dir);
+        handle_event(&mut app, Event::Paste("one\ntwo".to_string()));
+        assert_eq!(content(&mut app), "one\ntwo");
+    }
+
+    #[test]
+    fn resize_events_change_nothing_and_mouse_events_reach_the_app() {
+        let dir = temp("mouse");
+        let mut app = app_in(&dir);
+        handle_event(&mut app, Event::Paste("abc".to_string()));
+        let status = app.status.clone();
+        handle_event(&mut app, Event::Resize(120, 40));
+        assert_eq!(content(&mut app), "abc");
+        assert_eq!(app.status, status);
+        // A click in the far corner of an unlaid-out screen must not panic
+        // and must not edit the buffer.
+        handle_event(
+            &mut app,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 0,
+                row: 0,
+                modifiers: KeyModifiers::NONE,
+            }),
+        );
+        assert_eq!(content(&mut app), "abc");
+    }
+
+    #[test]
+    fn losing_focus_saves_dirty_buffers_only_when_auto_save_asks_for_it() {
+        let dir = temp("focus");
+        let file = dir.join("watched.txt");
+        std::fs::write(&file, "before").unwrap();
+        let mut app = app_in(&dir);
+        app.editor.open(&file, false).unwrap();
+        handle_event(&mut app, Event::FocusGained);
+        handle_event(&mut app, Event::Paste("!".to_string()));
+        handle_event(&mut app, Event::FocusLost);
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "before",
+            "default: no auto-save"
+        );
+
+        app.settings.editor_behavior.auto_save = vix::settings::AutoSave::FocusLost;
+        handle_event(&mut app, Event::FocusLost);
+        assert!(std::fs::read_to_string(&file).unwrap().contains('!'));
+    }
+
+    #[test]
+    fn export_settings_writes_a_bundle_and_reports_to_the_caller() {
+        let dir = temp("export");
+        let out = dir.join("bundle.json");
+        let c = cli(&["--export-settings", out.to_str().unwrap()]);
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        assert!(out.is_file());
+        assert!(
+            vix::settings_bundle::read(&out).is_ok(),
+            "the bundle reads back"
+        );
+        // An unwritable destination is reported (on stderr) but still handled.
+        let bad = dir.join("no-dir").join("bundle.json");
+        let c = cli(&["--export-settings", bad.to_str().unwrap()]);
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        assert!(!bad.exists());
+    }
+
+    #[test]
+    fn importing_a_missing_bundle_is_handled_without_touching_any_config() {
+        let dir = temp("import");
+        let missing = dir.join("nope.json");
+        let c = cli(&["--import-settings", missing.to_str().unwrap()]);
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        let c = cli(&[]);
+        assert!(!handle_settings_bundle_flags(&c, &Settings::default()));
+    }
+}

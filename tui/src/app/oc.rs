@@ -392,3 +392,200 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::scripts::cov4::*;
+    use crate::oci::parse::Container;
+    use ratatui::layout::Rect;
+    use vix_input::KeyCode;
+
+    fn container(id: &str) -> Container {
+        Container {
+            id: id.to_string(),
+            name: format!("name-{id}"),
+            image: "img".into(),
+            state: "running".into(),
+            status: "Up".into(),
+            ports: String::new(),
+            host_ports: Vec::new(),
+            created: String::new(),
+        }
+    }
+
+    /// An app with an OC panel already open on two containers, so no engine
+    /// has to be found or run.
+    fn with_panel(tag: &str, read_only: bool) -> App {
+        let mut app = app_at(&temp(tag));
+        let mut p = Panel::new(Engine::Docker, Kind::Container, read_only);
+        p.set_rows(Rows::Containers(vec![container("aaa"), container("bbb")]));
+        app.oc = Some(p);
+        app
+    }
+
+    #[test]
+    fn engine_errors_carry_the_install_hint_only_when_nothing_is_installed() {
+        assert_eq!(
+            error_text(&OciError::NotInstalled),
+            t!("msg.oc_not_installed").to_string()
+        );
+        let other = OciError::Parse("bad json".into());
+        assert_eq!(error_text(&other), other.to_string());
+    }
+
+    #[test]
+    fn unknown_actions_are_not_handled_and_known_ones_are() {
+        let mut app = app_at(&temp("oc-actions"));
+        assert!(!app.run_oc_action("oc.no_such_thing"));
+        assert!(app.run_oc_action("oc.engine_detect"));
+    }
+
+    #[test]
+    fn detect_reports_the_engine_found_or_the_install_hint() {
+        let mut app = app_at(&temp("oc-detect"));
+        app.settings.oc_engine = "auto".into();
+        let found = Engine::ALL
+            .into_iter()
+            .find_map(|e| crate::fileops::which_on_path(e.binary()).map(|p| (e, p)));
+        app.run_oc_action("oc.engine_detect");
+        match found {
+            Some((engine, path)) => assert_eq!(
+                app.status,
+                t!(
+                    "status.oc_engine",
+                    name = engine.binary(),
+                    path = path.display().to_string()
+                )
+                .to_string()
+            ),
+            None => assert_eq!(
+                last_message(&app),
+                Some(t!("msg.oc_not_installed").to_string())
+            ),
+        }
+    }
+
+    #[test]
+    fn choosing_an_engine_steps_the_setting_through_auto_and_the_installed_ones() {
+        let mut app = app_at(&temp("oc-choose"));
+        let mut choices = vec!["auto".to_string()];
+        choices.extend(
+            Engine::ALL
+                .into_iter()
+                .filter(|e| crate::fileops::which_on_path(e.binary()).is_some())
+                .map(|e| e.binary().to_string()),
+        );
+        app.settings.oc_engine = "auto".into();
+        for step in 1..=choices.len() {
+            app.run_oc_action("oc.engine_choose");
+            let expected = choices.get(step % choices.len()).unwrap().clone();
+            assert_eq!(app.settings.oc_engine, expected);
+            assert_eq!(
+                app.status,
+                t!("status.oc_engine_set", name = expected.as_str()).to_string()
+            );
+        }
+        // An engine that is not installed starts again from `auto`.
+        app.settings.oc_engine = "not-an-engine".into();
+        app.run_oc_action("oc.engine_choose");
+        assert_eq!(
+            app.settings.oc_engine,
+            choices.get(1 % choices.len()).unwrap().as_str()
+        );
+    }
+
+    #[test]
+    fn only_the_full_mode_allows_changes() {
+        let mut app = app_at(&temp("oc-mode"));
+        app.settings.oc_mode = "full".into();
+        assert!(!app.oc_read_only());
+        for mode in ["read-only", "ful", ""] {
+            app.settings.oc_mode = mode.into();
+            assert!(app.oc_read_only(), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn the_panel_closes_on_escape_and_ignores_keys_when_absent() {
+        let mut app = with_panel("oc-keys", true);
+        app.oc_key(code(KeyCode::Down));
+        assert_eq!(app.oc.as_ref().unwrap().selected, 1);
+        app.oc_key(code(KeyCode::Esc));
+        assert!(app.oc.is_none());
+        app.oc_key(code(KeyCode::Esc)); // no panel: nothing
+    }
+
+    #[test]
+    fn requests_close_report_read_only_and_refused_arguments() {
+        let mut app = with_panel("oc-requests", true);
+        app.oc_request(Request::None);
+        assert!(app.oc.is_some());
+        app.oc_request(Request::ReadOnly);
+        assert_eq!(app.status, t!("status.oc_read_only").to_string());
+        app.oc_request(Request::Invalid("bad id".into()));
+        assert_eq!(
+            app.status,
+            t!("msg.oc_invalid", error = "bad id").to_string()
+        );
+        app.oc_request(Request::Close);
+        assert!(app.oc.is_none());
+    }
+
+    #[test]
+    fn a_port_request_copies_a_localhost_url() {
+        let _clip = CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut app = with_panel("oc-port", true);
+        app.oc_request(Request::PortUrl(8080));
+        assert_eq!(
+            app.status,
+            t!("status.oc_url_copied", url = "http://localhost:8080").to_string()
+        );
+    }
+
+    #[test]
+    fn refused_ids_are_reported_before_any_engine_is_run() {
+        let mut app = with_panel("oc-invalid", true);
+        app.oc_request(Request::Inspect(Kind::Container, "-bad".into()));
+        let m = last_message(&app).unwrap();
+        assert!(
+            m.starts_with(t!("msg.oc_failed", error = "").to_string().trim_end()),
+            "{m}"
+        );
+        assert!(app.oc.is_some(), "a failed inspect keeps the panel open");
+        app.oc_request(Request::Logs("-bad".into()));
+        assert!(
+            app.status
+                .starts_with(t!("msg.oc_invalid", error = "").to_string().trim_end())
+        );
+        assert!(app.oc.is_some());
+        // With no panel these requests do nothing.
+        app.oc = None;
+        app.status.clear();
+        app.oc_request(Request::Logs("abc".into()));
+        app.oc_request(Request::Inspect(Kind::Container, "abc".into()));
+        app.oc_request(Request::Shell("abc".into()));
+        app.oc_request(Request::Exec(Pending::new(
+            "docker",
+            vec!["ps".into()],
+            false,
+        )));
+        assert_eq!(app.status, "");
+    }
+
+    #[test]
+    fn clicking_a_row_selects_it_and_clicks_outside_the_panel_do_nothing() {
+        let mut app = with_panel("oc-mouse", true);
+        app.layout.oc = Rect::new(0, 0, 40, 10);
+        app.oc_mouse(click(1, 1));
+        assert_eq!(app.oc.as_ref().unwrap().selected, 1);
+        app.oc_mouse(click(1, 9)); // past the last row: selection unchanged
+        assert_eq!(app.oc.as_ref().unwrap().selected, 1);
+        app.oc_mouse(click(60, 40)); // outside the panel
+        assert_eq!(app.oc.as_ref().unwrap().selected, 1);
+        app.oc = None;
+        app.oc_mouse(click(1, 1));
+    }
+}

@@ -843,3 +843,585 @@ impl App {
         self.status = t!("status.ai_done", action = t!("menu.ai")).to_string();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::scripts::cov4::*;
+    use crate::settings::Settings;
+    use std::sync::mpsc;
+    use vix_ai_panel::Role;
+
+    /// Queue `msg` as the finished result of a fake background AI task headed
+    /// for `dest`, without running any assistant.
+    fn inject(app: &mut App, dest: AiDest, msg: AiMsg) {
+        let (tx, rx) = mpsc::channel();
+        tx.send(msg).unwrap();
+        app.ai_replace = Some(AiReplace {
+            rx,
+            dest,
+            label: "Fake".to_string(),
+        });
+    }
+
+    fn done(text: &str) -> AiMsg {
+        AiMsg::Done(text.to_string())
+    }
+
+    fn ai_off_app(dir: &std::path::Path) -> App {
+        let mut s = Settings::default();
+        s.ai = "off".to_string();
+        app_with(dir, s)
+    }
+
+    #[test]
+    fn polling_with_nothing_running_or_nothing_ready_changes_nothing() {
+        let dir = temp("ai-poll-idle");
+        let mut app = app_at(&dir);
+        app.poll_ai_replace();
+        assert!(!app.ai_replace_running());
+        let (tx, rx) = mpsc::channel::<AiMsg>();
+        app.ai_replace = Some(AiReplace {
+            rx,
+            dest: AiDest::NewTab,
+            label: "x".into(),
+        });
+        app.poll_ai_replace();
+        assert!(app.ai_replace_running(), "still waiting for the reply");
+        drop(tx);
+        app.poll_ai_replace();
+        assert!(!app.ai_replace_running(), "a dropped sender ends the task");
+        assert_eq!(app.status, t!("status.ai_failed", action = "x").to_string());
+    }
+
+    #[test]
+    fn a_new_tab_reply_opens_trimmed_text_in_a_new_tab_and_reports_done() {
+        let dir = temp("ai-newtab");
+        let mut app = app_at(&dir);
+        let tabs = app.editor.tabs.len();
+        inject(&mut app, AiDest::NewTab, done("summary text\n\n"));
+        app.poll_ai_replace();
+        assert_eq!(app.editor.tabs.len(), tabs + 1);
+        assert_eq!(content(&mut app), "summary text");
+        assert_eq!(app.focus, Focus::Editor);
+        let done_text = t!("status.ai_done", action = "Fake").to_string();
+        assert_eq!(app.status, done_text);
+        assert_eq!(last_message(&app), Some(done_text));
+    }
+
+    #[test]
+    fn an_empty_reply_is_reported_as_a_failure_and_changes_nothing() {
+        let dir = temp("ai-empty");
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "keep me", 0);
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Whole,
+            },
+            done("\n\n"),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "keep me");
+        let failed = t!("status.ai_failed", action = "Fake").to_string();
+        assert_eq!(app.status, failed);
+        assert_eq!(last_message(&app), Some(failed));
+    }
+
+    #[test]
+    fn a_replace_reply_swaps_the_range_the_whole_buffer_or_a_clamped_range() {
+        let dir = temp("ai-replace");
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "hello world", 0);
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Range(0, 5),
+            },
+            done("HOWDY"),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "HOWDY world");
+        assert!(app.editor.active_tab_mut().unwrap().dirty);
+
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Range(6, 999),
+            },
+            done("there"),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "HOWDY there");
+
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Whole,
+            },
+            done("all new"),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "all new");
+        // A stale tab index is ignored rather than panicking.
+        app.apply_ai_replace(99, AiTarget::Whole, "nope");
+        assert_eq!(content(&mut app), "all new");
+    }
+
+    #[test]
+    fn a_diff_reply_opens_a_review_that_applies_only_accepted_hunks() {
+        let dir = temp("ai-diff");
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "one\ntwo\nthree\nfour\nfive\n", 0);
+        inject(
+            &mut app,
+            AiDest::Diff {
+                tab: 0,
+                target: AiTarget::Whole,
+            },
+            done("ONE\ntwo\nthree\nfour\nFIVE\n"),
+        );
+        app.poll_ai_replace();
+        let review = app.ai_diff_review().expect("review opens");
+        assert_eq!(review.change_count(), 2);
+        assert_eq!(review.accepted_count(), 2);
+        assert!(app.ai_diff_review().is_some());
+
+        app.ai_diff_key(code(KeyCode::Down));
+        app.ai_diff_key(code(KeyCode::Up));
+        app.ai_diff_key(key('r'));
+        assert_eq!(app.ai_diff_review().unwrap().accepted_count(), 0);
+        app.ai_diff_key(key('a'));
+        assert_eq!(app.ai_diff_review().unwrap().accepted_count(), 2);
+        app.ai_diff_key(key(' '));
+        assert_eq!(app.ai_diff_review().unwrap().accepted_count(), 1);
+        app.ai_diff_key(key('z')); // ignored
+        app.ai_diff_key(code(KeyCode::Enter));
+        assert!(app.ai_diff_review().is_none());
+        // The reply's trailing newline is trimmed on arrival.
+        assert_eq!(content(&mut app), "one\ntwo\nthree\nfour\nFIVE");
+        assert_eq!(
+            app.status,
+            t!("status.ai_done", action = t!("menu.ai")).to_string()
+        );
+    }
+
+    #[test]
+    fn escape_discards_a_diff_review_and_an_unchanged_reply_says_no_change() {
+        let dir = temp("ai-diff-esc");
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "a\nb\n", 0);
+        app.open_ai_diff(0, AiTarget::Whole, "A\nb\n");
+        assert!(app.ai_diff_review().is_some());
+        app.ai_diff_key(code(KeyCode::Esc));
+        assert!(app.ai_diff_review().is_none());
+        assert_eq!(content(&mut app), "a\nb\n");
+
+        app.open_ai_diff(0, AiTarget::Whole, "a\nb\n");
+        assert!(app.ai_diff_review().is_none());
+        assert_eq!(app.status, t!("status.ai_no_change").to_string());
+        // A stale tab index opens nothing.
+        app.open_ai_diff(42, AiTarget::Whole, "x");
+        assert!(app.ai_diff_review().is_none());
+        // Applying with no review open is a no-op.
+        app.ai_diff_apply();
+        assert_eq!(content(&mut app), "a\nb\n");
+        // Range targets diff only that slice.
+        app.open_ai_diff(0, AiTarget::Range(0, 1), "Z");
+        assert_eq!(app.ai_diff_review().unwrap().change_count(), 1);
+    }
+
+    #[test]
+    fn a_doc_comment_reply_inserts_a_line_above_directly_or_through_a_review() {
+        let dir = temp("ai-insert");
+        let mut app = app_at(&dir);
+        app.settings.misc.ai_diff_review = false;
+        buffer_with(&mut app, "fn a() {}\nfn b() {}\n", 10);
+        inject(
+            &mut app,
+            AiDest::InsertBeforeLine { tab: 0, at: 10 },
+            done("/// Docs for b."),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "fn a() {}\n/// Docs for b.\nfn b() {}\n");
+
+        app.settings.misc.ai_diff_review = true;
+        buffer_with(&mut app, "fn a() {}\n", 0);
+        inject(
+            &mut app,
+            AiDest::InsertBeforeLine { tab: 0, at: 0 },
+            done("/// Docs."),
+        );
+        app.poll_ai_replace();
+        assert!(app.ai_diff_review().is_some());
+        assert_eq!(content(&mut app), "fn a() {}\n", "review not yet applied");
+        app.ai_diff_key(code(KeyCode::Enter));
+        assert_eq!(content(&mut app), "/// Docs.\nfn a() {}\n");
+    }
+
+    #[test]
+    fn replace_or_diff_destination_follows_the_review_setting() {
+        let dir = temp("ai-dest");
+        let mut app = app_at(&dir);
+        app.settings.misc.ai_diff_review = true;
+        assert!(matches!(
+            app.ai_replace_or_diff_dest(3, AiTarget::Whole),
+            AiDest::Diff { tab: 3, .. }
+        ));
+        app.settings.misc.ai_diff_review = false;
+        assert!(matches!(
+            app.ai_replace_or_diff_dest(3, AiTarget::Whole),
+            AiDest::Replace { tab: 3, .. }
+        ));
+    }
+
+    #[cfg(feature = "git")]
+    #[test]
+    fn a_commit_message_reply_prefills_the_git_commit_prompt() {
+        let dir = temp("ai-commitmsg");
+        let mut app = app_at(&dir);
+        inject(
+            &mut app,
+            AiDest::GitCommitMessage,
+            done("  feat: add thing\n"),
+        );
+        app.poll_ai_replace();
+        let prompt = app.prompt.as_ref().expect("commit prompt");
+        assert!(matches!(prompt.kind, PromptKind::GitCommit));
+        assert_eq!(prompt.input, "feat: add thing");
+        assert!(app.git_panel.is_none());
+    }
+
+    #[test]
+    fn panel_replies_and_failures_land_in_the_transcript_without_a_message_entry() {
+        let dir = temp("ai-panel-reply");
+        let mut app = app_at(&dir);
+        app.open_ai_panel();
+        let before = app.messages.items.len();
+        app.ai_panel.as_mut().unwrap().busy = true;
+        inject(&mut app, AiDest::Panel, done("pong"));
+        app.poll_ai_replace();
+        let panel = app.ai_panel.as_ref().unwrap();
+        assert!(!panel.busy);
+        assert_eq!(panel.last_assistant(), Some("pong"));
+        assert_eq!(app.messages.items.len(), before, "panel replies are inline");
+
+        app.ai_panel.as_mut().unwrap().busy = true;
+        inject(
+            &mut app,
+            AiDest::Panel,
+            AiMsg::Failed(Some("rate limited".into())),
+        );
+        app.poll_ai_replace();
+        let panel = app.ai_panel.as_ref().unwrap();
+        assert!(!panel.busy);
+        let last = panel.turns.last().unwrap();
+        assert_eq!(last.role, Role::Error);
+        assert_eq!(
+            last.text,
+            t!(
+                "status.ai_failed_detail",
+                action = "Fake",
+                reason = "rate limited"
+            )
+            .to_string()
+        );
+        assert_eq!(app.messages.items.len(), before);
+
+        inject(&mut app, AiDest::Panel, AiMsg::Failed(None));
+        app.poll_ai_replace();
+        assert_eq!(
+            app.status,
+            t!("status.ai_failed", action = "Fake").to_string()
+        );
+    }
+
+    #[test]
+    fn a_failure_outside_the_panel_adds_an_error_message() {
+        let dir = temp("ai-fail-msg");
+        let mut app = app_at(&dir);
+        inject(&mut app, AiDest::NewTab, AiMsg::Failed(Some("boom".into())));
+        app.poll_ai_replace();
+        let text = t!("status.ai_failed_detail", action = "Fake", reason = "boom").to_string();
+        assert_eq!(app.status, text);
+        let m = app.messages.items.last().unwrap();
+        assert_eq!(m.text, text);
+        assert!(matches!(m.level, crate::messages::Level::Error));
+    }
+
+    #[test]
+    fn chat_panel_keys_edit_the_input_scroll_and_close() {
+        let dir = temp("ai-panel-keys");
+        let mut app = app_at(&dir);
+        app.run_action("ai.chat");
+        assert!(app.ai_panel.is_some());
+        for c in "hey".chars() {
+            app.ai_panel_key(key(c));
+        }
+        app.ai_panel_key(code(KeyCode::Backspace));
+        assert_eq!(app.ai_panel.as_ref().unwrap().input, "he");
+        app.ai_panel_key(code(KeyCode::Up));
+        assert_eq!(app.ai_panel.as_ref().unwrap().scroll, 1);
+        app.ai_panel_key(code(KeyCode::PageUp));
+        assert_eq!(app.ai_panel.as_ref().unwrap().scroll, 11);
+        app.ai_panel_key(code(KeyCode::PageDown));
+        assert_eq!(app.ai_panel.as_ref().unwrap().scroll, 1);
+        app.ai_panel_key(code(KeyCode::Down));
+        assert_eq!(app.ai_panel.as_ref().unwrap().scroll, 0);
+        app.ai_panel_key(code(KeyCode::Tab)); // ignored
+        assert_eq!(app.ai_panel.as_ref().unwrap().input, "he");
+        app.ai_panel_key(code(KeyCode::Esc));
+        assert!(app.ai_panel.is_none());
+        // Keys with no panel open do nothing.
+        app.ai_panel_key(key('x'));
+        app.ai_panel_key(code(KeyCode::Up));
+        assert!(app.ai_panel.is_none());
+    }
+
+    #[test]
+    fn opening_the_chat_panel_seeds_the_selection_and_keeps_an_open_panel() {
+        let dir = temp("ai-panel-seed");
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "explain this", 0);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(0, 7);
+        app.open_ai_panel();
+        assert_eq!(app.ai_panel.as_ref().unwrap().input, "explain");
+        app.ai_panel.as_mut().unwrap().input.push('!');
+        app.open_ai_panel();
+        assert_eq!(app.ai_panel.as_ref().unwrap().input, "explain!");
+    }
+
+    #[test]
+    fn last_reply_moves_to_a_tab_or_the_clipboard() {
+        let _clip = CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dir = temp("ai-panel-last");
+        let mut app = app_at(&dir);
+        app.open_ai_panel();
+        // With no assistant reply, both are no-ops.
+        app.ai_panel_key(alt('t'));
+        app.ai_panel_key(alt('c'));
+        assert!(app.ai_panel.is_some());
+        assert_ne!(app.status, t!("status.ai_copied").to_string());
+
+        app.ai_panel
+            .as_mut()
+            .unwrap()
+            .push(Role::Assistant, "the answer");
+        app.ai_panel_key(alt('c'));
+        assert_eq!(app.status, t!("status.ai_copied").to_string());
+        let tabs = app.editor.tabs.len();
+        app.ai_panel_key(alt('t'));
+        assert!(app.ai_panel.is_none());
+        assert_eq!(app.editor.tabs.len(), tabs + 1);
+        assert_eq!(content(&mut app), "the answer");
+        assert_eq!(app.focus, Focus::Editor);
+    }
+
+    #[test]
+    fn sending_ignores_blank_input_and_a_busy_assistant() {
+        let dir = temp("ai-send-guards");
+        let mut app = app_at(&dir);
+        app.open_ai_panel();
+        app.ai_panel_send(); // blank input
+        assert!(app.ai_panel.as_ref().unwrap().turns.is_empty());
+        app.ai_panel.as_mut().unwrap().input = "   ".into();
+        app.ai_panel_send();
+        assert!(app.ai_panel.as_ref().unwrap().turns.is_empty());
+
+        let (_tx, rx) = mpsc::channel::<AiMsg>();
+        app.ai_replace = Some(AiReplace {
+            rx,
+            dest: AiDest::Panel,
+            label: "busy".into(),
+        });
+        app.ai_panel.as_mut().unwrap().input = "hello".into();
+        app.ai_panel_send();
+        assert_eq!(app.status, t!("status.ai_busy").to_string());
+        assert_eq!(app.ai_panel.as_ref().unwrap().input, "hello", "input kept");
+        // No panel at all: nothing to send.
+        app.ai_replace = None;
+        app.ai_panel = None;
+        app.ai_panel_send();
+        assert!(app.ai_panel.is_none());
+    }
+
+    #[test]
+    fn sending_with_ai_off_records_the_user_turn_and_a_spawn_error() {
+        let dir = temp("ai-send-off");
+        let mut app = ai_off_app(&dir);
+        app.open_ai_panel();
+        app.ai_panel.as_mut().unwrap().input = "  hi there ".into();
+        app.ai_panel_key(code(KeyCode::Enter));
+        let panel = app.ai_panel.as_ref().unwrap();
+        assert!(!panel.busy);
+        assert_eq!(panel.input, "");
+        assert_eq!(panel.turns.len(), 2);
+        assert_eq!(panel.turns[0].role, Role::User);
+        assert_eq!(panel.turns[0].text, "hi there");
+        assert_eq!(panel.turns[1].role, Role::Error);
+        assert_eq!(
+            panel.turns[1].text,
+            t!("msg.command_failed", error = "spawn").to_string()
+        );
+        assert_eq!(last_message(&app), Some(t!("msg.ai_off").to_string()));
+        assert!(app.ai_replace.is_none());
+    }
+
+    #[test]
+    fn the_http_provider_without_an_api_key_reports_and_starts_nothing() {
+        let dir = temp("ai-nokey");
+        let mut s = Settings::default();
+        s.ai_provider = "openai".to_string();
+        s.ai_api_key_command = String::new();
+        let mut app = app_with(&dir, s);
+        buffer_with(&mut app, "text", 0);
+        app.run_action("ai.summarize");
+        assert!(app.ai_replace.is_none());
+        assert_eq!(
+            last_message(&app),
+            Some(t!("msg.ai_no_api_key", provider = "openai").to_string())
+        );
+    }
+
+    #[test]
+    fn transforms_report_busy_and_missing_input_and_ai_off_refuses_them() {
+        let dir = temp("ai-guards");
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "   \n", 0);
+        app.run_action("ai.summarize");
+        assert_eq!(app.status, t!("status.ai_no_input").to_string());
+        app.run_action("ai.explain");
+        assert_eq!(app.status, t!("status.ai_no_input").to_string());
+        app.status.clear();
+        app.run_action("ai.define");
+        assert_eq!(app.status, t!("status.ai_no_input").to_string());
+
+        let (_tx, rx) = mpsc::channel::<AiMsg>();
+        app.ai_replace = Some(AiReplace {
+            rx,
+            dest: AiDest::NewTab,
+            label: "busy".into(),
+        });
+        for action in [
+            "ai.summarize",
+            "ai.annotate",
+            "ai.improve",
+            "ai.edit_with_instruction",
+            "ai.generate_doc_comment",
+        ] {
+            app.status.clear();
+            assert!(app.run_ai_action(action));
+            assert_eq!(app.status, t!("status.ai_busy").to_string(), "{action}");
+        }
+        assert!(!app.run_ai_action("ai.no_such_action"));
+
+        let mut off = ai_off_app(&dir);
+        buffer_with(&mut off, "some text", 0);
+        for action in ["ai.summarize", "ai.annotate", "ai.generate_doc_comment"] {
+            off.run_action(action);
+            assert!(off.ai_replace.is_none(), "{action}");
+        }
+        assert!(off.spawn_ghost_ai("a", "b", "a").is_none());
+        assert_eq!(last_message(&off), Some(t!("msg.ai_off").to_string()));
+    }
+
+    #[test]
+    fn edit_with_instruction_needs_a_selection_then_prompts_and_rejects_blank_text() {
+        let dir = temp("ai-instr");
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "make this loud", 0);
+        app.ai_begin_edit_with_instruction();
+        assert_eq!(app.status, t!("status.ai_selection_required").to_string());
+        assert!(app.prompt.is_none());
+
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(5, 9);
+        app.ai_begin_edit_with_instruction();
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::AiInstruction
+        ));
+        assert!(matches!(
+            app.ai_instruction_target,
+            Some((0, AiTarget::Range(5, 9)))
+        ));
+        app.submit_ai_instruction("   ");
+        assert_eq!(app.status, t!("status.ai_no_input").to_string());
+        assert!(app.ai_instruction_target.is_none(), "target consumed");
+        // With no captured target a second submit does nothing.
+        app.status.clear();
+        app.submit_ai_instruction("shout");
+        assert_eq!(app.status, "");
+    }
+
+    #[test]
+    fn an_instruction_with_ai_off_starts_no_request() {
+        let dir = temp("ai-instr-off");
+        let mut app = ai_off_app(&dir);
+        buffer_with(&mut app, "make this loud", 0);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(5, 9);
+        app.ai_begin_edit_with_instruction();
+        app.submit_ai_instruction("shout");
+        assert!(app.ai_replace.is_none());
+        assert_eq!(last_message(&app), Some(t!("msg.ai_off").to_string()));
+        // Stale tab index: nothing happens either.
+        app.ai_instruction_target = Some((9, AiTarget::Whole));
+        app.submit_ai_instruction("shout");
+        assert!(app.ai_instruction_target.is_none());
+    }
+
+    #[test]
+    fn doc_comment_on_blank_context_says_no_input() {
+        let dir = temp("ai-doc-blank");
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "\n\n\n", 0);
+        app.ai_generate_doc_comment();
+        assert_eq!(app.status, t!("status.ai_no_input").to_string());
+        assert!(app.ai_replace.is_none());
+    }
+
+    #[test]
+    fn define_uses_the_selection_else_the_word_at_or_after_the_cursor() {
+        let dir = temp("ai-word");
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "alpha beta  gamma", 7);
+        assert_eq!(app.selected_or_word_text(), "beta");
+        buffer_with(&mut app, "alpha   beta", 6);
+        assert_eq!(
+            app.selected_or_word_text(),
+            "beta",
+            "next word when between"
+        );
+        buffer_with(&mut app, "alpha beta", 0);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(6, 10);
+        assert_eq!(app.selected_or_word_text(), "beta");
+        buffer_with(&mut app, "   ", 1);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection(None);
+        assert_eq!(app.selected_or_word_text(), "");
+    }
+}
