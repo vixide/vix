@@ -21,3 +21,7 @@ resolves variables — `$NAME`, `${NAME}`, `${NAME:default}`, and
 `${NAME/regex/format/}` — to their default text or to nothing; the default
 `Dialect::Tabstops` leaves `$NAME` as literal text. The full user-facing
 syntax is in the [snippets spec](../../vix-snippets/spec/index.md#tabstops-body-syntax).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The parser steps through the input with a checked `ahead` helper (an index past the end reads as the end). **Changed:** a tabstop number too large for a `u32` was capped at `u32::MAX`, naming a stop that was never written; it is now malformed, so the `$` stays literal text like any other malformed `$` construct.
