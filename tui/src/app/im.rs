@@ -175,10 +175,12 @@ pub(crate) fn history_file_name(id: &ConversationId) -> String {
             out.push(char::from(b));
         } else {
             // Upper-case hex digits for percent-escaping the bytes that are not file-name safe.
-            const HEX: &[u8; 16] = b"0123456789ABCDEF";
+            let digit = |nibble: u8| {
+                char::from_digit(u32::from(nibble), 16).map_or('0', |c| c.to_ascii_uppercase())
+            };
             out.push('%');
-            out.push(char::from(HEX[usize::from(b >> 4)]));
-            out.push(char::from(HEX[usize::from(b & 0xF)]));
+            out.push(digit(b >> 4));
+            out.push(digit(b & 0xF));
         }
     }
     format!("{out}.jsonl")
@@ -479,7 +481,10 @@ impl App {
             return Some(route.account.clone());
         }
         let names = self.im_link_names();
-        (names.len() == 1).then(|| names[0].clone())
+        match names.as_slice() {
+            [only] => Some(only.clone()),
+            _ => None,
+        }
     }
 
     /// Whether `account` is a `protocol = "matrix"` account.
@@ -705,8 +710,10 @@ impl App {
             return;
         };
         let (line, column) = (
-            reference.line as usize,
-            reference.column.map(|c| c as usize),
+            usize::try_from(reference.line).unwrap_or(usize::MAX),
+            reference
+                .column
+                .map(|c| usize::try_from(c).unwrap_or(usize::MAX)),
         );
         self.with_jump(|s| {
             s.open_path(&path, false);

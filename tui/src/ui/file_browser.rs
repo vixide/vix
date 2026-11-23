@@ -62,7 +62,7 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     draw_file_browser_header(fb, frame, chunk(&chunks, 0), chunk(&chunks, 1));
 
-    let view_h = chunk(&chunks, 2).height as usize;
+    let view_h = usize::from(chunk(&chunks, 2).height);
     if let Some(fb) = app.file_browser.as_mut() {
         fb.ensure_visible(view_h);
     }
@@ -72,10 +72,15 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
     let filtered = fb.matches();
     let total = filtered.len();
     // Fixed size (9) and date (16) columns; the path takes the rest.
-    let path_w = (chunk(&chunks, 2).width as usize).minus(9 + 16 + 5).max(8);
+    let path_w = usize::from(chunk(&chunks, 2).width)
+        .minus(9 + 16 + 5)
+        .max(8);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (row, &idx) in filtered.iter().enumerate().skip(fb.scroll).take(view_h) {
-        let text = file_browser_row(&fb.entries[idx], path_w);
+        let Some(entry) = fb.entries.get(idx) else {
+            continue;
+        };
+        let text = file_browser_row(entry, path_w);
         let line = if row == fb.selected {
             Line::from(Span::styled(text, theme::selected()))
         } else {

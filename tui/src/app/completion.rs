@@ -92,7 +92,10 @@ impl CompletionPopup {
             .collect();
         scored.sort_by(|a, b| {
             b.0.cmp(&a.0)
-                .then_with(|| items[a.1].sort_key().cmp(items[b.1].sort_key()))
+                .then_with(|| {
+                    let key = |i: usize| items.get(i).map(vix_lsp_core::CompletionItem::sort_key);
+                    key(a.1).cmp(&key(b.1))
+                })
                 .then(a.1.cmp(&b.1))
         });
         self.visible = scored.into_iter().map(|(_, i)| i).collect();

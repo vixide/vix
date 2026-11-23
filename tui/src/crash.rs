@@ -142,20 +142,27 @@ pub fn redact_quoted(message: &str) -> String {
     let mut out = String::with_capacity(message.len());
     let mut rest = message;
     while let Some(open) = rest.find(['`', '"']) {
-        let quote = rest[open..].chars().next().unwrap_or('`');
-        let Some(len) = rest[open.plus(1)..].find(quote) else {
+        let Some((before, from_open)) = rest.split_at_checked(open) else {
             break;
         };
-        let inner = &rest[open.plus(1)..open.plus(1).plus(len)];
-        out.push_str(&rest[..open]);
+        let quote = from_open.chars().next().unwrap_or('`');
+        // The quote is one ASCII byte, so skipping a byte lands on a boundary.
+        let after_open = from_open.get(1..).unwrap_or("");
+        let Some(len) = after_open.find(quote) else {
+            break;
+        };
+        let inner = after_open.get(..len).unwrap_or("");
+        out.push_str(before);
         if quote == '`' || inner.chars().count() > 40 {
             out.push(quote);
             out.push_str("<removed>");
             out.push(quote);
         } else {
-            out.push_str(&rest[open..=open.plus(1).plus(len)]);
+            out.push(quote);
+            out.push_str(inner);
+            out.push(quote);
         }
-        rest = &rest[open.plus(2).plus(len)..];
+        rest = after_open.get(len.plus(1)..).unwrap_or("");
     }
     out.push_str(rest);
     out
@@ -242,17 +249,21 @@ pub fn issue_url(repository: &str, report: &str) -> String {
     )
 }
 
+/// The upper-case hex digit for a nibble (`0..=15`; larger values cannot occur).
+fn hex_digit(nibble: u8) -> char {
+    char::from_digit(u32::from(nibble), 16).map_or('0', |c| c.to_ascii_uppercase())
+}
+
 /// Percent-encode `text` for a URL query value.
 fn encode(text: &str) -> String {
-    const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut out = String::with_capacity(text.len().times(3));
     for &b in text.as_bytes() {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
             out.push(char::from(b));
         } else {
             out.push('%');
-            out.push(char::from(HEX[usize::from(b >> 4)]));
-            out.push(char::from(HEX[usize::from(b & 0xF)]));
+            out.push(hex_digit(b >> 4));
+            out.push(hex_digit(b & 0xF));
         }
     }
     out

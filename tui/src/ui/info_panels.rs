@@ -61,7 +61,7 @@ pub(super) fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(p) = app.contacts.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -85,7 +85,10 @@ pub(super) fn draw_contacts(app: &mut App, frame: &mut Frame, area: Rect) {
         )));
     } else {
         for idx in p.scroll..p.scroll.plus(view_h).min(total) {
-            let text = format!("  {}", p.contacts[idx].name);
+            let Some(contact) = p.contacts.get(idx) else {
+                continue;
+            };
+            let text = format!("  {}", contact.name);
             if idx == p.selected {
                 lines.push(Line::from(Span::styled(text, theme::selected())));
             } else {
@@ -151,7 +154,7 @@ pub(super) fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(p) = app.vcard.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -167,7 +170,9 @@ pub(super) fn draw_vcard(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..p.scroll.plus(view_h).min(total) {
-        let row = &p.rows[idx];
+        let Some(row) = p.rows.get(idx) else {
+            continue;
+        };
         let text = format!("  {:<14} {}", row.label, row.value);
         if idx == p.selected {
             lines.push(Line::from(Span::styled(text, theme::selected())));
@@ -243,7 +248,7 @@ pub(super) fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     frame.render_widget(Paragraph::new(filter), chunk(&chunks, 0));
 
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     let lib = &app.snippet_library;
     if let Some(p) = app.snippets.as_mut() {
         p.ensure_visible(view_h, lib);
@@ -253,10 +258,10 @@ pub(super) fn draw_snippets(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let filtered = picker.matches(lib);
     let total = filtered.len();
-    let colw = chunk(&chunks, 1).width as usize;
+    let colw = usize::from(chunk(&chunks, 1).width);
     let mut rows: Vec<Line> = Vec::with_capacity(view_h);
-    for (row, &i) in filtered.iter().enumerate().skip(picker.scroll).take(view_h) {
-        let s = &lib[i];
+    let shown = filtered.iter().enumerate().skip(picker.scroll).take(view_h);
+    for (row, s) in shown.filter_map(|(row, &i)| Some((row, lib.get(i)?))) {
         let prefix = s
             .prefixes
             .first()
@@ -332,7 +337,10 @@ pub(super) fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect
         panel.scroll = max_scroll;
     }
     let end = panel.scroll.plus(view_h).min(panel.lines.len());
-    let lines: Vec<Line> = panel.lines[panel.scroll..end]
+    let lines: Vec<Line> = panel
+        .lines
+        .get(panel.scroll..end)
+        .unwrap_or(&[])
         .iter()
         .map(|l| {
             // Heading underline rules and the thematic break render dim.
@@ -347,8 +355,14 @@ pub(super) fn draw_markdown_preview(app: &mut App, frame: &mut Frame, area: Rect
     frame.render_widget(Paragraph::new(lines), inner);
     // Links render as `text (url)`; make the URL clickable (T628).
     if app.terminal_caps.hyperlinks {
-        let urls =
-            super::hyperlink::urls_in(panel.lines[panel.scroll..end].iter().map(String::as_str));
+        let urls = super::hyperlink::urls_in(
+            panel
+                .lines
+                .get(panel.scroll..end)
+                .unwrap_or(&[])
+                .iter()
+                .map(String::as_str),
+        );
         if !urls.is_empty() {
             app.layout.hyperlink_regions.push((inner, urls));
         }
@@ -396,7 +410,7 @@ pub(super) fn draw_markdown_toc(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(o) = app.markdown_toc.as_mut() {
         o.ensure_visible(view_h);
     }
@@ -405,7 +419,9 @@ pub(super) fn draw_markdown_toc(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in o.scroll..o.scroll.plus(view_h).min(o.len()) {
-        let e = &o.entries[idx];
+        let Some(e) = o.entries.get(idx) else {
+            continue;
+        };
         // `kind` is the heading's `#`-run; indent nested levels under it.
         let indent = "  ".repeat(e.kind.len().minus(1));
         let text = format!("  {indent}{}", e.name);
@@ -462,7 +478,7 @@ pub(super) fn draw_text_info(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.info.text_info() else {
         return;
     };
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (idx, row) in p.rows.iter().take(view_h).enumerate() {
         let text = format!("  {:<12} {}", row.label, row.value);
@@ -524,7 +540,7 @@ pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(p) = app.info.file_info_mut() {
         p.ensure_visible(view_h);
     }
@@ -533,7 +549,9 @@ pub(super) fn draw_file_info(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..p.scroll.plus(view_h).min(p.len()) {
-        let row = &p.rows[idx];
+        let Some(row) = p.rows.get(idx) else {
+            continue;
+        };
         let text = format!("  {:<14} {}", row.label, row.value);
         if idx == p.selected {
             lines.push(Line::from(Span::styled(text, theme::selected())));
@@ -593,7 +611,7 @@ pub(super) fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(p) = app.info.system_info_mut() {
         p.ensure_visible(view_h);
     }
@@ -602,7 +620,9 @@ pub(super) fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..p.scroll.plus(view_h).min(p.len()) {
-        let row = &p.rows[idx];
+        let Some(row) = p.rows.get(idx) else {
+            continue;
+        };
         let line = if row.is_heading() {
             Line::from(Span::styled(row.label.clone(), theme::title(true)))
         } else {

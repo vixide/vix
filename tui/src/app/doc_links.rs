@@ -132,7 +132,7 @@ impl App {
         let mut on_line = st
             .colors
             .iter()
-            .filter(|c| c.range.start.line as usize == line);
+            .filter(|c| usize::try_from(c.range.start.line).ok() == Some(line));
         let first = on_line.next()?;
         on_line.next().is_none().then_some(*first)
     }
@@ -276,8 +276,11 @@ impl App {
                 .into_iter()
                 .map(|c| {
                     let (r, g, b) = c.rgb;
-                    EolText::new(c.range.start.line as usize, "\u{25a0}")
-                        .with_color(Color::Rgb(r, g, b))
+                    EolText::new(
+                        usize::try_from(c.range.start.line).unwrap_or(usize::MAX),
+                        "\u{25a0}",
+                    )
+                    .with_color(Color::Rgb(r, g, b))
                 })
                 .collect()
         } else {
@@ -313,7 +316,7 @@ impl App {
         let mut on_line = st
             .links
             .iter()
-            .filter(|l| l.range.start.line as usize == line);
+            .filter(|l| usize::try_from(l.range.start.line).ok() == Some(line));
         let first = on_line.next()?;
         on_line.next().is_none().then(|| first.clone())
     }
