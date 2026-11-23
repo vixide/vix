@@ -40,6 +40,18 @@
 //!
 //! [wooorm/dictionaries]: https://github.com/wooorm/dictionaries
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 #[cfg(feature = "hunspell")]
@@ -192,7 +204,8 @@ impl SpellChecker {
             .into_iter()
             .filter(|(_, _, w)| should_check(w))
             .filter(|(_, _, w)| !self.check(w))
-            .map(|(start, end, _)| (base + start, base + end))
+            // A span whose position does not fit `usize` cannot be reported.
+            .filter_map(|(start, end, _)| Some((base.checked_add(start)?, base.checked_add(end)?)))
             .collect()
     }
 }
@@ -222,29 +235,30 @@ fn locale_candidates(locale: &str) -> Vec<String> {
 fn tokenize(text: &str) -> Vec<(usize, usize, String)> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
+    // The next index; an index is below `n` here, so it cannot overflow, and
+    // the end of the text is where scanning stops anyway.
+    let bump = |i: usize| i.checked_add(1).unwrap_or(n);
     let mut tokens = Vec::new();
     let mut i = 0;
-    while i < n {
-        if !chars[i].is_alphabetic() {
-            i += 1;
+    while let Some(&first) = chars.get(i) {
+        if !first.is_alphabetic() {
+            i = bump(i);
             continue;
         }
         let start = i;
         let mut word = String::new();
-        while i < n {
-            let c = chars[i];
+        while let Some(&c) = chars.get(i) {
             if c.is_alphabetic() {
                 word.push(c);
-                i += 1;
+                i = bump(i);
             // An apostrophe joins two letters only (not leading or trailing,
             // so a quote mark around a word is not part of the token).
             } else if (c == '\'' || c == '\u{2019}')
                 && !word.is_empty()
-                && i + 1 < n
-                && chars[i + 1].is_alphabetic()
+                && chars.get(bump(i)).is_some_and(|next| next.is_alphabetic())
             {
                 word.push('\'');
-                i += 1;
+                i = bump(i);
             } else {
                 break;
             }

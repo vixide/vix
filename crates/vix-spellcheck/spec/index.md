@@ -49,3 +49,7 @@ session dictionary, `i` ignores it for the session, `Esc` closes.
 - `hunspell` (default on): ask the installed `hunspell -D` where dictionaries live. Off,
   only the standard directories are searched and nothing is started. The root `hunspell`
   feature enables it (`spec/cargo-features`, T595).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The tokenizer reads characters with `get` and a single index-advance helper (the end of the text is where scanning stops), and a misspelling's span uses `checked_add`: a span whose position does not fit `usize` cannot be reported and is dropped. No fallbacks are declared.
