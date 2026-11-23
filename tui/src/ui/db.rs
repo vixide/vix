@@ -1576,7 +1576,7 @@ mod tests {
         let color_of = |needle: &str| {
             let rows = rows(&buf);
             let (y, line) = rows.iter().enumerate().find(|(_, l)| l.contains(needle)).unwrap();
-            let x = line.find(needle).unwrap();
+            let x = line.find(needle).map(|b| line[..b].chars().count()).unwrap();
             let meta_x = u16::try_from(x.saturating_sub(10)).unwrap();
             buf[(meta_x, u16::try_from(y).unwrap())].fg
         };
@@ -1781,5 +1781,42 @@ mod tests {
         // Message sits on the line above the hint, inside the border.
         assert!(r[h - 3].contains("a very informative status"));
         assert!(r[h - 2].contains(&head(&t!("ui.db_hint"))));
+    }
+
+    #[test]
+    fn staged_row_changes_are_colored_by_kind() {
+        let mut b = workbench();
+        b.focus = Pane::Results;
+        b.grid.set(
+            vec!["id".to_string(), "name".to_string()],
+            vec![
+                vec!["1".to_string(), "ada".to_string()],
+                vec!["2".to_string(), "grace".to_string()],
+                vec!["3".to_string(), "linus".to_string()],
+            ],
+        );
+        crate::db::staging::set_cell(&mut b.edits, 0, 1, "ada", "dame");
+        b.staged.toggle_delete(1);
+        b.staged.insert_row(2);
+        let mut app = app_with(b);
+        let buf = draw(&mut app, 120, 32);
+        let t = text(&buf);
+        assert!(t.contains("dame"), "the staged value replaces the loaded one");
+        let at = |needle: &str| {
+            let r = rows(&buf);
+            let (y, line) = r.iter().enumerate().find(|(_, l)| l.contains(needle)).unwrap();
+            let x = line.find(needle).map(|b| line[..b].chars().count()).unwrap();
+            let cell = &buf[(u16::try_from(x).unwrap(), u16::try_from(y).unwrap())];
+            (cell.fg, cell.modifier)
+        };
+        let (fg, m) = at("dame");
+        assert_eq!(fg, Color::Yellow);
+        assert!(m.contains(Modifier::BOLD));
+        let (fg, m) = at("grace");
+        assert_eq!(fg, Color::Red);
+        assert!(m.contains(Modifier::CROSSED_OUT));
+        let (fg, m) = at("linus");
+        assert_eq!(fg, Color::Green);
+        assert!(m.contains(Modifier::BOLD));
     }
 }
