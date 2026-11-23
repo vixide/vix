@@ -11,7 +11,55 @@
 //! "Range" means the selection's line span, or the whole buffer when there is
 //! no selection. See `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::editor::Editor;
+
+/// The lines before index `a` (all of them when `a` is past the end).
+fn before<'a>(lines: &'a [&'a str], a: usize) -> &'a [&'a str] {
+    lines.get(..a).unwrap_or(lines)
+}
+
+/// The lines from index `a` on (none when `a` is past the end).
+fn from<'a>(lines: &'a [&'a str], a: usize) -> &'a [&'a str] {
+    lines.get(a..).unwrap_or(&[])
+}
+
+/// The lines from index `a` up to but not including `b` (none for a range that is not inside).
+fn between<'a>(lines: &'a [&'a str], a: usize, b: usize) -> &'a [&'a str] {
+    lines.get(a..b).unwrap_or(&[])
+}
+
+/// How many chars the first `upto` lines take up with their newlines.
+fn chars_before(lines: &[&str], upto: usize) -> usize {
+    before(lines, upto).iter().fold(0, |total, l| {
+        add_or(total, add_or(l.chars().count(), 1, usize::MAX), usize::MAX)
+    })
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 impl Editor {
     /// Move the cursor's line up one row, swapping it with the line above. No-op
@@ -55,16 +103,18 @@ impl Editor {
         // plus the one below it.
         let (mut a, mut b) = self.line_span();
         if a == b {
-            if a + 1 >= n {
+            let below = add_or(a, 1, usize::MAX);
+            if below >= n {
                 return; // last line, nothing below to join
             }
-            b = a + 1;
+            b = below;
         }
-        a = a.min(n - 1);
-        b = b.min(n - 1);
+        let last = sub_or(n, 1, 0);
+        a = a.min(last);
+        b = b.min(last);
 
-        let mut merged = String::from(lines[a].trim_end());
-        for line in &lines[a + 1..=b] {
+        let mut merged = String::from(lines.get(a).copied().unwrap_or("").trim_end());
+        for line in between(&lines, add_or(a, 1, usize::MAX), add_or(b, 1, usize::MAX)) {
             let t = line.trim_start();
             if !merged.is_empty() && !t.is_empty() {
                 merged.push(' ');
@@ -72,17 +122,23 @@ impl Editor {
             merged.push_str(t);
         }
         // Cursor lands at the seam after the first line's content.
-        let cursor_col = lines[a].trim_end().chars().count();
+        let cursor_col = lines
+            .get(a)
+            .copied()
+            .unwrap_or("")
+            .trim_end()
+            .chars()
+            .count();
 
-        let mut rebuilt: Vec<&str> = lines[..a].to_vec();
+        let mut rebuilt: Vec<&str> = before(&lines, a).to_vec();
         rebuilt.push(&merged);
-        rebuilt.extend_from_slice(&lines[b + 1..]);
+        rebuilt.extend_from_slice(from(&lines, add_or(b, 1, usize::MAX)));
         let mut new_text = rebuilt.join("\n");
         if had_final_newline {
             new_text.push('\n');
         }
-        let offset: usize = lines[..a].iter().map(|l| l.chars().count() + 1).sum();
-        self.replace_all(&new_text, offset + cursor_col);
+        let offset = chars_before(&lines, a);
+        self.replace_all(&new_text, add_or(offset, cursor_col, usize::MAX));
     }
 
     /// Sort the selected lines ascending (byte order), or the whole buffer when
@@ -108,18 +164,21 @@ impl Editor {
         }
         let (a, b) = match self.get_selection() {
             Some(_) => self.line_span(),
-            None => (0, n - 1),
+            None => (0, sub_or(n, 1, 0)),
         };
-        let (a, b) = (a.min(n - 1), b.min(n - 1));
+        let last = sub_or(n, 1, 0);
+        let (a, b) = (a.min(last), b.min(last));
         if a >= b {
             return;
         }
-        lines[a..=b].sort_unstable();
+        if let Some(range) = lines.get_mut(a..=b) {
+            range.sort_unstable();
+        }
         let mut new_text = lines.join("\n");
         if had_final_newline {
             new_text.push('\n');
         }
-        let offset: usize = lines[..a].iter().map(|l| l.chars().count() + 1).sum();
+        let offset = chars_before(&lines, a);
         self.replace_all(&new_text, offset);
     }
 
@@ -184,19 +243,24 @@ impl Editor {
         }
         let (a, b) = match self.get_selection() {
             Some(s) if !s.is_empty() => self.line_span(),
-            _ => (0, n - 1),
+            _ => (0, sub_or(n, 1, 0)),
         };
-        let (a, b) = (a.min(n - 1), b.min(n - 1));
-        let mut parts: Vec<String> = lines[..a].iter().map(|s| (*s).to_string()).collect();
-        parts.extend(f(&lines[a..=b]));
-        parts.extend(lines[b + 1..].iter().map(|s| (*s).to_string()));
+        let last = sub_or(n, 1, 0);
+        let (a, b) = (a.min(last), b.min(last));
+        let mut parts: Vec<String> = before(&lines, a).iter().map(|s| (*s).to_string()).collect();
+        parts.extend(f(between(&lines, a, add_or(b, 1, usize::MAX))));
+        parts.extend(
+            from(&lines, add_or(b, 1, usize::MAX))
+                .iter()
+                .map(|s| (*s).to_string()),
+        );
         let mut new_text = parts.join("\n");
         if had_final_newline {
             new_text.push('\n');
         }
         // Char offset of the range start: each earlier line plus its `\n`
         // (offsets are in chars, not bytes).
-        let offset: usize = lines[..a].iter().map(|l| l.chars().count() + 1).sum();
+        let offset = chars_before(&lines, a);
         self.replace_all(&new_text, offset);
     }
 
@@ -209,7 +273,7 @@ impl Editor {
                 // A selection ending exactly at a line start does not include
                 // that trailing (empty) line.
                 let end = if sel.end > sel.start {
-                    sel.end - 1
+                    sub_or(sel.end, 1, 0)
                 } else {
                     sel.end
                 };
@@ -264,7 +328,8 @@ impl Editor {
             return;
         }
 
-        let cur_line = self.code_ref().char_to_line(cursor).min(n - 1);
+        let last_line = sub_or(n, 1, 0);
+        let cur_line = self.code_ref().char_to_line(cursor).min(last_line);
 
         // T580: a collapsed fold moves as one unit. The moved block is the
         // cursor line plus its hidden body; the neighbour it swaps with is
@@ -274,7 +339,7 @@ impl Editor {
             self.folds
                 .iter()
                 .find(|f| f.0 == line)
-                .map_or(line, |f| f.1.min(n - 1))
+                .map_or(line, |f| f.1.min(last_line))
         };
         let block_start = |line: usize| {
             self.folds
@@ -284,32 +349,35 @@ impl Editor {
         };
         let moved = (cur_line, block_end(cur_line));
         let (first, second) = if down {
-            if moved.1 + 1 >= n {
+            let nb = add_or(moved.1, 1, usize::MAX);
+            if nb >= n {
                 return;
             }
-            let nb = moved.1 + 1;
             (moved, (nb, block_end(nb)))
         } else {
-            if moved.0 == 0 {
+            let Some(nb_end) = moved.0.checked_sub(1) else {
                 return;
-            }
-            let nb_end = moved.0 - 1;
+            };
             ((block_start(nb_end), nb_end), moved)
         };
 
         // Column within the current line, preserved after the move.
         let line_start = self.code_ref().line_to_char(cur_line);
-        let col = cursor - line_start;
+        let col = sub_or(cursor, line_start, 0);
 
-        let mut order: Vec<&str> = Vec::with_capacity(n);
-        order.extend(&lines[..first.0]);
-        order.extend(&lines[second.0..=second.1]);
-        order.extend(&lines[first.0..=first.1]);
-        order.extend(&lines[second.1 + 1..]);
-        let first_len = first.1 - first.0 + 1;
-        let second_len = second.1 - second.0 + 1;
+        let mut order: Vec<&str> = Vec::new();
+        order.extend(before(&lines, first.0));
+        order.extend(between(&lines, second.0, add_or(second.1, 1, usize::MAX)));
+        order.extend(between(&lines, first.0, add_or(first.1, 1, usize::MAX)));
+        order.extend(from(&lines, add_or(second.1, 1, usize::MAX)));
+        let first_len = add_or(sub_or(first.1, first.0, 0), 1, usize::MAX);
+        let second_len = add_or(sub_or(second.1, second.0, 0), 1, usize::MAX);
         // Where the moved block's first line lands.
-        let target = if down { first.0 + second_len } else { first.0 };
+        let target = if down {
+            add_or(first.0, second_len, usize::MAX)
+        } else {
+            first.0
+        };
         let lines = order;
         let mut new_text = lines.join("\n");
         if had_final_newline {
@@ -320,19 +388,19 @@ impl Editor {
         // their lines.
         for f in &mut self.folds {
             if f.0 >= first.0 && f.1 <= first.1 {
-                f.0 += second_len;
-                f.1 += second_len;
+                f.0 = add_or(f.0, second_len, usize::MAX);
+                f.1 = add_or(f.1, second_len, usize::MAX);
             } else if f.0 >= second.0 && f.1 <= second.1 {
-                f.0 -= first_len;
-                f.1 -= first_len;
+                f.0 = sub_or(f.0, first_len, 0);
+                f.1 = sub_or(f.1, first_len, 0);
             }
         }
 
         // Offset of the moved line in the rebuilt text, plus the preserved column
         // (clamped to the moved line's new length).
-        let offset: usize = lines[..target].iter().map(|l| l.chars().count() + 1).sum();
-        let moved_len = lines[target].chars().count();
-        let new_cursor = offset + col.min(moved_len);
+        let offset = chars_before(&lines, target);
+        let moved_len = lines.get(target).map_or(0, |l| l.chars().count());
+        let new_cursor = add_or(offset, col.min(moved_len), usize::MAX);
 
         let len = self.code_ref().len_chars();
         let selection = self.get_selection();
@@ -377,7 +445,12 @@ fn shuffle(lines: &[&str], seed: u64) -> Vec<String> {
         state ^= state << 17;
         // Modulo bias is negligible for line counts and irrelevant to a
         // shuffle command.
-        let j = usize::try_from(state % (i as u64 + 1)).unwrap_or(0);
+        let j = u64::try_from(i)
+            .ok()
+            .and_then(|i| i.checked_add(1))
+            .and_then(|modulus| state.checked_rem(modulus))
+            .and_then(|r| usize::try_from(r).ok())
+            .unwrap_or(0);
         v.swap(i, j);
     }
     v
