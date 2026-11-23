@@ -915,12 +915,12 @@ mod tests {
         press(&mut a, KeyCode::Enter);
         draw(&mut a);
         let value = a.vcard.as_ref().unwrap().selected_value();
-        assert!(!value.is_empty());
+        assert_ne!(value, "");
         press(&mut a, KeyCode::Enter);
         assert_eq!(tab_text(&a), value);
         assert_eq!(
             a.status,
-            t!("status.ascii_inserted", name = value.clone()).to_string()
+            t!("status.ascii_inserted", name = value).to_string()
         );
         // Navigation keys move the selection; a click inserts that row.
         press(&mut a, KeyCode::Down);
@@ -997,15 +997,20 @@ mod tests {
     #[test]
     fn text_info_uses_the_selection_and_keys_insert_values() {
         let mut a = app();
-        a.editor.new_tab_with_content("alpha beta gamma\nsecond line\n");
-        a.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 10);
+        a.editor
+            .new_tab_with_content("alpha beta gamma\nsecond line\n");
+        a.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(0, 10);
         assert_eq!(a.selected_or_all_text(), "alpha beta");
         a.run_action("tools.text_info");
         draw(&mut a);
         // Down then Enter inserts the second statistic and keeps the panel.
         press(&mut a, KeyCode::Down);
         let value = a.info.text_info().unwrap().selected_value();
-        assert!(!value.is_empty());
+        assert_ne!(value, "");
         press(&mut a, KeyCode::Enter);
         assert!(tab_text(&a).contains(&value));
         press(&mut a, KeyCode::Up);
@@ -1021,9 +1026,11 @@ mod tests {
     #[test]
     fn markdown_preview_keys_scroll_open_the_toc_and_close() {
         let mut a = app();
-        let body: String = (0..30)
-            .map(|i| format!("# Heading {i}\n\ntext {i}\n\n"))
-            .collect();
+        let mut body = String::new();
+        for i in 0..30 {
+            std::fmt::Write::write_fmt(&mut body, format_args!("# Heading {i}\n\ntext {i}\n\n"))
+                .unwrap();
+        }
         a.editor.new_tab_with_content(&body);
         a.run_action("tools.markdown_preview");
         draw(&mut a);
@@ -1152,11 +1159,21 @@ mod tests {
         assert_eq!(tab_text(&a), "for i in xs {  }");
         assert!(a.snippet_active());
         // The first field is selected; typing replaces it, Tab moves on.
-        let sel = a.editor.active_tab_mut().unwrap().editor.get_selection_text();
+        let sel = a
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
         assert_eq!(sel.as_deref(), Some("i"));
         press(&mut a, KeyCode::Char('n'));
         a.snippet_tab();
-        let sel = a.editor.active_tab_mut().unwrap().editor.get_selection_text();
+        let sel = a
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
         assert_eq!(sel.as_deref(), Some("xs"));
         a.snippet_tab();
         a.snippet_tab();
@@ -1186,7 +1203,11 @@ mod tests {
         a.new_snippet_from_selection();
         assert_eq!(a.status, t!("status.no_selection").to_string());
         assert!(a.prompt.is_none());
-        a.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 4);
+        a.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(0, 4);
         a.new_snippet_from_selection();
         assert!(a.prompt.is_some());
         assert_eq!(a.pending_snippet_body.as_deref(), Some("some"));
@@ -1232,7 +1253,7 @@ mod tests {
                 break;
             }
         }
-        assert!(!value.is_empty());
+        assert_ne!(value, "");
         press(&mut a, KeyCode::Enter);
         assert!(tab_text(&a).contains(&value));
         // A click on a heading row inserts nothing.

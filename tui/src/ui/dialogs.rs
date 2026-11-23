@@ -611,7 +611,9 @@ mod tests {
     #[test]
     fn replace_confirm_lists_files_and_scrolls() {
         let mut a = app();
-        assert!(blank(&render(80, 24, |f, r| draw_replace_confirm(&a, f, r))));
+        assert!(blank(&render(80, 24, |f, r| draw_replace_confirm(
+            &a, f, r
+        ))));
         a.replace_confirm = Some(confirm_lines(40));
         let t = text(&render(80, 24, |f, r| draw_replace_confirm(&a, f, r)));
         assert!(t.contains("file0.txt (1)"));
@@ -640,7 +642,9 @@ mod tests {
     #[test]
     fn dir_edit_confirm_draws_nothing_without_a_pending_listing() {
         let a = app();
-        assert!(blank(&render(80, 24, |f, r| draw_dir_edit_confirm(&a, f, r))));
+        assert!(blank(&render(80, 24, |f, r| draw_dir_edit_confirm(
+            &a, f, r
+        ))));
     }
 
     #[test]
@@ -702,7 +706,9 @@ mod tests {
     #[test]
     fn structural_replace_bar_shows_its_own_label() {
         let mut a = app();
-        assert!(blank(&render(100, 10, |f, r| draw_structural_replace(&a, f, r))));
+        assert!(blank(&render(100, 10, |f, r| draw_structural_replace(
+            &a, f, r
+        ))));
         a.structural_replace = Some(StructuralReplace {
             pattern: vix_structural_replace::Pattern::compile("foo($X)").unwrap(),
             template: "bar($X)".to_string(),

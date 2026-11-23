@@ -1194,7 +1194,13 @@ mod tests {
         app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
         app.open_initial(&file);
         // The tab's own spelling of the path (symlinked temp dirs resolve).
-        let file = app.editor.active_tab().unwrap().path.clone().unwrap_or(file);
+        let file = app
+            .editor
+            .active_tab()
+            .unwrap()
+            .path
+            .clone()
+            .unwrap_or(file);
         (app, dir, file)
     }
 
@@ -1214,12 +1220,21 @@ mod tests {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         assert!(!app.run_dap_action("run.nonsense"));
         assert!(app.run_dap_action("run.repl"));
-        assert!(matches!(app.prompt.as_ref().unwrap().kind, PromptKind::DebugRepl));
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::DebugRepl
+        ));
         assert!(app.run_dap_action("run.watch"));
-        assert!(matches!(app.prompt.as_ref().unwrap().kind, PromptKind::DebugWatch));
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::DebugWatch
+        ));
         let shown = app.visible.contains(crate::app::Visible::DEBUG_PANEL);
         assert!(app.run_dap_action("run.panel"));
-        assert_ne!(shown, app.visible.contains(crate::app::Visible::DEBUG_PANEL));
+        assert_ne!(
+            shown,
+            app.visible.contains(crate::app::Visible::DEBUG_PANEL)
+        );
         assert!(app.run_dap_action("run.pause"));
     }
 
@@ -1258,22 +1273,24 @@ mod tests {
         assert_eq!(app.status, t!("status.blame_no_file").to_string());
 
         let (mut app, dir, _f) = app_with_file("bp", "a.rs", "one\ntwo\nthree\n");
-        app.editor.goto(2, None, ratatui::layout::Rect::new(0, 0, 80, 24));
+        app.editor
+            .goto(2, None, ratatui::layout::Rect::new(0, 0, 80, 24));
         app.run_dap_action("run.toggle_breakpoint");
         assert_eq!(app.active_breakpoints(), vec![2]);
         assert_eq!(app.active_breakpoint(2).unwrap().line, 2);
         assert!(app.active_breakpoint(1).is_none());
         app.run_dap_action("run.toggle_breakpoint");
-        assert!(app.active_breakpoints().is_empty());
+        assert_eq!(app.active_breakpoints(), Vec::<usize>::new());
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
     fn the_stopped_line_and_breakpoints_reach_the_active_tab() {
         let (mut app, dir, file) = app_with_file("stop", "a.rs", "one\ntwo\nthree\n");
-        app.editor.goto(3, None, ratatui::layout::Rect::new(0, 0, 80, 24));
+        app.editor
+            .goto(3, None, ratatui::layout::Rect::new(0, 0, 80, 24));
         app.toggle_breakpoint();
-        app.dap_stopped = Some((file.clone(), 2));
+        app.dap_stopped = Some((file, 2));
         app.refresh_debug_markers();
         assert_eq!(app.active_breakpoints(), vec![3]);
         // A stop in another file leaves this buffer without a current line.
@@ -1286,7 +1303,7 @@ mod tests {
     fn debug_prompts_add_watches_and_ignore_empty_input() {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         app.accept_debug_prompt(PromptKind::DebugWatch, "");
-        assert!(app.dap_view.watches.is_empty());
+        assert_eq!(app.dap_view.watches.len(), 0);
         app.accept_debug_prompt(PromptKind::DebugWatch, "x + 1");
         assert_eq!(app.dap_view.watches.len(), 1);
         assert_eq!(app.dap_view.watches[0].0, "x + 1");
@@ -1339,7 +1356,14 @@ mod tests {
     fn document_highlights_mark_every_occurrence() {
         let (mut app, dir, _f) = app_with_file("hl", "a.rs", "foo bar foo\n");
         app.apply_document_highlights(&[range(0, 0, 0, 3), range(0, 8, 0, 11)]);
-        let marks = app.editor.active_tab().unwrap().editor.marks().unwrap().clone();
+        let marks = app
+            .editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .marks()
+            .unwrap()
+            .clone();
         assert_eq!(marks.len(), 2);
         assert_eq!((marks[0].0, marks[0].1), (0, 3));
         assert_eq!((marks[1].0, marks[1].1), (8, 11));
@@ -1355,7 +1379,13 @@ mod tests {
         app.expand_selection_dir = Some(true);
         app.apply_selection_range(&chain);
         let sel = |a: &mut App| {
-            let s = a.editor.active_tab_mut().unwrap().editor.get_selection().unwrap();
+            let s = a
+                .editor
+                .active_tab_mut()
+                .unwrap()
+                .editor
+                .get_selection()
+                .unwrap();
             (s.start, s.end)
         };
         assert_eq!(sel(&mut app), (17, 20));
@@ -1485,7 +1515,7 @@ mod tests {
         let closed = dir.join("b.rs");
         std::fs::write(&closed, "use old;\n").unwrap();
         app.apply_workspace_edit(&[
-            (file.clone(), vec![(range(0, 4, 0, 7), "new".to_string())]),
+            (file, vec![(range(0, 4, 0, 7), "new".to_string())]),
             (closed.clone(), vec![(range(0, 4, 0, 7), "new".to_string())]),
             (dir.join("unchanged.rs"), Vec::new()),
         ]);

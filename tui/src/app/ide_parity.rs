@@ -966,7 +966,7 @@ mod tests {
     }
 
     fn last_error(app: &App) -> String {
-        app.messages.items.last().map(|m| m.text.clone()).unwrap_or_default()
+        app.messages.items.last().map_or_default(|m| m.text.clone())
     }
 
     fn list(purpose: ChoicePurpose, rows: &[&str]) -> ChoiceList {
@@ -1033,7 +1033,7 @@ mod tests {
         std::fs::write(&target, "l1\nl2\nl3\nl4\n").unwrap();
         app.choice_list = Some(list(
             ChoicePurpose::Peek {
-                path: target.clone(),
+                path: target,
                 line: 3,
             },
             &["row"],
@@ -1052,13 +1052,22 @@ mod tests {
         let rev = app.editor.active_tab().unwrap().editor.revision();
         app.lsp_synced.insert(file.clone(), rev);
         let range = crate::lsp_core::Range {
-            start: crate::lsp_core::Position { line: 0, character: 7 },
-            end: crate::lsp_core::Position { line: 0, character: 10 },
+            start: crate::lsp_core::Position {
+                line: 0,
+                character: 7,
+            },
+            end: crate::lsp_core::Position {
+                line: 0,
+                character: 10,
+            },
         };
         app.choice_list = Some(list(
             ChoicePurpose::ColorPresentation {
                 path: file,
-                edits: vec![vec![(range, "#f00".to_string())], vec![(range, "blue".to_string())]],
+                edits: vec![
+                    vec![(range, "#f00".to_string())],
+                    vec![(range, "blue".to_string())],
+                ],
             },
             &["#f00", "blue"],
         ));
@@ -1139,7 +1148,7 @@ mod tests {
         let (mut app, dir) = app_in("lhmissing");
         let file = open(&mut app, &dir, "a.txt", "one\n");
         app.local_history_act(&file, 12345, (0, 1), ChoiceAction::Primary);
-        assert!(!last_error(&app).is_empty());
+        assert_ne!(last_error(&app), "");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1224,8 +1233,14 @@ mod tests {
         app.on_code_actions(vec![action("cmd", Vec::new())]);
         assert_eq!(app.status, t!("status.organize_command_only").to_string());
         let range = crate::lsp_core::Range {
-            start: crate::lsp_core::Position { line: 0, character: 0 },
-            end: crate::lsp_core::Position { line: 0, character: 6 },
+            start: crate::lsp_core::Position {
+                line: 0,
+                character: 0,
+            },
+            end: crate::lsp_core::Position {
+                line: 0,
+                character: 6,
+            },
         };
         app.code_action_intent = CodeActionIntent::Cleanup;
         app.on_code_actions(vec![action(
@@ -1233,7 +1248,13 @@ mod tests {
             vec![(file, vec![(range, "use c;".to_string())])],
         )]);
         assert_eq!(app.status, t!("status.organize_done").to_string());
-        assert!(app.editor.active_tab().unwrap().text().starts_with("use c;"));
+        assert!(
+            app.editor
+                .active_tab()
+                .unwrap()
+                .text()
+                .starts_with("use c;")
+        );
         assert_eq!(app.code_action_intent, CodeActionIntent::Menu);
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -1247,8 +1268,14 @@ mod tests {
         // Nothing selected: ignored.
         app.preview_selected_code_action();
         let range = crate::lsp_core::Range {
-            start: crate::lsp_core::Position { line: 0, character: 4 },
-            end: crate::lsp_core::Position { line: 0, character: 5 },
+            start: crate::lsp_core::Position {
+                line: 0,
+                character: 4,
+            },
+            end: crate::lsp_core::Position {
+                line: 0,
+                character: 5,
+            },
         };
         app.code_actions = Some(crate::app::CodeActionMenu {
             actions: vec![action("No edit", Vec::new())],
@@ -1319,7 +1346,15 @@ mod tests {
         app.run_action("project.run_config_edit");
         let path = dir.join(".vix").join("run.toml");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), RUN_CONFIG_TEMPLATE);
-        assert!(app.editor.active_tab().unwrap().path.as_ref().unwrap().ends_with("run.toml"));
+        assert!(
+            app.editor
+                .active_tab()
+                .unwrap()
+                .path
+                .as_ref()
+                .unwrap()
+                .ends_with("run.toml")
+        );
         // A second edit keeps the file as it is.
         std::fs::write(&path, format!("{RUN_CONFIG_TEMPLATE}\n# mine\n")).unwrap();
         app.run_action("project.run_config_edit");
@@ -1342,14 +1377,14 @@ mod tests {
         std::fs::write(&path, "[[config\n").unwrap();
         app.run_action("project.run_config");
         assert!(app.choice_list.is_none());
-        assert!(!last_error(&app).is_empty());
+        assert_ne!(last_error(&app), "");
         app.messages.items.clear();
         app.run_config_named("anything");
-        assert!(!last_error(&app).is_empty());
+        assert_ne!(last_error(&app), "");
         std::fs::write(&path, "[[config]]\nname = \"a\"\ncommand = \"true\"\n").unwrap();
         app.messages.items.clear();
         app.run_config_named("missing");
-        assert!(!last_error(&app).is_empty());
+        assert_ne!(last_error(&app), "");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1371,7 +1406,10 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for e in &errors {
             app.report_run_config_error(e);
-            assert!(seen.insert(last_error(&app)), "each variant words its own message");
+            assert!(
+                seen.insert(last_error(&app)),
+                "each variant words its own message"
+            );
         }
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -1384,15 +1422,28 @@ mod tests {
         app.run_action("nav.peek_definition");
         let c = app.choice_list.as_ref().expect("a peek opened");
         assert!(matches!(c.purpose, ChoicePurpose::Peek { line: 2, .. }));
-        assert!(c.panel.rows.iter().any(|r| r.starts_with('>') && r.contains("target_fn")));
+        assert!(
+            c.panel
+                .rows
+                .iter()
+                .any(|r| r.starts_with('>') && r.contains("target_fn"))
+        );
         app.choice_list = None;
         // A symbol with no definition warns; no symbol at all warns too.
-        app.editor.active_tab_mut().unwrap().editor.set_content("nosuchsym();\n");
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_content("nosuchsym();\n");
         app.editor.active_tab_mut().unwrap().editor.set_cursor(2);
         app.run_action("nav.peek_definition");
         assert!(app.choice_list.is_none());
         assert!(last_error(&app).contains("nosuchsym"));
-        app.editor.active_tab_mut().unwrap().editor.set_content("   \n");
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_content("   \n");
         app.run_action("nav.peek_definition");
         assert!(app.choice_list.is_none());
         std::fs::remove_dir_all(&dir).ok();

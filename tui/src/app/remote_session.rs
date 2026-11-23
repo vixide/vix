@@ -1039,7 +1039,7 @@ mod tests {
     }
 
     fn last_message(app: &App) -> String {
-        app.messages.items.last().map(|m| m.text.clone()).unwrap_or_default()
+        app.messages.items.last().map_or_default(|m| m.text.clone())
     }
 
     #[test]
@@ -1080,15 +1080,26 @@ mod tests {
     #[test]
     fn a_failed_background_connect_reports_the_error_and_clears_the_busy_state() {
         let (mut app, dir) = app("failedconnect");
-        app.start_remote_job("box".to_string(), false, || Err("no route to host".to_string()));
-        assert_eq!(app.status, t!("status.remote_connecting", host = "box").to_string());
-        assert!(app.remote_segment().contains("box"), "the status bar shows it connecting");
+        app.start_remote_job("box".to_string(), false, || {
+            Err("no route to host".to_string())
+        });
+        assert_eq!(
+            app.status,
+            t!("status.remote_connecting", host = "box").to_string()
+        );
+        assert!(
+            app.remote_segment().contains("box"),
+            "the status bar shows it connecting"
+        );
         while app.remote_busy() {
             app.poll_remote();
             std::thread::yield_now();
         }
         assert_eq!(last_message(&app), "no route to host");
-        assert_eq!(app.status, t!("status.remote_connect_failed", host = "box").to_string());
+        assert_eq!(
+            app.status,
+            t!("status.remote_connect_failed", host = "box").to_string()
+        );
         assert_eq!(app.remote_segment(), "");
         app.poll_remote();
         let _ = std::fs::remove_dir_all(&dir);
@@ -1106,7 +1117,10 @@ mod tests {
         });
         app.poll_remote();
         assert!(!app.remote_busy());
-        assert_eq!(app.status, t!("status.remote_connect_failed", host = "ghost").to_string());
+        assert_eq!(
+            app.status,
+            t!("status.remote_connect_failed", host = "ghost").to_string()
+        );
         assert!(last_message(&app).contains("ghost"));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1185,7 +1199,10 @@ mod tests {
         let lost = io::Error::new(io::ErrorKind::NotConnected, "gone");
         assert!(app.note_remote_error(&lost));
         let before = app.messages.items.len();
-        assert!(app.note_remote_error(&lost), "still reports it, without a second warning");
+        assert!(
+            app.note_remote_error(&lost),
+            "still reports it, without a second warning"
+        );
         assert_eq!(app.messages.items.len(), before);
         assert!(app.remote_save_blocked());
         assert_eq!(app.status, t!("status.remote_save_blocked").to_string());
@@ -1201,7 +1218,10 @@ mod tests {
         app.open_path(&file, false);
         app.open_save_conflict(file.clone());
         assert!(app.remote_confirm_key(key('z')));
-        assert!(app.confirm.is_some(), "an unrelated key leaves the question open");
+        assert!(
+            app.confirm.is_some(),
+            "an unrelated key leaves the question open"
+        );
         assert!(app.remote_confirm_key(key('n')));
         assert!(app.confirm.is_none());
         assert_eq!(app.status, t!("status.save_conflict_kept").to_string());
@@ -1243,7 +1263,10 @@ mod tests {
         let mut app = app0.with_remote_pickers(None, None);
         // With no history and no pickers it asks for a name straight away.
         app.run_action("file.open_remote");
-        assert!(matches!(app.prompt.as_ref().unwrap().kind, PromptKind::OpenRemote));
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::OpenRemote
+        ));
         app.prompt = None;
 
         let mut store = app.load_session();
@@ -1253,9 +1276,15 @@ mod tests {
         app.run_action("file.open_remote");
         let list = app.choice_list.as_ref().unwrap();
         assert_eq!(list.panel.rows.len(), 3);
-        assert_eq!(list.panel.rows[0], t!("ui.remote_new_connection").to_string());
+        assert_eq!(
+            list.panel.rows[0],
+            t!("ui.remote_new_connection").to_string()
+        );
         assert_eq!(list.panel.rows[1], "ssh://new@box/srv");
-        assert_eq!(list.panel.selected, 1, "the newest recent name is highlighted");
+        assert_eq!(
+            list.panel.selected, 1,
+            "the newest recent name is highlighted"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1264,7 +1293,10 @@ mod tests {
         let (mut app, dir) = app("chooserow");
         let names = vec!["bogus name".to_string()];
         app.choose_recent_remote(&[], &names, 0);
-        assert!(matches!(app.prompt.as_ref().unwrap().kind, PromptKind::OpenRemote));
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::OpenRemote
+        ));
         app.prompt = None;
         // Row 1 is the first recent name; it does not parse, so it is reported.
         app.choose_recent_remote(&[], &names, 1);

@@ -1068,7 +1068,10 @@ mod tests {
         ];
         for (i, f) in draws.iter().enumerate() {
             let mut a = app();
-            assert!(blank(&render(&mut a, 100, 30, *f)), "chooser {i} drew while closed");
+            assert!(
+                blank(&render(&mut a, 100, 30, *f)),
+                "chooser {i} drew while closed"
+            );
         }
         let more: [fn(&mut App, &mut Frame, Rect); 6] = [
             draw_spell_suggest,
@@ -1080,7 +1083,10 @@ mod tests {
         ];
         for (i, f) in more.iter().enumerate() {
             let mut a = app();
-            assert!(blank(&render(&mut a, 100, 30, *f)), "chooser {i} drew while closed");
+            assert!(
+                blank(&render(&mut a, 100, 30, *f)),
+                "chooser {i} drew while closed"
+            );
         }
         let mut a = app();
         assert!(blank(&render(&mut a, 100, 30, draw_plugin_chooser)));
@@ -1135,7 +1141,12 @@ mod tests {
         };
         a.chooser.open_worktree(WorktreeChooser {
             worktrees: vec![
-                wt("/w/main", crate::git::Checkout::Branch("main".to_string()), true, false),
+                wt(
+                    "/w/main",
+                    crate::git::Checkout::Branch("main".to_string()),
+                    true,
+                    false,
+                ),
                 wt("/w/detached", crate::git::Checkout::Detached, false, true),
                 wt("/w/bare", crate::git::Checkout::Bare, false, false),
             ],
@@ -1218,7 +1229,11 @@ mod tests {
         assert!(r.iter().any(|l| l.contains("- let old = 1;")));
         assert!(r.iter().any(|l| l.contains("+ let new = 1;")));
         // The differing word is reversed + bold while the rest keeps its color.
-        let (y, line) = r.iter().enumerate().find(|(_, l)| l.contains("+ let new")).unwrap();
+        let (y, line) = r
+            .iter()
+            .enumerate()
+            .find(|(_, l)| l.contains("+ let new"))
+            .unwrap();
         let x = line.find("new").map(|b| line[..b].chars().count()).unwrap();
         let y = u16::try_from(y).unwrap();
         let word = &buf[(u16::try_from(x).unwrap(), y)];
@@ -1232,11 +1247,17 @@ mod tests {
 
     #[test]
     fn project_labels_lead_with_the_folder_name_and_abbreviate_home() {
-        assert_eq!(project_label("/home/me/code/vix", Some("/home/me")), "vix   ~/code/vix");
+        assert_eq!(
+            project_label("/home/me/code/vix", Some("/home/me")),
+            "vix   ~/code/vix"
+        );
         assert_eq!(project_label("/home/me", Some("/home/me")), "me   ~");
         assert_eq!(project_label("/srv/app/", None), "app   /srv/app/");
         assert_eq!(project_label("/", None), "/");
-        assert_eq!(project_label("/homework/x", Some("/home")), "x   /homework/x");
+        assert_eq!(
+            project_label("/homework/x", Some("/home")),
+            "x   /homework/x"
+        );
     }
 
     #[test]
@@ -1290,7 +1311,10 @@ mod tests {
         let buf = render(&mut a, 120, 30, draw_clipboard_chooser);
         let t = text(&buf);
         assert!(t.contains("first line two"), "whitespace is flattened");
-        assert!(!t.contains(&"x".repeat(81)), "long entries are cut at 80 characters");
+        assert!(
+            !t.contains(&"x".repeat(81)),
+            "long entries are cut at 80 characters"
+        );
     }
 
     #[test]
@@ -1311,7 +1335,11 @@ mod tests {
         assert!(t.contains(&t!("ui.tasks").to_string()));
     }
 
-    fn status(path: &str, staged: Option<crate::git::Change>, unstaged: Option<crate::git::Change>) -> crate::git::FileStatus {
+    fn status(
+        path: &str,
+        staged: Option<crate::git::Change>,
+        unstaged: Option<crate::git::Change>,
+    ) -> crate::git::FileStatus {
         crate::git::FileStatus {
             path: path.to_string(),
             staged,
@@ -1336,8 +1364,14 @@ mod tests {
         a.git_branch = None;
         let buf = render(&mut a, 100, 30, draw_git_panel);
         let r = rows(&buf);
-        assert!(r.iter().any(|l| l.contains("[\u{2713}]") && l.contains("src/a.rs")));
-        assert!(r.iter().any(|l| l.contains("[ ]") && l.contains("src/b.rs")));
+        assert!(
+            r.iter()
+                .any(|l| l.contains("[\u{2713}]") && l.contains("src/a.rs"))
+        );
+        assert!(
+            r.iter()
+                .any(|l| l.contains("[ ]") && l.contains("src/b.rs"))
+        );
         assert_eq!(a.layout.git_panel.height, 3);
     }
 
@@ -1357,12 +1391,21 @@ mod tests {
         assert!(t.contains(&t!("ui.git_log").to_string()));
         assert!(t.contains("abc0001") && t.contains("subject 2"));
         assert!(t.contains("2026-11-23"));
-        assert!(!t.contains("A very long author name indeed"), "authors are cut to 20 columns");
-        a.git_log = Some(LogPanel::new(vec![entry(1)], LogScope::File("src/deep/mod.rs".to_string())));
+        assert!(
+            !t.contains("A very long author name indeed"),
+            "authors are cut to 20 columns"
+        );
+        a.git_log = Some(LogPanel::new(
+            vec![entry(1)],
+            LogScope::File("src/deep/mod.rs".to_string()),
+        ));
         let t = text(&render(&mut a, 120, 30, draw_git_log));
         assert!(t.contains(&t!("ui.git_file_history").to_string()));
         assert!(t.contains("mod.rs"));
-        a.git_log = Some(LogPanel::new(vec![entry(1)], LogScope::Pick("topic".to_string())));
+        a.git_log = Some(LogPanel::new(
+            vec![entry(1)],
+            LogScope::Pick("topic".to_string()),
+        ));
         let t = text(&render(&mut a, 120, 30, draw_git_log));
         assert!(t.contains(&t!("ui.git_cherry_pick_from", rev = "topic").to_string()));
         assert!(t.contains(&t!("ui.git_cherry_pick_hint").to_string()[..10]));
@@ -1379,7 +1422,10 @@ mod tests {
         });
         let buf = render(&mut a, 100, 30, draw_context_menu);
         let r = a.layout.context_menu;
-        assert!(r.right() <= 100 && r.bottom() <= 30, "clamped inside the screen: {r:?}");
+        assert!(
+            r.right() <= 100 && r.bottom() <= 30,
+            "clamped inside the screen: {r:?}"
+        );
         assert_eq!(usize::from(r.height), CONTEXT_ITEMS.len() + 2);
         let t = text(&buf);
         let first = CONTEXT_ITEMS
@@ -1387,7 +1433,10 @@ mod tests {
             .find(|(_, act)| *act != "menu.separator")
             .unwrap();
         assert!(t.contains(&t!(first.0).to_string()));
-        if CONTEXT_ITEMS.iter().any(|(_, act)| *act == "menu.separator") {
+        if CONTEXT_ITEMS
+            .iter()
+            .any(|(_, act)| *act == "menu.separator")
+        {
             assert!(t.contains("\u{2500}\u{2500}\u{2500}"));
         }
     }
@@ -1441,6 +1490,9 @@ mod tests {
         assert!(t.contains("one.txt") && t.contains("two.txt"));
         assert!(t.contains("/tmp"), "the directory is its own column");
         assert!(t.contains(&crate::file_browser_panel::size_label(2048)));
-        assert!(a.layout.chooser.height >= 2, "both data rows are hit-testable");
+        assert!(
+            a.layout.chooser.height >= 2,
+            "both data rows are hit-testable"
+        );
     }
 }

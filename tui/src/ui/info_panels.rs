@@ -727,7 +727,10 @@ mod tests {
         a.contacts = Some(p);
         let buf = render(&mut a, 60, 12, draw_contacts);
         let t = text(&buf);
-        assert!(t.contains("Person 30"), "the selection is scrolled into view");
+        assert!(
+            t.contains("Person 30"),
+            "the selection is scrolled into view"
+        );
         assert!(!t.contains("Person 00"));
         // A scrollbar takes the last column of the list, so rows are one narrower.
         assert_eq!(a.layout.contacts.width, 37);
@@ -812,9 +815,14 @@ mod tests {
 
     fn markdown_app(n_sections: usize) -> App {
         let mut a = app();
-        let body: String = (0..n_sections)
-            .map(|i| format!("# Section {i}\n\nSome text for section {i}.\n\n"))
-            .collect();
+        let mut body = String::new();
+        for i in 0..n_sections {
+            std::fmt::Write::write_fmt(
+                &mut body,
+                format_args!("# Section {i}\n\nSome text for section {i}.\n\n"),
+            )
+            .unwrap();
+        }
         a.editor.new_tab_with_content(&body);
         a.run_action("tools.markdown_preview");
         assert!(a.markdown_preview.is_some());
@@ -887,7 +895,15 @@ mod tests {
         a.run_action("tools.text_info");
         let t = text(&render(&mut a, 80, 24, draw_text_info));
         assert!(t.contains(&t!("ui.text_info").to_string()));
-        let first = a.info.text_info().unwrap().rows.first().unwrap().label.clone();
+        let first = a
+            .info
+            .text_info()
+            .unwrap()
+            .rows
+            .first()
+            .unwrap()
+            .label
+            .clone();
         assert!(t.contains(&first), "the first statistic row is drawn");
         assert!(a.layout.text_info.height > 0);
     }
