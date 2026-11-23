@@ -483,6 +483,7 @@ run_groups() {
 	for g in "$@"; do
 		(
 			# Only this group's own steps belong in its timings.
+			# shellcheck disable=SC2030 # deliberate: the group has its own copy
 			timings=""
 			trap 'printf "%s" "$timings" >"$par_tmp/$g.timings"' EXIT
 			exec >"$par_tmp/$g.log" 2>&1
@@ -498,6 +499,7 @@ run_groups() {
 		echo "==> group $g"
 		cat "$par_tmp/$g.log"
 		if [ -f "$par_tmp/$g.timings" ]; then
+			# shellcheck disable=SC2031 # the group handed its copy back in a file
 			timings="${timings}$(cat "$par_tmp/$g.timings")
 "
 		fi
@@ -565,6 +567,12 @@ if in_tier full; then
 fi
 
 print_summary
+if [ "$scope_mode" = changed ] && [ "$tier" != fast ] && [ "$(changed_crates)" = ALL ]; then
+	# A root, toolchain, lint or gate file changed (or there is no main): the
+	# scoped steps ran on the whole workspace, so this is a full pass.
+	echo "OK (scope changed, tier $tier): a root, toolchain or lint file changed, so doc and semver ran on the whole workspace -- full pass"
+	exit 0
+fi
 if [ "$scope_mode" = changed ] && [ "$tier" != fast ]; then
 	echo "OK (scope changed, tier $tier): doc and semver ran on the changed crates and their dependents only; CI runs the whole workspace (--scope all)"
 	exit 0

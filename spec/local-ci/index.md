@@ -88,7 +88,7 @@ The landing bar is unchanged; these make the same checks wait less.
   depends on them (the dependency closure), because a crate's doc warnings and
   public API can only change through itself or something it re-exports. A
   change to a root manifest, lockfile, toolchain, lint or `scripts/check` file,
-  or no `main` to compare with, widens it to the whole workspace. The run ends
+  or no `main` to compare with, widens it to the whole workspace, and the run then says so (`… ran on the whole workspace -- full pass`). Otherwise the run ends
   with `OK (scope changed, tier …)`. CI (the forge workflows and `scripts/ci`)
   runs the whole workspace and the attestation runs `--scope all` explicitly,
   so an attested tree always passed the whole-workspace doc and semver checks;
