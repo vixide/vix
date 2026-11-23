@@ -54,7 +54,11 @@ fn line(app: &App) -> usize {
 }
 
 fn goto(app: &mut App, l: usize) {
-    app.editor.active_tab_mut().unwrap().editor.set_cursor_line(l);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor_line(l);
 }
 
 fn key(code: KeyCode) -> KeyEvent {
@@ -247,7 +251,11 @@ fn exports_open_a_new_tab_with_the_converted_text() {
     ] {
         app.editor.active = src;
         app.org_action(action);
-        assert_eq!(app.status, t!("status.org_exported", ext = ext).to_string(), "{action}");
+        assert_eq!(
+            app.status,
+            t!("status.org_exported", ext = ext).to_string(),
+            "{action}"
+        );
     }
     assert_eq!(app.editor.tabs.len(), tabs + 5);
     app.editor.active = src;
@@ -285,7 +293,9 @@ fn new_heading_navigation_and_missing_targets() {
 #[test]
 fn subtree_copy_cut_and_paste_roundtrip_through_the_clipboard() {
     static CLIP: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _g = CLIP.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _g = CLIP
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut app = scratch("* A\nbody\n* B\n");
     app.org_action("org.subtree.copy");
     assert_eq!(app.status, t!("status.org_subtree_copied").to_string());
@@ -344,7 +354,11 @@ fn refile_by_click_and_refusals() {
     assert!(app.chooser.refile_mut().is_some());
     app.refile_chooser_mouse(click(1, 0));
     assert!(app.chooser.is_none());
-    assert!(text(&app).starts_with("* B\n") && text(&app).contains("** A"), "{}", text(&app));
+    assert!(
+        text(&app).starts_with("* B\n") && text(&app).contains("** A"),
+        "{}",
+        text(&app)
+    );
 
     // Only one headline: nowhere to refile.
     let mut lone = scratch("* Only\n");
@@ -366,14 +380,17 @@ fn refile_by_click_and_refusals() {
 fn sparse_trees_fold_and_prompt() {
     let mut app = scratch("* TODO a\nx\n* b\ny\n* TODO c\n");
     app.org_action("org.sparse.todo");
-    assert!(app.status.contains(&t!("status.org_sparse", count = 1).to_string()[..4]));
+    assert!(
+        app.status
+            .contains(&t!("status.org_sparse", count = 1).to_string()[..4])
+    );
     app.org_action("org.sparse.match");
     assert!(is_prompt(&app, PromptKind::OrgSparseMatch));
     app.prompt = None;
     app.accept_org_prompt(PromptKind::OrgSparseMatch, "");
     app.status.clear();
     app.accept_org_prompt(PromptKind::OrgSparseMatch, "y");
-    assert!(!app.status.is_empty());
+    assert_ne!(app.status, "");
     app.org_sparse_match("");
 }
 
@@ -456,7 +473,11 @@ fn archiving_moves_a_subtree_to_the_sibling_archive_file() {
     assert!(archived.contains("* Gone"), "{archived}");
     // A second archive appends to the same file.
     app.org_action("org.archive.subtree");
-    assert!(std::fs::read_to_string(d.join("n.org_archive")).unwrap().contains("* Keep"));
+    assert!(
+        std::fs::read_to_string(d.join("n.org_archive"))
+            .unwrap()
+            .contains("* Keep")
+    );
     assert_eq!(text(&app), "");
 
     let mut plain = app_at(&temp("archive-plain"));
@@ -515,13 +536,17 @@ fn planning_and_timestamps() {
     let mut app = scratch("* Task\n");
     app.org_action("org.schedule");
     assert!(is_prompt(&app, PromptKind::OrgSchedule));
-    assert!(!app.prompt.as_ref().unwrap().input.is_empty());
+    assert_ne!(app.prompt.as_ref().unwrap().input, "");
     app.prompt = None;
     app.org_action("org.deadline");
     assert!(is_prompt(&app, PromptKind::OrgDeadline));
     app.prompt = None;
     app.accept_org_prompt(PromptKind::OrgSchedule, "2030-03-04");
-    assert!(text(&app).contains("SCHEDULED: <2030-03-04"), "{}", text(&app));
+    assert!(
+        text(&app).contains("SCHEDULED: <2030-03-04"),
+        "{}",
+        text(&app)
+    );
     app.accept_org_prompt(PromptKind::OrgDeadline, "2030-04-05");
     assert!(text(&app).contains("DEADLINE: <2030-04-05"));
     app.status.clear();
@@ -617,7 +642,10 @@ fn following_file_and_id_links_opens_the_target() {
     let (d, mut app) = app_with(
         "link-follow",
         &[
-            ("a.org", "[[file:b.org::2][b]] [[id:abc-123][node]] [[id:nope][gone]]\n"),
+            (
+                "a.org",
+                "[[file:b.org::2][b]] [[id:abc-123][node]] [[id:nope][gone]]\n",
+            ),
             ("b.org", "first\nsecond\n"),
             ("c.org", "* Node\n:PROPERTIES:\n:ID: abc-123\n:END:\n"),
         ],
@@ -654,7 +682,11 @@ fn emphasis_wraps_the_selection_and_blocks_insert_templates() {
         ("org.emphasis.strike", "+"),
     ] {
         let mut app = scratch("word\n");
-        app.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 4);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(0, 4);
         assert!(app.org_action(action), "{action}");
         assert_eq!(text(&app), format!("{marker}word{marker}\n"), "{action}");
     }
@@ -705,7 +737,10 @@ fn org_dispatcher_declines_unknown_actions_and_opens_agenda_prompts() {
 fn tab_folds_drawers_and_shift_tab_cycles_globally() {
     let (_d, mut app) = app_with(
         "fold",
-        &[("n.org", "* H\n:PROPERTIES:\n:ID: x\n:END:\nbody\n* I\nmore\n")],
+        &[(
+            "n.org",
+            "* H\n:PROPERTIES:\n:ID: x\n:END:\nbody\n* I\nmore\n",
+        )],
     );
     goto(&mut app, 1);
     assert!(app.org_view_key(key(KeyCode::Tab)), "on a drawer header");
@@ -720,7 +755,11 @@ fn tab_folds_drawers_and_shift_tab_cycles_globally() {
     assert!(!app.org_view_key(ctrl_tab));
     assert!(!app.org_view_key(key(KeyCode::Char('q'))));
     // With a selection S-Tab still outdents.
-    app.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 3);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 3);
     assert!(!app.org_view_key(key(KeyCode::BackTab)));
     assert!(!app.org_toggle_drawer_fold());
 }
@@ -757,7 +796,11 @@ fn capture_by_key_runs_the_wizard_into_the_cursor() {
     assert!(is_prompt(&app, PromptKind::OrgCaptureReview));
     assert!(app.capture_review.is_some());
     assert!(app.prompt.as_ref().unwrap().input.contains("* TODO"));
-    answer(&mut app, PromptKind::OrgCaptureReview, "* TODO edited in review");
+    answer(
+        &mut app,
+        PromptKind::OrgCaptureReview,
+        "* TODO edited in review",
+    );
     assert!(text(&app).contains("edited in review"));
     assert!(app.capture_review.is_none());
     // A stale review accept does nothing.
@@ -769,7 +812,13 @@ fn capture_by_key_runs_the_wizard_into_the_cursor() {
     assert!(is_prompt(&app, PromptKind::OrgCaptureField));
     answer(&mut app, PromptKind::OrgCaptureField, "rust");
     assert!(is_prompt(&app, PromptKind::OrgCaptureReview));
-    assert!(app.prompt.as_ref().unwrap().input.contains("#+begin_src rust"));
+    assert!(
+        app.prompt
+            .as_ref()
+            .unwrap()
+            .input
+            .contains("#+begin_src rust")
+    );
     app.prompt = None;
     app.capture_review = None;
 
@@ -782,10 +831,16 @@ fn capture_by_key_runs_the_wizard_into_the_cursor() {
 fn capture_with_a_missing_key_or_no_templates_reports() {
     let mut app = scratch("");
     app.start_capture_by_key("zz");
-    assert_eq!(app.status, t!("status.org_capture_missing_key", key = "zz").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_capture_missing_key", key = "zz").to_string()
+    );
     app.settings.org_capture_templates.clear();
     app.org_action("org.capture.select");
-    assert_eq!(app.status, t!("status.org_capture_no_templates").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_capture_no_templates").to_string()
+    );
     assert!(app.chooser.is_none());
     // A stray field answer with no wizard running does nothing.
     app.accept_capture_field("x");
@@ -856,7 +911,11 @@ fn captures_file_into_files_headlines_datetrees_and_ids() {
         template("m", "id:no-such-id", "** lost"),
     ];
     app.start_capture_by_key("f");
-    assert!(std::fs::read_to_string(d.join("new.org")).unwrap().contains("* appended"));
+    assert!(
+        std::fs::read_to_string(d.join("new.org"))
+            .unwrap()
+            .contains("* appended")
+    );
     app.start_capture_by_key("h");
     let inbox = std::fs::read_to_string(d.join("inbox.org")).unwrap();
     assert!(inbox.find("under inbox").unwrap() > inbox.find("* Inbox").unwrap());
@@ -864,11 +923,21 @@ fn captures_file_into_files_headlines_datetrees_and_ids() {
     app.start_capture_by_key("d");
     let journal = std::fs::read_to_string(d.join("journal.org")).unwrap();
     assert!(journal.contains("* journaled"), "{journal}");
-    assert!(journal.lines().count() >= 4, "year/month/day tree: {journal}");
+    assert!(
+        journal.lines().count() >= 4,
+        "year/month/day tree: {journal}"
+    );
     app.start_capture_by_key("i");
-    assert!(std::fs::read_to_string(d.join("nodes.org")).unwrap().contains("under node"));
+    assert!(
+        std::fs::read_to_string(d.join("nodes.org"))
+            .unwrap()
+            .contains("under node")
+    );
     app.start_capture_by_key("m");
-    assert_eq!(app.status, t!("status.org_capture_id_not_found", id = "no-such-id").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_capture_id_not_found", id = "no-such-id").to_string()
+    );
 }
 
 #[test]
@@ -897,7 +966,11 @@ fn agenda_views_list_tasks_and_search() {
         assert!(app.agenda.is_some(), "{action}");
         assert!(app.editor.active_tab().unwrap().read_only, "{action}");
         let count = app.agenda.as_ref().unwrap().items.len();
-        assert_eq!(app.status, t!("status.org_agenda_view", count = count).to_string(), "{action}");
+        assert_eq!(
+            app.status,
+            t!("status.org_agenda_view", count = count).to_string(),
+            "{action}"
+        );
     }
     app.org_action("org.agenda.todo");
     assert!(text(&app).contains("write docs"), "{}", text(&app));
@@ -934,7 +1007,10 @@ fn the_agenda_t_key_cycles_the_task_under_the_cursor() {
     assert_eq!(app.status, t!("status.org_agenda_no_task").to_string());
 
     // A source file that disappeared is reported.
-    let row = text(&app).lines().position(|l| l.contains("ship it")).unwrap();
+    let row = text(&app)
+        .lines()
+        .position(|l| l.contains("ship it"))
+        .unwrap();
     goto(&mut app, row);
     std::fs::remove_file(d.join("t.org")).unwrap();
     assert!(app.org_view_key(key(KeyCode::Char('t'))));
@@ -950,7 +1026,10 @@ fn the_agenda_t_key_cycles_the_task_under_the_cursor() {
 
 #[test]
 fn the_agenda_scope_follows_lock_file_list_and_default() {
-    let (d, mut app) = app_with("agenda-scope", &[("a.org", "* TODO in a\n"), ("b.org", "* TODO in b\n")]);
+    let (d, mut app) = app_with(
+        "agenda-scope",
+        &[("a.org", "* TODO in a\n"), ("b.org", "* TODO in b\n")],
+    );
     app.org_action("org.agenda.file_list");
     assert_eq!(app.status, t!("status.org_agenda_files_all").to_string());
     app.org_action("org.agenda.lock");
@@ -966,21 +1045,40 @@ fn the_agenda_scope_follows_lock_file_list_and_default() {
 
     // The explicit list.
     app.org_action("org.agenda.file_add");
-    assert_eq!(app.status, t!("status.org_agenda_file_added", path = "a.org").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_file_added", path = "a.org").to_string()
+    );
     app.org_action("org.agenda.file_add");
-    assert_eq!(app.status, t!("status.org_agenda_file_present", path = "a.org").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_file_present", path = "a.org").to_string()
+    );
     app.org_action("org.agenda.file_list");
     assert!(app.status.contains("a.org"));
     assert_eq!(app.org_agenda_files().len(), 1);
     app.org_action("org.agenda.file_remove");
-    assert_eq!(app.status, t!("status.org_agenda_file_removed", path = "a.org").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_file_removed", path = "a.org").to_string()
+    );
     app.org_action("org.agenda.file_remove");
-    assert_eq!(app.status, t!("status.org_agenda_file_absent", path = "a.org").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_file_absent", path = "a.org").to_string()
+    );
     app.settings.org_agenda_files = vec!["b.org".into(), "gone.org".into()];
-    assert_eq!(app.org_agenda_files().len(), 1, "unreadable entries are skipped");
+    assert_eq!(
+        app.org_agenda_files().len(),
+        1,
+        "unreadable entries are skipped"
+    );
     app.org_action("org.agenda.file_clear");
-    assert_eq!(app.status, t!("status.org_agenda_files_cleared").to_string());
-    assert!(app.settings.org_agenda_files.is_empty());
+    assert_eq!(
+        app.status,
+        t!("status.org_agenda_files_cleared").to_string()
+    );
+    assert_eq!(app.settings.org_agenda_files.len(), 0);
 
     // An unsaved buffer has no path to add or remove.
     let mut plain = scratch("x\n");
@@ -1001,7 +1099,11 @@ fn contact_link_completion_only_triggers_after_the_marker_in_org_files() {
     app.editor.active_tab_mut().unwrap().editor.set_cursor(end);
     assert!(app.maybe_complete_org_contact_link());
     app.completion = None;
-    app.editor.active_tab_mut().unwrap().editor.set_content("plain text");
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_content("plain text");
     let end = text(&app).chars().count();
     app.editor.active_tab_mut().unwrap().editor.set_cursor(end);
     assert!(!app.maybe_complete_org_contact_link());

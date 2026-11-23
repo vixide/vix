@@ -40,7 +40,13 @@ fn outside_a_repo_commands_and_prompts_report_not_a_repo() {
     let d = dir("norepo");
     let mut app = app_in(&d);
     assert!(!app.jj_is_repo());
-    for action in ["jj.status", "jj.describe", "jj.commit", "jj.edit", "jj.rebase"] {
+    for action in [
+        "jj.status",
+        "jj.describe",
+        "jj.commit",
+        "jj.edit",
+        "jj.rebase",
+    ] {
         app.status.clear();
         assert!(app.run_jj_action(action));
         assert_eq!(app.status, t!("status.jj_not_repo").to_string(), "{action}");
@@ -73,7 +79,7 @@ fn prompt_actions_open_the_matching_prompt_in_a_repo() {
         assert!(app.run_jj_action(action));
         let p = app.prompt.as_ref().unwrap_or_else(|| panic!("{action}"));
         assert!(p.kind == kind, "{action}");
-        assert!(p.input.is_empty());
+        assert_eq!(p.input, "");
     }
 }
 
@@ -232,5 +238,5 @@ fn accepting_each_jj_prompt_runs_its_command() {
     let mut app = app_in(&dir("accept-other"));
     app.accept_jj_prompt(PromptKind::Open, "x");
     assert!(app.running_command.is_none());
-    assert!(app.bottom_dock.lines.is_empty());
+    assert_eq!(app.bottom_dock.lines.len(), 0);
 }

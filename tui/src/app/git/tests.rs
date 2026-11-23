@@ -108,8 +108,7 @@ pub(crate) fn last_error(app: &App) -> String {
     app.messages
         .items
         .last()
-        .map(|m| m.text.clone())
-        .unwrap_or_default()
+        .map_or_default(|m| m.text.clone())
 }
 
 pub(crate) fn dock_has(app: &App, line: &str) -> bool {
@@ -146,7 +145,11 @@ fn outside_a_repo_the_guard_reports_and_actions_bail() {
     ] {
         app.status.clear();
         assert!(app.run_git_action(action), "{action}");
-        assert_eq!(app.status, t!("status.git_not_repo").to_string(), "{action}");
+        assert_eq!(
+            app.status,
+            t!("status.git_not_repo").to_string(),
+            "{action}"
+        );
         assert!(app.running_command.is_none(), "{action}");
         assert!(app.prompt.is_none(), "{action}");
     }
@@ -169,12 +172,26 @@ fn gutter_is_cleared_outside_a_repo_and_for_unsaved_buffers() {
     let mut app = app_at(&d);
     app.editor.new_tab_with_content("hello\n");
     app.refresh_git_gutter();
-    assert!(app.editor.active_tab().unwrap().editor.gutter_marks().is_none_or(|m| m.is_empty()));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .gutter_marks()
+            .is_none_or(Vec::is_empty)
+    );
 
     let (_d, mut app) = app_with("gutter-unsaved", &[("a.txt", FIVE)]);
     app.editor.new_tab_with_content("scratch\n");
     app.refresh_git_gutter();
-    assert!(app.editor.active_tab().unwrap().editor.gutter_marks().is_none_or(|m| m.is_empty()));
+    assert!(
+        app.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .gutter_marks()
+            .is_none_or(Vec::is_empty)
+    );
 }
 
 #[test]
@@ -188,7 +205,7 @@ fn gutter_base_choices_change_what_the_gutter_compares_against() {
             .unwrap()
             .editor
             .gutter_marks()
-            .map_or(0, |m| m.len())
+            .map_or(0, Vec::len)
     };
     assert_eq!(marked(&app), 2, "two lines differ from HEAD");
 
@@ -197,7 +214,10 @@ fn gutter_base_choices_change_what_the_gutter_compares_against() {
     git(&d, &["add", "a.txt"]);
     app.set_gutter_base("index");
     assert_eq!(app.settings.git_gutter_base, "index");
-    assert_eq!(app.status, t!("status.gutter_base_set", base = "index").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.gutter_base_set", base = "index").to_string()
+    );
     app.refresh_git_gutter();
     assert_eq!(marked(&app), 0);
 
@@ -333,8 +353,7 @@ fn hunk_actions_refuse_a_file_outside_the_workspace() {
 
 // ----- conflicts -----------------------------------------------------------
 
-const CONFLICTED: &str =
-    "a\n<<<<<<< HEAD\nours1\n=======\ntheirs1\n>>>>>>> x\nmid\n<<<<<<< HEAD\nours2\n=======\ntheirs2\n>>>>>>> x\nz\n";
+const CONFLICTED: &str = "a\n<<<<<<< HEAD\nours1\n=======\ntheirs1\n>>>>>>> x\nmid\n<<<<<<< HEAD\nours2\n=======\ntheirs2\n>>>>>>> x\nz\n";
 
 #[test]
 fn conflict_resolution_keeps_the_chosen_side() {
@@ -365,7 +384,11 @@ fn conflict_resolution_keeps_the_chosen_side() {
 #[test]
 fn conflict_actions_report_when_there_is_no_conflict() {
     let (_d, mut app) = app_with("no-conflict", &[("a.txt", "x\ny\n")]);
-    for action in ["git.conflict_ours", "git.conflict_next", "git.conflict_list"] {
+    for action in [
+        "git.conflict_ours",
+        "git.conflict_next",
+        "git.conflict_list",
+    ] {
         app.status.clear();
         app.run_git_action(action);
         assert_eq!(app.status, t!("status.no_conflict").to_string(), "{action}");
@@ -514,7 +537,10 @@ fn the_panel_opens_a_diff_and_confirms_discards() {
     assert!(app.confirm.is_some());
     app.git_confirm_key(ConfirmKind::GitDiscard, ch('y'));
     assert_eq!(std::fs::read_to_string(d.join("a.txt")).unwrap(), "one\n");
-    assert_eq!(app.status, t!("status.git_discarded", path = "a.txt").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.git_discarded", path = "a.txt").to_string()
+    );
     assert_eq!(app.git_status.len(), 1);
 
     // The remaining row is the untracked file: it is refused, not deleted.
@@ -528,7 +554,7 @@ fn the_panel_opens_a_diff_and_confirms_discards() {
 fn a_failed_discard_reports_an_error() {
     let (d, mut app) = panel_app("discard-fail");
     app.git_discard_confirmed(Path::new("does-not-exist.txt"));
-    assert!(!last_error(&app).is_empty());
+    assert_ne!(last_error(&app), "");
     assert_eq!(std::fs::read_to_string(d.join("a.txt")).unwrap(), "one!\n");
 }
 
@@ -543,7 +569,7 @@ fn identical_diff_reports_no_difference() {
     app.run_git_action("git.diff_index");
     let dv = app.diff_view.as_ref().unwrap();
     assert!(dv.title.contains("a.txt"));
-    assert!(!dv.lines.is_empty());
+    assert_ne!(dv.lines.len(), 0);
 }
 
 #[test]
@@ -566,7 +592,11 @@ fn commit_prompt_requires_staged_changes_or_smart_commit() {
     assert!(app.prompt.is_none());
 
     // Dirty and unstaged: "never" refuses, default asks, "always" stages all.
-    for (mode, tag) in [("never", "sc-never"), ("ask", "sc-ask"), ("always", "sc-always")] {
+    for (mode, tag) in [
+        ("never", "sc-never"),
+        ("ask", "sc-ask"),
+        ("always", "sc-always"),
+    ] {
         let (d, mut app) = app_with(tag, &[("a.txt", "x\n")]);
         std::fs::write(d.join("a.txt"), "y\n").unwrap();
         app.settings.smart_commit = mode.into();
@@ -630,7 +660,7 @@ fn stage_all_failure_and_success_paths() {
     let plain = temp("stage-all-fail");
     let mut app2 = app_at(&plain);
     app2.git_stage_all_then_commit();
-    assert!(!last_error(&app2).is_empty());
+    assert_ne!(last_error(&app2), "");
 }
 
 #[test]
@@ -651,7 +681,10 @@ fn amend_and_stash_run_through_git_op() {
     assert!(app.git_dirty());
     // Popping with nothing stashed fails and says why.
     app.run_git_action("git.stash_pop");
-    assert!(app.status.starts_with(&t!("msg.git_failed_reason", error = "").to_string()[..6]));
+    assert!(
+        app.status
+            .starts_with(&t!("msg.git_failed_reason", error = "").to_string()[..6])
+    );
 }
 
 // ----- branches ---------------------------------------------------------------
@@ -664,7 +697,10 @@ fn creating_and_switching_branches() {
     app.git_create_branch("  ");
     assert_eq!(app.status, t!("status.git_empty_branch").to_string());
     app.git_create_branch("topic");
-    assert_eq!(app.status, t!("status.git_switched", branch = "topic").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.git_switched", branch = "topic").to_string()
+    );
     assert_eq!(app.git_branch.as_deref(), Some("topic"));
     // A duplicate name fails with an error message.
     let before = app.messages.items.len();
@@ -692,7 +728,10 @@ fn creating_and_switching_branches() {
     app.branch_key(key(KeyCode::Enter));
     assert!(app.chooser.branch_mut().is_none());
     assert_eq!(app.git_branch.as_deref(), Some("main"));
-    assert_eq!(app.status, t!("status.git_switched", branch = "main").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.git_switched", branch = "main").to_string()
+    );
 
     app.run_git_action("git.switch_branch");
     app.branch_key(key(KeyCode::Esc));
@@ -725,7 +764,7 @@ fn branch_checkout_reloads_clean_buffers_and_reports_it() {
         app.messages
             .items
             .iter()
-            .any(|m| m.text == t!("status.git_reloaded", count = 1).to_string())
+            .any(|m| m.text == t!("status.git_reloaded", count = 1))
     );
 }
 
@@ -788,9 +827,18 @@ fn log_actions_stream_their_commands() {
     let (_d, mut app) = app_with("log-cmds", &[("a.txt", "x\n")]);
     for (action, expect) in [
         ("git.log", "$ git --no-pager log"),
-        ("git.log_since_1_day_ago", "$ git --no-pager log --since=1-day-ago"),
-        ("git.log_since_1_week_ago", "$ git --no-pager log --since=1-week-ago"),
-        ("git.log_since_1_month_ago", "$ git --no-pager log --since=1-month-ago"),
+        (
+            "git.log_since_1_day_ago",
+            "$ git --no-pager log --since=1-day-ago",
+        ),
+        (
+            "git.log_since_1_week_ago",
+            "$ git --no-pager log --since=1-week-ago",
+        ),
+        (
+            "git.log_since_1_month_ago",
+            "$ git --no-pager log --since=1-month-ago",
+        ),
         ("git.status", "$ git --no-pager status"),
         ("git.push", "$ git push"),
         ("git.pull_ff", "$ git pull --ff-only"),
@@ -803,7 +851,11 @@ fn log_actions_stream_their_commands() {
         app.running_command = None;
         app.bottom_dock.clear();
         app.run_git_action(action);
-        assert!(dock_has(&app, expect), "{action}: {:?}", app.bottom_dock.lines);
+        assert!(
+            dock_has(&app, expect),
+            "{action}: {:?}",
+            app.bottom_dock.lines
+        );
     }
     app.cancel_command();
     app.running_command = None;
@@ -1019,11 +1071,14 @@ fn blame_reports_committed_uncommitted_and_missing() {
     set_text(&mut app, "one\nINSERTED\ntwo\n");
     goto_line(&mut app, 1);
     app.run_git_action("git.blame");
-    assert_eq!(app.status, t!("status.blame_uncommitted", line = 2).to_string());
+    assert_eq!(
+        app.status,
+        t!("status.blame_uncommitted", line = 2).to_string()
+    );
 
     goto_line(&mut app, 9);
     app.run_git_action("git.blame");
-    assert!(!app.status.is_empty());
+    assert_ne!(app.status, "");
 }
 
 #[test]
@@ -1040,8 +1095,7 @@ fn blame_without_a_file_or_for_an_untracked_file() {
 
 /// Draw one frame and flatten it to text.
 pub(crate) fn render(app: &mut App) -> String {
-    let mut term =
-        ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 40)).unwrap();
+    let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 40)).unwrap();
     term.draw(|f| crate::ui::draw(app, f)).unwrap();
     term.backend()
         .buffer()

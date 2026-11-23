@@ -584,3 +584,6 @@ impl App {
         self.visible.set(crate::app::Visible::BOTTOM_DOCK, true);
     }
 }
+
+#[cfg(test)]
+mod tests;

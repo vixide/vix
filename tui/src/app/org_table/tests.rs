@@ -43,7 +43,11 @@ fn line(app: &App) -> usize {
 }
 
 fn goto(app: &mut App, l: usize) {
-    app.editor.active_tab_mut().unwrap().editor.set_cursor_line(l);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor_line(l);
 }
 
 /// Put the cursor on `row`, inside field `field` (0-based) of that line.
@@ -89,7 +93,11 @@ fn field_index_counts_pipes() {
     assert_eq!(App::org_table_field_index_at("| a | b | c |", 0), 0);
     assert_eq!(App::org_table_field_index_at("| a | b | c |", 5), 1);
     assert_eq!(App::org_table_field_index_at("| a | b | c |", 9), 2);
-    assert_eq!(App::org_table_field_index_at("| a | b | c |", 999), 2, "clamped");
+    assert_eq!(
+        App::org_table_field_index_at("| a | b | c |", 999),
+        2,
+        "clamped"
+    );
 }
 
 #[test]
@@ -149,7 +157,12 @@ fn meta_keys_edit_the_table_structure() {
     assert!(app.org_table_key(key(KeyCode::Down, ALT)));
     assert!(app.org_table_key(key(KeyCode::Up, ALT)));
     assert!(app.org_table_key(key(KeyCode::Right, alt_shift())));
-    assert_eq!(text(&app).lines().next().unwrap().matches('|').count(), 4, "{}", text(&app));
+    assert_eq!(
+        text(&app).lines().next().unwrap().matches('|').count(),
+        4,
+        "{}",
+        text(&app)
+    );
     assert!(app.org_table_key(key(KeyCode::Left, alt_shift())));
     assert_eq!(text(&app).lines().next().unwrap().matches('|').count(), 3);
     let rows = text(&app).lines().count();
@@ -176,7 +189,10 @@ fn table_keys_only_apply_inside_a_table_of_an_editable_org_buffer() {
     let tab = key(KeyCode::Tab, KeyModifiers::NONE);
     let mut app = table_app("keys-guard");
     at_field(&mut app, 0, 0);
-    assert!(!app.org_table_key(key(KeyCode::Char('x'), KeyModifiers::NONE)), "unbound key");
+    assert!(
+        !app.org_table_key(key(KeyCode::Char('x'), KeyModifiers::NONE)),
+        "unbound key"
+    );
     assert!(!app.org_table_key(key(KeyCode::Tab, KeyModifiers::CONTROL)));
     app.focus = Focus::Explorer;
     assert!(!app.org_table_key(tab));
@@ -235,14 +251,21 @@ fn copy_down_and_sum_report_and_fill() {
     let mut app = table_app("act-sum");
     at_field(&mut app, 2, 1);
     app.org_table_action("org.table.sum_column");
-    assert_eq!(app.status, t!("status.org_table_sum", sum = "15").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_table_sum", sum = "15").to_string()
+    );
     let before = text(&app);
     app.org_table_action("org.table.copy_down");
     assert!(app.editor.active_tab().unwrap().dirty);
     assert_ne!(app.status, t!("status.org_table_no_table").to_string());
     let _ = before;
     goto(&mut app, 0);
-    app.editor.active_tab_mut().unwrap().editor.set_content("plain\n");
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_content("plain\n");
     app.status.clear();
     app.org_table_action("org.table.sum_column");
     assert_eq!(app.status, t!("status.org_table_no_table").to_string());
@@ -270,7 +293,11 @@ fn table_actions_outside_a_table_report_it() {
     ] {
         app.status.clear();
         assert!(app.org_table_action(action), "{action}");
-        assert_eq!(app.status, t!("status.org_table_no_table").to_string(), "{action}");
+        assert_eq!(
+            app.status,
+            t!("status.org_table_no_table").to_string(),
+            "{action}"
+        );
     }
     assert!(!app.org_table_action("org.table.nope"));
     assert_eq!(text(&app), "just text\n");
@@ -365,7 +392,11 @@ fn sorting_by_column_kind_and_direction() {
 fn creating_a_table_from_a_selection_or_empty() {
     let mut app = app_with("create", "a,b\n1,2\n", true);
     let len = text(&app).chars().count();
-    app.editor.active_tab_mut().unwrap().editor.set_selection_range(0, len);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, len);
     app.org_table_action("org.table.create_from_region");
     assert_eq!(app.status, t!("status.org_table_created").to_string());
     assert!(text(&app).contains("| a"), "{}", text(&app));
@@ -381,7 +412,10 @@ fn exporting_a_table_as_tsv() {
     goto(&mut app, 2);
     let tabs = app.editor.tabs.len();
     app.org_table_action("org.table.export_tsv");
-    assert_eq!(app.status, t!("status.org_exported", ext = "tsv").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_exported", ext = "tsv").to_string()
+    );
     assert_eq!(app.editor.tabs.len(), tabs + 1);
     assert!(text(&app).contains("Name\tQty"), "{}", text(&app));
 }
@@ -391,20 +425,33 @@ fn rectangles_copy_cut_and_paste() {
     let mut app = table_app("rect");
     at_field(&mut app, 2, 1);
     app.org_table_action("org.table.paste_rectangle");
-    assert_eq!(app.status, t!("status.org_table_rectangle_empty").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_table_rectangle_empty").to_string()
+    );
 
     app.org_table_action("org.table.copy_rectangle");
-    assert_eq!(app.status, t!("status.org_table_rectangle_copied").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_table_rectangle_copied").to_string()
+    );
     assert!(app.table_rectangle_clip.is_some());
     at_field(&mut app, 3, 1);
     app.org_table_action("org.table.paste_rectangle");
-    assert_eq!(app.status, t!("status.org_table_rectangle_pasted").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_table_rectangle_pasted").to_string()
+    );
     assert_eq!(text(&app).matches("3 |").count(), 2, "{}", text(&app));
 
     at_field(&mut app, 2, 0);
     app.org_table_action("org.table.cut_rectangle");
     assert_eq!(app.status, t!("status.org_table_rectangle_cut").to_string());
-    assert!(!text(&app).contains("| a "), "the cut field is blanked: {}", text(&app));
+    assert!(
+        !text(&app).contains("| a "),
+        "the cut field is blanked: {}",
+        text(&app)
+    );
 
     // A selection spanning two fields copies the whole rectangle.
     let mut app = table_app("rect-sel");
@@ -412,7 +459,11 @@ fn rectangles_copy_cut_and_paste() {
         at_field(&mut app, 2, 0);
         app.editor.active_tab().unwrap().editor.get_cursor()
     };
-    app.editor.active_tab_mut().unwrap().editor.set_selection_range(start, start + 10);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(start, start + 10);
     app.org_table_action("org.table.copy_rectangle");
     assert!(app.table_rectangle_clip.is_some());
 
@@ -426,7 +477,8 @@ fn rectangles_copy_cut_and_paste() {
 
 // ----- column view and dynamic blocks ------------------------------------------------------------------
 
-const COLS: &str = "#+COLUMNS: %25ITEM %TODO\n* TODO Task\n:PROPERTIES:\n:EFFORT: 1h\n:END:\n* Other\n";
+const COLS: &str =
+    "#+COLUMNS: %25ITEM %TODO\n* TODO Task\n:PROPERTIES:\n:EFFORT: 1h\n:END:\n* Other\n";
 
 #[test]
 fn column_view_needs_an_org_buffer() {
@@ -481,7 +533,10 @@ fn dynamic_blocks_insert_update_and_update_all() {
     assert!(app.prompt.as_ref().unwrap().kind == PromptKind::OrgColumnsInsertDblock);
     app.prompt = None;
     app.accept_org_prompt(PromptKind::OrgColumnsInsertDblock, "");
-    assert_eq!(app.status, t!("status.org_columns_dblock_inserted").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_columns_dblock_inserted").to_string()
+    );
     assert!(text(&app).contains("#+BEGIN: columnview"), "{}", text(&app));
     assert!(text(&app).contains(":id local"), "{}", text(&app));
 
@@ -490,15 +545,24 @@ fn dynamic_blocks_insert_update_and_update_all() {
 
     goto(&mut app, 0);
     app.org_action("org.columns.update_dblock");
-    assert_eq!(app.status, t!("status.org_columns_dblock_updated").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_columns_dblock_updated").to_string()
+    );
     // Off a dblock header: reported.
     let last = text(&app).lines().count() - 1;
     goto(&mut app, last);
     app.org_action("org.columns.update_dblock");
-    assert_eq!(app.status, t!("status.org_columns_dblock_not_found").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_columns_dblock_not_found").to_string()
+    );
 
     app.org_action("org.columns.update_all_dblocks");
-    assert_eq!(app.status, t!("status.org_columns_dblocks_updated_all").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.org_columns_dblocks_updated_all").to_string()
+    );
     // Prompt kinds routed through the column prompt handler.
     app.accept_org_prompt(PromptKind::OrgColumnsInsertColumn, "X");
     assert!(Path::new("").as_os_str().is_empty());

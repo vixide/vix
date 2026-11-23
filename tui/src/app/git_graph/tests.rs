@@ -127,7 +127,7 @@ fn a_commit_that_cannot_be_shown_reports_an_error_and_stays_open() {
     app.git_graph.as_mut().unwrap().commits[0].sha = "deadbeefdeadbeefdeadbeef".into();
     app.git_graph_key(key(KeyCode::Enter));
     assert!(app.git_graph.is_some());
-    assert!(!last_error(&app).is_empty());
+    assert_ne!(last_error(&app), "");
 }
 
 #[test]
@@ -151,11 +151,17 @@ fn copying_the_hash_reports_it() {
     let (_d, mut app) = open("graph-copy");
     let sha = panel(&app).selected_commit().unwrap().sha.clone();
     app.git_graph_key(ctrl('y'));
-    assert_eq!(app.status, t!("status.git_graph_copied", sha = sha).to_string());
+    assert_eq!(
+        app.status,
+        t!("status.git_graph_copied", sha = sha).to_string()
+    );
     // With a tab open the copy goes through the editor instead.
     app.editor.new_tab_with_content("x\n");
     app.git_graph_key(ctrl('Y'));
-    assert_eq!(app.status, t!("status.git_graph_copied", sha = sha).to_string());
+    assert_eq!(
+        app.status,
+        t!("status.git_graph_copied", sha = sha).to_string()
+    );
 }
 
 #[test]
@@ -172,7 +178,10 @@ fn checkout_asks_first_then_switches_branch() {
     app.git_graph_key(ch('y'));
     assert!(matches!(panel(&app).mode, Mode::Browse));
     assert_eq!(git(&d, &["branch", "--show-current"]).trim(), "feat");
-    assert_eq!(app.status, t!("status.git_switched", branch = "feat").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.git_switched", branch = "feat").to_string()
+    );
     assert_eq!(app.git_branch.as_deref(), Some("feat"));
 }
 
@@ -186,7 +195,12 @@ fn checkout_of_an_unbranched_commit_detaches() {
     app.layout.git_graph = Rect::new(0, 0, 80, 10);
     app.open_git_graph();
     // Move HEAD off `loose` first so selecting it is a real checkout.
-    let loose = panel(&app).commits.iter().find(|c| c.subject == "loose").unwrap().clone();
+    let loose = panel(&app)
+        .commits
+        .iter()
+        .find(|c| c.subject == "loose")
+        .unwrap()
+        .clone();
     git(&d, &["checkout", "-q", "main"]);
     git(&d, &["update-ref", "refs/keep/loose", &loose.sha]);
     select_summary(&mut app, "loose");
@@ -231,8 +245,17 @@ fn cherry_pick_applies_a_commit_onto_the_current_branch() {
         }
     ));
     app.git_graph_key(key(KeyCode::Enter));
-    let abbrev = panel(&app).commits.iter().find(|c| c.subject == "second").unwrap().abbrev.clone();
-    assert_eq!(app.status, t!("status.git_graph_picked", sha = abbrev).to_string());
+    let abbrev = panel(&app)
+        .commits
+        .iter()
+        .find(|c| c.subject == "second")
+        .unwrap()
+        .abbrev
+        .clone();
+    assert_eq!(
+        app.status,
+        t!("status.git_graph_picked", sha = abbrev).to_string()
+    );
     assert!(d.join("f.txt").exists(), "the commit's file is now on main");
     assert_eq!(git(&d, &["log", "-1", "--format=%s"]).trim(), "second");
 }
@@ -244,7 +267,7 @@ fn a_failing_cherry_pick_reports_the_commit() {
     select_summary(&mut app, "seed");
     app.git_graph_key(ctrl('p'));
     app.git_graph_key(ch('y'));
-    assert!(!last_error(&app).is_empty());
+    assert_ne!(last_error(&app), "");
 }
 
 #[test]
@@ -277,7 +300,10 @@ fn new_branch_prompt_edits_creates_and_cancels() {
         app.git_graph_key(ch(c));
     }
     app.git_graph_key(key(KeyCode::Enter));
-    assert_eq!(app.status, t!("status.git_switched", branch = "newbr").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.git_switched", branch = "newbr").to_string()
+    );
     assert!(git(&d, &["branch", "--list", "newbr"]).contains("newbr"));
     assert!(panel(&app).refs.contains(&"newbr".to_string()));
 
@@ -287,7 +313,7 @@ fn new_branch_prompt_edits_creates_and_cancels() {
         app.git_graph_key(ch(c));
     }
     app.git_graph_key(key(KeyCode::Enter));
-    assert!(!last_error(&app).is_empty());
+    assert_ne!(last_error(&app), "");
 }
 
 #[test]
@@ -323,7 +349,7 @@ fn pages_load_on_demand_and_failures_end_paging() {
     app.root = broken;
     app.git_graph_key(key(KeyCode::Down));
     assert!(panel(&app).exhausted);
-    assert!(!last_error(&app).is_empty());
+    assert_ne!(last_error(&app), "");
     // Reloading against it fails the same way.
     let n = app.messages.items.len();
     app.git_graph_key(key(KeyCode::Tab));
@@ -339,4 +365,3 @@ fn error_text_has_an_install_hint_for_a_missing_git() {
     let other = GraphError::InvalidArgument("x".into());
     assert_eq!(error_text(&other), other.to_string());
 }
-

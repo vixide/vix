@@ -93,7 +93,11 @@ fn messages(app: &App, id: &ConversationId) -> Vec<String> {
 #[test]
 fn nicks_are_cleaned_to_irc_characters() {
     assert_eq!(default_nick("  ana "), "ana");
-    assert_eq!(default_nick("123abc!x"), "abcx", "digits lead no nick; '!' is dropped");
+    assert_eq!(
+        default_nick("123abc!x"),
+        "abcx",
+        "digits lead no nick; '!' is dropped"
+    );
     assert_eq!(default_nick("-9-x"), "x");
     assert_eq!(default_nick("999"), "vix");
     assert_eq!(default_nick("!!!"), "vix");
@@ -109,7 +113,11 @@ fn history_file_names_escape_everything_unsafe() {
     let name = |s: &str| history_file_name(&ConversationId::new(s));
     assert_eq!(name("notes"), "notes.jsonl");
     assert_eq!(name("irc/net/#vix"), "irc%2Fnet%2F%23vix.jsonl");
-    assert_eq!(name(".hidden"), "%2Ehidden.jsonl", "a leading dot never survives");
+    assert_eq!(
+        name(".hidden"),
+        "%2Ehidden.jsonl",
+        "a leading dot never survives"
+    );
     assert_eq!(name("a.b"), "a.b.jsonl");
     assert_eq!(name("../x"), "%2E.%2Fx.jsonl");
     assert_eq!(name("é"), "%C3%A9.jsonl");
@@ -153,14 +161,20 @@ fn titles_and_verification() {
 #[test]
 fn history_paths_skip_the_session_and_follow_the_directory() {
     let mut app = app();
-    assert!(app.im.history_path(&notes()).is_none(), "session-only by default");
+    assert!(
+        app.im.history_path(&notes()).is_none(),
+        "session-only by default"
+    );
     let dir = temp("hist-path");
     app.im_use_history_dir(dir.clone());
-    assert_eq!(app.im.history_path(&notes()).unwrap(), dir.join("notes.jsonl"));
+    assert_eq!(
+        app.im.history_path(&notes()).unwrap(),
+        dir.join("notes.jsonl")
+    );
     assert!(app.im.history_path(&ConversationId::new(SESSION)).is_none());
     // A conversation with no file yet loads as empty.
     let id = room(&mut app);
-    assert!(messages(&app, &id).is_empty());
+    assert_eq!(messages(&app, &id).len(), 0);
 }
 
 #[test]
@@ -174,7 +188,7 @@ fn delivered_messages_are_appended_and_reloaded() {
     assert_eq!(raw.lines().count(), 2);
 
     let mut again = App::new(temp("hist-again"), Settings::default());
-    again.im_use_history_dir(dir.clone());
+    again.im_use_history_dir(dir);
     assert_eq!(messages(&again, &notes()), ["first", "second"]);
     assert_eq!(again.im.inbox.total_unread(), 0);
 }
@@ -198,8 +212,8 @@ fn history_beyond_the_message_limit_keeps_the_newest() {
     let dir = temp("hist-limit");
     let mut lines = String::new();
     for i in 0..(vix_im::DEFAULT_MESSAGE_LIMIT + 3) {
-        let l = vix_im::history::encode_line(&Message::text("ana", now_ms(), format!("m{i}")))
-            .unwrap();
+        let l =
+            vix_im::history::encode_line(&Message::text("ana", now_ms(), format!("m{i}"))).unwrap();
         lines.push_str(&l);
         lines.push('\n');
     }
@@ -227,7 +241,7 @@ fn clearing_history_asks_then_wipes_messages_and_file() {
     assert_eq!(messages(&app, &notes()).len(), 1);
     app.run_action("im.clear_history");
     app.im_dialog_key(key(KeyCode::Enter));
-    assert!(messages(&app, &notes()).is_empty());
+    assert_eq!(messages(&app, &notes()).len(), 0);
     assert!(!dir.join("notes.jsonl").exists());
     assert_eq!(
         app.status,
@@ -257,20 +271,42 @@ fn presence_and_notify_policy_report_their_labels() {
     for (action, p, key) in [
         ("im.status_away", Presence::Away, "menu.item.im.status_away"),
         ("im.status_busy", Presence::Busy, "menu.item.im.status_busy"),
-        ("im.status_available", Presence::Available, "menu.item.im.status_available"),
+        (
+            "im.status_available",
+            Presence::Available,
+            "menu.item.im.status_available",
+        ),
     ] {
         app.run_action(action);
         assert_eq!(app.im.presence, p);
-        assert_eq!(app.status, t!("status.im_presence", status = t!(key)).to_string());
+        assert_eq!(
+            app.status,
+            t!("status.im_presence", status = t!(key)).to_string()
+        );
     }
     for (action, policy, key) in [
-        ("im.notify_all", NotifyPolicy::All, "menu.item.im.notify_all"),
-        ("im.notify_off", NotifyPolicy::Off, "menu.item.im.notify_off"),
-        ("im.notify_mentions", NotifyPolicy::Mentions, "menu.item.im.notify_mentions"),
+        (
+            "im.notify_all",
+            NotifyPolicy::All,
+            "menu.item.im.notify_all",
+        ),
+        (
+            "im.notify_off",
+            NotifyPolicy::Off,
+            "menu.item.im.notify_off",
+        ),
+        (
+            "im.notify_mentions",
+            NotifyPolicy::Mentions,
+            "menu.item.im.notify_mentions",
+        ),
     ] {
         app.run_action(action);
         assert_eq!(app.im_notify_policy(), policy);
-        assert_eq!(app.status, t!("status.im_notify", policy = t!(key)).to_string());
+        assert_eq!(
+            app.status,
+            t!("status.im_notify", policy = t!(key)).to_string()
+        );
     }
     app.settings.im.notify = "bogus".into();
     assert_eq!(app.im_notify_policy(), NotifyPolicy::Mentions);
@@ -289,9 +325,18 @@ fn deliveries_notify_according_to_policy_and_screen() {
         app.im_deliver(&r, Message::text("bob", now_ms(), "hello")),
         Delivery::Unread { mention: false }
     );
-    assert_eq!(app.status, t!("status.im_new_message", name = "#vix").to_string());
-    app.im_deliver(&r, Message::text("bob", now_ms(), format!("hey @{me} look")));
-    assert_eq!(app.status, t!("status.im_mention", name = "#vix").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.im_new_message", name = "#vix").to_string()
+    );
+    app.im_deliver(
+        &r,
+        Message::text("bob", now_ms(), format!("hey @{me} look")),
+    );
+    assert_eq!(
+        app.status,
+        t!("status.im_mention", name = "#vix").to_string()
+    );
     assert!(app.im.inbox.has_mention());
     assert!(app.im_status_segment().contains('@'));
 
@@ -299,14 +344,17 @@ fn deliveries_notify_according_to_policy_and_screen() {
     app.status.clear();
     app.im.presence = Presence::Busy;
     app.im_deliver(&r, Message::text("bob", now_ms(), "quiet"));
-    assert!(app.status.is_empty());
+    assert_eq!(app.status, "");
     app.im.inbox.set_blocked(["spam".to_string()]);
     assert_eq!(
         app.im_deliver(&r, Message::text("spam", now_ms(), "x")),
         Delivery::Blocked
     );
     assert_eq!(
-        app.im_deliver(&ConversationId::new("nowhere"), Message::text("bob", now_ms(), "x")),
+        app.im_deliver(
+            &ConversationId::new("nowhere"),
+            Message::text("bob", now_ms(), "x")
+        ),
         Delivery::NoConversation
     );
 
@@ -386,7 +434,7 @@ fn joining_leaving_and_messaging_need_a_connection() {
     let mut app = app();
     app.status.clear();
     app.im_join("  ");
-    assert!(app.status.is_empty());
+    assert_eq!(app.status, "");
     app.im_join("vix");
     assert_eq!(app.status, t!("status.im_not_connected").to_string());
     // With a selected network room the account is known, but nothing is linked.
@@ -419,7 +467,10 @@ fn direct_conversations_open_through_the_active_account() {
     let id = irc_id("acct", Some("bob"));
     assert_eq!(app.im.selected_id(), Some(id.clone()));
     assert!(app.im.open);
-    assert_eq!(app.im.inbox.get(&id).unwrap().kind, ConversationKind::Direct);
+    assert_eq!(
+        app.im.inbox.get(&id).unwrap().kind,
+        ConversationKind::Direct
+    );
     assert_eq!(
         app.im.routes.get(&id).unwrap().target.as_deref(),
         Some("bob")
@@ -450,7 +501,10 @@ fn typed_lines_in_notes_are_stored_and_in_a_room_need_a_link() {
     let r = room(&mut app);
     type_line(&mut app, "hello room");
     assert_eq!(app.status, t!("status.im_not_connected").to_string());
-    assert!(messages(&app, &r).is_empty(), "not stored when it could not be sent");
+    assert!(
+        messages(&app, &r).is_empty(),
+        "not stored when it could not be sent"
+    );
     // An action line the same.
     app.status.clear();
     type_line(&mut app, "/me waves");
@@ -473,13 +527,22 @@ fn slash_commands_dispatch() {
     type_line(&mut app, "/status away");
     assert_eq!(app.im.presence, Presence::Away);
     type_line(&mut app, "/status bogus");
-    assert_eq!(app.status, t!("status.im_invalid_status", value = "bogus").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.im_invalid_status", value = "bogus").to_string()
+    );
     app.im.panel.clear_input();
     type_line(&mut app, "/bogus");
-    assert_eq!(app.status, t!("status.im_unknown_command", name = "bogus").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.im_unknown_command", name = "bogus").to_string()
+    );
     app.im.panel.clear_input();
     type_line(&mut app, "/join");
-    assert_eq!(app.status, t!("status.im_missing_argument", command = "join").to_string());
+    assert_eq!(
+        app.status,
+        t!("status.im_missing_argument", command = "join").to_string()
+    );
     app.im.panel.clear_input();
 
     // /nick without a connection only renames locally.
@@ -489,10 +552,13 @@ fn slash_commands_dispatch() {
     type_line(&mut app, "a line");
     assert_eq!(messages(&app, &notes()).len(), 1);
     type_line(&mut app, "/clear");
-    assert!(messages(&app, &notes()).is_empty());
+    assert_eq!(messages(&app, &notes()).len(), 0);
     // /follow needs a Cowork session this build lacks.
     type_line(&mut app, "/follow bob");
-    assert_eq!(app.status, t!("msg.capability_missing", name = "cowork").to_string());
+    assert_eq!(
+        app.status,
+        t!("msg.capability_missing", name = "cowork").to_string()
+    );
 
     // Network commands with no connection.
     room(&mut app);
@@ -519,10 +585,16 @@ fn the_cowork_session_conversation_routes_to_cowork() {
     session(&mut app);
     app.run_action("im.panel");
     type_line(&mut app, "hi team");
-    assert_eq!(app.status, t!("msg.capability_missing", name = "cowork").to_string());
+    assert_eq!(
+        app.status,
+        t!("msg.capability_missing", name = "cowork").to_string()
+    );
     app.status.clear();
     type_line(&mut app, "/me nods");
-    assert_eq!(app.status, t!("msg.capability_missing", name = "cowork").to_string());
+    assert_eq!(
+        app.status,
+        t!("msg.capability_missing", name = "cowork").to_string()
+    );
 }
 
 // ----- sharing -----------------------------------------------------------------------------------------------------
@@ -549,10 +621,14 @@ fn sharing_needs_a_selection_and_a_file() {
 
 #[test]
 fn a_selection_that_is_too_long_is_refused() {
-    let body: String = (0..MAX_SNIPPET_LINES + 5).map(|i| format!("l{i}\n")).collect();
+    let body = "line\n".repeat(MAX_SNIPPET_LINES + 5);
     let mut app = app_with_file("share-long", &body);
     let len = body.chars().count();
-    app.editor.active_tab_mut().unwrap().editor.set_selection_range(0, len);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, len);
     app.run_action("im.share_selection");
     assert_eq!(
         app.status,
@@ -564,7 +640,11 @@ fn a_selection_that_is_too_long_is_refused() {
 #[test]
 fn sharing_a_selection_to_notes_confirms_then_stores_it() {
     let mut app = app_with_file("share-notes", "fn a() {}\nfn b() {}\n");
-    app.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 9);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 9);
     app.run_action("im.share_selection");
     let Some(ImDialog::Share { title, message, .. }) = app.im_dialog.clone() else {
         panic!("expected the share confirmation");
@@ -572,7 +652,10 @@ fn sharing_a_selection_to_notes_confirms_then_stores_it() {
     assert_eq!(title, t!("ui.im_notes").to_string());
     assert!(matches!(message.kind, MessageKind::Snippet { .. }));
     app.im_dialog_key(key(KeyCode::Enter));
-    assert_eq!(app.status, t!("status.im_sent", name = t!("ui.im_notes")).to_string());
+    assert_eq!(
+        app.status,
+        t!("status.im_sent", name = t!("ui.im_notes")).to_string()
+    );
     assert_eq!(messages(&app, &notes()).len(), 1);
 }
 
@@ -580,17 +663,25 @@ fn sharing_a_selection_to_notes_confirms_then_stores_it() {
 fn sharing_into_a_room_needs_a_link_and_into_a_server_a_room() {
     let mut app = app_with_file("share-room", "fn a() {}\n");
     let r = room(&mut app);
-    app.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 9);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 9);
     app.run_action("im.share_selection");
     app.im_dialog_key(key(KeyCode::Char('y')));
     assert_eq!(app.status, t!("status.im_not_connected").to_string());
-    assert!(messages(&app, &r).is_empty());
+    assert_eq!(messages(&app, &r).len(), 0);
 
     app.run_action("im.share_location");
     assert_eq!(app.status, t!("status.im_not_connected").to_string());
 
     server(&mut app);
-    app.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 9);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 9);
     app.run_action("im.share_selection");
     app.im_dialog_key(key(KeyCode::Enter));
     assert_eq!(app.status, t!("status.im_not_a_room").to_string());
@@ -603,13 +694,23 @@ fn sharing_into_a_room_needs_a_link_and_into_a_server_a_room() {
 fn sharing_to_the_cowork_session_goes_to_cowork() {
     let mut app = app_with_file("share-session", "fn a() {}\n");
     session(&mut app);
-    app.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 9);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_selection_range(0, 9);
     app.run_action("im.share_selection");
     app.im_dialog_key(key(KeyCode::Enter));
-    assert_eq!(app.status, t!("msg.capability_missing", name = "cowork").to_string());
+    assert_eq!(
+        app.status,
+        t!("msg.capability_missing", name = "cowork").to_string()
+    );
     app.status.clear();
     app.run_action("im.share_location");
-    assert_eq!(app.status, t!("msg.capability_missing", name = "cowork").to_string());
+    assert_eq!(
+        app.status,
+        t!("msg.capability_missing", name = "cowork").to_string()
+    );
 }
 
 #[test]
@@ -617,14 +718,20 @@ fn share_location_to_notes_stores_the_position() {
     let mut app = app_with_file("share-loc", "fn a() {}\n");
     app.run_action("im.share_location");
     assert_eq!(messages(&app, &notes()), ["a.rs:1:1"]);
-    assert_eq!(app.status, t!("status.im_sent", name = t!("ui.im_notes")).to_string());
+    assert_eq!(
+        app.status,
+        t!("status.im_sent", name = t!("ui.im_notes")).to_string()
+    );
 }
 
 #[test]
 fn share_paths_prefer_workspace_relative_and_shared_names() {
     let app = app_with_file("share-path", "x\n");
     assert_eq!(app.im_share_path(&app.root.join("sub/b.rs")), "sub/b.rs");
-    assert_eq!(app.im_share_path(Path::new("/elsewhere/c.rs")), "/elsewhere/c.rs");
+    assert_eq!(
+        app.im_share_path(Path::new("/elsewhere/c.rs")),
+        "/elsewhere/c.rs"
+    );
     let shared = PathBuf::from(format!("{}src/a.rs", crate::editor::REMOTE_PATH_PREFIX));
     assert_eq!(app.im_share_path(&shared), "src/a.rs");
 }
