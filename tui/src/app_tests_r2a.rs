@@ -5012,3 +5012,140 @@ fn terminal_zoom_sends_a_sequence_only_for_terminals_that_support_it() {
         assert_eq!(a.status, expected);
     }
 }
+
+// ----- overlays: dialogs, pomodoro button, mirrored docks, menu levels --------------------------------
+
+#[test]
+fn text_dialog_selects_inside_its_field_and_closes_on_an_outside_click() {
+    let mut a = app();
+    a.run_action("vix.website");
+    assert!(a.dialog.as_ref().unwrap().editor.is_some());
+    a.layout.dialog_body = Rect::new(10, 10, 40, 3);
+    a.on_mouse(left_click(12, 10));
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 20, 10));
+    assert!(a.dialog.is_some(), "clicks in the field only select text");
+    // Moving the pointer outside does not close it either; a left click does.
+    a.on_mouse(mouse(MouseEventKind::Moved, 70, 20));
+    assert!(a.dialog.is_some());
+    a.on_mouse(left_click(70, 20));
+    assert!(a.dialog.is_none());
+    // The About dialog has no field: any left click closes it.
+    a.run_action("vix.about");
+    a.on_mouse(left_click(12, 10));
+    assert!(a.dialog.is_none());
+}
+
+#[test]
+fn pomodoro_dialog_button_starts_the_countdown() {
+    let mut a = app();
+    a.run_action("tools.pomodoro");
+    a.layout.pomodoro_button = Rect::new(10, 10, 12, 1);
+    a.on_mouse(left_click(50, 20)); // elsewhere: swallowed
+    assert!(!a.pomodoro_running());
+    a.on_mouse(left_click(11, 10));
+    assert!(a.pomodoro_running());
+    assert!(!a.visible.contains(Visible::POMODORO));
+}
+
+#[test]
+fn mirrored_layout_resizes_docks_from_the_opposite_edges() {
+    let mut a = chrome_app();
+    a.settings.mirror_layout = "on".to_string();
+    assert!(crate::ui::layout_mirrored(&a));
+    // Mirrored: the explorer's draggable edge is its left edge, the messages' its right edge.
+    a.layout.explorer = Rect::new(75, 2, 25, 18);
+    a.layout.messages = Rect::new(0, 2, 20, 18);
+    a.on_mouse(left_click(75, 5));
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 60, 5));
+    assert_eq!(a.settings.explorer_width, 40);
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 60, 5));
+    a.on_mouse(left_click(19, 5));
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 30, 5));
+    assert_eq!(a.settings.messages_width, 31);
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 30, 5));
+}
+
+#[test]
+fn split_dividers_drag_to_resize_the_panes() {
+    let mut a = app_with("one");
+    a.editor.new_tab_with_content("two");
+    a.run_action("view.split_vertical");
+    a.layout.editor_region = Rect::new(0, 3, 80, 20);
+    let panes = a.editor.split_layout(a.layout.editor_region);
+    assert_eq!(panes.len(), 2);
+    let divider = panes[0].rect.right();
+    a.on_mouse(left_click(divider, 10));
+    assert!(a.flags.contains(AppFlags::SPLIT_RESIZE));
+    // Dragging along the divider (the pointer must stay on it) re-derives the ratio.
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), divider, 12));
+    let after = a.editor.split_layout(a.layout.editor_region);
+    assert_eq!(after.len(), 2);
+    assert_eq!(
+        after[0].rect.width + 1 + after[1].rect.width,
+        panes[0].rect.width + 1 + panes[1].rect.width,
+        "the divider stays inside the region"
+    );
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), divider, 10));
+    assert!(!a.flags.contains(AppFlags::SPLIT_RESIZE));
+    // A click inside a pane focuses it.
+    a.on_mouse(left_click(2, 10));
+    assert_eq!(a.focus, Focus::Editor);
+    a.focus_split_pane(1);
+    assert_eq!(a.focus, Focus::Editor);
+}
+
+#[test]
+fn menu_escape_backs_out_one_submenu_level_at_a_time() {
+    let mut a = app();
+    a.on_key(alt('i')); // View
+    let items = a.menu.defs()[a.menu.open.unwrap()].items;
+    let sub = items
+        .iter()
+        .position(|i| i.submenu.is_some())
+        .expect("View has submenus");
+    for _ in 0..items.len() {
+        if a.menu.item == Some(sub) {
+            break;
+        }
+        a.on_key(key(KeyCode::Down));
+    }
+    assert_eq!(a.menu.item, Some(sub));
+    a.on_key(key(KeyCode::Right));
+    a.on_key(key(KeyCode::Down));
+    assert!(a.menu.sub.is_some(), "the submenu is open and highlighted");
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.menu.sub.is_none());
+    assert!(a.menu.is_open(), "one Esc only closes the submenu");
+    a.on_key(key(KeyCode::Esc));
+    assert!(!a.menu.is_open());
+}
+
+#[test]
+fn interactive_query_replace_keeps_the_cursor_put_while_toggling_options() {
+    let mut a = app_with("Foo foo\n");
+    a.run_action("edit.query_replace");
+    type_str(&mut a, "foo");
+    a.on_key(alt('c'));
+    a.on_key(alt('w'));
+    a.on_key(alt('s'));
+    assert_eq!(cursor(&a), 0, "interactive mode never previews");
+    a.on_key(key(KeyCode::Backspace));
+    a.on_key(key(KeyCode::Tab));
+    type_str(&mut a, "x");
+    a.on_key(key(KeyCode::Backspace));
+    assert_eq!(a.search.as_ref().unwrap().replace, "");
+    a.on_key(key(KeyCode::F(3)));
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.search.is_none());
+}
+
+#[test]
+fn selecting_an_html_entity_with_nothing_open_does_nothing() {
+    let mut a = app_with("");
+    a.insert_selected_html();
+    assert_eq!(active_text(&a), "");
+    a.run_action("tools.html_chars");
+    a.html_panel.as_mut().unwrap().selected = usize::MAX / 2;
+    a.insert_selected_html();
+    assert_eq!(active_text(&a), "");
+}
