@@ -52,6 +52,17 @@
 //! assert_eq!(render_replacement("when $C -> $B", src, &m), "when a > 0 -> run();");
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
 // Tests slice their own ASCII fixtures; the lint guards library code.
 #![cfg_attr(not(test), warn(clippy::string_slice))]
 
@@ -91,22 +102,45 @@ struct Token {
 /// marker -- so it always tokenizes on its own.
 const PUNCT: &str = "!#%&*+-./:<=>?@^|~";
 
+/// The text of `s` from byte `i` on; empty when `i` is past the end or inside
+/// a character.
+fn tail(s: &str, i: usize) -> &str {
+    s.get(i..).unwrap_or("")
+}
+
+/// The text of `s` between bytes `a` and `b`; empty for a range that is not a
+/// piece of `s`.
+fn cut(s: &str, a: usize, b: usize) -> &str {
+    s.get(a..b).unwrap_or("")
+}
+
+/// `a + b`; an offset past the top of `usize` is past any text.
+fn plus(a: usize, b: usize) -> usize {
+    add_or(a, b, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Skip whitespace from `i`, then read one token starting there. Returns
 /// the token and the byte offset just past it, or `None` at end of input.
 /// Shared by [`tokenize`] (source text) and [`Pattern::compile`] (a
 /// pattern's literal portions), so token boundaries line up between them.
 fn next_token_at(text: &str, mut i: usize) -> Option<(Token, usize)> {
     while i < text.len() {
-        let c = text.get(i..).unwrap_or_default().chars().next()?;
+        let c = tail(text, i).chars().next()?;
         if c.is_whitespace() {
-            i += c.len_utf8();
+            i = plus(i, c.len_utf8());
         } else {
             break;
         }
     }
-    let c = text.get(i..).unwrap_or_default().chars().next()?;
+    let c = tail(text, i).chars().next()?;
     if "([{".contains(c) {
-        let end = i + c.len_utf8();
+        let end = plus(i, c.len_utf8());
         return Some((
             Token {
                 kind: Kind::Open,
@@ -117,7 +151,7 @@ fn next_token_at(text: &str, mut i: usize) -> Option<(Token, usize)> {
         ));
     }
     if ")]}".contains(c) {
-        let end = i + c.len_utf8();
+        let end = plus(i, c.len_utf8());
         return Some((
             Token {
                 kind: Kind::Close,
@@ -162,7 +196,7 @@ fn next_token_at(text: &str, mut i: usize) -> Option<(Token, usize)> {
     }
     // A single character not covered above (`,`, `;`, `$`, …): its own
     // one-character token.
-    let end = i + c.len_utf8();
+    let end = plus(i, c.len_utf8());
     Some((
         Token {
             kind: Kind::Other,
@@ -178,7 +212,7 @@ fn next_token_at(text: &str, mut i: usize) -> Option<(Token, usize)> {
 /// Runs to the matching closing quote, or to the end of `text` if it's
 /// never closed.
 fn scan_string_literal(text: &str, i: usize, quote: char) -> usize {
-    let mut j = i + quote.len_utf8();
+    let mut j = plus(i, quote.len_utf8());
     while j < text.len() {
         let c2 = text
             .get(j..)
@@ -187,13 +221,13 @@ fn scan_string_literal(text: &str, i: usize, quote: char) -> usize {
             .next()
             .unwrap_or(quote);
         if c2 == '\\' {
-            j += c2.len_utf8();
+            j = plus(j, c2.len_utf8());
             if let Some(c3) = text.get(j..).and_then(|s| s.chars().next()) {
-                j += c3.len_utf8();
+                j = plus(j, c3.len_utf8());
             }
             continue;
         }
-        j += c2.len_utf8();
+        j = plus(j, c2.len_utf8());
         if c2 == quote {
             break;
         }
@@ -213,7 +247,7 @@ fn scan_run(text: &str, i: usize, keep: impl Fn(char) -> bool) -> usize {
             .next()
             .unwrap_or('\0');
         if keep(c) {
-            j += c.len_utf8();
+            j = plus(j, c.len_utf8());
         } else {
             break;
         }
@@ -294,11 +328,11 @@ impl Pattern {
         let mut i = 0;
         loop {
             while i < pattern.len() {
-                let Some(c) = pattern.get(i..).unwrap_or_default().chars().next() else {
+                let Some(c) = tail(pattern, i).chars().next() else {
                     break;
                 };
                 if c.is_whitespace() {
-                    i += c.len_utf8();
+                    i = plus(i, c.len_utf8());
                 } else {
                     break;
                 }
@@ -306,32 +340,29 @@ impl Pattern {
             if i >= pattern.len() {
                 break;
             }
-            if pattern.as_bytes()[i] == b'$' {
-                let mut j = i + 1;
+            if pattern.as_bytes().get(i) == Some(&b'$') {
+                let mut j = plus(i, 1);
                 let multi = pattern.get(j..).is_some_and(|s| s.starts_with('$'));
                 if multi {
-                    j += 1;
+                    j = plus(j, 1);
                 }
                 let name_start = j;
                 let mut name_end = j;
-                for (k, c) in pattern.get(j..).unwrap_or_default().char_indices() {
+                for (k, c) in tail(pattern, j).char_indices() {
                     let ok = if k == 0 {
                         c.is_alphabetic() || c == '_'
                     } else {
                         c.is_alphanumeric() || c == '_'
                     };
                     if ok {
-                        name_end = j + k + c.len_utf8();
+                        name_end = plus(plus(j, k), c.len_utf8());
                     } else {
                         break;
                     }
                 }
                 if name_end > name_start {
                     tokens.push(PatternToken::Hole {
-                        name: pattern
-                            .get(name_start..name_end)
-                            .unwrap_or_default()
-                            .to_string(),
+                        name: cut(pattern, name_start, name_end).to_string(),
                         multi,
                     });
                     i = name_end;
@@ -345,10 +376,7 @@ impl Pattern {
             };
             tokens.push(PatternToken::Literal(
                 tok.kind,
-                pattern
-                    .get(tok.start..tok.end)
-                    .unwrap_or_default()
-                    .to_string(),
+                cut(pattern, tok.start, tok.end).to_string(),
             ));
             i = next;
         }
@@ -366,11 +394,13 @@ impl Pattern {
         let mut i = 0;
         while i < toks.len() {
             if let Some((end_idx, captures)) = self.try_match_at(&toks, i, source) {
-                let start = toks[i].start;
-                let end = if end_idx > i {
-                    toks[end_idx - 1].end
-                } else {
-                    toks[i].start
+                let Some(first) = toks.get(i) else {
+                    break;
+                };
+                let start = first.start;
+                let end = match end_idx.checked_sub(1).filter(|_| end_idx > i) {
+                    Some(last) => toks.get(last).map_or(start, |t| t.end),
+                    None => start,
                 };
                 out.push(Match {
                     start,
@@ -379,9 +409,9 @@ impl Pattern {
                 });
                 // Resume after the match (non-overlapping); `max(i + 1)`
                 // guarantees progress when a pattern matched zero tokens.
-                i = end_idx.max(i + 1);
+                i = end_idx.max(plus(i, 1));
             } else {
-                i += 1;
+                i = plus(i, 1);
             }
         }
         out
@@ -428,20 +458,23 @@ impl Pattern {
         match pat_tok {
             PatternToken::Literal(kind, text) => {
                 let t = toks.get(ti)?;
-                if t.kind == *kind && source.get(t.start..t.end).unwrap_or_default() == text {
-                    self.match_from(pi + 1, toks, ti + 1, source, caps)
+                if t.kind == *kind && cut(source, t.start, t.end) == text {
+                    self.match_from(plus(pi, 1), toks, plus(ti, 1), source, caps)
                 } else {
                     None
                 }
             }
             PatternToken::Hole { name, multi: false } => {
                 let unit_end = consume_unit(toks, ti)?;
-                let span = (toks[ti].start, toks[unit_end - 1].end);
+                let first = toks.get(ti)?;
+                let last = toks.get(unit_end.checked_sub(1)?)?;
+                let span = (first.start, last.end);
                 // Captures are committed to `caps` only if the remainder of
                 // the pattern matches, so a failed branch leaves no residue.
                 let mut next_caps = caps.clone();
                 next_caps.push((name.clone(), span));
-                let result = self.match_from(pi + 1, toks, unit_end, source, &mut next_caps)?;
+                let result =
+                    self.match_from(plus(pi, 1), toks, unit_end, source, &mut next_caps)?;
                 *caps = next_caps;
                 Some(result)
             }
@@ -456,8 +489,12 @@ impl Pattern {
                 let mut j = ti;
                 loop {
                     if depth == 0 {
-                        let span = if j > ti {
-                            (toks[ti].start, toks[j - 1].end)
+                        let taken = j
+                            .checked_sub(1)
+                            .filter(|_| j > ti)
+                            .and_then(|last| Some((toks.get(ti)?.start, toks.get(last)?.end)));
+                        let span = if let Some(span) = taken {
+                            span
                         } else {
                             let p = toks.get(ti).map_or(source.len(), |t| t.start);
                             (p, p)
@@ -465,7 +502,7 @@ impl Pattern {
                         let mut next_caps = caps.clone();
                         next_caps.push((name.clone(), span));
                         if let Some(result) =
-                            self.match_from(pi + 1, toks, j, source, &mut next_caps)
+                            self.match_from(plus(pi, 1), toks, j, source, &mut next_caps)
                         {
                             *caps = next_caps;
                             return Some(result);
@@ -473,14 +510,14 @@ impl Pattern {
                     }
                     let t = toks.get(j)?;
                     match t.kind {
-                        Kind::Open => depth += 1,
-                        Kind::Close => depth -= 1,
+                        Kind::Open => depth = depth.checked_add(1)?,
+                        Kind::Close => depth = depth.checked_sub(1)?,
                         Kind::Other => {}
                     }
                     if depth < 0 {
                         return None;
                     }
-                    j += 1;
+                    j = plus(j, 1);
                 }
             }
         }
@@ -493,18 +530,18 @@ impl Pattern {
 fn consume_unit(toks: &[Token], i: usize) -> Option<usize> {
     let t = toks.get(i)?;
     if t.kind != Kind::Open {
-        return Some(i + 1);
+        return i.checked_add(1);
     }
-    let mut depth = 1;
-    let mut j = i + 1;
+    let mut depth: i64 = 1;
+    let mut j = plus(i, 1);
     while depth > 0 {
         let t2 = toks.get(j)?;
         match t2.kind {
-            Kind::Open => depth += 1,
-            Kind::Close => depth -= 1,
+            Kind::Open => depth = depth.checked_add(1)?,
+            Kind::Close => depth = depth.checked_sub(1)?,
             Kind::Other => {}
         }
-        j += 1;
+        j = plus(j, 1);
     }
     Some(j)
 }
@@ -519,27 +556,27 @@ fn consume_unit(toks: &[Token], i: usize) -> Option<usize> {
 pub fn render_replacement(template: &str, source: &str, m: &Match) -> String {
     let mut out = String::new();
     let mut i = 0;
-    while let Some(c) = template.get(i..).unwrap_or_default().chars().next() {
+    while let Some(c) = tail(template, i).chars().next() {
         if c != '$' {
             out.push(c);
-            i += c.len_utf8();
+            i = plus(i, c.len_utf8());
             continue;
         }
-        let mut j = i + 1;
+        let mut j = plus(i, 1);
         let multi = template.get(j..).is_some_and(|s| s.starts_with('$'));
         if multi {
-            j += 1;
+            j = plus(j, 1);
         }
         let name_start = j;
         let mut name_end = j;
-        for (k, ch) in template.get(j..).unwrap_or_default().char_indices() {
+        for (k, ch) in tail(template, j).char_indices() {
             let ok = if k == 0 {
                 ch.is_alphabetic() || ch == '_'
             } else {
                 ch.is_alphanumeric() || ch == '_'
             };
             if ok {
-                name_end = j + k + ch.len_utf8();
+                name_end = plus(plus(j, k), ch.len_utf8());
             } else {
                 break;
             }
@@ -548,12 +585,12 @@ pub fn render_replacement(template: &str, source: &str, m: &Match) -> String {
             // Bare `$`: copy it through and let the next loop turn handle
             // whatever follows (a second `$` is then re-examined).
             out.push('$');
-            i += 1;
+            i = plus(i, 1);
             continue;
         }
-        let name = template.get(name_start..name_end).unwrap_or_default();
+        let name = cut(template, name_start, name_end);
         if let Some((_, (cs, ce))) = m.captures.iter().find(|(n, _)| n == name) {
-            out.push_str(source.get(*cs..*ce).unwrap_or_default());
+            out.push_str(cut(source, *cs, *ce));
         }
         i = name_end;
     }

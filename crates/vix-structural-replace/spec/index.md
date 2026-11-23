@@ -76,3 +76,7 @@ this optimizes for.
     file under the workspace root and reuses `ReplaceConfirm`'s existing
     preview-and-confirm step verbatim (the same one workspace
     search-and-replace uses), rather than building a second confirm UI.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Tokenizing, pattern compiling, matching and rendering move through the text with `tail`, `cut` and a checked `plus`, and index token lists with `get`. **Declared (REPLACE-F1):** a byte offset past the end of the text, or inside a character, reads as empty text; a bracket depth that overflows ends the match; a template that names a hole the pattern did not capture renders it as empty text (as before).
