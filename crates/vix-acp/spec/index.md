@@ -197,3 +197,7 @@ under the tool call that embedded it (ACP tool-call `content` of type
 is `tui/src/app/acp.rs`, the dock is drawn in `tui/src/ui/ai.rs`. Tests: unit tests in each module,
 `crates/vix-acp/tests/fake_agent.rs` (a scripted fake agent over real pipes),
 and `tui/tests/integration/acp.rs`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). **Changed:** `client::slice_lines` returns `Result<String, String>`: a `line` of 0 (lines start at 1) is an error naming it, where it was moved to line 1, and the workspace file read reports it to the agent as an error. **Declared (ACP-F1):** an absent optional text field of an agent message (message text, plan entry text, tool field, permission option name, error message) is empty text; an absent error code is the JSON-RPC server-error code -32000; a `limit` or `line` too large for the address space selects every line or none past the end. A `session/load` reply with no session id raises no `Ready` event. Counters and read-length slices carry `RCA-EXC-2` proofs.

@@ -24,6 +24,10 @@ use crate::wire::{self, Incoming, RpcError};
 /// The ACP protocol version this client speaks.
 pub const PROTOCOL_VERSION: u64 = 1;
 
+/// The text of an absent optional text field of an agent message: the empty
+/// string (ACP-F1).
+const ABSENT_TEXT: &str = "";
+
 /// What kind of grant a permission option is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptionKind {
@@ -282,7 +286,13 @@ impl Client {
     /// Allocate an id, remember what it is for, and build the request.
     fn send(&mut self, method: &str, params: &Value, kind: Pending) -> Value {
         let id = self.next_id;
-        self.next_id += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: one id per request sent in one session, so a u64 cannot overflow"
+        )]
+        {
+            self.next_id += 1;
+        }
         self.pending.insert(id, kind);
         wire::request(id, method, params)
     }
@@ -386,7 +396,13 @@ impl Client {
     ) -> Value {
         let mut result = json!({"output": output, "truncated": truncated});
         if let Some(e) = exit {
-            result["exitStatus"] = e.to_json();
+            #[expect(
+                clippy::indexing_slicing,
+                reason = "RCA-EXC-2: result is the object literal built above; assigning to a key of an object inserts it"
+            )]
+            {
+                result["exitStatus"] = e.to_json();
+            }
         }
         wire::response(req_id, &result)
     }
@@ -487,8 +503,11 @@ impl Client {
                 // The session id was already set when `session/load` was sent.
                 self.resumed = true;
                 self.phase = Phase::Ready;
-                let sid = self.session_id.clone().unwrap_or_default();
-                step.events.push(Event::Ready { session_id: sid });
+                // The id was set when `session/load` was sent; without one there
+                // is no session to report as ready.
+                if let Some(session_id) = self.session_id.clone() {
+                    step.events.push(Event::Ready { session_id });
+                }
             }
             Pending::NewSession => {
                 if let Some(sid) = value.get("sessionId").and_then(Value::as_str) {
@@ -541,14 +560,14 @@ impl Client {
             update
                 .pointer("/content/text")
                 .and_then(Value::as_str)
-                .unwrap_or_default()
+                .unwrap_or(ABSENT_TEXT)
                 .to_string()
         };
         let field = |k: &str| {
             update
                 .get(k)
                 .and_then(Value::as_str)
-                .unwrap_or_default()
+                .unwrap_or(ABSENT_TEXT)
                 .to_string()
         };
         match update.get("sessionUpdate").and_then(Value::as_str) {
@@ -569,7 +588,7 @@ impl Client {
                                 content: e
                                     .get("content")
                                     .and_then(Value::as_str)
-                                    .unwrap_or_default()
+                                    .unwrap_or(ABSENT_TEXT)
                                     .to_string(),
                                 status: e
                                     .get("status")
@@ -618,7 +637,7 @@ impl Client {
                     title: params
                         .pointer("/toolCall/title")
                         .and_then(Value::as_str)
-                        .unwrap_or_default()
+                        .unwrap_or(ABSENT_TEXT)
                         .to_string(),
                     options: parse_options(params),
                 });
@@ -745,7 +764,7 @@ fn parse_options(params: &Value) -> Vec<PermOption> {
                         name: o
                             .get("name")
                             .and_then(Value::as_str)
-                            .unwrap_or_default()
+                            .unwrap_or(ABSENT_TEXT)
                             .to_string(),
                         kind,
                     })
@@ -757,23 +776,35 @@ fn parse_options(params: &Value) -> Vec<PermOption> {
 /// Apply ACP's `line`/`limit` (1-based first line, max line count) to `text`.
 ///
 /// Lines keep their terminators (`split_inclusive`). Absent both parameters the
-/// text is returned whole; a `line` of `0` is treated like `1`.
+/// text is returned whole. `line` is 1-based, so a `line` of `0` is an error
+/// rather than being moved to 1; a `line` past the end of the text, or a
+/// `limit` of `0`, selects no lines, and a `limit` beyond the end selects all.
+///
+/// # Errors
+///
+/// A message naming the invalid `line`, when it is `0`.
 ///
 /// # Examples
 ///
 /// ```
 /// use vix_acp::client::slice_lines;
-/// assert_eq!(slice_lines("a\nb\nc\n", Some(2), Some(1)), "b\n");
-/// assert_eq!(slice_lines("a\nb\n", None, None), "a\nb\n");
+/// assert_eq!(slice_lines("a\nb\nc\n", Some(2), Some(1)).unwrap(), "b\n");
+/// assert_eq!(slice_lines("a\nb\n", None, None).unwrap(), "a\nb\n");
+/// assert!(slice_lines("a\n", Some(0), None).is_err());
 /// ```
-#[must_use]
-pub fn slice_lines(text: &str, line: Option<u64>, limit: Option<u64>) -> String {
+pub fn slice_lines(text: &str, line: Option<u64>, limit: Option<u64>) -> Result<String, String> {
     if line.is_none() && limit.is_none() {
-        return text.to_string();
+        return Ok(text.to_string());
     }
-    let skip = usize::try_from(line.unwrap_or(1).saturating_sub(1)).unwrap_or(usize::MAX);
+    let first = line.unwrap_or(1);
+    let Some(skip) = first.checked_sub(1) else {
+        return Err(format!("line {first} is not a line: lines start at 1"));
+    };
+    // A count beyond the address space is beyond any text: no lines are
+    // skipped past the end, and every line is taken.
+    let skip = usize::try_from(skip).unwrap_or(usize::MAX);
     let take = limit.map_or(usize::MAX, |l| usize::try_from(l).unwrap_or(usize::MAX));
-    text.split_inclusive('\n').skip(skip).take(take).collect()
+    Ok(text.split_inclusive('\n').skip(skip).take(take).collect())
 }
 
 #[cfg(test)]
@@ -1039,10 +1070,17 @@ mod tests {
     #[test]
     fn slice_lines_is_one_based() {
         let t = "a\nb\nc\n";
-        assert_eq!(slice_lines(t, None, None), t);
-        assert_eq!(slice_lines(t, Some(2), None), "b\nc\n");
-        assert_eq!(slice_lines(t, Some(2), Some(1)), "b\n");
-        assert_eq!(slice_lines(t, None, Some(1)), "a\n");
-        assert_eq!(slice_lines(t, Some(0), Some(1)), "a\n");
+        assert_eq!(slice_lines(t, None, None).unwrap(), t);
+        assert_eq!(slice_lines(t, Some(2), None).unwrap(), "b\nc\n");
+        assert_eq!(slice_lines(t, Some(2), Some(1)).unwrap(), "b\n");
+        assert_eq!(slice_lines(t, None, Some(1)).unwrap(), "a\n");
+        assert_eq!(slice_lines(t, Some(9), None).unwrap(), "");
+        assert_eq!(slice_lines(t, Some(1), Some(u64::MAX)).unwrap(), t);
+        // Line 0 does not exist: an error naming it, not line 1.
+        assert!(
+            slice_lines(t, Some(0), Some(1))
+                .unwrap_err()
+                .contains("line 0")
+        );
     }
 }

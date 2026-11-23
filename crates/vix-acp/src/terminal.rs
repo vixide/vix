@@ -51,9 +51,14 @@ fn push_capped(cap: &Mutex<Captured>, chunk: &[u8], limit: usize) {
         return;
     };
     c.bytes.extend_from_slice(chunk);
-    c.chunks = c.chunks.wrapping_add(1);
-    if c.bytes.len() > limit {
-        let excess = c.bytes.len() - limit;
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: one step per chunk read from a process in one session, so a u64 cannot overflow"
+    )]
+    {
+        c.chunks += 1;
+    }
+    if let Some(excess) = c.bytes.len().checked_sub(limit).filter(|e| *e > 0) {
         c.bytes.drain(..excess);
         c.truncated = true;
     }
@@ -66,7 +71,14 @@ fn pump(mut src: impl Read + Send + 'static, cap: Arc<Mutex<Captured>>, limit: u
         loop {
             match src.read(&mut buf) {
                 Ok(0) | Err(_) => break,
-                Ok(n) => push_capped(&cap, &buf[..n], limit),
+                Ok(n) => {
+                    #[expect(
+                        clippy::indexing_slicing,
+                        reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most buf.len()"
+                    )]
+                    let received = &buf[..n];
+                    push_capped(&cap, received, limit);
+                }
             }
         }
     });
@@ -126,11 +138,17 @@ impl Terminal {
         if c.truncated {
             // 0b10xx_xxxx is a continuation byte: never begin on one.
             while c.bytes.get(start).is_some_and(|b| b & 0xC0 == 0x80) {
-                start += 1;
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: get(start) returned a byte, so start is below the length"
+                )]
+                {
+                    start += 1;
+                }
             }
         }
         (
-            String::from_utf8_lossy(&c.bytes[start..]).into_owned(),
+            String::from_utf8_lossy(c.bytes.get(start..).map_or(&[][..], |t| t)).into_owned(),
             c.truncated,
         )
     }

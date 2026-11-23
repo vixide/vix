@@ -30,7 +30,8 @@ pub const MAX_LINE: usize = 16 * 1024 * 1024;
 /// ```
 #[must_use]
 pub fn encode_line(value: &Value) -> Vec<u8> {
-    let mut out = serde_json::to_vec(value).unwrap_or_default();
+    // A `Value` always serializes; were it ever not, the line is empty.
+    let mut out = serde_json::to_vec(value).unwrap_or_else(|_| Vec::new());
     out.push(b'\n');
     out
 }
@@ -75,7 +76,13 @@ impl LineDecoder {
             } else if self.buf.len() >= MAX_LINE {
                 self.buf.clear();
                 self.skipping = true;
-                self.malformed += 1;
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: one count per dropped line, each at least one byte of input, so a usize cannot overflow"
+                )]
+                {
+                    self.malformed += 1;
+                }
             } else {
                 self.buf.push(b);
             }
@@ -89,13 +96,19 @@ impl LineDecoder {
             let end = self.buf.iter().position(|&b| b == b'\n')?;
             let line: Vec<u8> = self.buf.drain(..=end).collect();
             // Strip the trailing newline; `end` is its index so `len >= 1`.
-            let text = &line[..line.len() - 1];
+            let text = line.strip_suffix(b"\n").map_or(&line[..], |t| t);
             if text.iter().all(u8::is_ascii_whitespace) {
                 continue;
             }
             match serde_json::from_slice(text) {
                 Ok(v) => return Some(v),
-                Err(_) => self.malformed += 1,
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: one count per line consumed, each at least one byte of input"
+                )]
+                Err(_) => {
+                    self.malformed += 1;
+                }
             }
         }
     }
@@ -199,7 +212,7 @@ pub fn parse_incoming(value: &Value) -> Option<Incoming> {
                     message: e
                         .get("message")
                         .and_then(Value::as_str)
-                        .unwrap_or_default()
+                        .unwrap_or("")
                         .to_string(),
                 })
             } else {

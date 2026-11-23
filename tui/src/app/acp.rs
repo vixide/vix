@@ -896,7 +896,7 @@ impl App {
             }
             std::fs::read_to_string(&p).map_err(|e| e.to_string())?
         };
-        Ok(vix_acp::client::slice_lines(&text, line, limit))
+        vix_acp::client::slice_lines(&text, line, limit)
     }
 
     /// Queue the agent's write as a pending diff on the target buffer. Nothing
