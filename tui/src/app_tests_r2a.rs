@@ -2887,7 +2887,7 @@ fn workspace_replace_previews_then_writes_every_file_on_confirm() {
         a.messages
             .items
             .iter()
-            .any(|m| m.text == t!("status.replaced_in_files", replaced = 3, files = 2).to_string())
+            .any(|m| m.text == t!("status.replaced_in_files", replaced = 3, files = 2))
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
