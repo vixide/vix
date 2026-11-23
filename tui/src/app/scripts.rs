@@ -626,7 +626,11 @@ mod tests {
     #[test]
     fn reload_reports_the_command_count_and_drops_deleted_scripts() {
         let (mut app, scripts, _lock) = scripted("scr-reload");
-        write_script(&scripts, "a", r#"register_command("x", "X", "h"); fn h() {}"#);
+        write_script(
+            &scripts,
+            "a",
+            r#"register_command("x", "X", "h"); fn h() {}"#,
+        );
         app.reload_scripts();
         assert_eq!(
             last_message(&app),
@@ -641,11 +645,19 @@ mod tests {
         );
         // Relocalizing with no scripts loaded does nothing; with one, reloads.
         app.relocalize_scripts();
-        write_script(&scripts, "b", r#"register_command("x", "X", "h"); fn h() {}"#);
+        write_script(
+            &scripts,
+            "b",
+            r#"register_command("x", "X", "h"); fn h() {}"#,
+        );
         app.relocalize_scripts();
         assert_eq!(app.script_command_count(), 0, "nothing was loaded to redo");
         app.load_scripts();
-        write_script(&scripts, "c", r#"register_command("y", "Y", "h"); fn h() {}"#);
+        write_script(
+            &scripts,
+            "c",
+            r#"register_command("y", "Y", "h"); fn h() {}"#,
+        );
         app.relocalize_scripts();
         assert_eq!(app.script_command_count(), 2);
     }
@@ -799,7 +811,11 @@ mod tests {
         assert_eq!(texts, vec!["note".to_string(), "oops".to_string()]);
 
         app.run_script_command("script:s:bad");
-        assert_eq!(content(&mut app), "partial", "effects before the error apply");
+        assert_eq!(
+            content(&mut app),
+            "partial",
+            "effects before the error apply"
+        );
         assert!(last_message(&app).unwrap().contains("kaboom"));
     }
 
@@ -867,12 +883,18 @@ mod tests {
         assert!(app.chooser.plugin().is_none());
         std::fs::write(&lock, "not [valid").unwrap();
         app.open_plugin_chooser();
-        assert!(last_message(&app).unwrap().starts_with(
-            t!("msg.plugin_failed", error = "").to_string().trim_end()
-        ));
+        assert!(
+            last_message(&app)
+                .unwrap()
+                .starts_with(t!("msg.plugin_failed", error = "").to_string().trim_end())
+        );
         // Loading scripts with a corrupt lock reports it too and still loads
         // the global scripts.
-        write_script(&scripts, "g", r#"register_command("x", "X", "h"); fn h() {}"#);
+        write_script(
+            &scripts,
+            "g",
+            r#"register_command("x", "X", "h"); fn h() {}"#,
+        );
         let before = app.messages.items.len();
         app.load_scripts();
         assert!(app.messages.items.len() > before);
@@ -893,14 +915,23 @@ mod tests {
         assert!(app.chooser.plugin().is_some());
 
         app.on_key(code(KeyCode::Enter)); // enable alpha
-        assert_eq!(app.status, t!("status.plugin_enabled", name = "alpha").to_string());
-        assert_eq!(app.chooser.plugin().unwrap().rows[0].state, PluginState::Enabled);
+        assert_eq!(
+            app.status,
+            t!("status.plugin_enabled", name = "alpha").to_string()
+        );
+        assert_eq!(
+            app.chooser.plugin().unwrap().rows[0].state,
+            PluginState::Enabled
+        );
         assert_eq!(app.script_command_count(), 1, "the plugin's script loaded");
 
         app.layout.chooser = Rect::new(0, 0, 40, 5);
         app.on_mouse(click(2, 1)); // enable beta
         assert_eq!(app.chooser.plugin().unwrap().selected, 1);
-        assert_eq!(app.chooser.plugin().unwrap().rows[1].state, PluginState::Enabled);
+        assert_eq!(
+            app.chooser.plugin().unwrap().rows[1].state,
+            PluginState::Enabled
+        );
         assert_eq!(app.script_command_count(), 2);
         app.on_mouse(click(2, 0)); // disable alpha again
         assert_eq!(
@@ -920,7 +951,10 @@ mod tests {
         plugin(&scripts, &lock, &["alpha", "ghost"]);
         std::fs::remove_dir_all(scripts.join("ghost")).unwrap();
         app.open_plugin_chooser();
-        assert_eq!(app.chooser.plugin().unwrap().rows[1].state, PluginState::Missing);
+        assert_eq!(
+            app.chooser.plugin().unwrap().rows[1].state,
+            PluginState::Missing
+        );
         app.on_key(code(KeyCode::Down));
         let before = app.messages.items.len();
         app.on_key(code(KeyCode::Enter));
@@ -934,9 +968,15 @@ mod tests {
         app.on_key(code(KeyCode::Enter));
         std::fs::write(scripts.join("alpha/p.rhai"), "// edited\n").unwrap();
         app.open_plugin_chooser();
-        assert_eq!(app.chooser.plugin().unwrap().rows[0].state, PluginState::Changed);
+        assert_eq!(
+            app.chooser.plugin().unwrap().rows[0].state,
+            PluginState::Changed
+        );
         app.on_key(code(KeyCode::Enter));
-        assert_eq!(app.chooser.plugin().unwrap().rows[0].state, PluginState::Enabled);
+        assert_eq!(
+            app.chooser.plugin().unwrap().rows[0].state,
+            PluginState::Enabled
+        );
         // Without any selectable row the toggle quietly does nothing.
         app.chooser = None;
         app.toggle_selected_plugin();

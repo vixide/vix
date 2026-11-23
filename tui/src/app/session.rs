@@ -729,9 +729,13 @@ mod tests {
         bad.store_settings_or_warn();
         let m = bad.messages.items.last().expect("a warning");
         assert!(matches!(m.level, Level::Warn));
-        assert!(m.text.starts_with(
-            t!("msg.settings_save_failed", error = "").to_string().trim_end()
-        ));
+        assert!(
+            m.text.starts_with(
+                t!("msg.settings_save_failed", error = "")
+                    .to_string()
+                    .trim_end()
+            )
+        );
     }
 
     #[test]
@@ -762,9 +766,13 @@ mod tests {
         bad.store_session_or_warn(&session);
         let m = bad.messages.items.last().expect("a warning");
         assert!(matches!(m.level, Level::Warn));
-        assert!(m.text.starts_with(
-            t!("msg.session_save_failed", error = "").to_string().trim_end()
-        ));
+        assert!(
+            m.text.starts_with(
+                t!("msg.session_save_failed", error = "")
+                    .to_string()
+                    .trim_end()
+            )
+        );
     }
 
     #[test]
@@ -817,11 +825,22 @@ mod tests {
 
         let mut fresh = app_at(&dir);
         fresh.restore_session();
-        assert_eq!(fresh.status, t!("status.session_restored", count = 2).to_string());
-        let paths: Vec<_> = fresh.editor.tabs.iter().filter_map(|t| t.path.clone()).collect();
+        assert_eq!(
+            fresh.status,
+            t!("status.session_restored", count = 2).to_string()
+        );
+        let paths: Vec<_> = fresh
+            .editor
+            .tabs
+            .iter()
+            .filter_map(|t| t.path.clone())
+            .collect();
         assert_eq!(paths, vec![a, b]);
         assert_eq!(fresh.editor.tabs.len(), 2, "the blank tab was dropped");
-        assert_eq!(fresh.editor.active_tab_mut().unwrap().editor.get_cursor(), 3);
+        assert_eq!(
+            fresh.editor.active_tab_mut().unwrap().editor.get_cursor(),
+            3
+        );
 
         // Restore can be switched off.
         let mut s = crate::settings::Settings::default();
@@ -883,18 +902,27 @@ mod tests {
 
         let mut fresh = app_at(&dir);
         fresh.ensure_project_session_loaded();
-        assert_eq!(fresh.project_command_cache.compile.as_deref(), Some("make all"));
-        assert_eq!(fresh.project_command_cache.test.as_deref(), Some("make check"));
+        assert_eq!(
+            fresh.project_command_cache.compile.as_deref(),
+            Some("make all")
+        );
+        assert_eq!(
+            fresh.project_command_cache.test.as_deref(),
+            Some("make check")
+        );
         assert_eq!(fresh.project_history.run, vec!["./a.out".to_string()]);
         assert_eq!(fresh.project_history.compile, vec!["make".to_string()]);
         assert_eq!(fresh.project_last_command.as_deref(), Some("make all"));
 
         // A run that never loaded the project fields carries the saved ones forward.
-        let mut idle = app_at(&dir);
+        let idle = app_at(&dir);
         idle.save_session().unwrap();
         let mut again = app_at(&dir);
         again.ensure_project_session_loaded();
-        assert_eq!(again.project_command_cache.compile.as_deref(), Some("make all"));
+        assert_eq!(
+            again.project_command_cache.compile.as_deref(),
+            Some("make all")
+        );
         assert_eq!(again.project_last_command.as_deref(), Some("make all"));
     }
 
@@ -909,7 +937,10 @@ mod tests {
         let mut app = app_at(&dir);
         app.open_workspace_chooser();
         let chooser = app.chooser.workspace().expect("chooser opens");
-        assert_eq!(chooser.roots, vec![other.canonicalize().unwrap().to_string_lossy().into_owned()]);
+        assert_eq!(
+            chooser.roots,
+            vec![other.canonicalize().unwrap().to_string_lossy().into_owned()]
+        );
 
         app.on_key(code(KeyCode::Down));
         app.on_key(code(KeyCode::Up));
@@ -927,7 +958,11 @@ mod tests {
         assert_eq!(app.root, other.canonicalize().unwrap());
         assert_eq!(
             app.status,
-            t!("status.project_switched", path = other.canonicalize().unwrap().display()).to_string()
+            t!(
+                "status.project_switched",
+                path = other.canonicalize().unwrap().display()
+            )
+            .to_string()
         );
         assert_eq!(app.focus, Focus::Editor);
     }
@@ -974,21 +1009,21 @@ mod tests {
             t!("status.settings_exported", path = path.display()).to_string()
         );
         app.export_settings("no-such-dir/sub/bundle.json");
-        assert!(app
-            .messages
-            .items
-            .last()
-            .unwrap()
-            .text
-            .starts_with(t!("msg.settings_export_failed", error = "").to_string().trim_end()));
+        assert!(
+            app.messages.items.last().unwrap().text.starts_with(
+                t!("msg.settings_export_failed", error = "")
+                    .to_string()
+                    .trim_end()
+            )
+        );
         app.import_settings("missing.json");
-        assert!(app
-            .messages
-            .items
-            .last()
-            .unwrap()
-            .text
-            .starts_with(t!("msg.settings_import_failed", error = "").to_string().trim_end()));
+        assert!(
+            app.messages.items.last().unwrap().text.starts_with(
+                t!("msg.settings_import_failed", error = "")
+                    .to_string()
+                    .trim_end()
+            )
+        );
     }
 
     #[test]

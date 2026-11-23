@@ -914,7 +914,14 @@ mod tests {
         let dir = temp("ai-empty");
         let mut app = app_at(&dir);
         buffer_with(&mut app, "keep me", 0);
-        inject(&mut app, AiDest::Replace { tab: 0, target: AiTarget::Whole }, done("\n\n"));
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Whole,
+            },
+            done("\n\n"),
+        );
         app.poll_ai_replace();
         assert_eq!(content(&mut app), "keep me");
         let failed = t!("status.ai_failed", action = "Fake").to_string();
@@ -929,7 +936,10 @@ mod tests {
         buffer_with(&mut app, "hello world", 0);
         inject(
             &mut app,
-            AiDest::Replace { tab: 0, target: AiTarget::Range(0, 5) },
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Range(0, 5),
+            },
             done("HOWDY"),
         );
         app.poll_ai_replace();
@@ -938,7 +948,10 @@ mod tests {
 
         inject(
             &mut app,
-            AiDest::Replace { tab: 0, target: AiTarget::Range(6, 999) },
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Range(6, 999),
+            },
             done("there"),
         );
         app.poll_ai_replace();
@@ -946,7 +959,10 @@ mod tests {
 
         inject(
             &mut app,
-            AiDest::Replace { tab: 0, target: AiTarget::Whole },
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Whole,
+            },
             done("all new"),
         );
         app.poll_ai_replace();
@@ -963,7 +979,10 @@ mod tests {
         buffer_with(&mut app, "one\ntwo\nthree\nfour\nfive\n", 0);
         inject(
             &mut app,
-            AiDest::Diff { tab: 0, target: AiTarget::Whole },
+            AiDest::Diff {
+                tab: 0,
+                target: AiTarget::Whole,
+            },
             done("ONE\ntwo\nthree\nfour\nFIVE\n"),
         );
         app.poll_ai_replace();
@@ -1065,7 +1084,11 @@ mod tests {
     fn a_commit_message_reply_prefills_the_git_commit_prompt() {
         let dir = temp("ai-commitmsg");
         let mut app = app_at(&dir);
-        inject(&mut app, AiDest::GitCommitMessage, done("  feat: add thing\n"));
+        inject(
+            &mut app,
+            AiDest::GitCommitMessage,
+            done("  feat: add thing\n"),
+        );
         app.poll_ai_replace();
         let prompt = app.prompt.as_ref().expect("commit prompt");
         assert!(matches!(prompt.kind, PromptKind::GitCommit));
@@ -1088,7 +1111,11 @@ mod tests {
         assert_eq!(app.messages.items.len(), before, "panel replies are inline");
 
         app.ai_panel.as_mut().unwrap().busy = true;
-        inject(&mut app, AiDest::Panel, AiMsg::Failed(Some("rate limited".into())));
+        inject(
+            &mut app,
+            AiDest::Panel,
+            AiMsg::Failed(Some("rate limited".into())),
+        );
         app.poll_ai_replace();
         let panel = app.ai_panel.as_ref().unwrap();
         assert!(!panel.busy);
@@ -1096,7 +1123,12 @@ mod tests {
         assert_eq!(last.role, Role::Error);
         assert_eq!(
             last.text,
-            t!("status.ai_failed_detail", action = "Fake", reason = "rate limited").to_string()
+            t!(
+                "status.ai_failed_detail",
+                action = "Fake",
+                reason = "rate limited"
+            )
+            .to_string()
         );
         assert_eq!(app.messages.items.len(), before);
 
@@ -1169,7 +1201,9 @@ mod tests {
 
     #[test]
     fn last_reply_moves_to_a_tab_or_the_clipboard() {
-        let _clip = CLIP.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _clip = CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = temp("ai-panel-last");
         let mut app = app_at(&dir);
         app.open_ai_panel();
@@ -1230,7 +1264,7 @@ mod tests {
         app.ai_panel_key(code(KeyCode::Enter));
         let panel = app.ai_panel.as_ref().unwrap();
         assert!(!panel.busy);
-        assert!(panel.input.is_empty());
+        assert_eq!(panel.input, "");
         assert_eq!(panel.turns.len(), 2);
         assert_eq!(panel.turns[0].role, Role::User);
         assert_eq!(panel.turns[0].text, "hi there");
@@ -1316,7 +1350,10 @@ mod tests {
             .editor
             .set_selection_range(5, 9);
         app.ai_begin_edit_with_instruction();
-        assert!(matches!(app.prompt.as_ref().unwrap().kind, PromptKind::AiInstruction));
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::AiInstruction
+        ));
         assert!(matches!(
             app.ai_instruction_target,
             Some((0, AiTarget::Range(5, 9)))
@@ -1327,7 +1364,7 @@ mod tests {
         // With no captured target a second submit does nothing.
         app.status.clear();
         app.submit_ai_instruction("shout");
-        assert!(app.status.is_empty());
+        assert_eq!(app.status, "");
     }
 
     #[test]
@@ -1367,7 +1404,11 @@ mod tests {
         buffer_with(&mut app, "alpha beta  gamma", 7);
         assert_eq!(app.selected_or_word_text(), "beta");
         buffer_with(&mut app, "alpha   beta", 6);
-        assert_eq!(app.selected_or_word_text(), "beta", "next word when between");
+        assert_eq!(
+            app.selected_or_word_text(),
+            "beta",
+            "next word when between"
+        );
         buffer_with(&mut app, "alpha beta", 0);
         app.editor
             .active_tab_mut()
@@ -1376,7 +1417,11 @@ mod tests {
             .set_selection_range(6, 10);
         assert_eq!(app.selected_or_word_text(), "beta");
         buffer_with(&mut app, "   ", 1);
-        app.editor.active_tab_mut().unwrap().editor.set_selection(None);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection(None);
         assert_eq!(app.selected_or_word_text(), "");
     }
 }

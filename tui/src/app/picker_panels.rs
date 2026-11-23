@@ -739,17 +739,32 @@ mod tests {
         let mut app = fresh("pp-nerd");
         app.open_nerd_palette();
         assert!(app.info.nerd_palette().is_some());
-        for k in [KeyCode::Down, KeyCode::Right, KeyCode::Up, KeyCode::Left, KeyCode::Tab] {
+        for k in [
+            KeyCode::Down,
+            KeyCode::Right,
+            KeyCode::Up,
+            KeyCode::Left,
+            KeyCode::Tab,
+        ] {
             app.nerd_key(code(k));
         }
         let (glyph, name) = {
             let p = app.info.nerd_palette().unwrap();
-            (p.selected_glyph().unwrap(), p.selected_name().unwrap().to_string())
+            (
+                p.selected_glyph().unwrap(),
+                p.selected_name().unwrap().to_string(),
+            )
         };
         app.nerd_key(code(KeyCode::Enter));
         assert_eq!(content(&mut app), glyph.to_string());
-        assert_eq!(app.status, t!("status.glyph_inserted", name = name).to_string());
-        assert!(app.info.nerd_palette().is_some(), "stays open for more picks");
+        assert_eq!(
+            app.status,
+            t!("status.glyph_inserted", name = name).to_string()
+        );
+        assert!(
+            app.info.nerd_palette().is_some(),
+            "stays open for more picks"
+        );
         app.nerd_key(code(KeyCode::Esc));
         assert!(app.info.nerd_palette().is_none());
         // Enter with no palette is a no-op.
@@ -822,11 +837,17 @@ mod tests {
         app.x11_key(code(KeyCode::Tab));
         let (hex, name) = {
             let p = app.x11_panel.as_ref().unwrap();
-            (p.selected_hex().unwrap().to_string(), p.selected_name().unwrap().to_string())
+            (
+                p.selected_hex().unwrap().to_string(),
+                p.selected_name().unwrap().to_string(),
+            )
         };
         app.x11_key(code(KeyCode::Enter));
         assert_eq!(content(&mut app), hex);
-        assert_eq!(app.status, t!("status.x11_inserted", name = name).to_string());
+        assert_eq!(
+            app.status,
+            t!("status.x11_inserted", name = name).to_string()
+        );
         app.flags.insert(AppFlags::THEME_EDITOR_PICKING);
         app.x11_key(code(KeyCode::Esc));
         assert!(app.x11_panel.is_none());
@@ -840,7 +861,13 @@ mod tests {
         app.layout.x11_panel = Rect::new(0, 0, 30, 8);
         app.open_x11_panel();
         app.x11_mouse(click(1, 2));
-        let hex = app.x11_panel.as_ref().unwrap().selected_hex().unwrap().to_string();
+        let hex = app
+            .x11_panel
+            .as_ref()
+            .unwrap()
+            .selected_hex()
+            .unwrap()
+            .to_string();
         assert_eq!(content(&mut app), hex);
         // Opened for a theme-editor pick that no longer exists: it just closes.
         app.flags.insert(AppFlags::THEME_EDITOR_PICKING);
@@ -868,12 +895,19 @@ mod tests {
             .unwrap()
             .media_type
             .to_string();
-        assert_eq!(selected, "application/json", "pre-selected from the extension");
+        assert_eq!(
+            selected, "application/json",
+            "pre-selected from the extension"
+        );
         app.media_type_key(code(KeyCode::Enter));
         assert_eq!(content(&mut app), "application/json");
         assert_eq!(
             app.status,
-            t!("status.media_type_inserted", media_type = "application/json").to_string()
+            t!(
+                "status.media_type_inserted",
+                media_type = "application/json"
+            )
+            .to_string()
         );
         for c in "png".chars() {
             app.media_type_key(key(c));
@@ -918,7 +952,11 @@ mod tests {
         assert!(app.qrcode.as_ref().is_some_and(|a| !a.is_empty()));
         app.qrcode = None;
         buffer_with(&mut app, "ignored line\nfoo bar", 0);
-        app.editor.active_tab_mut().unwrap().editor.set_selection_range(13, 20);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(13, 20);
         app.open_qrcode();
         assert!(app.qrcode.is_some());
     }
@@ -936,7 +974,12 @@ mod tests {
         assert!(app.todo_tree.as_ref().expect("todos found").len() >= 2);
         let n = 2;
         assert_eq!(app.status, t!("status.todos_n", n = n).to_string());
-        for k in [KeyCode::Down, KeyCode::PageDown, KeyCode::Up, KeyCode::PageUp] {
+        for k in [
+            KeyCode::Down,
+            KeyCode::PageDown,
+            KeyCode::Up,
+            KeyCode::PageUp,
+        ] {
             app.todo_tree_key(code(k));
         }
         let rows = app.todo_tree.as_ref().unwrap().len();
@@ -965,13 +1008,14 @@ mod tests {
             }
         }
         assert!(app.todo_tree.is_none(), "an item was activated");
-        assert!(app
-            .editor
-            .active_tab_mut()
-            .unwrap()
-            .path
-            .as_ref()
-            .is_some_and(|p| p.ends_with("work.rs")));
+        assert!(
+            app.editor
+                .active_tab_mut()
+                .unwrap()
+                .path
+                .as_ref()
+                .is_some_and(|p| p.ends_with("work.rs"))
+        );
         assert_eq!(app.focus, Focus::Editor);
     }
 
@@ -997,8 +1041,17 @@ mod tests {
         app.layout.theme_editor = Rect::new(0, 0, 40, 10);
         app.open_theme_editor();
         assert!(app.theme_editor.is_some());
-        assert_eq!(app.theme_editor_baseline.as_deref(), Some(app.settings.theme.as_str()));
-        for k in [KeyCode::Down, KeyCode::PageDown, KeyCode::Up, KeyCode::PageUp, KeyCode::Tab] {
+        assert_eq!(
+            app.theme_editor_baseline.as_deref(),
+            Some(app.settings.theme.as_str())
+        );
+        for k in [
+            KeyCode::Down,
+            KeyCode::PageDown,
+            KeyCode::Up,
+            KeyCode::PageUp,
+            KeyCode::Tab,
+        ] {
             app.theme_editor_key(code(k));
         }
         app.theme_editor_key(code(KeyCode::Enter));
@@ -1009,7 +1062,10 @@ mod tests {
         assert!(!app.flags.contains(AppFlags::THEME_EDITOR_PICKING));
 
         app.theme_editor_key(ctrl('s'));
-        assert!(matches!(app.prompt.as_ref().unwrap().kind, PromptKind::ThemeSaveAs));
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::ThemeSaveAs
+        ));
         app.prompt = None;
         app.theme_editor_mouse(click(40, 40)); // outside
         assert!(app.x11_panel.is_none());

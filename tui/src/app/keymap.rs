@@ -1566,7 +1566,12 @@ mod tests {
     #[test]
     fn plain_and_text_field_dialogs_close_on_their_own_keys() {
         let mut app = with_keymap("km-dialog", "apple");
-        for close in [KeyCode::Enter, KeyCode::Esc, KeyCode::Char(' '), KeyCode::Char('o')] {
+        for close in [
+            KeyCode::Enter,
+            KeyCode::Esc,
+            KeyCode::Char(' '),
+            KeyCode::Char('o'),
+        ] {
             app.dialog = Some(crate::app::Dialog {
                 title: "About".into(),
                 body: "v".into(),
@@ -1638,7 +1643,10 @@ mod tests {
         app.calendar_key(code(KeyCode::Left));
         assert_eq!(app.calendar.selected(), d0);
         app.calendar_key(code(KeyCode::Down));
-        assert_eq!(app.calendar.selected(), d0.checked_add(jiff::Span::new().days(7)).unwrap());
+        assert_eq!(
+            app.calendar.selected(),
+            d0.checked_add(jiff::Span::new().days(7)).unwrap()
+        );
         app.calendar_key(code(KeyCode::Up));
         assert_eq!(app.calendar.selected(), d0);
         app.calendar_key(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL));
@@ -1736,7 +1744,11 @@ mod tests {
             app.emacs_chord = chord;
             app.on_key(code(KeyCode::F(5)));
             assert_eq!(app.emacs_chord, EmacsChord::None);
-            assert_eq!(app.status, t!("status.emacs_no_chord").to_string(), "{chord:?}");
+            assert_eq!(
+                app.status,
+                t!("status.emacs_no_chord").to_string(),
+                "{chord:?}"
+            );
         }
     }
 
@@ -1755,7 +1767,11 @@ mod tests {
             app.emacs_chord = chord;
             app.on_key(key('~'));
             assert_eq!(app.emacs_chord, EmacsChord::None);
-            assert_eq!(app.status, t!("status.emacs_no_chord").to_string(), "{chord:?}");
+            assert_eq!(
+                app.status,
+                t!("status.emacs_no_chord").to_string(),
+                "{chord:?}"
+            );
         }
     }
 
@@ -1801,7 +1817,10 @@ mod tests {
         app.vim_cmd_key(code(KeyCode::Backspace));
         assert_eq!(app.vim_cmd.as_deref(), Some(""));
         app.vim_cmd_key(code(KeyCode::Backspace));
-        assert!(app.vim_cmd.is_none(), "backspacing past the colon closes it");
+        assert!(
+            app.vim_cmd.is_none(),
+            "backspacing past the colon closes it"
+        );
         // Esc cancels.
         app.vim_cmd = Some("w".into());
         app.vim_cmd_key(code(KeyCode::Esc));
@@ -1892,7 +1911,13 @@ mod tests {
 
     #[test]
     fn editing_keys_in_other_keymaps_reach_the_editor() {
-        for keymap in ["vscode-windows", "intellij-macos", "sublime", "zed", "eclipse"] {
+        for keymap in [
+            "vscode-windows",
+            "intellij-macos",
+            "sublime",
+            "zed",
+            "eclipse",
+        ] {
             let mut app = with_keymap("km-others", keymap);
             buffer_with(&mut app, "x", 1);
             app.on_key(key('y'));

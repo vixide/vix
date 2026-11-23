@@ -239,8 +239,9 @@ mod tests {
     fn temp(tag: &str) -> PathBuf {
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("vix-plugcli-{tag}-{}-{n}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir =
+            std::env::temp_dir().join(format!("vix-plugcli-{tag}-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("temp dir: {e}"));
         dir
     }
 
@@ -356,9 +357,15 @@ mod tests {
         .unwrap();
         let r = run(&args(&["remove", "alpha"]), &paths);
         assert!(r.ok);
-        assert_eq!(r.lines, vec![t!("msg.plugin_removed", name = "alpha").to_string()]);
+        assert_eq!(
+            r.lines,
+            vec![t!("msg.plugin_removed", name = "alpha").to_string()]
+        );
         assert!(!paths.plugin_dir("alpha").exists());
-        assert!(Lockfile::load(&paths.lock_path).unwrap().plugins.is_empty());
+        assert_eq!(
+            Lockfile::load(&paths.lock_path).unwrap().plugins,
+            Vec::new()
+        );
         // Removing it again names the missing plugin.
         let r = run(&args(&["remove", "alpha"]), &paths);
         assert!(!r.ok);
@@ -376,7 +383,7 @@ mod tests {
         if cfg!(feature = "git") {
             let r = run(&args(&["update"]), &paths);
             assert!(r.ok);
-            assert!(r.lines.is_empty());
+            assert_eq!(r.lines, Vec::<String>::new());
         }
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -393,7 +400,10 @@ mod tests {
         }
         .save(&paths.lock_path)
         .unwrap();
-        let r = run(&args(&["install", "https://example.invalid/alpha.git"]), &paths);
+        let r = run(
+            &args(&["install", "https://example.invalid/alpha.git"]),
+            &paths,
+        );
         assert!(!r.ok);
         assert!(r.lines[0].contains("alpha"));
         std::fs::remove_dir_all(&dir).ok();
@@ -406,7 +416,10 @@ mod tests {
             (PluginError::InvalidName("name-x".into()), "name-x"),
             (PluginError::AlreadyInstalled("dup-x".into()), "dup-x"),
             (PluginError::NotInstalled("missing-x".into()), "missing-x"),
-            (PluginError::SymlinkEscape(PathBuf::from("/esc/x")), "/esc/x"),
+            (
+                PluginError::SymlinkEscape(PathBuf::from("/esc/x")),
+                "/esc/x",
+            ),
             (PluginError::Lockfile("lock-detail".into()), "lock-detail"),
             (PluginError::Git("git-detail".into()), "git-detail"),
         ];

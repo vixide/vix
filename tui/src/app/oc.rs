@@ -459,7 +459,10 @@ mod tests {
                 )
                 .to_string()
             ),
-            None => assert_eq!(last_message(&app), Some(t!("msg.oc_not_installed").to_string())),
+            None => assert_eq!(
+                last_message(&app),
+                Some(t!("msg.oc_not_installed").to_string())
+            ),
         }
     }
 
@@ -478,12 +481,18 @@ mod tests {
             app.run_oc_action("oc.engine_choose");
             let expected = choices.get(step % choices.len()).unwrap().clone();
             assert_eq!(app.settings.oc_engine, expected);
-            assert_eq!(app.status, t!("status.oc_engine_set", name = expected.as_str()).to_string());
+            assert_eq!(
+                app.status,
+                t!("status.oc_engine_set", name = expected.as_str()).to_string()
+            );
         }
         // An engine that is not installed starts again from `auto`.
         app.settings.oc_engine = "not-an-engine".into();
         app.run_oc_action("oc.engine_choose");
-        assert_eq!(app.settings.oc_engine, choices.get(1 % choices.len()).unwrap().as_str());
+        assert_eq!(
+            app.settings.oc_engine,
+            choices.get(1 % choices.len()).unwrap().as_str()
+        );
     }
 
     #[test]
@@ -515,14 +524,19 @@ mod tests {
         app.oc_request(Request::ReadOnly);
         assert_eq!(app.status, t!("status.oc_read_only").to_string());
         app.oc_request(Request::Invalid("bad id".into()));
-        assert_eq!(app.status, t!("msg.oc_invalid", error = "bad id").to_string());
+        assert_eq!(
+            app.status,
+            t!("msg.oc_invalid", error = "bad id").to_string()
+        );
         app.oc_request(Request::Close);
         assert!(app.oc.is_none());
     }
 
     #[test]
     fn a_port_request_copies_a_localhost_url() {
-        let _clip = CLIP.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _clip = CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut app = with_panel("oc-port", true);
         app.oc_request(Request::PortUrl(8080));
         assert_eq!(
@@ -536,10 +550,16 @@ mod tests {
         let mut app = with_panel("oc-invalid", true);
         app.oc_request(Request::Inspect(Kind::Container, "-bad".into()));
         let m = last_message(&app).unwrap();
-        assert!(m.starts_with(t!("msg.oc_failed", error = "").to_string().trim_end()), "{m}");
+        assert!(
+            m.starts_with(t!("msg.oc_failed", error = "").to_string().trim_end()),
+            "{m}"
+        );
         assert!(app.oc.is_some(), "a failed inspect keeps the panel open");
         app.oc_request(Request::Logs("-bad".into()));
-        assert!(app.status.starts_with(t!("msg.oc_invalid", error = "").to_string().trim_end()));
+        assert!(
+            app.status
+                .starts_with(t!("msg.oc_invalid", error = "").to_string().trim_end())
+        );
         assert!(app.oc.is_some());
         // With no panel these requests do nothing.
         app.oc = None;
@@ -547,8 +567,12 @@ mod tests {
         app.oc_request(Request::Logs("abc".into()));
         app.oc_request(Request::Inspect(Kind::Container, "abc".into()));
         app.oc_request(Request::Shell("abc".into()));
-        app.oc_request(Request::Exec(Pending::new("docker", vec!["ps".into()], false)));
-        assert!(app.status.is_empty());
+        app.oc_request(Request::Exec(Pending::new(
+            "docker",
+            vec!["ps".into()],
+            false,
+        )));
+        assert_eq!(app.status, "");
     }
 
     #[test]

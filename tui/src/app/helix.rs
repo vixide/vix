@@ -865,7 +865,11 @@ mod tests {
     }
 
     fn selected(app: &mut App) -> Option<String> {
-        app.editor.active_tab_mut().unwrap().editor.get_selection_text()
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text()
     }
 
     fn carets(app: &App) -> usize {
@@ -947,7 +951,10 @@ mod tests {
         // Edit the buffer, then `write` saves it.
         buffer_with(&mut app, "changed", 0);
         app.run_helix_command("write");
-        assert_eq!(std::fs::read_to_string(&file).unwrap().trim_end(), "changed");
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap().trim_end(),
+            "changed"
+        );
         app.run_helix_command("quit!");
         assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
         app.flags.remove(AppFlags::SHOULD_QUIT);
@@ -1032,12 +1039,7 @@ mod tests {
         // Select mode extends every selection instead of dropping them.
         press(&mut app, "v");
         press(&mut app, "l");
-        let sel: Vec<_> = app
-            .editor
-            .active_tab()
-            .unwrap()
-            .editor
-            .caret_anchors();
+        let sel: Vec<_> = app.editor.active_tab().unwrap().editor.caret_anchors();
         assert!(sel.iter().all(|(a, c)| a != c), "{sel:?}");
         esc(&mut app);
         press(&mut app, "j");
@@ -1052,12 +1054,18 @@ mod tests {
         assert_eq!(selected(&mut app).as_deref(), Some("ab"));
         esc(&mut app);
         press(&mut app, "h");
-        assert_eq!(selected(&mut app), None, "a plain motion drops the selection");
+        assert_eq!(
+            selected(&mut app),
+            None,
+            "a plain motion drops the selection"
+        );
     }
 
     #[test]
     fn yank_and_paste_after_before_with_counts_and_dot_repeat() {
-        let _clip = CLIP.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _clip = CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut app = helix("hx-paste", "abc def", 0);
         press(&mut app, "wy"); // yank "abc "
         press(&mut app, "P");
@@ -1071,7 +1079,9 @@ mod tests {
 
     #[test]
     fn each_selection_gets_its_own_register_line_when_the_counts_match() {
-        let _clip = CLIP.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _clip = CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut app = helix("hx-splitpaste", "x\ny\n", 0);
         vix_clipboard::set("A\nB\n").unwrap();
         press(&mut app, "C");
@@ -1084,7 +1094,9 @@ mod tests {
 
     #[test]
     fn an_empty_register_pastes_nothing() {
-        let _clip = CLIP.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _clip = CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut app = helix("hx-emptypaste", "abc", 0);
         vix_clipboard::set("").unwrap();
         press(&mut app, "p");
