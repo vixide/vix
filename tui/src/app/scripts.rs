@@ -20,10 +20,6 @@
     )
 )]
 
-#[cfg(test)]
-#[path = "tests_cov4.rs"]
-pub(crate) mod cov4;
-
 use crate::app::chooser::ChooserSlot;
 use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
@@ -553,8 +549,8 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use super::cov4::*;
     use super::*;
+    use crate::app::cov4::*;
     use ratatui::layout::Rect;
     use vix_script::plugins::{LockEntry, Lockfile, PluginState};
 

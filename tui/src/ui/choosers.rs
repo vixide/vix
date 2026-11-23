@@ -1073,13 +1073,12 @@ mod tests {
                 "chooser {i} drew while closed"
             );
         }
-        let more: [fn(&mut App, &mut Frame, Rect); 6] = [
+        let more: [fn(&mut App, &mut Frame, Rect); 5] = [
             draw_spell_suggest,
             draw_recent_chooser,
             draw_location_chooser,
             draw_capture_chooser,
             draw_refile_chooser,
-            draw_script_chooser,
         ];
         for (i, f) in more.iter().enumerate() {
             let mut a = app();
@@ -1088,8 +1087,14 @@ mod tests {
                 "chooser {i} drew while closed"
             );
         }
-        let mut a = app();
-        assert!(blank(&render(&mut a, 100, 30, draw_plugin_chooser)));
+        // The script and plugin choosers exist only with the `script` feature.
+        #[cfg(feature = "script")]
+        {
+            let mut a = app();
+            assert!(blank(&render(&mut a, 100, 30, draw_script_chooser)));
+            let mut a = app();
+            assert!(blank(&render(&mut a, 100, 30, draw_plugin_chooser)));
+        }
     }
 
     #[test]

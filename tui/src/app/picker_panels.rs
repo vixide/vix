@@ -725,7 +725,7 @@ mod nav_tests {
 mod tests {
     use super::*;
     use crate::app::Focus;
-    use crate::app::scripts::cov4::*;
+    use crate::app::cov4::*;
 
     fn fresh(tag: &str) -> App {
         let dir = temp(tag);

@@ -104,6 +104,11 @@ use chooser::ChooserSlot;
 use edit_surface::EditSlot;
 use info_panel::InfoSlot;
 pub(crate) use overlays::OverlayId;
+/// Shared helpers of the coverage tests (builders, keys, temp dirs); not feature-gated
+/// because tests of ungated modules use them.
+#[cfg(test)]
+#[path = "app/tests_cov4.rs"]
+pub(crate) mod cov4;
 mod large_file;
 mod lsp_dap;
 mod lsp_file_ops;

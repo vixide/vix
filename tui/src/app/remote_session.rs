@@ -1257,6 +1257,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[cfg(feature = "tasks")]
     #[test]
     fn the_open_remote_dialog_lists_recent_names_and_selects_the_newest() {
         let (app0, dir) = app("opendialog");

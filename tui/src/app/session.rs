@@ -696,7 +696,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::scripts::cov4::*;
+    use crate::app::cov4::*;
     use crate::messages::Level;
     use ratatui::layout::Rect;
 
