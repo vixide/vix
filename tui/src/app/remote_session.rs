@@ -1030,4 +1030,249 @@ mod tests {
         assert!(!app.editor.active_tab().unwrap().dirty);
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    fn adopted(tag: &str) -> (App, PathBuf) {
+        let (mut app, dir) = app(tag);
+        app.adopt_remote(SshTarget::parse(&format!("ssh://me@box{}", url_path(&dir))).unwrap());
+        app.confirm = None;
+        (app, dir)
+    }
+
+    fn last_message(app: &App) -> String {
+        app.messages.items.last().map(|m| m.text.clone()).unwrap_or_default()
+    }
+
+    #[test]
+    fn open_remote_ignores_blank_names_and_refuses_while_busy_or_unsaved() {
+        let (mut app, dir) = app("openguards");
+        app.open_remote("   ");
+        assert!(!app.remote_busy());
+        assert!(app.status.is_empty() || !app.status.contains("busy"));
+
+        // Unsaved edits come first: the switch would close their buffers.
+        let area = ratatui::layout::Rect::new(0, 0, 80, 24);
+        assert!(app.editor.insert_str("dirty", area));
+        assert!(app.editor.tabs.iter().any(|t| t.dirty));
+        app.open_remote("ssh://box/srv");
+        assert_eq!(app.status, t!("status.remote_unsaved_first").to_string());
+        assert!(!app.remote_busy());
+        app.editor.active_tab_mut().unwrap().dirty = false;
+
+        // A name that does not parse is reported, nothing is started.
+        app.open_remote("not a remote");
+        assert!(!app.remote_busy());
+        assert!(last_message(&app).contains("not a remote"));
+
+        // While a connect is running a second one is refused.
+        let (tx, rx) = mpsc::channel();
+        app.remote.pending = Some(Pending {
+            rx,
+            label: "box".to_string(),
+            reconnect: false,
+        });
+        assert!(app.remote_busy());
+        app.open_remote("ssh://other/srv");
+        assert_eq!(app.status, t!("status.remote_busy").to_string());
+        drop(tx);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_background_connect_reports_the_error_and_clears_the_busy_state() {
+        let (mut app, dir) = app("failedconnect");
+        app.start_remote_job("box".to_string(), false, || Err("no route to host".to_string()));
+        assert_eq!(app.status, t!("status.remote_connecting", host = "box").to_string());
+        assert!(app.remote_segment().contains("box"), "the status bar shows it connecting");
+        while app.remote_busy() {
+            app.poll_remote();
+            std::thread::yield_now();
+        }
+        assert_eq!(last_message(&app), "no route to host");
+        assert_eq!(app.status, t!("status.remote_connect_failed", host = "box").to_string());
+        assert_eq!(app.remote_segment(), "");
+        app.poll_remote();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_connect_thread_that_vanished_is_reported_as_a_failure() {
+        let (mut app, dir) = app("vanished");
+        let (tx, rx) = mpsc::channel::<Result<Connected, String>>();
+        drop(tx);
+        app.remote.pending = Some(Pending {
+            rx,
+            label: "ghost".to_string(),
+            reconnect: false,
+        });
+        app.poll_remote();
+        assert!(!app.remote_busy());
+        assert_eq!(app.status, t!("status.remote_connect_failed", host = "ghost").to_string());
+        assert!(last_message(&app).contains("ghost"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reconnect_and_trust_actions_need_an_open_remote() {
+        let (mut app, dir) = app("noremote");
+        app.run_action("file.reconnect_remote");
+        assert_eq!(app.status, t!("status.remote_none").to_string());
+        app.status.clear();
+        app.run_action("file.trust_remote");
+        assert_eq!(app.status, t!("status.remote_none").to_string());
+        assert!(app.confirm.is_none());
+        assert!(!app.run_remote_action("file.something_else"));
+
+        let (mut app, dir2) = adopted("withremote");
+        app.run_action("file.trust_remote");
+        assert_eq!(
+            app.confirm.as_ref().map(|c| c.kind),
+            Some(ConfirmKind::TrustRemote)
+        );
+        app.confirm = None;
+        // A reconnect cannot start while another connect is running.
+        let (tx, rx) = mpsc::channel();
+        app.remote.pending = Some(Pending {
+            rx,
+            label: "box".to_string(),
+            reconnect: true,
+        });
+        app.run_action("file.reconnect_remote");
+        assert_eq!(app.status, t!("status.remote_busy").to_string());
+        drop(tx);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&dir2);
+    }
+
+    #[test]
+    fn declining_trust_restricts_the_workspace_and_the_status_segment_says_so() {
+        let (mut app, dir) = app("decline");
+        app.adopt_remote(SshTarget::parse(&format!("ssh://me@box{}", url_path(&dir))).unwrap());
+        assert!(app.remote_segment().contains("me@box"));
+        app.remote.session.as_mut().unwrap().trust_prompt_at = None;
+        // Other keys leave the question open.
+        assert!(app.remote_confirm_key(key('x')));
+        assert!(app.confirm.is_some());
+        assert!(app.remote_confirm_key(key('n')));
+        assert!(app.confirm.is_none());
+        assert!(app.remote_untrusted());
+        assert_eq!(app.status, t!("status.remote_restricted").to_string());
+        let restricted = app.remote_segment();
+        assert!(restricted.contains("me@box"));
+        // The same label reads differently once trusted.
+        app.set_remote_trust(true);
+        assert_eq!(app.status, t!("status.remote_trusted").to_string());
+        assert_ne!(app.remote_segment(), restricted);
+        // A confirmation of another kind is not the remote's to handle.
+        app.confirm = Some(Confirm {
+            message: String::new(),
+            paths: Vec::new(),
+            kind: ConfirmKind::Delete,
+        });
+        assert!(!app.remote_confirm_key(key('y')));
+        app.confirm = None;
+        assert!(!app.remote_confirm_key(key('y')));
+        // Esc declines too.
+        app.open_remote_trust_prompt();
+        app.remote.session.as_mut().unwrap().trust_prompt_at = None;
+        assert!(app.remote_confirm_key(KeyEvent::from(KeyCode::Esc)));
+        assert!(app.remote_untrusted());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_lost_connection_shows_in_the_status_segment_and_warns_once() {
+        let (mut app, dir) = adopted("lostseg");
+        let lost = io::Error::new(io::ErrorKind::NotConnected, "gone");
+        assert!(app.note_remote_error(&lost));
+        let before = app.messages.items.len();
+        assert!(app.note_remote_error(&lost), "still reports it, without a second warning");
+        assert_eq!(app.messages.items.len(), before);
+        assert!(app.remote_save_blocked());
+        assert_eq!(app.status, t!("status.remote_save_blocked").to_string());
+        assert!(app.remote_segment().contains("box"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_save_conflict_prompt_keeps_both_on_n_and_ignores_other_keys() {
+        let (mut app, dir) = app("conflictkeys");
+        let file = dir.join("a.txt");
+        std::fs::write(&file, "one\n").unwrap();
+        app.open_path(&file, false);
+        app.open_save_conflict(file.clone());
+        assert!(app.remote_confirm_key(key('z')));
+        assert!(app.confirm.is_some(), "an unrelated key leaves the question open");
+        assert!(app.remote_confirm_key(key('n')));
+        assert!(app.confirm.is_none());
+        assert_eq!(app.status, t!("status.save_conflict_kept").to_string());
+
+        // A prompt with no file to act on simply closes.
+        app.confirm = Some(Confirm {
+            message: String::new(),
+            paths: Vec::new(),
+            kind: ConfirmKind::SaveConflict,
+        });
+        assert!(app.remote_confirm_key(key('o')));
+        assert!(app.confirm.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn comparing_with_disk_reports_identical_text_and_unreadable_files() {
+        let (mut app, dir) = app("comparedisk");
+        let file = dir.join("a.txt");
+        std::fs::write(&file, "same\n").unwrap();
+        app.open_path(&file, false);
+        app.compare_with_disk(&file);
+        assert_eq!(app.status, t!("status.diff_identical").to_string());
+        assert!(app.diff_view.is_none());
+        // A path with no open buffer does nothing.
+        app.compare_with_disk(&dir.join("other.txt"));
+        assert!(last_message(&app).len() > 1);
+        // A deleted file cannot be read.
+        app.messages.items.clear();
+        std::fs::remove_file(&file).unwrap();
+        app.compare_with_disk(&file);
+        assert!(!app.messages.items.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_open_remote_dialog_lists_recent_names_and_selects_the_newest() {
+        let (app0, dir) = app("opendialog");
+        let mut app = app0.with_remote_pickers(None, None);
+        // With no history and no pickers it asks for a name straight away.
+        app.run_action("file.open_remote");
+        assert!(matches!(app.prompt.as_ref().unwrap().kind, PromptKind::OpenRemote));
+        app.prompt = None;
+
+        let mut store = app.load_session();
+        store.push_recent_remote("ssh://old@box/srv");
+        store.push_recent_remote("ssh://new@box/srv");
+        app.store_session(&store).unwrap();
+        app.run_action("file.open_remote");
+        let list = app.choice_list.as_ref().unwrap();
+        assert_eq!(list.panel.rows.len(), 3);
+        assert_eq!(list.panel.rows[0], t!("ui.remote_new_connection").to_string());
+        assert_eq!(list.panel.rows[1], "ssh://new@box/srv");
+        assert_eq!(list.panel.selected, 1, "the newest recent name is highlighted");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn choosing_a_recent_remote_row_opens_the_prompt_or_the_named_remote() {
+        let (mut app, dir) = app("chooserow");
+        let names = vec!["bogus name".to_string()];
+        app.choose_recent_remote(&[], &names, 0);
+        assert!(matches!(app.prompt.as_ref().unwrap().kind, PromptKind::OpenRemote));
+        app.prompt = None;
+        // Row 1 is the first recent name; it does not parse, so it is reported.
+        app.choose_recent_remote(&[], &names, 1);
+        assert!(last_message(&app).contains("bogus name"));
+        app.messages.items.clear();
+        // A row past the names falls back to the prompt.
+        app.choose_recent_remote(&[], &names, 5);
+        assert!(app.prompt.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
