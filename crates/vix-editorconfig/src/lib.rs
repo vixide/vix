@@ -27,6 +27,18 @@
 //! assert_eq!(r.indent_string().as_deref(), Some("  "));
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::Path;
 
 pub mod modeline;
@@ -172,8 +184,7 @@ fn parse_bool(value: &str) -> Option<bool> {
 
 /// Strip a trailing `;`/`#` comment from a line (`EditorConfig` comments).
 fn strip_comment(line: &str) -> &str {
-    let cut = line.find(['#', ';']).unwrap_or(line.len());
-    &line[..cut]
+    line.split_once(['#', ';']).map_or(line, |(head, _)| head)
 }
 
 /// Split a `key = value` line, trimming both sides.
