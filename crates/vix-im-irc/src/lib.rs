@@ -17,6 +17,18 @@
 //! App converts between the two. Received text is passed on raw: sanitizing
 //! it for display is the App's (and `vix-im`'s) job.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod client;
 pub mod codec;
 pub mod ctcp;

@@ -155,3 +155,7 @@ nick, join, names, `PING`, a message round trip with `server-time` and
 `account` tags, `/me`, `QUIT`, `close`, a server `ERROR`, a refused
 connection, and TLS against a non-TLS peer failing cleanly. No test uses
 the real network.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Wire-format arithmetic uses `checked_*`: a server timestamp whose millisecond count does not fit is not a server time (`None`), and a line limit smaller than the fixed parts of a message is the existing `TooLong` error. The prefix reserve for an outgoing line may exceed the 512-byte limit only for an absurd nick; the declared answer is no room for text (`max_line` is 0). `NICKLEN` is parsed as non-zero, so the retry nick keeps at least zero characters of the old one. Missing trailing parameters of a numeric reply give empty detail text. Other arithmetic carries `RCA-EXC-2` proofs.

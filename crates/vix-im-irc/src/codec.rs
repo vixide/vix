@@ -5,6 +5,18 @@
 //! writes one line without its CRLF and refuses CR, LF and NUL anywhere, so no
 //! text can smuggle in a second command.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt;
 
 /// One IRCv3 message tag: a key and an optional, already-unescaped value.
@@ -312,7 +324,8 @@ impl Line {
             return Err(EncodeError::BadCommand);
         }
         out.push_str(&self.command);
-        let last = self.params.len().saturating_sub(1);
+        // The index of the final parameter; with none the loop does not run.
+        let last = self.params.len().checked_sub(1);
         for (i, param) in self.params.iter().enumerate() {
             if has_forbidden(param) {
                 return Err(EncodeError::ForbiddenChar);
@@ -320,7 +333,7 @@ impl Line {
             out.push(' ');
             let needs_colon = param.is_empty() || param.contains(' ') || param.starts_with(':');
             if needs_colon {
-                if i != last {
+                if Some(i) != last {
                     return Err(EncodeError::BadMiddleParam);
                 }
                 out.push(':');
@@ -367,7 +380,14 @@ pub fn server_time_millis(value: &str) -> Option<i64> {
         Some(_) => return None,
     };
     let days = vix_civil_date::days_from_civil(year, month, day);
-    Some(((days * 24 + hour) * 60 + minute) * 60_000 + second * 1000 + millis)
+    // A date whose millisecond count does not fit is not a valid server time.
+    days.checked_mul(24)?
+        .checked_add(hour)?
+        .checked_mul(60)?
+        .checked_add(minute)?
+        .checked_mul(60_000)?
+        .checked_add(second.checked_mul(1000)?)?
+        .checked_add(millis)
 }
 
 /// Parse exactly `width` ASCII digits (no sign, no whitespace) as a number; `None` otherwise. Used for the fixed-width fields of `server-time` timestamps.
@@ -453,6 +473,12 @@ mod tests {
         let wire = tagged.to_wire().unwrap();
         assert_eq!(wire, "@+x=a\\sb\\:c TAGMSG #a");
         assert_eq!(Line::parse(&wire).unwrap(), tagged);
+    }
+
+    #[test]
+    fn a_server_time_too_large_to_count_is_rejected() {
+        // A year so large that its millisecond count overflows i64 is not a server time.
+        assert_eq!(server_time_millis("99999999999-01-01T00:00:00.000Z"), None);
     }
 
     #[test]

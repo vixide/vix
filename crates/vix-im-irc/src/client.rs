@@ -20,6 +20,14 @@ use crate::split::{self, MAX_LINE, TextError};
 /// IRCv3 capabilities this client asks for when the server offers them.
 pub const WANTED_CAPS: [&str; 4] = ["server-time", "message-tags", "sasl", "account-tag"];
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// A secret that never shows in `Debug` output and is wiped from memory when
 /// dropped.
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -322,7 +330,12 @@ const MAX_NICK_RETRIES: u8 = 5;
 /// server adds when it relays our message, so others receive it whole.
 fn relay_reserve(nick: &str, user: &str) -> usize {
     // ':' nick '!' '~' user '@' host(<=63) ' '
-    nick.len() + user.len() + 63 + 5
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: two live strings plus 68 cannot exceed the address space"
+    )]
+    let reserve = nick.len() + user.len() + 63 + 5;
+    reserve
 }
 
 impl Client {
@@ -418,14 +431,14 @@ impl Client {
                 if self.phase == Phase::Sasl {
                     step.event(Event::Error {
                         kind: ErrorKind::SaslFailed,
-                        detail: line.params.last().cloned().unwrap_or_default(),
+                        detail: line.params.last().map_or_else(String::new, Clone::clone),
                     });
                     self.end_cap(&mut step);
                 }
             }
             "001" => self.on_welcome(&line, &mut step),
             "005" => {
-                let tokens = line.params.get(1..).unwrap_or_default();
+                let tokens = line.params.get(1..).map_or(&[][..], |t| t);
                 self.isupport.apply(tokens);
             }
             "433" if self.phase != Phase::Registered && self.nick_retries < MAX_NICK_RETRIES => {
@@ -568,7 +581,8 @@ impl Client {
 
     /// The most text one outgoing message may carry: the 512-byte line limit minus what the server will prepend when relaying (our `nick!user@host` prefix, see `relay_reserve`).
     fn max_line(&self) -> usize {
-        MAX_LINE.saturating_sub(relay_reserve(&self.nick, &self.config.user))
+        // A prefix longer than the whole line leaves no room for text.
+        sub_or(MAX_LINE, relay_reserve(&self.nick, &self.config.user), 0)
     }
 
     /// The IRCv3 `server-time` tag of `line` in Unix milliseconds, if present and well formed.
@@ -664,7 +678,7 @@ impl Client {
             return;
         };
         // authzid NUL authcid NUL passwd; authzid empty (same as authcid).
-        let mut plain = Vec::with_capacity(sasl.user.len() * 2 + sasl.password.0.len() + 2);
+        let mut plain = Vec::new();
         plain.push(0);
         plain.extend_from_slice(sasl.user.as_bytes());
         plain.push(0);
@@ -698,13 +712,21 @@ impl Client {
     /// Appends `_`; when the server's `NICKLEN` would be exceeded the last character
     /// is replaced instead so the retry is always legal.
     fn retry_nick(&mut self, step: &mut Step) {
-        self.nick_retries += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: callers retry only while nick_retries < MAX_NICK_RETRIES, so the u8 cannot overflow"
+        )]
+        {
+            self.nick_retries += 1;
+        }
         let mut next = format!("{}_", self.nick);
         if let Some(max) = self.isupport.nicklen
             && next.len() > max
         {
             // Out of room: replace the last character instead.
-            next = self.nick.chars().take(max.saturating_sub(1)).collect();
+            // NICKLEN is parsed as non-zero (isupport.rs), so max is at least 1.
+            let keep = sub_or(max, 1, 0);
+            next = self.nick.chars().take(keep).collect();
             next.push('_');
             if next == self.nick {
                 next.pop();
@@ -857,7 +879,7 @@ impl Client {
             ErrorKind::Numeric(code)
         };
         // Skip our own nick (param 0); the rest names the subject and reason.
-        let detail = line.params.get(1..).unwrap_or_default().join(" ");
+        let detail = line.params.get(1..).map_or(&[][..], |t| t).join(" ");
         step.event(Event::Error { kind, detail });
     }
 }

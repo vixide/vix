@@ -6,6 +6,18 @@
 //! Nothing here logs: not message text, not credentials. Reconnecting is
 //! left to the App (v1).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::io::{self, ErrorKind as IoKind, Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
@@ -334,7 +346,12 @@ fn session(
             Err(e) if e.kind() == IoKind::Interrupted => continue,
             Err(e) => return Err(e),
         };
-        for &byte in &buf[..n] {
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most buf.len()"
+        )]
+        let received = &buf[..n];
+        for &byte in received {
             if byte == b'\n' {
                 if !overlong {
                     let text = String::from_utf8_lossy(&pending);
