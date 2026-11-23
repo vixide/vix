@@ -28,9 +28,43 @@
 //! [`ParseError::NotAConnectionString`], so the caller can fall back to
 //! typing it.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt;
 
 use crate::connect::{Connection, Kind};
+
+/// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners
+/// stop at the end before reading it).
+fn ch(chars: &[char], i: usize) -> char {
+    chars.get(i).copied().unwrap_or('\0')
+}
+
+/// The chars between `from` and `to`; empty for a range that is not inside `chars`.
+fn span(chars: &[char], from: usize, to: usize) -> &[char] {
+    chars.get(from..to).unwrap_or(&[])
+}
+
+/// `from + step`; an index past the top of `usize` is past any text.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// A parsed connection string: the connection it describes, plus the
 /// password it carried (held in memory only, never saved) and the options
@@ -166,8 +200,7 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
 /// (or, for `sqlite`, by a bare `:`). Returns the scheme and what follows
 /// the `://` (or the `:` for `sqlite:`).
 fn split_scheme(text: &str) -> Option<(&str, &str)> {
-    let colon = text.find(':')?;
-    let scheme = &text[..colon];
+    let (scheme, after) = text.split_once(':')?;
     if scheme.is_empty()
         || !scheme
             .chars()
@@ -175,7 +208,6 @@ fn split_scheme(text: &str) -> Option<(&str, &str)> {
     {
         return None;
     }
-    let after = &text[colon + 1..];
     if scheme.eq_ignore_ascii_case("sqlite") {
         return Some((scheme, after));
     }
@@ -184,10 +216,10 @@ fn split_scheme(text: &str) -> Option<(&str, &str)> {
 
 /// Whether `text` starts with a `key=` token whose key is a libpq keyword.
 fn looks_like_libpq(text: &str) -> bool {
-    let Some(eq) = text.find('=') else {
+    let Some((before, _)) = text.split_once('=') else {
         return false;
     };
-    let key = text[..eq].trim();
+    let key = before.trim();
     !key.contains(char::is_whitespace) && LIBPQ_KEYS.contains(&key.to_ascii_lowercase().as_str())
 }
 
@@ -197,22 +229,23 @@ fn looks_like_libpq(text: &str) -> bool {
 fn decode(s: &str) -> Result<String, ParseError> {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' {
+    let mut rest = bytes.iter().copied();
+    while let Some(b) = rest.next() {
+        if b == b'%' {
             let hex = |b: u8| char::from(b).to_digit(16);
-            let (Some(hi), Some(lo)) = (
-                bytes.get(i + 1).copied().and_then(hex),
-                bytes.get(i + 2).copied().and_then(hex),
-            ) else {
+            let (Some(hi), Some(lo)) = (rest.next().and_then(hex), rest.next().and_then(hex))
+            else {
                 return Err(ParseError::BadPercentEncoding);
             };
             // Two hex digits always fit a byte.
-            out.push(u8::try_from(hi * 16 + lo).map_err(|_| ParseError::BadPercentEncoding)?);
-            i += 3;
+            let value = hi
+                .checked_mul(16)
+                .and_then(|high| high.checked_add(lo))
+                .and_then(|v| u8::try_from(v).ok())
+                .ok_or(ParseError::BadPercentEncoding)?;
+            out.push(value);
         } else {
-            out.push(bytes[i]);
-            i += 1;
+            out.push(b);
         }
     }
     String::from_utf8(out).map_err(|_| ParseError::BadPercentEncoding)
@@ -246,8 +279,8 @@ fn server_url(kind: Kind, rest: &str) -> Result<Parsed, ParseError> {
     let rest = rest.split('#').next().unwrap_or("");
     let (main, query) = rest.split_once('?').unwrap_or((rest, ""));
     let (authority, path) = main.split_once('/').unwrap_or((main, ""));
-    let (userinfo, hostport) = match authority.rfind('@') {
-        Some(at) => (Some(&authority[..at]), &authority[at + 1..]),
+    let (userinfo, hostport) = match authority.rsplit_once('@') {
+        Some((user, host)) => (Some(user), host),
         None => (None, authority),
     };
     let mut parsed = Parsed {
@@ -337,8 +370,8 @@ fn libpq_pairs(text: &str) -> Result<Vec<(String, String)>, ParseError> {
     let mut pairs = Vec::new();
     let mut i = 0;
     let skip_ws = |i: &mut usize| {
-        while *i < chars.len() && chars[*i].is_whitespace() {
-            *i += 1;
+        while *i < chars.len() && ch(&chars, *i).is_whitespace() {
+            *i = ahead(*i, 1);
         }
     };
     loop {
@@ -347,10 +380,10 @@ fn libpq_pairs(text: &str) -> Result<Vec<(String, String)>, ParseError> {
             break;
         }
         let start = i;
-        while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '=' {
-            i += 1;
+        while i < chars.len() && !ch(&chars, i).is_whitespace() && ch(&chars, i) != '=' {
+            i = ahead(i, 1);
         }
-        let key: String = chars[start..i].iter().collect();
+        let key: String = span(&chars, start, i).iter().collect();
         skip_ws(&mut i);
         if key.is_empty() || chars.get(i) != Some(&'=') {
             return Err(ParseError::MissingValue(if key.is_empty() {
@@ -359,26 +392,26 @@ fn libpq_pairs(text: &str) -> Result<Vec<(String, String)>, ParseError> {
                 key
             }));
         }
-        i += 1; // the '='
+        i = ahead(i, 1); // the '='
         skip_ws(&mut i);
         let mut value = String::new();
         if chars.get(i) == Some(&'\'') {
-            i += 1;
+            i = ahead(i, 1);
             let mut closed = false;
             while i < chars.len() {
-                match chars[i] {
-                    '\\' if i + 1 < chars.len() => {
-                        value.push(chars[i + 1]);
-                        i += 2;
+                match ch(&chars, i) {
+                    '\\' if ahead(i, 1) < chars.len() => {
+                        value.push(ch(&chars, ahead(i, 1)));
+                        i = ahead(i, 2);
                     }
                     '\'' => {
                         closed = true;
-                        i += 1;
+                        i = ahead(i, 1);
                         break;
                     }
                     c => {
                         value.push(c);
-                        i += 1;
+                        i = ahead(i, 1);
                     }
                 }
             }
@@ -386,13 +419,13 @@ fn libpq_pairs(text: &str) -> Result<Vec<(String, String)>, ParseError> {
                 return Err(ParseError::UnterminatedQuote);
             }
         } else {
-            while i < chars.len() && !chars[i].is_whitespace() {
-                if chars[i] == '\\' && i + 1 < chars.len() {
-                    value.push(chars[i + 1]);
-                    i += 2;
+            while i < chars.len() && !ch(&chars, i).is_whitespace() {
+                if ch(&chars, i) == '\\' && ahead(i, 1) < chars.len() {
+                    value.push(ch(&chars, ahead(i, 1)));
+                    i = ahead(i, 2);
                 } else {
-                    value.push(chars[i]);
-                    i += 1;
+                    value.push(ch(&chars, i));
+                    i = ahead(i, 1);
                 }
             }
         }

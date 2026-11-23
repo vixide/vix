@@ -16,7 +16,49 @@
 //! columns to offer. Owning spec: `crates/vix-db/spec/index.md`
 //! ("Intelligent Autocomplete").
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::highlight::KEYWORDS;
+
+/// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners
+/// stop at the end before reading it).
+fn ch(chars: &[char], i: usize) -> char {
+    chars.get(i).copied().unwrap_or('\0')
+}
+
+/// The chars between `from` and `to`; empty for a range that is not inside `chars`.
+fn span(chars: &[char], from: usize, to: usize) -> &[char] {
+    chars.get(from..to).unwrap_or(&[])
+}
+
+/// `from + step`; an index past the top of `usize` is past any text.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// One `alias → table` binding found in a statement.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,16 +120,16 @@ fn is_ident_char(c: char) -> bool {
 fn quoted(chars: &[char], mut i: usize, close: char) -> (String, usize) {
     let mut name = String::new();
     while i < chars.len() {
-        if chars[i] == close {
-            if close != ']' && chars.get(i + 1) == Some(&close) {
+        if ch(chars, i) == close {
+            if close != ']' && chars.get(ahead(i, 1)) == Some(&close) {
                 name.push(close);
-                i += 2;
+                i = ahead(i, 2);
                 continue;
             }
-            return (name, i + 1);
+            return (name, ahead(i, 1));
         }
-        name.push(chars[i]);
-        i += 1;
+        name.push(ch(chars, i));
+        i = ahead(i, 1);
     }
     (name, i)
 }
@@ -98,24 +140,26 @@ fn lex(sql: &str) -> Vec<Tok> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < chars.len() {
-        let c = chars[i];
+        let c = ch(&chars, i);
         match c {
-            _ if c.is_whitespace() => i += 1,
-            '-' if chars.get(i + 1) == Some(&'-') => {
-                while i < chars.len() && chars[i] != '\n' {
-                    i += 1;
+            _ if c.is_whitespace() => i = ahead(i, 1),
+            '-' if chars.get(ahead(i, 1)) == Some(&'-') => {
+                while i < chars.len() && ch(&chars, i) != '\n' {
+                    i = ahead(i, 1);
                 }
             }
-            '/' if chars.get(i + 1) == Some(&'*') => {
-                i += 2;
-                while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
-                    i += 1;
+            '/' if chars.get(ahead(i, 1)) == Some(&'*') => {
+                i = ahead(i, 2);
+                while i < chars.len()
+                    && !(ch(&chars, i) == '*' && chars.get(ahead(i, 1)) == Some(&'/'))
+                {
+                    i = ahead(i, 1);
                 }
-                i += 2;
+                i = ahead(i, 2);
             }
             '\'' => {
                 // A string literal; `quoted` handles the doubled `''` escape.
-                i = quoted(&chars, i + 1, '\'').1;
+                i = quoted(&chars, ahead(i, 1), '\'').1;
                 out.push(Tok::Other);
             }
             '"' | '`' | '[' => {
@@ -123,40 +167,40 @@ fn lex(sql: &str) -> Vec<Tok> {
                     '[' => ']',
                     other => other,
                 };
-                let (name, next) = quoted(&chars, i + 1, close);
+                let (name, next) = quoted(&chars, ahead(i, 1), close);
                 out.push(Tok::Word(name, true));
                 i = next;
             }
             '.' => {
                 out.push(Tok::Dot);
-                i += 1;
+                i = ahead(i, 1);
             }
             ',' => {
                 out.push(Tok::Comma);
-                i += 1;
+                i = ahead(i, 1);
             }
             '(' => {
                 out.push(Tok::Open);
-                i += 1;
+                i = ahead(i, 1);
             }
             ')' => {
                 out.push(Tok::Close);
-                i += 1;
+                i = ahead(i, 1);
             }
             _ if is_ident_char(c) => {
                 let start = i;
-                while i < chars.len() && is_ident_char(chars[i]) {
-                    i += 1;
+                while i < chars.len() && is_ident_char(ch(&chars, i)) {
+                    i = ahead(i, 1);
                 }
                 if c.is_ascii_digit() {
                     out.push(Tok::Other);
                 } else {
-                    out.push(Tok::Word(chars[start..i].iter().collect(), false));
+                    out.push(Tok::Word(span(&chars, start, i).iter().collect(), false));
                 }
             }
             _ => {
                 out.push(Tok::Other);
-                i += 1;
+                i = ahead(i, 1);
             }
         }
     }
@@ -192,17 +236,17 @@ fn reserved(word: &str) -> bool {
 fn skip_group(toks: &[Tok], mut i: usize) -> usize {
     let mut depth = 0usize;
     while i < toks.len() {
-        match toks[i] {
-            Tok::Open => depth += 1,
-            Tok::Close => {
-                depth = depth.saturating_sub(1);
+        match toks.get(i) {
+            Some(Tok::Open) => depth = ahead(depth, 1),
+            Some(Tok::Close) => {
+                depth = sub_or(depth, 1, 0);
                 if depth == 0 {
-                    return i + 1;
+                    return ahead(i, 1);
                 }
             }
             _ => {}
         }
-        i += 1;
+        i = ahead(i, 1);
     }
     i
 }
@@ -243,14 +287,14 @@ fn scan(toks: &[Tok], out: &mut Vec<Alias>) {
         {
             false
         } else {
-            i += 1;
+            i = ahead(i, 1);
             continue;
         };
-        i += 1;
+        i = ahead(i, 1);
         loop {
             i = table_ref(toks, i, out);
             if comma_list && toks.get(i) == Some(&Tok::Comma) {
-                i += 1;
+                i = ahead(i, 1);
             } else {
                 break;
             }
@@ -263,13 +307,14 @@ fn scan(toks: &[Tok], out: &mut Vec<Alias>) {
 fn nested(toks: &[Tok], i: usize, out: &mut Vec<Alias>) -> usize {
     let end = skip_group(toks, i);
     // `end` is past the closing `)` unless the group never closes.
-    let inner_end = if toks.get(end.wrapping_sub(1)) == Some(&Tok::Close) {
-        end - 1
-    } else {
-        end
+    let inner_end = match end.checked_sub(1) {
+        Some(last) if toks.get(last) == Some(&Tok::Close) => last,
+        _ => end,
     };
-    if i < inner_end {
-        scan(&toks[i + 1..inner_end], out);
+    if i < inner_end
+        && let Some(inside) = toks.get(ahead(i, 1)..inner_end)
+    {
+        scan(inside, out);
     }
     end
 }
@@ -279,7 +324,7 @@ fn nested(toks: &[Tok], i: usize, out: &mut Vec<Alias>) -> usize {
 fn table_ref(toks: &[Tok], mut i: usize, out: &mut Vec<Alias>) -> usize {
     // `FROM ONLY t` (PostgreSQL) and `JOIN LATERAL (…)` prefix the reference.
     while is_kw(toks.get(i), "only") || is_kw(toks.get(i), "lateral") {
-        i += 1;
+        i = ahead(i, 1);
     }
     let mut parts: Vec<String> = Vec::new();
     let mut derived = false;
@@ -293,9 +338,9 @@ fn table_ref(toks: &[Tok], mut i: usize, out: &mut Vec<Alias>) -> usize {
                 break;
             }
             parts.push(w.clone());
-            i += 1;
+            i = ahead(i, 1);
             if toks.get(i) == Some(&Tok::Dot) {
-                i += 1;
+                i = ahead(i, 1);
             } else {
                 break;
             }
@@ -311,11 +356,11 @@ fn table_ref(toks: &[Tok], mut i: usize, out: &mut Vec<Alias>) -> usize {
     }
     let explicit = is_kw(toks.get(i), "as");
     if explicit {
-        i += 1;
+        i = ahead(i, 1);
     }
     let alias = match toks.get(i) {
         Some(Tok::Word(w, q)) if explicit || *q || !reserved(w) => {
-            i += 1;
+            i = ahead(i, 1);
             Some(w.clone())
         }
         _ => None,

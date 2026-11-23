@@ -19,8 +19,50 @@
 //! old server without the catalog view, say) just means no facts, and the
 //! column stays plain free text. Owning spec: `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::catalog::{quote_ident, quote_value};
 use super::connect::Kind;
+
+/// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners
+/// stop at the end before reading it).
+fn ch(chars: &[char], i: usize) -> char {
+    chars.get(i).copied().unwrap_or('\0')
+}
+
+/// The chars between `from` and `to`; empty for a range that is not inside `chars`.
+fn span(chars: &[char], from: usize, to: usize) -> &[char] {
+    chars.get(from..to).unwrap_or(&[])
+}
+
+/// `from + step`; an index past the top of `usize` is past any text.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// What the workbench knows about one column of the previewed table.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -215,7 +257,7 @@ pub fn mysql_enum_values(column_type: &str) -> Option<Vec<String>> {
     if !head.eq_ignore_ascii_case("enum(") || !t.ends_with(')') {
         return None;
     }
-    let tokens = tokenize(&t[4..])?;
+    let tokens = tokenize(t.get(4..)?)?;
     let values: Vec<String> = tokens
         .into_iter()
         .filter_map(|tok| match tok {
@@ -244,51 +286,51 @@ pub fn check_bodies(text: &str) -> Vec<String> {
     let mut i = 0;
     let mut quote: Option<char> = None;
     while i < chars.len() {
-        let c = chars[i];
+        let c = ch(&chars, i);
         if let Some(q) = quote {
             if c == q {
                 quote = None;
             }
-            i += 1;
+            i = ahead(i, 1);
             continue;
         }
         if matches!(c, '\'' | '"' | '`') {
             quote = Some(c);
-            i += 1;
+            i = ahead(i, 1);
             continue;
         }
-        let word_start = i == 0 || !is_word(chars[i - 1]);
+        let word_start = i == 0 || !is_word(ch(&chars, sub_or(i, 1, 0)));
         let is_check = word_start
-            && chars.len() >= i + 5
-            && chars[i..i + 5]
+            && chars.len() >= ahead(i, 5)
+            && span(&chars, i, ahead(i, 5))
                 .iter()
                 .collect::<String>()
                 .eq_ignore_ascii_case("check")
-            && chars.get(i + 5).is_none_or(|&n| !is_word(n));
+            && chars.get(ahead(i, 5)).is_none_or(|&n| !is_word(n));
         if !is_check {
-            i += 1;
+            i = ahead(i, 1);
             continue;
         }
-        let mut j = i + 5;
+        let mut j = ahead(i, 5);
         while chars.get(j).is_some_and(|c| c.is_whitespace()) {
-            j += 1;
+            j = ahead(j, 1);
         }
         if chars.get(j) != Some(&'(') {
-            i += 5;
+            i = ahead(i, 5);
             continue;
         }
         match matching_paren(&chars, j) {
             Some(end) => {
                 out.push(
-                    chars[j + 1..end]
+                    span(&chars, ahead(j, 1), end)
                         .iter()
                         .collect::<String>()
                         .trim()
                         .to_string(),
                 );
-                i = end + 1;
+                i = ahead(end, 1);
             }
-            None => i = j + 1,
+            None => i = ahead(j, 1),
         }
     }
     out
@@ -313,9 +355,9 @@ fn matching_paren(chars: &[char], open: usize) -> Option<usize> {
         }
         match c {
             '\'' | '"' | '`' => quote = Some(c),
-            '(' => depth += 1,
+            '(' => depth = ahead(depth, 1),
             ')' => {
-                depth -= 1;
+                depth = sub_or(depth, 1, 0);
                 if depth == 0 {
                     return Some(k);
                 }
@@ -349,9 +391,9 @@ fn tokenize(text: &str) -> Option<Vec<Token>> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < chars.len() {
-        let c = chars[i];
+        let c = ch(&chars, i);
         match c {
-            c if c.is_whitespace() => i += 1,
+            c if c.is_whitespace() => i = ahead(i, 1),
             '\'' => {
                 let (s, next) = quoted(&chars, i, '\'')?;
                 out.push(Token::Str(s));
@@ -362,25 +404,33 @@ fn tokenize(text: &str) -> Option<Vec<Token>> {
                 out.push(Token::Quoted(s));
                 i = next;
             }
-            '[' if chars.get(i + 1) != Some(&']')
+            '[' if chars.get(ahead(i, 1)) != Some(&']')
                 && !matches!(out.last(), Some(Token::Word(w)) if w.eq_ignore_ascii_case("array")) =>
             {
                 // A bracketed identifier (`[x]`, SQLite style); `ARRAY[…]`
                 // and a `type[]` suffix stay punctuation.
-                let end = chars[i..].iter().position(|&c| c == ']')? + i;
-                out.push(Token::Quoted(chars[i + 1..end].iter().collect()));
-                i = end + 1;
+                let end = add_or(
+                    span(&chars, i, chars.len())
+                        .iter()
+                        .position(|&c| c == ']')?,
+                    i,
+                    usize::MAX,
+                );
+                out.push(Token::Quoted(
+                    span(&chars, ahead(i, 1), end).iter().collect(),
+                ));
+                i = ahead(end, 1);
             }
             '(' | ')' | '[' | ']' | ',' | '=' => {
                 out.push(Token::Sym(c));
-                i += 1;
+                i = ahead(i, 1);
             }
-            ':' if chars.get(i + 1) == Some(&':') => {
+            ':' if chars.get(ahead(i, 1)) == Some(&':') => {
                 out.push(Token::Sym(':'));
-                i += 2;
+                i = ahead(i, 2);
             }
-            '-' if chars.get(i + 1).is_some_and(char::is_ascii_digit) => {
-                let (n, next) = number(&chars, i + 1);
+            '-' if chars.get(ahead(i, 1)).is_some_and(char::is_ascii_digit) => {
+                let (n, next) = number(&chars, ahead(i, 1));
                 out.push(Token::Num(format!("-{n}")));
                 i = next;
             }
@@ -392,9 +442,9 @@ fn tokenize(text: &str) -> Option<Vec<Token>> {
             c if is_word(c) => {
                 let start = i;
                 while chars.get(i).is_some_and(|&c| is_word(c)) {
-                    i += 1;
+                    i = ahead(i, 1);
                 }
-                let word: String = chars[start..i].iter().collect();
+                let word: String = span(&chars, start, i).iter().collect();
                 // `_utf8mb4'a'`: a charset introducer glued to its string.
                 if !(word.starts_with('_') && chars.get(i) == Some(&'\'')) {
                     out.push(Token::Word(word));
@@ -410,19 +460,19 @@ fn tokenize(text: &str) -> Option<Vec<Token>> {
 /// unescaped; returns it and the index after the closing quote.
 fn quoted(chars: &[char], start: usize, q: char) -> Option<(String, usize)> {
     let mut s = String::new();
-    let mut i = start + 1;
+    let mut i = ahead(start, 1);
     loop {
         let c = *chars.get(i)?;
         if c == q {
-            if chars.get(i + 1) == Some(&q) {
+            if chars.get(ahead(i, 1)) == Some(&q) {
                 s.push(q);
-                i += 2;
+                i = ahead(i, 2);
                 continue;
             }
-            return Some((s, i + 1));
+            return Some((s, ahead(i, 1)));
         }
         s.push(c);
-        i += 1;
+        i = ahead(i, 1);
     }
 }
 
@@ -433,9 +483,9 @@ fn number(chars: &[char], start: usize) -> (String, usize) {
         .get(i)
         .is_some_and(|c| c.is_ascii_digit() || *c == '.')
     {
-        i += 1;
+        i = ahead(i, 1);
     }
-    (chars[start..i].iter().collect(), i)
+    (span(chars, start, i).iter().collect(), i)
 }
 
 /// Words that end a cast's type name (they belong to the expression).
