@@ -72,7 +72,7 @@ pub(super) fn draw_pomodoro(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(big, theme::selected())))
             .alignment(Alignment::Center),
-        rows[0],
+        chunk(&rows, 0),
     );
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
@@ -80,13 +80,13 @@ pub(super) fn draw_pomodoro(app: &mut App, frame: &mut Frame, area: Rect) {
             theme::selected(),
         )))
         .alignment(Alignment::Center),
-        rows[1],
+        chunk(&rows, 1),
     );
-    app.layout.pomodoro_button = rows[1];
+    app.layout.pomodoro_button = chunk(&rows, 1);
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim())))
             .alignment(Alignment::Center),
-        rows[3],
+        chunk(&rows, 3),
     );
 }
 
@@ -198,17 +198,20 @@ pub(super) fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
     // Record the body rect so mouse selection can hit-test it.
-    app.layout.dialog_body = rows[0];
+    app.layout.dialog_body = chunk(&rows, 0);
 
     frame.render_widget(Clear, rect);
     frame.render_widget(block, rect);
     if has_editor {
         // A selectable/copyable text field (Website/Email).
         if let Some(ed) = app.dialog.as_ref().and_then(|d| d.editor.as_ref()) {
-            frame.render_widget(ed, rows[0]);
+            frame.render_widget(ed, chunk(&rows, 0));
         }
     } else {
-        frame.render_widget(Paragraph::new(body).alignment(Alignment::Center), rows[0]);
+        frame.render_widget(
+            Paragraph::new(body).alignment(Alignment::Center),
+            chunk(&rows, 0),
+        );
     }
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
@@ -216,7 +219,7 @@ pub(super) fn draw_dialog(app: &mut App, frame: &mut Frame, area: Rect) {
             theme::selected(),
         )))
         .alignment(Alignment::Center),
-        rows[2],
+        chunk(&rows, 2),
     );
 }
 
@@ -273,18 +276,18 @@ pub(super) fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect)
             Span::styled(format!(" {:<4}", field.label()), theme::dim()),
             Span::styled(format!("{text}{caret}"), style),
         ]);
-        frame.render_widget(Paragraph::new(line), rows[i]);
-        app.layout.color_converter_rows[i] = rows[i];
+        frame.render_widget(Paragraph::new(line), chunk(&rows, i));
+        app.layout.color_converter_rows[i] = chunk(&rows, i);
     }
 
     // A swatch of the current color, when the focused field parses.
     if let Some(c) = conv.color() {
         let swatch = Block::default().style(Style::default().bg(Color::Rgb(c.r, c.g, c.b)));
-        frame.render_widget(swatch, rows[4]);
+        frame.render_widget(swatch, chunk(&rows, 4));
     }
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
-        rows[5],
+        chunk(&rows, 5),
     );
 }
 
@@ -340,13 +343,13 @@ pub(super) fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     frame.render_widget(
         Paragraph::new(field("pattern", &t.pattern, t.focus == Field::Pattern)),
-        rows[0],
+        chunk(&rows, 0),
     );
     frame.render_widget(
         Paragraph::new(field("subject", &t.subject, t.focus == Field::Subject)),
-        rows[1],
+        chunk(&rows, 1),
     );
-    app.layout.regex_tester_rows = [rows[0], rows[1]];
+    app.layout.regex_tester_rows = [chunk(&rows, 0), chunk(&rows, 1)];
 
     let result_lines: Vec<Line> = match t.result() {
         Outcome::Error(e) => vec![Line::from(Span::styled(format!(" {e}"), theme::dim()))],
@@ -361,17 +364,17 @@ pub(super) fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
                 t!("status.matches_n", n = m.len()).to_string(),
                 theme::dim(),
             ))];
-            let view = rows[3].height.minus(1) as usize;
+            let view = chunk(&rows, 3).height.minus(1) as usize;
             for s in m.iter().take(view) {
                 lines.push(Line::from(format!("  {s}")));
             }
             lines
         }
     };
-    frame.render_widget(Paragraph::new(result_lines), rows[3]);
+    frame.render_widget(Paragraph::new(result_lines), chunk(&rows, 3));
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
-        rows[4],
+        chunk(&rows, 4),
     );
 }
 
@@ -423,9 +426,9 @@ pub(super) fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
             format!(" {}{caret}", calc.input),
             input_style,
         ))),
-        rows[0],
+        chunk(&rows, 0),
     );
-    app.layout.calculator_rects[0] = rows[0];
+    app.layout.calculator_rects[0] = chunk(&rows, 0);
 
     // Buttons: [ Run ] [ Insert ].
     let btn = |label: String, focused: bool| {
@@ -447,21 +450,21 @@ pub(super) fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
             calc.focus == Focus::Insert,
         ),
     ]);
-    frame.render_widget(Paragraph::new(buttons), rows[1]);
+    frame.render_widget(Paragraph::new(buttons), chunk(&rows, 1));
     // Button hit rects: the drawn " [ Run ] [ Insert ] " cells, so they can
     // follow the row when a mirrored layout right-aligns it.
     let run_w = u16::try_from((t!("ui.calculator_run").chars().count()).plus(5)).unwrap_or(0);
     let insert_w = u16::try_from((t!("ui.calculator_insert").chars().count()).plus(5)).unwrap_or(0);
     app.layout.calculator_rects[1] = Rect {
-        x: (rows[1].x).plus(1),
-        y: rows[1].y,
-        width: run_w.min(rows[1].width.minus(1)),
+        x: (chunk(&rows, 1).x).plus(1),
+        y: chunk(&rows, 1).y,
+        width: run_w.min(chunk(&rows, 1).width.minus(1)),
         height: 1,
     };
     app.layout.calculator_rects[2] = Rect {
-        x: (rows[1].x).plus(1).plus(run_w),
-        y: rows[1].y,
-        width: insert_w.min(rows[1].width.minus(run_w.plus(1))),
+        x: (chunk(&rows, 1).x).plus(1).plus(run_w),
+        y: chunk(&rows, 1).y,
+        width: insert_w.min(chunk(&rows, 1).width.minus(run_w.plus(1))),
         height: 1,
     };
 
@@ -471,10 +474,10 @@ pub(super) fn draw_calculator(app: &mut App, frame: &mut Frame, area: Rect) {
         Some(Outcome::Err(e)) => Line::from(Span::styled(format!(" {e}"), theme::dim())),
         None => Line::from(""),
     };
-    frame.render_widget(Paragraph::new(result_line), rows[2]);
+    frame.render_widget(Paragraph::new(result_line), chunk(&rows, 2));
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
-        rows[3],
+        chunk(&rows, 3),
     );
     mirror_calculator(app, frame, inner);
 }
@@ -552,7 +555,7 @@ pub(super) fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) 
                 field_style(conv.focus == Focus::Value),
             ),
         ])),
-        rows[0],
+        chunk(&rows, 0),
     );
     // From selector.
     frame.render_widget(
@@ -563,7 +566,7 @@ pub(super) fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) 
                 field_style(conv.focus == Focus::From),
             ),
         ])),
-        rows[1],
+        chunk(&rows, 1),
     );
     // To selector, with the live output to its right.
     frame.render_widget(
@@ -575,12 +578,12 @@ pub(super) fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) 
             ),
             Span::styled(format!("   = {}", conv.output_text()), theme::base()),
         ])),
-        rows[2],
+        chunk(&rows, 2),
     );
-    app.layout.unit_converter_rows = [rows[0], rows[1], rows[2]];
+    app.layout.unit_converter_rows = [chunk(&rows, 0), chunk(&rows, 1), chunk(&rows, 2)];
 
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(hint.to_string(), theme::dim()))),
-        rows[4],
+        chunk(&rows, 4),
     );
 }

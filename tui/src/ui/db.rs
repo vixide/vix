@@ -689,8 +689,10 @@ fn draw_db_workbench(app: &mut App, frame: &mut Frame, area: Rect) {
     let right = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(55), Constraint::Min(3)])
-        .split(cols[1]);
-    let tree_body = Block::default().borders(Borders::ALL).inner(cols[0]);
+        .split(chunk(&cols, 1));
+    let tree_body = Block::default()
+        .borders(Borders::ALL)
+        .inner(chunk(&cols, 0));
     let editor_body = Block::default().borders(Borders::ALL).inner(right[0]);
     let results_area = Block::default().borders(Borders::ALL).inner(right[1]);
     // The results grid keeps its first row for the headers.
@@ -707,7 +709,7 @@ fn draw_db_workbench(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.db_tree = tree_body;
     app.layout.db_editor = editor_body;
     app.layout.db_results = results_body;
-    draw_db_tree(app, frame, cols[0]);
+    draw_db_tree(app, frame, chunk(&cols, 0));
     draw_db_editor(app, frame, right[0]);
     draw_db_results(app, frame, right[1]);
 }
@@ -1216,7 +1218,7 @@ fn draw_db_compare_review(c: &crate::db::compare::review::Compare, frame: &mut F
             trunc(&format!(" {summary} · {access}"), width),
             theme::title(true),
         ))),
-        rows[0],
+        chunk(&rows, 0),
     );
     if c.changes.is_empty() {
         frame.render_widget(
@@ -1224,19 +1226,19 @@ fn draw_db_compare_review(c: &crate::db::compare::review::Compare, frame: &mut F
                 format!(" {}", t!("ui.db_compare_same")),
                 theme::dim(),
             ))),
-            rows[1],
+            chunk(&rows, 1),
         );
         return;
     }
-    let height = usize::from(rows[1].height);
+    let height = usize::from(chunk(&rows, 1).height);
     let skip = c.cursor.minus(height.minus(1));
     let mut list: Vec<Line> = Vec::with_capacity(height);
     for (i, change) in c.changes.iter().enumerate().skip(skip).take(height) {
         list.push(compare_change_line(c, i, change, width));
     }
-    frame.render_widget(Paragraph::new(list), rows[1]);
+    frame.render_widget(Paragraph::new(list), chunk(&rows, 1));
     if let Some(change) = c.changes.get(c.cursor) {
-        draw_db_compare_detail(change, frame, rows[2]);
+        draw_db_compare_detail(change, frame, chunk(&rows, 2));
     }
 }
 

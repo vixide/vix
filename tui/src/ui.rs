@@ -55,7 +55,7 @@ mod terminal;
 mod tool_panels;
 mod undo_tree;
 
-use crate::geo::Geo;
+use crate::geo::{Geo, chunk};
 #[cfg(feature = "ai")]
 use ai::{draw_ai_diff, draw_ai_panel};
 use bottom_dock::draw_bottom_dock;
@@ -223,7 +223,12 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
         .direction(Direction::Horizontal)
         .constraints(order.iter().map(|&(_, c)| c).collect::<Vec<_>>())
         .split(body);
-    let at = |k: char| order.iter().position(|&(o, _)| o == k).map(|i| cols[i]);
+    let at = |k: char| {
+        order
+            .iter()
+            .position(|&(o, _)| o == k)
+            .map(|i| chunk(&cols, i))
+    };
     BodyColumns {
         explorer: at('e'),
         center: at('c').unwrap_or(body),
@@ -274,7 +279,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         .direction(Direction::Vertical)
         .constraints(vconstraints)
         .split(area);
-    app.layout.menu = rows[0];
+    app.layout.menu = chunk(&rows, 0);
     let status_row = rows.get(2).copied();
 
     // The bottom dock (when shown) takes a fixed-height strip at the bottom of the
@@ -282,15 +287,15 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     let (body, bottom_dock_rect) = if app.visible.contains(crate::app::Visible::BOTTOM_DOCK) {
         // Height is user-adjustable (drag the dock's top edge); keep at least 3
         // rows for the main body above it.
-        let max_h = rows[1].height.minus(3).max(3);
+        let max_h = chunk(&rows, 1).height.minus(3).max(3);
         let h = app.settings.bottom_dock_height.clamp(3, max_h);
         let v = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(3), Constraint::Length(h)])
-            .split(rows[1]);
+            .split(chunk(&rows, 1));
         (v[0], Some(v[1]))
     } else {
-        (rows[1], None)
+        (chunk(&rows, 1), None)
     };
 
     let cols = body_columns(app, body);
@@ -329,7 +334,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     }
 
     // ----- render (immutable reads from here) -----
-    draw_menu_bar(app, frame, rows[0]);
+    draw_menu_bar(app, frame, chunk(&rows, 0));
     if let Some(r) = explorer_rect {
         draw_explorer(app, frame, r);
     }
@@ -348,7 +353,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         draw_status_bar(app, frame, r);
     }
 
-    draw_overlays(app, frame, area, rows[0]);
+    draw_overlays(app, frame, area, chunk(&rows, 0));
     end_of_frame_passes(app, frame);
 }
 

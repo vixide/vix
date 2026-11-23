@@ -122,7 +122,7 @@ pub(super) fn draw_fhir_bundle(app: &mut App, frame: &mut Frame, area: Rect) {
     let row_area = if show_bar {
         Rect {
             width: chunk(&chunks, 1).width.minus(1),
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         }
     } else {
         chunk(&chunks, 1)
@@ -131,7 +131,7 @@ pub(super) fn draw_fhir_bundle(app: &mut App, frame: &mut Frame, area: Rect) {
     if show_bar {
         let sb_area = Rect {
             x: chunk(&chunks, 1).x.plus(chunk(&chunks, 1).width).minus(1),
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         };
         draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }
@@ -147,6 +147,6 @@ pub(super) fn draw_fhir_bundle(app: &mut App, frame: &mut Frame, area: Rect) {
             .unwrap_or(u16::MAX)
             .min(chunk(&chunks, 1).height),
         width: row_area.width,
-        ..chunks[1]
+        ..chunk(&chunks, 1)
     };
 }

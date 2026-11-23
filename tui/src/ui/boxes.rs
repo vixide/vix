@@ -68,14 +68,14 @@ pub(super) fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     // (`◀`/`▶`). The arrows are clickable (see `App::calendar_mouse`) and mirror
     // the Left/Right keys.
     let header = Line::from(format!("{CAL_PREV}{:^19}{CAL_NEXT}", app.calendar.title()));
-    frame.render_widget(Paragraph::new(header), rows[0]);
-    frame.render_widget(Paragraph::new(month_lines(&app.calendar)), rows[1]);
+    frame.render_widget(Paragraph::new(header), chunk(&rows, 0));
+    frame.render_widget(Paragraph::new(month_lines(&app.calendar)), chunk(&rows, 1));
 
     let help = Line::from(Span::styled(
         t!("ui.calendar_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(help), rows[2]);
+    frame.render_widget(Paragraph::new(help), chunk(&rows, 2));
 }
 
 /// Draw the clock box (Tools -> Clock...) in the top-right corner: one row per
@@ -127,11 +127,11 @@ pub(super) fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
     state.select(Some(app.clock.selected));
-    frame.render_stateful_widget(list, rows[0], &mut state);
-    app.layout.clock = rows[0];
+    frame.render_stateful_widget(list, chunk(&rows, 0), &mut state);
+    app.layout.clock = chunk(&rows, 0);
 
     let help = Line::from(Span::styled(t!("ui.clock_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(help), rows[1]);
+    frame.render_widget(Paragraph::new(help), chunk(&rows, 1));
 }
 
 /// Draw the workspace dashboard overlay. Figures still being computed in the

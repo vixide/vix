@@ -102,14 +102,14 @@ pub(super) fn draw_hl7_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let show_bar = total > view_h && chunk(&chunks, 1).width > 1;
     let row_area = Rect {
         width: chunk(&chunks, 1).width.minus(u16::from(show_bar)),
-        ..chunks[1]
+        ..chunk(&chunks, 1)
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
             x: chunk(&chunks, 1).x.plus(chunk(&chunks, 1).width).minus(1),
             width: 1,
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         };
         draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }

@@ -87,7 +87,7 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
     let row_area = if show_bar {
         Rect {
             width: chunk(&chunks, 2).width.minus(1),
-            ..chunks[2]
+            ..chunk(&chunks, 2)
         }
     } else {
         chunk(&chunks, 2)
@@ -96,7 +96,7 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
     if show_bar {
         let sb_area = Rect {
             x: chunk(&chunks, 2).x.plus(chunk(&chunks, 2).width).minus(1),
-            ..chunks[2]
+            ..chunk(&chunks, 2)
         };
         draw_scrollbar(frame, sb_area, fb.selected, total.minus(1));
     }

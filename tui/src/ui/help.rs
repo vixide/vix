@@ -97,14 +97,14 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.help_headers = [
         Rect {
             width: header_w.min(chunk(&chunks, 1).width),
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         },
         Rect {
             x: chunk(&chunks, 1)
                 .x
                 .plus(header_w.min(chunk(&chunks, 1).width)),
             width: chunk(&chunks, 1).width.minus(header_w),
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         },
     ];
 
@@ -215,14 +215,14 @@ pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rec
     app.layout.keybinding_editor_headers = [
         Rect {
             width: header_w.min(chunk(&chunks, 1).width),
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         },
         Rect {
             x: chunk(&chunks, 1)
                 .x
                 .plus(header_w.min(chunk(&chunks, 1).width)),
             width: chunk(&chunks, 1).width.minus(header_w),
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         },
     ];
 

@@ -102,7 +102,7 @@ pub(super) fn draw_undo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
     let row_area = if show_bar {
         Rect {
             width: chunk(&chunks, 0).width.minus(1),
-            ..chunks[0]
+            ..chunk(&chunks, 0)
         }
     } else {
         chunk(&chunks, 0)
@@ -111,7 +111,7 @@ pub(super) fn draw_undo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
     if show_bar {
         let sb_area = Rect {
             x: chunk(&chunks, 0).x.plus(chunk(&chunks, 0).width).minus(1),
-            ..chunks[0]
+            ..chunk(&chunks, 0)
         };
         draw_scrollbar(frame, sb_area, selected, total.minus(1));
     }

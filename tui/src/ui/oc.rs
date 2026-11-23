@@ -164,7 +164,7 @@ pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
     let row_area = if show_bar {
         Rect {
             width: chunk(&chunks, 1).width.minus(1),
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         }
     } else {
         chunk(&chunks, 1)
@@ -173,7 +173,7 @@ pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
     if show_bar {
         let sb_area = Rect {
             x: chunk(&chunks, 1).x.plus(chunk(&chunks, 1).width).minus(1),
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         };
         draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }

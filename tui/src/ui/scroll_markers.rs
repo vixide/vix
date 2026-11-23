@@ -16,7 +16,7 @@
     )
 )]
 
-use crate::geo::Geo;
+use crate::geo::{Geo, chunk};
 use ratatui::style::Color;
 
 use crate::editor::Tab;
@@ -61,8 +61,10 @@ pub(super) fn bucket(markers: &[Marker], total_lines: usize, height: usize) -> V
             .checked_div(max_line)
             .unwrap_or(0)
             .min(span);
-        if rows[row].is_none_or(|(source, _)| m.source >= source) {
-            rows[row] = Some((m.source, m.color));
+        if let Some(slot) = rows.get_mut(row)
+            && slot.is_none_or(|(source, _)| m.source >= source)
+        {
+            *slot = Some((m.source, m.color));
         }
     }
     rows.into_iter().map(|r| r.map(|(_, c)| c)).collect()

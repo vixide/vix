@@ -794,10 +794,10 @@ fn draw_list_chooser_sized(
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
     state.select(Some(selected));
-    frame.render_stateful_widget(list, rows[0], &mut state);
+    frame.render_stateful_widget(list, chunk(&rows, 0), &mut state);
 
-    frame.render_widget(hint, rows[1]);
-    rows[0]
+    frame.render_widget(hint, chunk(&rows, 1));
+    chunk(&rows, 0)
 }
 
 /// The recent-files chooser: a multi-column table — basename, path, size,
