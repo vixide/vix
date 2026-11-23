@@ -15,7 +15,9 @@ pub(crate) fn temp(tag: &str) -> PathBuf {
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("vix-cov4-{tag}-{}-{n}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    dir
+    // Canonical, so paths compare equal to what the app reports (macOS
+    // temp dirs sit behind the `/var` -> `/private/var` symlink).
+    dir.canonicalize().unwrap()
 }
 
 /// An [`App`] rooted at `root` with default settings and a private session

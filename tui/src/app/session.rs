@@ -692,3 +692,328 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::scripts::cov4::*;
+    use crate::messages::Level;
+    use ratatui::layout::Rect;
+
+    /// Write `name` under `dir` with `text` and return its path.
+    fn file(dir: &Path, name: &str, text: &str) -> PathBuf {
+        let p = dir.join(name);
+        std::fs::write(&p, text).unwrap();
+        p
+    }
+
+    /// A path under a regular file, so every write to it fails.
+    fn unwritable(dir: &Path) -> PathBuf {
+        let blocker = file(dir, "blocker", "x");
+        blocker.join("child.toml")
+    }
+
+    #[test]
+    fn settings_are_stored_to_the_chosen_path_and_a_failed_store_warns() {
+        let dir = temp("sess-settings");
+        let path = dir.join("cfg").join("config.toml");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut app = app_at(&dir).with_settings_path(&path);
+        app.store_settings().unwrap();
+        assert!(path.is_file());
+        let before = app.messages.items.len();
+        app.store_settings_or_warn();
+        assert_eq!(app.messages.items.len(), before, "success is silent");
+
+        let mut bad = app_at(&dir).with_settings_path(unwritable(&dir));
+        bad.store_settings_or_warn();
+        let m = bad.messages.items.last().expect("a warning");
+        assert!(matches!(m.level, Level::Warn));
+        assert!(m.text.starts_with(
+            t!("msg.settings_save_failed", error = "").to_string().trim_end()
+        ));
+    }
+
+    #[test]
+    fn a_settings_load_failure_is_queued_as_a_warning() {
+        let dir = temp("sess-loadfail");
+        let mut app = app_at(&dir);
+        app.warn_settings_load_failed("bad toml at line 3");
+        let m = app.messages.items.last().unwrap();
+        assert!(matches!(m.level, Level::Warn));
+        assert_eq!(
+            m.text,
+            t!("msg.settings_load_failed", error = "bad toml at line 3").to_string()
+        );
+    }
+
+    #[test]
+    fn a_session_that_cannot_be_written_warns_and_a_good_one_round_trips() {
+        let dir = temp("sess-store");
+        let app = app_at(&dir);
+        let mut ws = app.workspace_session();
+        ws.visits = 0;
+        let mut session = crate::session::Session::default();
+        session.set_workspace(ws);
+        assert!(app.store_session(&session).is_ok());
+        assert!(app.load_session().workspace(&app.session_key()).is_some());
+
+        let mut bad = app_at(&dir).with_session_path(unwritable(&dir));
+        bad.store_session_or_warn(&session);
+        let m = bad.messages.items.last().expect("a warning");
+        assert!(matches!(m.level, Level::Warn));
+        assert!(m.text.starts_with(
+            t!("msg.session_save_failed", error = "").to_string().trim_end()
+        ));
+    }
+
+    #[test]
+    fn the_session_key_is_the_canonical_workspace_root() {
+        let dir = temp("sess-key");
+        let app = app_at(&dir);
+        assert_eq!(
+            app.session_key(),
+            dir.canonicalize().unwrap().to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn a_session_captures_files_cursors_and_the_active_tab_but_skips_untitled_and_ephemeral() {
+        let dir = temp("sess-capture");
+        let a = file(&dir, "a.txt", "alpha text");
+        let b = file(&dir, "b.txt", "bravo text");
+        let tmp = file(&dir, "scratch.tmp", "temp");
+        let mut s = crate::settings::Settings::default();
+        s.editor_behavior.ephemeral_paths = vec!["**/*.tmp".to_string()];
+        let mut app = app_with(&dir, s);
+        app.open_path(&a, false);
+        app.open_path(&tmp, false);
+        app.open_path(&b, false);
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(4);
+        app.editor.new_tab_with_content("untitled");
+        let ws = app.workspace_session();
+        assert_eq!(
+            ws.files,
+            vec![
+                a.to_string_lossy().into_owned(),
+                b.to_string_lossy().into_owned()
+            ]
+        );
+        assert_eq!(ws.cursors, vec![0, 4]);
+        assert_eq!(ws.root, app.session_key());
+        assert!(ws.split.is_none());
+    }
+
+    #[test]
+    fn saving_and_restoring_reopens_the_files_with_cursors_and_reports_the_count() {
+        let dir = temp("sess-restore");
+        let a = file(&dir, "a.txt", "alpha text");
+        let b = file(&dir, "b.txt", "bravo text");
+        let mut app = app_at(&dir);
+        app.open_path(&a, false);
+        app.open_path(&b, false);
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(3);
+        app.save_session().unwrap();
+
+        let mut fresh = app_at(&dir);
+        fresh.restore_session();
+        assert_eq!(fresh.status, t!("status.session_restored", count = 2).to_string());
+        let paths: Vec<_> = fresh.editor.tabs.iter().filter_map(|t| t.path.clone()).collect();
+        assert_eq!(paths, vec![a, b]);
+        assert_eq!(fresh.editor.tabs.len(), 2, "the blank tab was dropped");
+        assert_eq!(fresh.editor.active_tab_mut().unwrap().editor.get_cursor(), 3);
+
+        // Restore can be switched off.
+        let mut s = crate::settings::Settings::default();
+        s.startup.restore_session = false;
+        let mut off = app_with(&dir, s);
+        off.restore_session();
+        assert_eq!(off.editor.tabs.len(), 1);
+        assert!(off.editor.tabs[0].path.is_none());
+        // With nothing saved for a workspace, restore does nothing.
+        let other = temp("sess-restore-none");
+        let mut none = app_at(&other);
+        let status = none.status.clone();
+        none.restore_session();
+        assert_eq!(none.status, status);
+        assert_eq!(none.editor.tabs.len(), 1);
+    }
+
+    #[test]
+    fn applying_a_session_skips_missing_files_clamps_cursors_and_active_tab() {
+        let dir = temp("sess-apply");
+        let a = file(&dir, "a.txt", "short");
+        let mut app = app_at(&dir);
+        let ws = crate::session::WorkspaceSession {
+            root: app.session_key(),
+            files: vec![
+                a.to_string_lossy().into_owned(),
+                dir.join("gone.txt").to_string_lossy().into_owned(),
+            ],
+            cursors: vec![999],
+            scrolls: vec![0],
+            active: 9,
+            ..Default::default()
+        };
+        assert_eq!(app.apply_session(&ws), 1);
+        assert_eq!(app.editor.tabs.len(), 1);
+        assert_eq!(app.editor.active_tab_mut().unwrap().editor.get_cursor(), 5);
+        // A session whose files are all gone opens nothing and keeps the blank tab.
+        let mut app2 = app_at(&temp("sess-apply-none"));
+        let ws2 = crate::session::WorkspaceSession {
+            files: vec!["/definitely/not/here.txt".into()],
+            ..Default::default()
+        };
+        assert_eq!(app2.apply_session(&ws2), 0);
+        assert_eq!(app2.editor.tabs.len(), 1);
+    }
+
+    #[test]
+    fn project_commands_and_history_survive_a_session_round_trip() {
+        let dir = temp("sess-project");
+        let mut app = app_at(&dir);
+        app.ensure_project_session_loaded();
+        app.ensure_project_session_loaded(); // second call is a no-op
+        app.project_command_cache.compile = Some("make all".into());
+        app.project_command_cache.test = Some("make check".into());
+        app.project_history.run = vec!["./a.out".into()];
+        app.project_history.compile = vec!["make".into()];
+        app.project_last_command = Some("make all".into());
+        app.save_session().unwrap();
+
+        let mut fresh = app_at(&dir);
+        fresh.ensure_project_session_loaded();
+        assert_eq!(fresh.project_command_cache.compile.as_deref(), Some("make all"));
+        assert_eq!(fresh.project_command_cache.test.as_deref(), Some("make check"));
+        assert_eq!(fresh.project_history.run, vec!["./a.out".to_string()]);
+        assert_eq!(fresh.project_history.compile, vec!["make".to_string()]);
+        assert_eq!(fresh.project_last_command.as_deref(), Some("make all"));
+
+        // A run that never loaded the project fields carries the saved ones forward.
+        let mut idle = app_at(&dir);
+        idle.save_session().unwrap();
+        let mut again = app_at(&dir);
+        again.ensure_project_session_loaded();
+        assert_eq!(again.project_command_cache.compile.as_deref(), Some("make all"));
+        assert_eq!(again.project_last_command.as_deref(), Some("make all"));
+    }
+
+    #[test]
+    fn the_workspace_chooser_lists_other_recent_roots_and_switches_to_one() {
+        let dir = temp("sess-chooser");
+        let other = temp("sess-chooser-other");
+        file(&other, "marker.txt", "m");
+        // Record `other` as a recently-visited workspace.
+        let other_app = app_at(&other).with_session_path(dir.join("session.toml"));
+        other_app.save_session().unwrap();
+        let mut app = app_at(&dir);
+        app.open_workspace_chooser();
+        let chooser = app.chooser.workspace().expect("chooser opens");
+        assert_eq!(chooser.roots, vec![other.canonicalize().unwrap().to_string_lossy().into_owned()]);
+
+        app.on_key(code(KeyCode::Down));
+        app.on_key(code(KeyCode::Up));
+        app.on_key(code(KeyCode::Tab));
+        assert!(app.chooser.workspace().is_some());
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.chooser.workspace().is_none());
+
+        app.open_workspace_chooser();
+        app.layout.chooser = Rect::new(0, 0, 40, 5);
+        app.on_mouse(click(1, 3)); // below the one row: nothing
+        assert!(app.chooser.workspace().is_some());
+        app.on_mouse(click(1, 0));
+        assert!(app.chooser.workspace().is_none());
+        assert_eq!(app.root, other.canonicalize().unwrap());
+        assert_eq!(
+            app.status,
+            t!("status.project_switched", path = other.canonicalize().unwrap().display()).to_string()
+        );
+        assert_eq!(app.focus, Focus::Editor);
+    }
+
+    #[test]
+    fn the_workspace_chooser_reports_when_there_is_nowhere_else_to_go() {
+        let dir = temp("sess-chooser-none");
+        let mut app = app_at(&dir);
+        app.open_workspace_chooser();
+        assert_eq!(app.status, t!("status.no_recent_projects").to_string());
+        assert!(app.chooser.workspace().is_none());
+    }
+
+    #[test]
+    fn changing_the_keymap_resets_pending_chord_state() {
+        let dir = temp("sess-apply-settings");
+        let mut s = crate::settings::Settings::default();
+        s.keymap = "emacs".into();
+        let mut app = app_with(&dir, s);
+        app.emacs_chord = crate::app::EmacsChord::CtrlX;
+        app.vim_cmd = Some("w".into());
+        let old = app.settings.clone();
+        let mut new = old.clone();
+        new.keymap = "vi".into();
+        app.apply_settings(&old, new);
+        assert_eq!(app.settings.keymap, "vi");
+        assert_eq!(app.emacs_chord, crate::app::EmacsChord::None);
+        assert!(app.vim_cmd.is_none());
+    }
+
+    #[test]
+    fn export_writes_a_bundle_and_import_reports_a_missing_bundle() {
+        let dir = temp("sess-bundle");
+        let mut app = app_at(&dir);
+        let status = app.status.clone();
+        app.export_settings("");
+        app.import_settings("");
+        assert_eq!(app.status, status);
+        app.export_settings("bundle.json");
+        let path = dir.join("bundle.json");
+        assert!(path.is_file());
+        assert_eq!(
+            app.status,
+            t!("status.settings_exported", path = path.display()).to_string()
+        );
+        app.export_settings("no-such-dir/sub/bundle.json");
+        assert!(app
+            .messages
+            .items
+            .last()
+            .unwrap()
+            .text
+            .starts_with(t!("msg.settings_export_failed", error = "").to_string().trim_end()));
+        app.import_settings("missing.json");
+        assert!(app
+            .messages
+            .items
+            .last()
+            .unwrap()
+            .text
+            .starts_with(t!("msg.settings_import_failed", error = "").to_string().trim_end()));
+    }
+
+    #[test]
+    fn the_settings_prompts_open_with_their_kinds() {
+        let dir = temp("sess-prompts");
+        let mut app = app_at(&dir);
+        app.open_export_settings_prompt();
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::ExportSettings
+        ));
+        app.open_import_settings_prompt();
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::ImportSettings
+        ));
+    }
+
+    #[test]
+    fn a_path_outside_the_config_directory_is_not_the_settings_file() {
+        let dir = temp("sess-isfile");
+        let app = app_at(&dir);
+        assert!(!app.is_settings_file(&dir.join("config.toml")));
+        if let Some(real) = app.settings_file_path() {
+            assert!(app.is_settings_file(&real));
+        }
+    }
+}
