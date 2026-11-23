@@ -20,6 +20,18 @@
 //! The authoritative list of names is `crates/vix-editor-core/spec/actions.tsv`;
 //! see also `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
     MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, UnIndent, Undo,
@@ -27,6 +39,20 @@ use crate::actions::{
 use crate::editor::Editor;
 use crate::multicursor::CaretMove;
 use crate::selection::Selection;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 impl Editor {
     // ----- cursor movement ------------------------------------------------
@@ -132,7 +158,7 @@ impl Editor {
     pub(crate) fn line_end(&self, pos: usize) -> usize {
         let code = self.code_ref();
         let row = code.char_to_line(pos);
-        code.line_to_char(row) + code.line_len(row)
+        add_or(code.line_to_char(row), code.line_len(row), usize::MAX)
     }
     /// Char offset of the first non-blank (not space/tab) character of the line
     /// containing `pos`; the line end when the line is all blanks.
@@ -141,9 +167,9 @@ impl Editor {
         let row = code.char_to_line(pos);
         let start = code.line_to_char(row);
         let len = code.line_len(row);
-        let line = code.slice(start, start + len);
+        let line = code.slice(start, add_or(start, len, usize::MAX));
         let lead = line.chars().take_while(|c| *c == ' ' || *c == '\t').count();
-        start + lead
+        add_or(start, lead, usize::MAX)
     }
 
     /// Move the cursor to the start of the current line.
@@ -239,10 +265,11 @@ impl Editor {
         let cur = self.get_cursor();
         let row = code.char_to_line(cur);
         let start = code.line_to_char(row);
-        let end = if row + 1 < code.len_lines() {
-            code.line_to_char(row + 1)
+        let next_row = add_or(row, 1, usize::MAX);
+        let end = if next_row < code.len_lines() {
+            code.line_to_char(next_row)
         } else {
-            code.line_to_char(row) + code.line_len(row)
+            add_or(code.line_to_char(row), code.line_len(row), usize::MAX)
         };
         self.set_selection(Some(Selection::new(start, end)));
         self.set_cursor(end);
@@ -262,8 +289,9 @@ impl Editor {
             end
         } else {
             // On a boundary/whitespace: skip one then to the next word end.
-            let (_, e2) = code.word_boundaries(pos + 1);
-            e2.max(pos + 1)
+            let after = add_or(pos, 1, usize::MAX);
+            let (_, e2) = code.word_boundaries(after);
+            e2.max(after)
         }
     }
     /// Char offset of the start of the word at or before the character left of
@@ -273,8 +301,9 @@ impl Editor {
         if pos == 0 {
             return 0;
         }
-        let (start, _) = code.word_boundaries(pos.saturating_sub(1));
-        start.min(pos.saturating_sub(1))
+        let left = sub_or(pos, 1, 0);
+        let (start, _) = code.word_boundaries(left);
+        start.min(left)
     }
 
     /// Move the cursor to the end of the current/next word (the stop
@@ -371,12 +400,12 @@ impl Editor {
         let mut row = code.char_to_line(pos);
         let blank = |r: usize| code.line_len(r) == 0;
         if forward {
-            if row + 1 >= total {
+            if add_or(row, 1, usize::MAX) >= total {
                 return code.len_chars();
             }
-            row += 1;
+            row = add_or(row, 1, usize::MAX);
             while row < total && !blank(row) {
-                row += 1;
+                row = add_or(row, 1, usize::MAX);
             }
             if row >= total {
                 return code.len_chars();
@@ -385,9 +414,9 @@ impl Editor {
             if row == 0 {
                 return 0;
             }
-            row -= 1;
+            row = sub_or(row, 1, 0);
             while row > 0 && !blank(row) {
-                row -= 1;
+                row = sub_or(row, 1, 0);
             }
         }
         code.line_to_char(row)
@@ -447,17 +476,17 @@ impl Editor {
     }
     /// Move the cursor up half a page.
     pub fn half_page_up(&mut self, view_h: usize) {
-        self.move_by_rows((view_h / 2).max(1), false, false);
+        self.move_by_rows(view_h.div_euclid(2).max(1), false, false);
     }
     /// Move the cursor down half a page.
     pub fn half_page_down(&mut self, view_h: usize) {
-        self.move_by_rows((view_h / 2).max(1), true, false);
+        self.move_by_rows(view_h.div_euclid(2).max(1), true, false);
     }
 
     /// Center the viewport on the cursor line.
     pub fn center(&mut self, view_h: usize) {
         let row = self.code_ref().char_to_line(self.get_cursor());
-        self.set_offset_y(row.saturating_sub(view_h / 2));
+        self.set_offset_y(sub_or(row, view_h.div_euclid(2), 0));
     }
     /// Move the cursor to the top visible line. (The cursor lands at the start of
     /// that line; the old column is not kept.)
@@ -470,16 +499,16 @@ impl Editor {
     /// is not kept).
     pub fn cursor_to_view_center(&mut self, view_h: usize) {
         self.clear_selection();
-        let total = self.code_ref().len_lines().saturating_sub(1);
-        let target = (self.get_offset_y() + view_h / 2).min(total);
+        let total = sub_or(self.code_ref().len_lines(), 1, 0);
+        let target = add_or(self.get_offset_y(), view_h.div_euclid(2), usize::MAX).min(total);
         self.set_cursor(self.code_ref().line_to_char(target));
     }
     /// Move the cursor to the bottom visible line (at its start; the old column
     /// is not kept).
     pub fn cursor_to_view_bottom(&mut self, view_h: usize) {
         self.clear_selection();
-        let total = self.code_ref().len_lines().saturating_sub(1);
-        let target = (self.get_offset_y() + view_h.saturating_sub(1)).min(total);
+        let total = sub_or(self.code_ref().len_lines(), 1, 0);
+        let target = add_or(self.get_offset_y(), sub_or(view_h, 1, 0), usize::MAX).min(total);
         self.set_cursor(self.code_ref().line_to_char(target));
     }
 
@@ -582,7 +611,7 @@ impl Editor {
         let to = if end > cur {
             end
         } else if end < self.code_ref().len_chars() {
-            end + 1
+            add_or(end, 1, usize::MAX)
         } else {
             return;
         };
@@ -596,8 +625,10 @@ impl Editor {
         let cur = self.get_cursor();
         let code = self.code_ref();
         let (mut start, mut end) = code.word_boundaries(cur);
-        if start >= end && cur > 0 {
-            (start, end) = code.word_boundaries(cur - 1);
+        if start >= end
+            && let Some(before) = cur.checked_sub(1)
+        {
+            (start, end) = code.word_boundaries(before);
         }
         if start >= end {
             return;

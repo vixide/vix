@@ -13,6 +13,18 @@
 //! the non-wrapped renderer lives in [`crate::render`].
 //! See `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
@@ -61,6 +73,40 @@ struct RowCtx<'a> {
     bracket: Option<usize>,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a + b` for screen columns; a column past the top of `u16` is past the right edge.
+fn add_u16(a: u16, b: u16) -> u16 {
+    add_u16_or(a, b, u16::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit.
+fn add_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b` for screen columns; below zero is zero columns.
+fn sub_u16(a: u16, b: u16) -> u16 {
+    sub_u16_or(a, b, 0)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero.
+fn sub_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// Display width of one grapheme for soft-wrap layout. Tabs render as a single
 /// cell, so they count as width 1.
 fn gwidth(g: RopeSlice) -> usize {
@@ -80,10 +126,13 @@ impl Editor {
         let total_lines = code.len_lines();
         let line_number_digits = total_lines.max(1).to_string().len().max(5);
         let line_number_width = self.get_line_number_width();
-        let text_x0 = area.left() + u16::try_from(line_number_width).unwrap_or(u16::MAX);
+        let text_x0 = add_u16(
+            area.left(),
+            u16::try_from(line_number_width).unwrap_or(u16::MAX),
+        );
         let right = area.right();
-        let text_width = (area.width as usize).saturating_sub(line_number_width);
-        let height = area.height as usize;
+        let text_width = sub_or(usize::from(area.width), line_number_width, 0);
+        let height = usize::from(area.height);
         let default_text_style = self.text_style;
 
         // One layout pass shared by every row; rows beyond `height` are never
@@ -95,7 +144,7 @@ impl Editor {
         let caret_sels = self.caret_selections();
 
         for (i, vr) in rows.iter().enumerate() {
-            let draw_y = area.top() + u16::try_from(i).unwrap_or(u16::MAX);
+            let draw_y = add_u16(area.top(), u16::try_from(i).unwrap_or(u16::MAX));
             if draw_y >= area.bottom() {
                 break;
             }
@@ -137,7 +186,7 @@ impl Editor {
 
         if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
             let s = if is_first {
-                format!("{:>line_number_digits$}", vr.line + 1)
+                format!("{:>line_number_digits$}", add_or(vr.line, 1, usize::MAX))
             } else {
                 " ".repeat(line_number_digits)
             };
@@ -150,7 +199,10 @@ impl Editor {
         // wrapped line is marked once, at its start.
         if is_first {
             let sign_x = if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
-                area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
+                add_u16(
+                    area.left(),
+                    u16::try_from(line_number_digits).unwrap_or(u16::MAX),
+                )
             } else {
                 area.left()
             };
@@ -190,7 +242,8 @@ impl Editor {
 
         // Caret at the segment end is shown only at the logical line's end;
         // at a wrap boundary it belongs to the next visual row's column 0.
-        if caret.is_none() && self.cursor == vr.end && vr.end == line_start + line_len {
+        let line_end = add_or(line_start, line_len, usize::MAX);
+        if caret.is_none() && self.cursor == vr.end && vr.end == line_end {
             caret = Some(vx);
         }
         if caret.is_none() && vr.start == vr.end && self.cursor == vr.start {
@@ -198,20 +251,21 @@ impl Editor {
         }
         // End-of-line virtual text (T614) after the line's last visual row,
         // and a folded line's `...` before it.
-        if vr.end == line_start + line_len {
-            let mut end = usize::from(text_x0) + usize::from(vx);
+        if vr.end == line_end {
+            let mut end = add_or(usize::from(text_x0), usize::from(vx), usize::MAX);
             if self.fold_marker(vr.line) == Some(true) {
                 let x = u16::try_from(end).unwrap_or(u16::MAX);
                 if x < right {
-                    let shown: String = "...".chars().take(usize::from(right - x)).collect();
+                    let shown: String =
+                        "...".chars().take(usize::from(sub_u16(right, x))).collect();
                     buf.set_string(x, draw_y, &shown, default_text_style);
                 }
-                end += 3;
+                end = add_or(end, 3, usize::MAX);
             }
             self.draw_eol_texts(buf, vr.line, end, right, draw_y);
         }
         if let (Some(cvx), Some(cursor_style)) = (caret, self.cursor_style) {
-            let cx = text_x0 + cvx;
+            let cx = add_u16(text_x0, cvx);
             if cx < right && draw_y < area.bottom() {
                 buf[(cx, draw_y)].set_style(cursor_style);
             }
@@ -252,7 +306,7 @@ impl Editor {
             } else {
                 u16::try_from(w).unwrap_or(u16::MAX)
             };
-            let cell_x = text_x0 + vx;
+            let cell_x = add_u16(text_x0, vx);
 
             if self.flags.contains(Flags::SHOW_WHITESPACE)
                 && matches!(g.chars().next(), Some('\t' | ' ' | '\r'))
@@ -305,16 +359,16 @@ impl Editor {
                 // Extra carets are painted inline (only the primary uses the
                 // end-of-line caret handling below).
                 if self.carets.iter().any(|c| c.pos == ch) {
-                    let cx = text_x0 + vx;
+                    let cx = add_u16(text_x0, vx);
                     if cx < right && draw_y < area.bottom() {
                         buf[(cx, draw_y)].set_style(cs);
                     }
                 }
             }
 
-            vx = vx.saturating_add(gw);
-            ch += g_chars;
-            byte += g_bytes;
+            vx = add_u16(vx, gw);
+            ch = add_or(ch, g_chars, usize::MAX);
+            byte = add_or(byte, g_bytes, usize::MAX);
         }
         (caret, vx)
     }
@@ -332,7 +386,7 @@ impl Editor {
         while line < total_lines && rows.len() < max_rows {
             // A folded range's body takes no rows, as in the unwrapped view.
             if self.is_line_hidden(line) {
-                line += 1;
+                line = add_or(line, 1, usize::MAX);
                 continue;
             }
             let line_start = code.line_to_char(line);
@@ -356,12 +410,15 @@ impl Editor {
                     end: line_start,
                     lens: false,
                 });
-                line += 1;
+                line = add_or(line, 1, usize::MAX);
                 continue;
             }
             let mut col = 0usize;
             while col < line_len && rows.len() < max_rows {
-                let slice = code.char_slice(line_start + col, line_start + line_len);
+                let slice = code.char_slice(
+                    add_or(line_start, col, usize::MAX),
+                    add_or(line_start, line_len, usize::MAX),
+                );
                 let mut width = 0usize;
                 let mut seg_chars = 0usize;
                 for g in RopeGraphemes::new(&slice) {
@@ -369,11 +426,11 @@ impl Editor {
                     let gw = gwidth(g);
                     // `seg_chars > 0` guarantees progress: a single grapheme
                     // wider than the view still gets a row of its own.
-                    if width + gw > tw && seg_chars > 0 {
+                    if add_or(width, gw, usize::MAX) > tw && seg_chars > 0 {
                         break;
                     }
-                    width += gw;
-                    seg_chars += g_chars;
+                    width = add_or(width, gw, usize::MAX);
+                    seg_chars = add_or(seg_chars, g_chars, usize::MAX);
                     if width >= tw {
                         break;
                     }
@@ -382,16 +439,16 @@ impl Editor {
                 if seg_chars == 0 {
                     seg_chars = 1;
                 }
-                let seg_end = (col + seg_chars).min(line_len);
+                let seg_end = add_or(col, seg_chars, usize::MAX).min(line_len);
                 rows.push(VRow {
                     line,
-                    start: line_start + col,
-                    end: line_start + seg_end,
+                    start: add_or(line_start, col, usize::MAX),
+                    end: add_or(line_start, seg_end, usize::MAX),
                     lens: false,
                 });
                 col = seg_end;
             }
-            line += 1;
+            line = add_or(line, 1, usize::MAX);
         }
         rows
     }
@@ -401,7 +458,7 @@ impl Editor {
 /// `right` (so a wide grapheme at the edge is styled only as far as it fits).
 fn paint(buf: &mut Buffer, x: u16, width: u16, right: u16, y: u16, style: Style) {
     for dx in 0..width {
-        let cx = x + dx;
+        let cx = add_u16(x, dx);
         if cx < right {
             buf[(cx, y)].set_style(style);
         }
