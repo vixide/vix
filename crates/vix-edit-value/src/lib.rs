@@ -24,7 +24,54 @@
 //! [`Tree::value`], [`Tree::depth`], ...) and never touches the tree directly,
 //! so all fold/undo invariants live here.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+
+/// The nesting depth one level below `depth`. Depth counts the levels of a
+/// parsed document, which the parser's recursion limit keeps far below `usize::MAX`.
+fn deeper(depth: usize) -> usize {
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: depth is a nesting level of a parsed document, bounded by the parser's recursion limit"
+    )]
+    let next = depth + 1;
+    next
+}
+
+/// Whether an item at `index` of `len` items is followed by another.
+fn has_next(index: usize, len: usize) -> bool {
+    index.checked_add(1).is_some_and(|next| next < len)
+}
+
+/// The index of the last of `len` rows; with none, 0.
+fn last_index(len: usize) -> usize {
+    sub_or(len, 1, 0)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Which serialization the buffer uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -274,16 +321,20 @@ impl Tree {
     }
 
     /// Serialize the tree back to text in its format.
-    #[must_use]
-    pub fn to_text(&self) -> String {
+    ///
+    /// # Errors
+    ///
+    /// The YAML serializer's error when the tree cannot be written as YAML;
+    /// the caller must not save in that case (an empty text would erase the file).
+    pub fn to_text(&self) -> Result<String, serde_norway::Error> {
         match self.format {
             Format::Json => {
                 let mut out = String::new();
                 json_push(&self.root, 0, &mut out);
                 out.push('\n');
-                out
+                Ok(out)
             }
-            Format::Yaml => serde_norway::to_string(&to_yaml(&self.root)).unwrap_or_default(),
+            Format::Yaml => serde_norway::to_string(&to_yaml(&self.root)),
         }
     }
 
@@ -316,12 +367,12 @@ impl Tree {
             return Outcome::Consumed;
         }
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => self.sel = self.sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => self.sel = sub_or(self.sel, 1, 0),
             KeyCode::Down | KeyCode::Char('j') => self.step_down(1),
-            KeyCode::PageUp => self.sel = self.sel.saturating_sub(page.max(1)),
+            KeyCode::PageUp => self.sel = sub_or(self.sel, page.max(1), 0),
             KeyCode::PageDown => self.step_down(page.max(1)),
             KeyCode::Home => self.sel = 0,
-            KeyCode::End => self.sel = self.rows.len().saturating_sub(1),
+            KeyCode::End => self.sel = last_index(self.rows.len()),
             KeyCode::Left | KeyCode::Char('h') => self.collapse_or_parent(),
             KeyCode::Right | KeyCode::Char('l') => self.expand_or_child(),
             KeyCode::Char(' ') => self.toggle(),
@@ -350,7 +401,7 @@ impl Tree {
 
     /// Move the selection down by `n`, clamped.
     fn step_down(&mut self, n: usize) {
-        self.sel = (self.sel + n).min(self.rows.len().saturating_sub(1));
+        self.sel = add_or(self.sel, n, usize::MAX).min(last_index(self.rows.len()));
     }
 
     /// Collapse the selected container, or jump to its parent.
@@ -365,10 +416,11 @@ impl Tree {
             self.select_path(&path);
         } else {
             let path = row.path.clone();
-            if path.is_empty() {
+            // The root has no parent.
+            let Some((_, parent)) = path.split_last() else {
                 return;
-            }
-            self.select_path(&path[..path.len() - 1]);
+            };
+            self.select_path(parent);
         }
     }
 
@@ -385,8 +437,9 @@ impl Tree {
                 self.select_path(&path);
             }
             Kind::Container(false) => {
-                if self.sel + 1 < self.rows.len() {
-                    self.sel += 1;
+                let next = add_or(self.sel, 1, usize::MAX);
+                if next < self.rows.len() {
+                    self.sel = next;
                 }
             }
             Kind::Scalar => {}
@@ -408,13 +461,13 @@ impl Tree {
 
     /// Enter: edit a scalar, or toggle a container.
     fn activate(&mut self) {
-        match self.rows.get(self.sel).map(|r| r.kind) {
-            Some(Kind::Scalar) => {
-                self.edit_buf = self.rows[self.sel].value.clone();
+        match self.rows.get(self.sel) {
+            Some(row) if row.kind == Kind::Scalar => {
+                self.edit_buf = row.value.clone();
                 self.mode = Mode::Edit;
             }
-            Some(Kind::Container(_)) => self.toggle(),
-            None => {}
+            Some(row) if matches!(row.kind, Kind::Container(_)) => self.toggle(),
+            _ => {}
         }
     }
 
@@ -459,7 +512,7 @@ impl Tree {
         self.rows.clear();
         flatten(&self.root, 0, String::new(), Vec::new(), &mut self.rows);
         if self.sel >= self.rows.len() {
-            self.sel = self.rows.len().saturating_sub(1);
+            self.sel = last_index(self.rows.len());
         }
     }
 
@@ -529,7 +582,7 @@ fn flatten(val: &Val, depth: usize, label: String, path: Vec<Seg>, out: &mut Vec
                 for (i, item) in items.iter().enumerate() {
                     let mut p = path.clone();
                     p.push(Seg::Index(i));
-                    flatten(item, depth + 1, format!("[{i}]"), p, out);
+                    flatten(item, deeper(depth), format!("[{i}]"), p, out);
                 }
             }
         }
@@ -545,7 +598,7 @@ fn flatten(val: &Val, depth: usize, label: String, path: Vec<Seg>, out: &mut Vec
                 for (k, v) in entries {
                     let mut p = path.clone();
                     p.push(Seg::Key(k.clone()));
-                    flatten(v, depth + 1, k.clone(), p, out);
+                    flatten(v, deeper(depth), k.clone(), p, out);
                 }
             }
         }
@@ -659,9 +712,9 @@ fn json_push(val: &Val, depth: usize, out: &mut String) {
             }
             out.push_str("[\n");
             for (i, item) in items.iter().enumerate() {
-                indent(out, depth + 1);
-                json_push(item, depth + 1, out);
-                if i + 1 < items.len() {
+                indent(out, deeper(depth));
+                json_push(item, deeper(depth), out);
+                if has_next(i, items.len()) {
                     out.push(',');
                 }
                 out.push('\n');
@@ -676,11 +729,11 @@ fn json_push(val: &Val, depth: usize, out: &mut String) {
             }
             out.push_str("{\n");
             for (i, (k, v)) in entries.iter().enumerate() {
-                indent(out, depth + 1);
+                indent(out, deeper(depth));
                 out.push_str(&json_quote(k));
                 out.push_str(": ");
-                json_push(v, depth + 1, out);
-                if i + 1 < entries.len() {
+                json_push(v, deeper(depth), out);
+                if has_next(i, entries.len()) {
                     out.push(',');
                 }
                 out.push('\n');
@@ -770,7 +823,7 @@ mod tests {
         t.handle_key(code(KeyCode::Enter), 8); // commit
         assert_eq!(t.value(1), "9");
         assert!(t.is_dirty());
-        assert!(t.to_text().contains("\"a\": 9"));
+        assert!(t.to_text().unwrap().contains("\"a\": 9"));
     }
 
     #[test]
@@ -792,7 +845,7 @@ mod tests {
     fn json_round_trips_and_preserves_key_order() {
         let t = Tree::from_text(r#"{"b": 1, "a": 2}"#, Format::Json).unwrap();
         assert_eq!(
-            t.to_text(),
+            t.to_text().unwrap(),
             "{\n  \"b\": 1,\n  \"a\": 2\n}\n",
             "keys stay in source order"
         );
@@ -803,7 +856,7 @@ mod tests {
         let t = Tree::from_text("name: vix\ntags:\n  - tui\n  - editor\n", Format::Yaml).unwrap();
         assert_eq!(t.label(1), "name");
         assert_eq!(t.value(1), "vix");
-        let out = t.to_text();
+        let out = t.to_text().unwrap();
         assert!(out.contains("name: vix"), "got: {out:?}");
         assert!(out.contains("- tui"), "got: {out:?}");
     }

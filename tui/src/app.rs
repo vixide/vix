@@ -11231,8 +11231,17 @@ impl App {
 
     /// Serialize the structured-value editor back into the active buffer and save.
     fn save_edit_value(&mut self) {
-        let Some(text) = self.edit.edit_value().map(crate::edit_value::Tree::to_text) else {
+        let Some(result) = self.edit.edit_value().map(crate::edit_value::Tree::to_text) else {
             return;
+        };
+        let text = match result {
+            Ok(text) => text,
+            Err(e) => {
+                // Never save an empty file over the user's data.
+                self.messages
+                    .warn(t!("msg.edit_value_serialize", error = e.to_string()).to_string());
+                return;
+            }
         };
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&text);

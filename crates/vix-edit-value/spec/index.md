@@ -47,3 +47,7 @@ routes keys, and on save serializes into the active buffer before `file.save`.
 | `Syntax { message }` | the text is not valid JSON or YAML; `message` is the parser's own, line and column included |
 
 The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `status.convert_failed` line is unchanged.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). **Changed:** `Tree::to_text` returns `Result<String, serde_norway::Error>`. A YAML tree that cannot be serialized used to give an empty text, which the editor then saved over the file; the editor now reports `msg.edit_value_serialize` and saves nothing. **Declared (VALUE-F1):** selection movement stops at the first and last row, and the last row of an empty list is 0. Nesting depth carries an `RCA-EXC-2` proof (a parsed document's recursion limit).
