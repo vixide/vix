@@ -37,6 +37,18 @@
 //!
 //! Spec: `crates/vix-column-view/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use vix_org::{
@@ -44,6 +56,20 @@ use vix_org::{
     governing_subtree, headline_level, move_subtree_down, move_subtree_up, set_property,
     todo_keywords,
 };
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// What the host should do after the overlay handled a key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,12 +270,18 @@ impl ColumnView {
                     .map(|v| v.chars().count())
                     .max()
                     .unwrap_or(0);
-                i32::try_from(header_len.max(content_max).clamp(3, 40)).unwrap_or(10)
+                // The auto width: the longer of header and content, held to the
+                // declared 3..=40 band (a bound of a computed result, not of input).
+                let auto = header_len.max(content_max).clamp(3, 40);
+                i32::try_from(auto).unwrap_or(10)
             },
             i32::from,
         );
         let over = self.width_overrides.get(i).copied().unwrap_or(0);
-        usize::try_from((base + over).max(3)).unwrap_or(3)
+        // A sum that does not fit is the minimum width.
+        base.checked_add(over)
+            .and_then(|width| usize::try_from(width.max(3)).ok())
+            .unwrap_or(3)
     }
 
     /// Adjust the vertical scroll so the selected row stays within a body
@@ -263,10 +295,10 @@ impl ColumnView {
         }
         if self.row < self.row_scroll {
             self.row_scroll = self.row;
-        } else if self.row >= self.row_scroll + height {
-            self.row_scroll = self.row + 1 - height;
+        } else if self.row >= add_or(self.row_scroll, height, usize::MAX) {
+            self.row_scroll = sub_or(add_or(self.row, 1, usize::MAX), height, 0);
         }
-        self.row_scroll = self.row_scroll.min(count.saturating_sub(height));
+        self.row_scroll = self.row_scroll.min(sub_or(count, height, 0));
     }
 
     /// Take (clear) the pending status message, if any, for the host to show.
@@ -358,22 +390,25 @@ impl ColumnView {
             KeyCode::Down if alt => self.move_row(text, false),
             KeyCode::Right if shift => self.cycle_allowed(text, true),
             KeyCode::Left if shift => self.cycle_allowed(text, false),
-            KeyCode::Left => self.col = self.col.saturating_sub(1),
+            KeyCode::Left => self.col = sub_or(self.col, 1, 0),
             KeyCode::Right => {
-                if self.col + 1 < self.spec.columns.len() {
-                    self.col += 1;
+                let next = add_or(self.col, 1, usize::MAX);
+                if next < self.spec.columns.len() {
+                    self.col = next;
                 }
             }
-            KeyCode::Up => self.row = self.row.saturating_sub(1),
+            KeyCode::Up => self.row = sub_or(self.row, 1, 0),
             KeyCode::Down => {
-                if self.row + 1 < self.rows.len() {
-                    self.row += 1;
+                let next = add_or(self.row, 1, usize::MAX);
+                if next < self.rows.len() {
+                    self.row = next;
                 }
             }
             KeyCode::Char(c) if c.is_ascii_digit() => {
                 // `0` selects the 10th entry, mirroring Org's `1`..`9`,`0`.
-                let n = c.to_digit(10).unwrap_or(0);
-                self.jump_allowed(text, if n == 0 { 10 } else { n as usize });
+                if let Some(n) = c.to_digit(10).and_then(|n| usize::try_from(n).ok()) {
+                    self.jump_allowed(text, if n == 0 { 10 } else { n });
+                }
             }
             KeyCode::Char('n') => self.cycle_allowed(text, true),
             KeyCode::Char('p') => self.cycle_allowed(text, false),
@@ -418,8 +453,7 @@ impl ColumnView {
         self.rows
             .get(self.row)
             .and_then(|r| r.values.get(self.col))
-            .cloned()
-            .unwrap_or_default()
+            .map_or_else(String::new, Clone::clone)
     }
 
     /// Seed the edit buffer with the current field's raw value and enter
@@ -438,14 +472,14 @@ impl ColumnView {
     /// `<`: narrow the current column by one.
     fn narrow(&mut self) {
         if let Some(w) = self.width_overrides.get_mut(self.col) {
-            *w -= 1;
+            *w = w.checked_sub(1).unwrap_or(*w);
         }
     }
 
     /// `>`: widen the current column by one.
     fn widen(&mut self) {
         if let Some(w) = self.width_overrides.get_mut(self.col) {
-            *w += 1;
+            *w = w.checked_add(1).unwrap_or(*w);
         }
     }
 
@@ -478,11 +512,13 @@ impl ColumnView {
         // A current value not in the list starts the cycle at the first entry
         // in either direction.
         let next = match idx {
-            Some(i) if forward => (i + 1) % list.len(),
-            Some(i) => (i + list.len() - 1) % list.len(),
+            Some(i) if forward => i.checked_add(1).filter(|n| *n < list.len()).unwrap_or(0),
+            Some(i) => i.checked_sub(1).unwrap_or_else(|| sub_or(list.len(), 1, 0)),
             None => 0,
         };
-        let value = list[next].clone();
+        let Some(value) = list.get(next).cloned() else {
+            return;
+        };
         self.commit_value(text, &value);
     }
 
@@ -490,7 +526,7 @@ impl ColumnView {
     /// allowed value. No-op with no list or fewer entries.
     fn jump_allowed(&mut self, text: &mut String, n: usize) {
         let list = self.allowed_values_for_current();
-        let Some(value) = list.get(n.saturating_sub(1)).cloned() else {
+        let Some(value) = list.get(sub_or(n, 1, 0)).cloned() else {
             return;
         };
         self.commit_value(text, &value);
@@ -580,7 +616,7 @@ impl ColumnView {
         }
         self.spec.columns.remove(self.col);
         self.width_overrides.remove(self.col);
-        self.col = self.col.min(self.spec.columns.len().saturating_sub(1));
+        self.col = self.col.min(sub_or(self.spec.columns.len(), 1, 0));
         self.rebuild_rows(text);
     }
 
@@ -591,7 +627,9 @@ impl ColumnView {
         let other = if left {
             self.col.checked_sub(1)
         } else {
-            (self.col + 1 < n).then_some(self.col + 1)
+            add_or(self.col, 1, usize::MAX)
+                .lt(&n)
+                .then(|| add_or(self.col, 1, usize::MAX))
         };
         let Some(other) = other else {
             return;
@@ -641,8 +679,8 @@ impl ColumnView {
             self.file_name.as_deref(),
         );
         self.rows = rows;
-        self.row = self.row.min(self.rows.len().saturating_sub(1));
-        self.col = self.col.min(self.spec.columns.len().saturating_sub(1));
+        self.row = self.row.min(sub_or(self.rows.len(), 1, 0));
+        self.col = self.col.min(sub_or(self.spec.columns.len(), 1, 0));
     }
 
     /// Re-locate [`Self::anchor_line`] in `new_text` after an edit that may
@@ -734,28 +772,31 @@ fn write_file_level_property(text: &str, name: &str, value: &str) -> String {
     // `:PROPERTIES:` drawer; update the property in place if present, else
     // insert it before `:END:`. With no drawer, one is created at the top of
     // the headline boundary below.
-    let mut i = 0;
-    while i < first_headline {
-        if lines[i].trim().eq_ignore_ascii_case(":PROPERTIES:")
-            && let Some(end_rel) = lines[i + 1..first_headline]
-                .iter()
-                .position(|l| l.trim().eq_ignore_ascii_case(":END:"))
-        {
-            let end = i + 1 + end_rel;
-            let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
-            if let Some(pi) = (i + 1..end).find(|&k| {
-                lines[k]
-                    .trim_start()
-                    .to_ascii_lowercase()
-                    .starts_with(&needle)
-            }) {
-                out[pi] = entry;
-            } else {
-                out.insert(end, entry);
-            }
-            return out.join("\n");
+    let preamble = lines.get(..first_headline).unwrap_or(&[]);
+    for (i, line) in preamble.iter().enumerate() {
+        if !line.trim().eq_ignore_ascii_case(":PROPERTIES:") {
+            continue;
         }
-        i += 1;
+        let Some(end) = preamble
+            .iter()
+            .enumerate()
+            .skip(add_or(i, 1, usize::MAX))
+            .find(|(_, l)| l.trim().eq_ignore_ascii_case(":END:"))
+            .map(|(k, _)| k)
+        else {
+            continue;
+        };
+        let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
+        let existing = (add_or(i, 1, usize::MAX)..end).find(|&k| {
+            lines
+                .get(k)
+                .is_some_and(|l| l.trim_start().to_ascii_lowercase().starts_with(&needle))
+        });
+        match existing.and_then(|pi| out.get_mut(pi)) {
+            Some(slot) => *slot = entry,
+            None => out.insert(end, entry),
+        }
+        return out.join("\n");
     }
     let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
     out.splice(

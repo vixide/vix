@@ -50,3 +50,7 @@ codebase's convention elsewhere:
 ## Roadmap
 
 - Nothing open.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Navigation, scroll, width and property-drawer code uses `get`, iterators and `checked_*`. **Declared (COLUMN-F1):** the automatic column width is held to 3..=40 (a bound of a computed result), an override that would overflow leaves the width unchanged, cursor movement stops at the first and last row and column, and a missing field value shows empty.
