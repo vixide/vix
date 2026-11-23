@@ -640,11 +640,43 @@ mod tests {
     }
 
     #[test]
-    fn dir_edit_confirm_draws_nothing_without_a_pending_listing() {
+    fn dir_edit_confirm_lists_each_change_before_anything_runs() {
         let a = app();
         assert!(blank(&render(80, 24, |f, r| draw_dir_edit_confirm(
             &a, f, r
         ))));
+
+        let dir = std::env::temp_dir().join(format!("vix-r2c-diredit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.txt"), "A").unwrap();
+        std::fs::write(dir.join("old.txt"), "O").unwrap();
+        let mut a = App::new(dir.clone(), Settings::default());
+        a.settings.explorer_delete = "hard".to_string();
+        a.layout.editor = Rect::new(0, 0, 80, 24);
+        a.open_initial(&dir.join("a.txt"));
+        a.run_action("explorer.edit_directory");
+        let tab = a.editor.active_tab_mut().unwrap();
+        tab.editor.set_content("/001 renamed.txt\nfresh.txt\n");
+        tab.dirty = true;
+        a.run_action("file.save");
+        let confirm = a
+            .dir_edit_confirm
+            .as_ref()
+            .expect("a confirm step is pending");
+        assert_eq!(confirm.count, 3, "one rename, one create, one delete");
+        let preview = confirm.lines.clone();
+        let buf = render(100, 24, |f, r| draw_dir_edit_confirm(&a, f, r));
+        let t = flat(&buf);
+        for line in &preview {
+            let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
+            assert!(t.contains(&line), "{line:?} is listed");
+        }
+        assert!(t.contains("renamed.txt") && t.contains("fresh.txt") && t.contains("old.txt"));
+        let hint = t!("ui.dir_edit_confirm_hint").to_string();
+        assert!(t.contains(hint.chars().take(12).collect::<String>().as_str()));
+        // Nothing has touched the disk yet.
+        assert!(dir.join("a.txt").exists() && dir.join("old.txt").exists());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

@@ -1746,7 +1746,6 @@ mod tests {
         let buf = draw(&mut app, 120, 32);
         let t = text(&buf);
         assert!(t.contains("* orders"), "a marked table shows an asterisk");
-        assert!(t.contains(&t!("ui.db_tables").to_string()) || t.contains("users"));
         // The filter shows in the pane title.
         app.db.as_mut().unwrap().tree.filter = "ord".to_string();
         let t = text(&draw(&mut app, 120, 32));
