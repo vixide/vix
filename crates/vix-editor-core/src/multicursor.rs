@@ -1518,3 +1518,159 @@ mod caret_tests {
         assert_eq!(e.get_content(), "  ab\ncd\n  ef", "one undo step");
     }
 }
+
+#[cfg(test)]
+mod edge_tests {
+    //! No-op and boundary behaviour of the multi-caret operations.
+
+    use crate::editor::Editor;
+    use crate::multicursor::{CaretMove, SelectionEdit};
+
+    fn ed(text: &str, cursor: usize) -> Editor {
+        let mut e = Editor::new("text", text, Vec::new()).unwrap();
+        e.set_cursor(cursor);
+        e
+    }
+
+    #[test]
+    fn empty_inputs_change_nothing() {
+        let mut e = ed("abc", 1);
+        e.set_caret_anchors(&[]);
+        e.edit_selections(&[]);
+        assert_eq!((e.get_content().as_str(), e.get_cursor()), ("abc", 1));
+        assert!(!e.has_multi_carets());
+        assert!(!e.remove_last_caret());
+        assert!(!e.split_selection_into_lines());
+        // Cut with only bare carets and no selection copies nothing and keeps text.
+        e.add_caret_at(2);
+        e.multi_cut();
+        assert_eq!(e.get_content(), "abc");
+        assert_eq!(e.caret_count(), 2);
+    }
+
+    #[test]
+    fn next_occurrence_needs_a_word_and_stops_when_it_wraps_onto_itself() {
+        // No word at the cursor, so nothing to search for.
+        let mut e = ed("   ", 1);
+        e.add_next_occurrence();
+        e.skip_occurrence(true);
+        e.add_all_occurrences();
+        assert!(!e.has_multi_carets());
+        assert_eq!(e.caret_count(), 1);
+        // A word that occurs once: Ctrl+D selects it, the next Ctrl+D wraps back
+        // onto the held match and adds nothing.
+        let mut e = ed("alpha beta", 2);
+        e.add_next_occurrence();
+        assert_eq!(e.caret_count(), 1);
+        e.add_next_occurrence();
+        assert_eq!(e.caret_count(), 1);
+        assert_eq!(e.selection_span(), Some((0, 5)));
+        // Two occurrences: the second Ctrl+D adds one caret; the third wraps
+        // onto an existing caret and adds nothing.
+        let mut e = ed("ab ab", 0);
+        e.add_next_occurrence();
+        e.add_next_occurrence();
+        assert_eq!(e.caret_count(), 2);
+        e.add_next_occurrence();
+        assert_eq!(e.caret_count(), 2);
+    }
+
+    #[test]
+    fn skip_occurrence_walks_backward_and_wraps() {
+        let mut e = ed("x ab ab ab", 0);
+        e.set_selection_range(5, 7); // the middle "ab"
+        e.skip_occurrence(false);
+        assert_eq!(e.selection_span(), Some((2, 4)));
+        e.skip_occurrence(false);
+        assert_eq!(e.selection_span(), Some((8, 10)), "wraps to the last");
+        e.skip_occurrence(true);
+        assert_eq!(e.selection_span(), Some((2, 4)), "and forward wraps back");
+    }
+
+    #[test]
+    fn removing_the_last_caret_restores_the_previous_selection() {
+        let mut e = ed("abcd efgh", 0);
+        e.set_caret_anchors(&[(0, 2), (5, 7)]);
+        assert!(e.has_multi_carets());
+        assert!(e.remove_last_caret());
+        assert_eq!(e.selection_span(), Some((5, 7)));
+        assert!(!e.has_multi_carets());
+    }
+
+    #[test]
+    fn splitting_selections_keeps_bare_carets_and_blank_selections() {
+        // A bare caret next to a multi-line selection stays as a caret.
+        let mut e = ed("ab\ncd\nef", 0);
+        e.set_caret_anchors(&[(0, 2), (7, 7)]);
+        assert!(e.split_selection_into_lines());
+        assert_eq!(e.caret_count(), 2, "one piece plus the bare caret");
+        let mut e = ed("ab\ncd\nef", 0);
+        e.set_caret_anchors(&[(1, 7), (0, 0)]);
+        assert!(e.split_selection_into_lines());
+        assert_eq!(e.caret_count(), 4, "three line pieces plus the bare caret");
+        // A selection covering only a blank line's newline has no piece, so
+        // it is kept whole.
+        let mut e = ed("a\n\nb", 0);
+        e.set_caret_anchors(&[(2, 3)]);
+        assert!(e.split_selection_into_lines());
+        assert_eq!(e.caret_anchors(), vec![(2, 3)]);
+    }
+
+    #[test]
+    fn overlapping_deletes_merge_into_the_earlier_caret() {
+        let mut e = ed("abcdefgh", 0);
+        e.set_caret_anchors(&[(1, 5), (3, 7)]);
+        e.multi_delete(false);
+        // The second selection starts inside text the first already removed,
+        // so it merges into the first caret instead of deleting more.
+        assert_eq!(e.get_content(), "afgh");
+        assert_eq!(e.caret_count(), 1);
+    }
+
+    #[test]
+    fn delete_at_the_buffer_edges_is_a_noop_for_that_caret() {
+        let mut e = ed("abc", 0);
+        e.add_caret_at(2);
+        e.multi_delete(false); // backspace: the caret at 0 has nothing before it
+        assert_eq!(e.get_content(), "ac");
+        let mut e = ed("abc", 3);
+        e.add_caret_at(1);
+        e.multi_delete(true); // forward delete: the caret at the end has nothing
+        assert_eq!(e.get_content(), "ac");
+    }
+
+    #[test]
+    fn outdent_removes_up_to_one_unit_at_every_caret_line() {
+        let mut e = ed("    a\n  b\nc", 0);
+        e.set_caret_anchors(&[(0, 0), (8, 8), (12, 12)]);
+        e.indent_carets(true);
+        // The text indent unit is two spaces: one unit goes from each line that
+        // has one, and "c" has none.
+        assert_eq!(e.get_content(), "  a\nb\nc");
+        assert_eq!(e.caret_positions().len(), 3);
+    }
+
+    #[test]
+    fn arrow_moves_collapse_or_extend_each_caret() {
+        let mut e = ed("abc\ndef", 0);
+        e.set_caret_anchors(&[(0, 2), (4, 6)]);
+        e.multi_move(CaretMove::Right, false);
+        // A non-shift arrow collapses each selection to its right edge.
+        assert_eq!(e.caret_anchors(), vec![(2, 2), (6, 6)]);
+        e.multi_move(CaretMove::Left, true);
+        assert_eq!(e.caret_anchors(), vec![(2, 1), (6, 5)]);
+    }
+
+    #[test]
+    fn edit_selections_selects_the_inserted_text_per_edit() {
+        let mut e = ed("ab cd", 0);
+        e.edit_selections(&[
+            SelectionEdit::new(0, 2, "XYZ").selecting(1, 3),
+            SelectionEdit::new(3, 5, "Q").selecting(5, 9),
+        ]);
+        assert_eq!(e.get_content(), "XYZ Q");
+        // Selection ranges are clamped to the inserted text's length: the
+        // second edit's (5, 9) collapses to a caret at the end of "Q".
+        assert_eq!(e.caret_anchors(), vec![(1, 3), (5, 5)]);
+    }
+}

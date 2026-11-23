@@ -406,4 +406,55 @@ mod tests {
         // The current path is protected; undo still works and never panics.
         assert_eq!(h.undo().map(|b| first_text(&b)), Some("d".into()));
     }
+
+    #[test]
+    fn pruning_drops_the_oldest_off_path_leaf_and_repairs_the_parent() {
+        // Cap of 3 live states. Chain 0 -> 1 -> 2, then step back to the root
+        // and branch to 3: four states, so the oldest off-path leaf (2) goes.
+        let mut h = History::new(3);
+        h.push(batch("a")); // 1
+        h.push(batch("b")); // 2
+        h.undo();
+        h.undo();
+        h.push(batch("c")); // 3, root's active branch
+        let seqs: Vec<usize> = h.nodes().iter().map(|n| n.seq).collect();
+        assert_eq!(seqs, vec![0, 1, 3], "state 2 was pruned, leaving a gap");
+        let nodes = h.nodes();
+        assert!(nodes[1].children.is_empty(), "its parent forgot it");
+        assert_eq!(nodes[0].children, vec![1, 3]);
+        assert_eq!(h.path_to(2), None, "a pruned state is not live");
+        // Walking the surviving history still works.
+        assert_eq!(h.undo().map(|b| first_text(&b)), Some("c".into()));
+        assert_eq!(h.redo().map(|b| first_text(&b)), Some("c".into()));
+    }
+
+    #[test]
+    fn pruning_repoints_an_active_branch_at_a_live_node() {
+        // The root's active branch is the pruned leaf's chain: after the prune
+        // the parent's active child must not dangle.
+        let mut h = History::new(2);
+        h.push(batch("a")); // 1
+        h.undo();
+        h.push(batch("b")); // 2 (current), root children [1, 2]
+        // 3 states > cap 2: leaf 1 is the oldest off-path leaf and goes.
+        assert_eq!(
+            h.nodes().iter().map(|n| n.seq).collect::<Vec<_>>(),
+            vec![0, 2]
+        );
+        h.undo();
+        assert_eq!(h.redo().map(|b| first_text(&b)), Some("b".into()));
+    }
+
+    #[test]
+    fn a_zero_cap_never_prunes_and_branch_switching_needs_two_branches() {
+        let mut h = History::new(0);
+        for c in ["a", "b", "c", "d", "e"] {
+            h.push(batch(c));
+        }
+        assert_eq!(h.nodes().len(), 6);
+        assert!(!h.switch_branch(), "a tip has no branches");
+        h.undo();
+        assert!(!h.switch_branch(), "one child is not a choice");
+        assert!(!h.select_redo_branch(99));
+    }
 }

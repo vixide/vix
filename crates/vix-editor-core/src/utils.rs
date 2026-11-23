@@ -221,7 +221,10 @@ pub fn calculate_end_position(start_row: usize, start_col: usize, text: &str) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{get_lang_for, shebang_lang};
+    use super::{
+        calculate_end_position, comment, count_indent_units, get_lang, get_lang_for, indent, rgb,
+        shebang_lang,
+    };
 
     /// T658: an extensionless script takes its language from the `#!` line.
     #[test]
@@ -245,5 +248,99 @@ mod tests {
         assert_eq!(get_lang_for("main.rs", "#!/bin/bash\n"), "rust");
         assert_eq!(get_lang_for("notes.txt", "#!/bin/bash\n"), "unknown");
         assert_eq!(get_lang_for("README", "hello\n"), "unknown");
+    }
+
+    #[test]
+    fn get_lang_maps_every_known_extension() {
+        for (file, lang) in [
+            ("a.rs", "rust"),
+            ("a.js", "javascript"),
+            ("a.jsx", "javascript"),
+            ("a.ts", "typescript"),
+            ("a.tsx", "typescript"),
+            ("a.py", "python"),
+            ("a.go", "go"),
+            ("a.java", "java"),
+            ("a.cpp", "cpp"),
+            ("a.c", "c"),
+            ("a.cs", "c_sharp"),
+            ("a.html", "html"),
+            ("a.css", "css"),
+            ("a.json", "json"),
+            ("a.toml", "toml"),
+            ("a.yaml", "yaml"),
+            ("a.yml", "yaml"),
+            ("a.sh", "shell"),
+            ("a.bash", "shell"),
+            ("a.md", "markdown"),
+            ("a.org", "org"),
+            ("a.zzz", "unknown"),
+            ("Makefile", "unknown"),
+            // Extensions are case-sensitive.
+            ("A.RS", "unknown"),
+        ] {
+            assert_eq!(get_lang(file), lang, "{file}");
+        }
+    }
+
+    #[test]
+    fn shebang_handles_more_interpreters_and_degenerate_lines() {
+        assert_eq!(shebang_lang("#!/usr/bin/zsh"), Some("shell"));
+        assert_eq!(shebang_lang("#!/usr/bin/env pypy3"), Some("python"));
+        assert_eq!(shebang_lang("#!/usr/bin/nodejs"), Some("javascript"));
+        assert_eq!(shebang_lang("#!/usr/bin/env tsx"), Some("typescript"));
+        assert_eq!(shebang_lang("#!/usr/bin/env ts-node"), Some("typescript"));
+        // `env` with nothing runnable after it, and a bare `#!`.
+        assert_eq!(shebang_lang("#!/usr/bin/env -S"), None);
+        assert_eq!(shebang_lang("#!"), None);
+    }
+
+    #[test]
+    fn indent_and_comment_conventions() {
+        assert_eq!(indent("rust"), "    ");
+        assert_eq!(indent("html"), "    ");
+        assert_eq!(indent("go"), "\t");
+        assert_eq!(indent("c_sharp"), "\t");
+        assert_eq!(indent("yaml"), "  ");
+        assert_eq!(indent("nonsense"), "  ");
+        assert_eq!(comment("python"), "#");
+        assert_eq!(comment("org"), "#");
+        assert_eq!(comment("lua"), "--");
+        assert_eq!(comment("sql"), "--");
+        assert_eq!(comment("rust"), "//");
+        assert_eq!(comment("nonsense"), "//");
+    }
+
+    #[test]
+    fn count_indent_units_counts_whole_units_only() {
+        let r = |s: &str| ropey::Rope::from_str(s);
+        assert_eq!(
+            count_indent_units(r("        x").slice(..), "    ", None),
+            2
+        );
+        // A partial trailing unit is ignored.
+        assert_eq!(count_indent_units(r("      x").slice(..), "    ", None), 1);
+        assert_eq!(count_indent_units(r("\t\tx").slice(..), "\t", None), 2);
+        assert_eq!(count_indent_units(r("x").slice(..), "  ", None), 0);
+        assert_eq!(count_indent_units(r("    x").slice(..), "", None), 0);
+        // `max_col` stops counting once that many columns are consumed.
+        assert_eq!(
+            count_indent_units(r("            x").slice(..), "    ", Some(4)),
+            1
+        );
+        assert_eq!(
+            count_indent_units(r("            x").slice(..), "    ", Some(8)),
+            2
+        );
+    }
+
+    #[test]
+    fn rgb_and_end_position() {
+        assert_eq!(rgb("#ff8000"), (255, 128, 0));
+        assert_eq!(rgb("00ff00"), (0, 255, 0));
+        assert_eq!(rgb("nonsense"), (0, 0, 0));
+        assert_eq!(calculate_end_position(2, 4, "ab"), (2, 6));
+        assert_eq!(calculate_end_position(2, 4, "ab\ncde"), (3, 3));
+        assert_eq!(calculate_end_position(0, 0, ""), (0, 0));
     }
 }

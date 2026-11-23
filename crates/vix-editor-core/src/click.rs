@@ -97,3 +97,57 @@ impl ClickTracker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ClickKind, ClickTracker};
+    use std::time::Duration;
+
+    #[test]
+    fn same_offset_clicks_escalate_single_double_triple() {
+        let mut t = ClickTracker::new(Duration::from_secs(60));
+        assert_eq!(t.register(3), ClickKind::Single);
+        assert_eq!(t.register(3), ClickKind::Double);
+        assert_eq!(t.register(3), ClickKind::Triple);
+        // A fourth click is still within the window of the previous two.
+        assert_eq!(t.register(3), ClickKind::Triple);
+    }
+
+    #[test]
+    fn a_click_elsewhere_starts_over() {
+        let mut t = ClickTracker::new(Duration::from_secs(60));
+        t.register(3);
+        t.register(3);
+        assert_eq!(t.register(9), ClickKind::Single);
+        // The window slid: the next click at 9 is a double, not a triple.
+        assert_eq!(t.register(9), ClickKind::Double);
+    }
+
+    #[test]
+    fn mixed_offsets_never_make_a_triple() {
+        let mut t = ClickTracker::new(Duration::from_secs(60));
+        t.register(3);
+        t.register(4);
+        assert_eq!(t.register(4), ClickKind::Double);
+    }
+
+    #[test]
+    fn clicks_slower_than_the_window_are_singles() {
+        let mut t = ClickTracker::new(Duration::ZERO);
+        assert_eq!(t.register(3), ClickKind::Single);
+        assert_eq!(t.register(3), ClickKind::Single);
+        assert_eq!(t.register(3), ClickKind::Single);
+    }
+
+    #[test]
+    fn register_records_the_last_two_clicks() {
+        let mut t = ClickTracker::new(Duration::from_secs(60));
+        assert!(t.last.is_none() && t.prev.is_none());
+        t.register(1);
+        assert_eq!(t.last.map(|c| c.1), Some(1));
+        assert!(t.prev.is_none());
+        t.register(2);
+        assert_eq!(t.last.map(|c| c.1), Some(2));
+        assert_eq!(t.prev.map(|c| c.1), Some(1));
+    }
+}

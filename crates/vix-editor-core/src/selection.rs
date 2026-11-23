@@ -101,3 +101,48 @@ impl Selection {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Selection;
+
+    #[test]
+    fn new_orders_its_ends() {
+        let s = Selection::new(7, 2);
+        assert_eq!((s.start, s.end), (2, 7));
+    }
+
+    #[test]
+    fn from_anchor_and_cursor_orders_either_way() {
+        let fwd = Selection::from_anchor_and_cursor(2, 7);
+        let back = Selection::from_anchor_and_cursor(7, 2);
+        assert_eq!((fwd.start, fwd.end), (2, 7));
+        assert_eq!((back.start, back.end), (2, 7));
+    }
+
+    #[test]
+    fn active_and_empty_are_complements() {
+        let s = Selection::new(3, 3);
+        assert!(s.is_empty() && !s.is_active());
+        let s = Selection::new(3, 4);
+        assert!(!s.is_empty() && s.is_active());
+        // A hand-built reversed range is still non-empty, and an equal one empty.
+        assert!(!Selection { start: 5, end: 1 }.is_empty());
+        assert!(Selection { start: 5, end: 5 }.is_empty());
+    }
+
+    #[test]
+    fn contains_is_start_inclusive_end_exclusive() {
+        let s = Selection::new(2, 5);
+        assert!(!s.contains(1));
+        assert!(s.contains(2));
+        assert!(s.contains(4));
+        assert!(!s.contains(5));
+    }
+
+    #[test]
+    fn sorted_normalizes_a_reversed_literal() {
+        assert_eq!(Selection { start: 9, end: 4 }.sorted(), (4, 9));
+        assert_eq!(Selection { start: 4, end: 9 }.sorted(), (4, 9));
+    }
+}

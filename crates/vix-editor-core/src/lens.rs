@@ -417,3 +417,96 @@ mod tests {
         assert_eq!(ed.cursor_from_mouse(0, 2, &area), Some(9));
     }
 }
+
+#[cfg(test)]
+mod lens_edge_tests {
+    use crate::editor::Editor;
+    use ratatui_core::buffer::Buffer;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::widgets::Widget;
+
+    fn bare(text: &str) -> Editor {
+        let mut e = Editor::new("text", text, Vec::new()).unwrap();
+        e.show_line_numbers(false);
+        e.set_left_code_padding(0);
+        e
+    }
+
+    fn row(buf: &Buffer, y: u16) -> String {
+        (0..buf.area.width)
+            .map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' '))
+            .collect()
+    }
+
+    #[test]
+    fn empty_labels_are_dropped_and_same_line_labels_join() {
+        let mut e = bare("a\nb\nc");
+        e.set_code_lenses(vec![
+            (2, "second".into()),
+            (0, String::new()),
+            (2, "first-added-later".into()),
+            (1, "one".into()),
+        ]);
+        assert_eq!(e.code_lens_at(0), None, "the empty label vanished");
+        assert_eq!(e.code_lens_at(1), Some("one"));
+        assert_eq!(e.code_lens_at(2), Some("second | first-added-later"));
+        assert!(e.has_code_lenses());
+        e.clear_code_lenses();
+        assert!(!e.has_code_lenses());
+        assert_eq!(e.code_lens_at(1), None);
+    }
+
+    #[test]
+    fn filler_rows_after_the_last_line_are_part_of_the_layout() {
+        let mut e = bare("a\nb");
+        e.set_filler_rows(vec![(2, 2)]);
+        let rows = e.view_rows(10);
+        let kinds: Vec<String> = rows.iter().map(|r| format!("{r:?}")).collect();
+        assert_eq!(kinds.len(), 4, "{kinds:?}");
+        // The cap applies to fillers too.
+        assert_eq!(e.view_rows(3).len(), 3);
+        let area = Rect::new(0, 0, 6, 4);
+        let mut buf = Buffer::empty(area);
+        (&e).render(area, &mut buf);
+        assert_eq!(buf[(0, 2)].symbol(), "\u{2571}");
+        assert_eq!(buf[(0, 3)].symbol(), "\u{2571}");
+    }
+
+    #[test]
+    fn a_lens_label_follows_indent_and_scroll_and_is_clipped() {
+        let mut e = bare("    code");
+        e.set_code_lenses(vec![(0, "Run | Debug".into())]);
+        let area = Rect::new(0, 0, 10, 2);
+        let mut buf = Buffer::empty(area);
+        (&e).render(area, &mut buf);
+        // Indented to the line's own indent, clipped at the right edge.
+        assert_eq!(row(&buf, 0), "    Run | ");
+        assert!(
+            row(&buf, 1).trim_end().ends_with("code"),
+            "{:?}",
+            row(&buf, 1)
+        );
+        // Scrolled past the indent: the label starts at the left edge.
+        e.set_offset_x(6);
+        let mut buf = Buffer::empty(area);
+        (&e).render(area, &mut buf);
+        assert!(row(&buf, 0).starts_with("Run | Debu"));
+        // A view with no room beyond the label's start draws nothing.
+        let mut e = bare("        x");
+        e.set_code_lenses(vec![(0, "L".into())]);
+        let narrow = Rect::new(0, 0, 8, 2);
+        let mut buf = Buffer::empty(narrow);
+        (&e).render(narrow, &mut buf);
+        assert_eq!(row(&buf, 0).trim_end(), "");
+    }
+
+    #[test]
+    fn a_lens_in_a_gutter_wider_than_the_view_is_skipped() {
+        let mut e = Editor::new("text", "a\nb", Vec::new()).unwrap();
+        e.set_code_lenses(vec![(0, "L".into())]);
+        let area = Rect::new(0, 0, 4, 3);
+        let mut buf = Buffer::empty(area);
+        (&e).render(area, &mut buf);
+        assert!(!row(&buf, 0).contains('L'));
+    }
+}

@@ -905,3 +905,392 @@ mod forward_delete_tests {
         assert_eq!(text(&e), "abcd");
     }
 }
+
+#[cfg(test)]
+mod motion_and_edit_tests {
+    //! The named motion / selection / edit wrappers: exact cursor, selection
+    //! and text results for each catalog action.
+
+    use crate::editor::Editor;
+    use crate::editor_input::tests_support::CLIP;
+
+    fn ed(text: &str, cursor: usize) -> Editor {
+        let mut e = Editor::new("rust", text, Vec::new()).unwrap();
+        e.set_cursor(cursor);
+        e
+    }
+
+    fn text(e: &Editor) -> String {
+        e.code_ref().get_content()
+    }
+
+    fn sel(e: &mut Editor) -> Option<(usize, usize)> {
+        e.get_selection().map(|s| s.sorted())
+    }
+
+    #[test]
+    fn arrow_motions_move_one_step_and_clear_selection() {
+        let mut e = ed("abc\ndef", 1);
+        e.cursor_right();
+        assert_eq!(e.get_cursor(), 2);
+        e.cursor_left();
+        assert_eq!(e.get_cursor(), 1);
+        e.cursor_down();
+        assert_eq!(e.get_cursor(), 5);
+        e.cursor_up();
+        assert_eq!(e.get_cursor(), 1);
+        assert_eq!(sel(&mut e), None);
+    }
+
+    #[test]
+    fn select_arrows_extend_the_selection() {
+        let mut e = ed("abc\ndef", 1);
+        e.select_right();
+        assert_eq!(sel(&mut e), Some((1, 2)));
+        e.select_left();
+        e.select_left();
+        assert_eq!(sel(&mut e), Some((0, 1)));
+        let mut e = ed("abc\ndef", 1);
+        e.select_down();
+        assert_eq!(sel(&mut e), Some((1, 5)));
+        let mut e = ed("abc\ndef", 5);
+        e.select_up();
+        assert_eq!(sel(&mut e), Some((1, 5)));
+    }
+
+    #[test]
+    fn buffer_start_and_end_motions() {
+        let mut e = ed("abc\ndef", 5);
+        e.cursor_start();
+        assert_eq!(e.get_cursor(), 0);
+        e.cursor_end();
+        assert_eq!(e.get_cursor(), 7);
+        let mut e = ed("abc\ndef", 5);
+        e.select_to_start();
+        assert_eq!((e.get_cursor(), sel(&mut e)), (0, Some((0, 5))));
+        let mut e = ed("abc\ndef", 2);
+        e.select_to_end();
+        assert_eq!((e.get_cursor(), sel(&mut e)), (7, Some((2, 7))));
+    }
+
+    #[test]
+    fn line_motions() {
+        let mut e = ed("x\n  abc def\ny", 6);
+        e.start_of_line();
+        assert_eq!(e.get_cursor(), 2);
+        e.end_of_line();
+        assert_eq!(e.get_cursor(), 11);
+        e.start_of_text();
+        assert_eq!(e.get_cursor(), 4);
+        // Smart Home toggles first-text <-> column 0 <-> first-text.
+        e.set_cursor(8);
+        e.start_of_text_toggle();
+        assert_eq!(e.get_cursor(), 4);
+        e.start_of_text_toggle();
+        assert_eq!(e.get_cursor(), 2);
+        e.start_of_text_toggle();
+        assert_eq!(e.get_cursor(), 4);
+    }
+
+    #[test]
+    fn selecting_line_motions() {
+        let mut e = ed("x\n  abc def\ny", 8);
+        e.select_to_start_of_line();
+        assert_eq!((e.get_cursor(), sel(&mut e)), (2, Some((2, 8))));
+        let mut e = ed("x\n  abc def\ny", 8);
+        e.select_to_end_of_line();
+        assert_eq!((e.get_cursor(), sel(&mut e)), (11, Some((8, 11))));
+        let mut e = ed("x\n  abc def\ny", 8);
+        e.select_to_start_of_text();
+        assert_eq!((e.get_cursor(), sel(&mut e)), (4, Some((4, 8))));
+        let mut e = ed("x\n  abc def\ny", 8);
+        e.select_to_start_of_text_toggle();
+        assert_eq!((e.get_cursor(), sel(&mut e)), (4, Some((4, 8))));
+        e.select_to_start_of_text_toggle();
+        assert_eq!(e.get_cursor(), 2);
+    }
+
+    #[test]
+    fn select_line_takes_the_newline_and_handles_last_line() {
+        let mut e = ed("ab\ncd", 1);
+        e.select_line();
+        assert_eq!((e.get_cursor(), sel(&mut e)), (3, Some((0, 3))));
+        let mut e = ed("ab\ncd", 4);
+        e.select_line();
+        assert_eq!((e.get_cursor(), sel(&mut e)), (5, Some((3, 5))));
+    }
+
+    #[test]
+    fn word_motions() {
+        let mut e = ed("foo bar baz", 0);
+        e.word_right();
+        assert_eq!(e.get_cursor(), 3);
+        e.word_right();
+        assert_eq!(e.get_cursor(), 7);
+        e.sub_word_right();
+        assert_eq!(e.get_cursor(), 11);
+        e.word_right(); // at the end: stays
+        assert_eq!(e.get_cursor(), 11);
+        e.word_left();
+        assert_eq!(e.get_cursor(), 8);
+        e.sub_word_left();
+        assert_eq!(e.get_cursor(), 4);
+        e.set_cursor(0);
+        e.word_left();
+        assert_eq!(e.get_cursor(), 0);
+    }
+
+    #[test]
+    fn selecting_word_motions() {
+        let mut e = ed("foo bar baz", 4);
+        e.select_word_right();
+        assert_eq!(sel(&mut e), Some((4, 7)));
+        e.select_sub_word_right();
+        assert_eq!(sel(&mut e), Some((4, 11)));
+        let mut e = ed("foo bar baz", 11);
+        e.select_word_left();
+        assert_eq!(sel(&mut e), Some((8, 11)));
+        e.select_sub_word_left();
+        assert_eq!(sel(&mut e), Some((4, 11)));
+    }
+
+    #[test]
+    fn word_deletion() {
+        let mut e = ed("foo bar baz", 3);
+        e.delete_word_right();
+        assert_eq!(text(&e), "foo baz");
+        let mut e = ed("foo bar baz", 7);
+        e.delete_word_left();
+        assert_eq!(text(&e), "foo  baz");
+        assert_eq!(e.get_cursor(), 4);
+        let mut e = ed("foo bar", 0);
+        e.delete_sub_word_right();
+        assert_eq!(text(&e), " bar");
+        let mut e = ed("foo bar", 7);
+        e.delete_sub_word_left();
+        assert_eq!(text(&e), "foo ");
+        // Nothing to delete at the buffer edges.
+        let mut e = ed("foo", 3);
+        e.delete_word_right();
+        let mut e2 = ed("foo", 0);
+        e2.delete_word_left();
+        assert_eq!((text(&e), text(&e2)), ("foo".into(), "foo".into()));
+    }
+
+    #[test]
+    fn paragraph_motions() {
+        let src = "a\nb\n\nc\nd\n\ne";
+        let mut e = ed(src, 0);
+        e.paragraph_next();
+        assert_eq!(e.get_cursor(), 4); // the first blank line
+        e.paragraph_next();
+        assert_eq!(e.get_cursor(), 9); // the second blank line
+        e.paragraph_next(); // last paragraph: clamps to the end
+        assert_eq!(e.get_cursor(), 11);
+        e.paragraph_next(); // already on the last line
+        assert_eq!(e.get_cursor(), 11);
+        e.paragraph_previous();
+        assert_eq!(e.get_cursor(), 9);
+        e.paragraph_previous();
+        assert_eq!(e.get_cursor(), 4);
+        e.paragraph_previous();
+        assert_eq!(e.get_cursor(), 0);
+        e.paragraph_previous();
+        assert_eq!(e.get_cursor(), 0);
+        let mut e = ed(src, 0);
+        e.select_to_paragraph_next();
+        assert_eq!(sel(&mut e), Some((0, 4)));
+        let mut e = ed(src, 10);
+        e.select_to_paragraph_previous();
+        assert_eq!(sel(&mut e), Some((9, 10)));
+    }
+
+    #[test]
+    fn paging_moves_by_the_viewport_height() {
+        let body = (0..20)
+            .map(|i| format!("l{i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let row = |e: &Editor| e.code_ref().char_to_line(e.get_cursor());
+        let mut e = ed(&body, 0);
+        e.page_down(5);
+        assert_eq!(row(&e), 5);
+        e.half_page_down(6);
+        assert_eq!(row(&e), 8);
+        e.half_page_up(6);
+        assert_eq!(row(&e), 5);
+        e.page_up(5);
+        assert_eq!(row(&e), 0);
+        // A zero-height viewport still moves one row.
+        e.page_down(0);
+        assert_eq!(row(&e), 1);
+        e.select_page_down(3);
+        assert_eq!(row(&e), 4);
+        assert!(sel(&mut e).is_some());
+        e.select_page_up(2);
+        assert_eq!(row(&e), 2);
+    }
+
+    #[test]
+    fn viewport_relative_cursor_placement() {
+        let body = (0..30)
+            .map(|i| format!("l{i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let row = |e: &Editor| e.code_ref().char_to_line(e.get_cursor());
+        let mut e = ed(&body, 0);
+        e.set_cursor(e.code_ref().line_to_char(12));
+        e.center(10);
+        assert_eq!(e.get_offset_y(), 7);
+        e.cursor_to_view_top();
+        assert_eq!(row(&e), 7);
+        e.cursor_to_view_center(10);
+        assert_eq!(row(&e), 12);
+        e.cursor_to_view_bottom(10);
+        assert_eq!(row(&e), 16);
+        // Clamped to the last line when the viewport overhangs the buffer.
+        e.set_offset_y(28);
+        e.cursor_to_view_bottom(10);
+        assert_eq!(row(&e), 29);
+        e.cursor_to_view_center(10);
+        assert_eq!(row(&e), 29);
+    }
+
+    #[test]
+    fn editing_wrappers() {
+        let mut e = ed("ab", 2);
+        e.insert_newline();
+        assert_eq!(text(&e), "ab\n");
+        e.insert_str_action("cd");
+        e.backspace();
+        assert_eq!(text(&e), "ab\nc");
+        e.undo();
+        assert_eq!(text(&e), "ab\ncd");
+        e.undo();
+        assert_eq!(text(&e), "ab\n");
+        e.redo();
+        assert_eq!(text(&e), "ab\ncd");
+        let mut e = ed("ab", 1);
+        e.insert_tab();
+        assert_eq!(text(&e), "    ab");
+        e.indent_line();
+        assert_eq!(text(&e), "        ab");
+        e.outdent_line();
+        assert_eq!(text(&e), "    ab");
+        e.select_all();
+        e.indent_selection();
+        assert_eq!(text(&e), "        ab");
+        e.outdent_selection();
+        assert_eq!(text(&e), "    ab");
+        e.deselect();
+        assert_eq!(sel(&mut e), None);
+    }
+
+    #[test]
+    fn duplicate_and_delete_line() {
+        let mut e = ed("ab\ncd", 1);
+        e.duplicate_line();
+        assert_eq!(text(&e), "ab\nab\ncd");
+        e.delete_line();
+        assert_eq!(text(&e), "ab\ncd");
+        let mut e = ed("ab", 1);
+        e.set_selection_range(0, 1);
+        e.duplicate();
+        assert_eq!(text(&e), "aab");
+    }
+
+    #[test]
+    fn clipboard_wrappers_round_trip() {
+        let _g = CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut e = ed("one two", 0);
+        e.set_selection_range(0, 3);
+        e.copy();
+        assert_eq!(text(&e), "one two");
+        assert_eq!(sel(&mut e), Some((0, 3)));
+        e.cut();
+        assert_eq!(text(&e), " two");
+        e.set_cursor(4);
+        e.paste();
+        assert_eq!(text(&e), " twoone");
+        // copy_line leaves the selection and cursor exactly as they were.
+        let mut e = ed("ab\ncd", 4);
+        e.set_selection_range(3, 4);
+        e.copy_line();
+        assert_eq!((e.get_cursor(), sel(&mut e)), (4, Some((3, 4))));
+        assert_eq!(e.get_clipboard().unwrap(), "cd");
+        e.cut_line();
+        assert_eq!(text(&e), "ab\n");
+        assert_eq!(e.get_clipboard().unwrap(), "cd");
+    }
+
+    #[test]
+    fn every_motion_moves_all_carets_when_there_are_several() {
+        type Motion = fn(&mut Editor);
+        let motions: &[(&str, Motion, bool)] = &[
+            ("cursor_up", Editor::cursor_up, false),
+            ("cursor_down", Editor::cursor_down, false),
+            ("cursor_left", Editor::cursor_left, false),
+            ("cursor_right", Editor::cursor_right, false),
+            ("select_up", Editor::select_up, true),
+            ("select_down", Editor::select_down, true),
+            ("select_left", Editor::select_left, true),
+            ("select_right", Editor::select_right, true),
+            ("cursor_start", Editor::cursor_start, false),
+            ("cursor_end", Editor::cursor_end, false),
+            ("select_to_start", Editor::select_to_start, true),
+            ("select_to_end", Editor::select_to_end, true),
+            ("start_of_line", Editor::start_of_line, false),
+            ("end_of_line", Editor::end_of_line, false),
+            ("start_of_text", Editor::start_of_text, false),
+            ("start_of_text_toggle", Editor::start_of_text_toggle, false),
+            (
+                "select_to_start_of_line",
+                Editor::select_to_start_of_line,
+                true,
+            ),
+            ("select_to_end_of_line", Editor::select_to_end_of_line, true),
+            (
+                "select_to_start_of_text",
+                Editor::select_to_start_of_text,
+                true,
+            ),
+            (
+                "select_to_start_of_text_toggle",
+                Editor::select_to_start_of_text_toggle,
+                true,
+            ),
+            ("word_right", Editor::word_right, false),
+            ("word_left", Editor::word_left, false),
+            ("select_word_right", Editor::select_word_right, true),
+            ("select_word_left", Editor::select_word_left, true),
+        ];
+        for (name, motion, selects) in motions {
+            let mut e = ed("  one two\n  three four\n  five six\nseven", 0);
+            // Two carets mid-line on lines 1 and 2, so every motion has room
+            // to move both in some direction.
+            e.set_cursor(e.code_ref().line_to_char(1) + 6);
+            e.add_caret_at(e.code_ref().line_to_char(2) + 6);
+            let before = e.caret_positions();
+            motion(&mut e);
+            let after = e.caret_positions();
+            assert_ne!(before, after, "{name} moved the carets");
+            if *selects {
+                assert!(!e.caret_selections().is_empty(), "{name} selects");
+            } else {
+                assert!(e.caret_selections().is_empty(), "{name} clears");
+            }
+        }
+    }
+
+    #[test]
+    fn select_word_does_nothing_away_from_words() {
+        let mut e = ed("a   b", 3);
+        e.select_word();
+        assert_eq!(sel(&mut e), None);
+        let mut e = ed("  x", 0);
+        e.select_word();
+        assert_eq!(sel(&mut e), None);
+    }
+}

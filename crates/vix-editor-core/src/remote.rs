@@ -371,3 +371,87 @@ mod tests {
         assert_eq!(e.remote_carets(), &[]);
     }
 }
+
+#[cfg(test)]
+mod colour_and_edit_tests {
+    use super::{RemoteCaret, Splice, text_on};
+    use crate::editor::Editor;
+    use ratatui_core::buffer::Buffer;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::style::{Color, Modifier};
+    use ratatui_core::widgets::Widget;
+
+    #[test]
+    fn text_colour_contrasts_with_the_background() {
+        // Rec. 601 luma threshold is 140.
+        assert_eq!(text_on(Color::Rgb(255, 255, 255)), Color::Black);
+        assert_eq!(text_on(Color::Rgb(255, 255, 0)), Color::Black);
+        assert_eq!(text_on(Color::Rgb(0, 0, 0)), Color::White);
+        assert_eq!(text_on(Color::Rgb(30, 30, 160)), Color::White);
+        // Named dark colours get white text; every other named colour black.
+        for dark in [
+            Color::Black,
+            Color::DarkGray,
+            Color::Blue,
+            Color::Red,
+            Color::Magenta,
+        ] {
+            assert_eq!(text_on(dark), Color::White, "{dark:?}");
+        }
+        for light in [
+            Color::Yellow,
+            Color::White,
+            Color::Green,
+            Color::Cyan,
+            Color::Indexed(7),
+        ] {
+            assert_eq!(text_on(light), Color::Black, "{light:?}");
+        }
+    }
+
+    #[test]
+    fn remote_carets_and_selections_are_drawn_under_the_local_cursor() {
+        let mut e = Editor::new("text", "hello world", Vec::new()).unwrap();
+        e.show_line_numbers(false);
+        e.set_left_code_padding(0);
+        e.set_remote_carets(vec![RemoteCaret {
+            head: 8,
+            selection: Some((6, 11)),
+            color: Color::Rgb(250, 250, 250),
+        }]);
+        assert_eq!(e.remote_carets().len(), 1);
+        let area = Rect::new(0, 0, 20, 1);
+        let mut buf = Buffer::empty(area);
+        (&e).render(area, &mut buf);
+        // The selected range is reversed in the participant's colour...
+        assert!(buf[(6, 0)].modifier.contains(Modifier::REVERSED));
+        assert_eq!(buf[(6, 0)].fg, Color::Rgb(250, 250, 250));
+        assert!(!buf[(5, 0)].modifier.contains(Modifier::REVERSED));
+        // ...and the caret cell is a solid block with contrasting text.
+        assert_eq!(buf[(8, 0)].bg, Color::Rgb(250, 250, 250));
+        assert_eq!(buf[(8, 0)].fg, Color::Black);
+        // Clearing the list draws nothing.
+        e.set_remote_carets(Vec::new());
+        let mut buf = Buffer::empty(area);
+        (&e).render(area, &mut buf);
+        assert_ne!(buf[(8, 0)].bg, Color::Rgb(250, 250, 250));
+    }
+
+    #[test]
+    fn an_empty_batch_of_remote_edits_changes_nothing() {
+        let mut e = Editor::new("text", "abc", Vec::new()).unwrap();
+        e.set_cursor(2);
+        e.start_edit_log();
+        e.apply_remote_edits(&[]);
+        assert_eq!((e.get_content().as_str(), e.get_cursor()), ("abc", 2));
+        e.apply_remote_edits(&[Splice {
+            offset: 0,
+            delete: 0,
+            insert: "xy".into(),
+        }]);
+        assert_eq!((e.get_content().as_str(), e.get_cursor()), ("xyabc", 4));
+        assert!(e.take_edit_log().is_empty(), "remote edits are not logged");
+        e.stop_edit_log();
+        assert!(!e.is_edit_logging());
+    }
+}

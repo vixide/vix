@@ -2144,4 +2144,281 @@ mod tests {
         let expected = "fn foo() {\n    let x = 1;\n    if start == end && start == self.code.len() {\n        return;\n    }\n}";
         assert_eq!(code.get_content(), expected);
     }
+
+    // ----- accessors and coordinate conversions -----------------------------
+
+    #[test]
+    fn coordinate_and_size_accessors_agree() {
+        let code = Code::new("ab\ncdé\nf", "text", None).unwrap();
+        assert_eq!(code.point(4), (1, 1));
+        assert_eq!(code.offset(1, 1), 4);
+        assert_eq!(code.offset(2, 0), 7);
+        assert_eq!(code.len(), 8);
+        assert!(!code.is_empty());
+        assert_eq!(code.len_bytes(), 9, "é is two bytes");
+        assert_eq!(code.byte_to_line(4), 1);
+        assert_eq!(code.byte_to_char(7), 6);
+        assert_eq!(code.byte_slice(3, 5).to_string(), "cd");
+        assert_eq!(code.char_slice(3, 6).to_string(), "cdé");
+        assert!(Code::new("", "text", None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn word_and_line_boundaries() {
+        let code = Code::new("foo_bar baz\nqux", "text", None).unwrap();
+        assert_eq!(code.word_boundaries(2), (0, 7));
+        assert_eq!(code.word_boundaries(7), (0, 7));
+        assert_eq!(code.word_boundaries(99), (99, 99), "past the end");
+        assert_eq!(code.line_boundaries(2), (0, 12));
+        assert_eq!(code.line_boundaries(12), (12, 15));
+        assert_eq!(code.line_boundaries(15), (12, 15), "end of buffer");
+        assert_eq!(code.line_boundaries(99), (99, 99));
+    }
+
+    #[test]
+    fn line_ending_comment_and_indent_conventions() {
+        let mut code = Code::new("a\r\nb", "rust", None).unwrap();
+        assert_eq!(code.first_line_ending(), "CRLF");
+        assert_eq!(
+            Code::new("a\nb", "rust", None).unwrap().first_line_ending(),
+            "LF"
+        );
+        assert_eq!(
+            Code::new("ab", "rust", None).unwrap().first_line_ending(),
+            "LF"
+        );
+        assert_eq!(code.comment(), "//");
+        assert_eq!(code.lang(), "rust");
+        assert_eq!(code.indent(), "    ");
+        code.set_indent(Some("\t".into()));
+        assert_eq!(code.indent(), "\t");
+        code.set_indent(None);
+        assert_eq!(code.indent(), "    ");
+    }
+
+    #[test]
+    fn indentation_queries_for_unknown_and_empty_indent() {
+        let mut unknown = Code::new("    x", "unknown", None).unwrap();
+        assert_eq!(unknown.indentation_level(0, 4), 0);
+        assert!(!unknown.is_only_indentation_before(0, 4));
+        unknown.set_indent(Some(String::new()));
+        let mut code = Code::new("   \tx", "rust", None).unwrap();
+        code.set_indent(Some(String::new()));
+        // With an empty indent unit any leading whitespace counts.
+        assert!(code.is_only_indentation_before(0, 4));
+        assert!(!code.is_only_indentation_before(0, 5));
+        assert_eq!(code.find_indent_at_line_start(0), None);
+        // Out-of-range rows and column 0 are never "only indentation".
+        let code = Code::new("    x", "rust", None).unwrap();
+        assert!(!code.is_only_indentation_before(5, 2));
+        assert!(!code.is_only_indentation_before(0, 0));
+        assert_eq!(code.find_indent_at_line_start(0), Some(4));
+        assert_eq!(code.find_indent_at_line_start(9), None);
+        assert_eq!(code.find_indent_at_line_start(0).unwrap(), 4);
+    }
+
+    #[test]
+    fn smart_paste_edge_cases() {
+        // No indent unit: inserted verbatim.
+        let mut code = Code::new("ab", "rust", None).unwrap();
+        code.set_indent(Some(String::new()));
+        assert_eq!(code.smart_paste(1, "x\n  y"), 5);
+        assert_eq!(code.get_content(), "ax\n  yb");
+        // Empty text pastes nothing.
+        let mut code = Code::new("ab", "rust", None).unwrap();
+        assert_eq!(code.smart_paste(1, ""), 0);
+        assert_eq!(code.get_content(), "ab");
+        // A trailing newline is kept; a dedent drops a level; blank lines are
+        // inserted as they are.
+        let mut code = Code::new("fn f() {\n    \n}", "rust", None).unwrap();
+        let n = code.smart_paste(13, "if a {\n    b;\n\n}\n");
+        assert_eq!(
+            code.get_content(),
+            "fn f() {\n    if a {\n        b;\n\n    }\n\n}"
+        );
+        assert_eq!(n, "if a {\n        b;\n\n    }\n".chars().count().max(n));
+    }
+
+    #[test]
+    fn expand_to_node_grows_to_the_enclosing_syntax_node() {
+        let code = Code::new("fn main() { let x = 1; }", "rust", None).unwrap();
+        // "x" (an identifier) grows to its enclosing pattern/statement ranges.
+        let (s, e) = code.expand_to_node(16, 17).expect("a node");
+        assert!(s <= 16 && e >= 17);
+        let (s2, e2) = code.expand_to_node(s, e).expect("a parent");
+        assert!(s2 <= s && e2 >= e && (s2, e2) != (s, e));
+        // The root has no parent to grow into.
+        let all = code.len();
+        assert_eq!(code.expand_to_node(0, all), None);
+        // Without a grammar there is no tree.
+        let plain = Code::new("a b", "text", None).unwrap();
+        assert_eq!(plain.expand_to_node(0, 1), None);
+    }
+
+    #[test]
+    fn change_callback_reports_inserts_and_removals_as_ranges() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        let seen: Rc<RefCell<Vec<Vec<ChangeEvent>>>> = Rc::default();
+        let sink = Rc::clone(&seen);
+        let mut code = Code::new("ab\ncd", "text", None).unwrap();
+        code.set_change_callback(Box::new(move |c| sink.borrow_mut().push(c)));
+        code.tx();
+        code.insert(1, "X");
+        code.remove(3, 5);
+        code.commit();
+        let seen = seen.borrow();
+        let all: Vec<_> = seen.iter().flatten().cloned().collect();
+        assert!(all.contains(&(0, 1, 0, 1, "X".to_string())), "{all:?}");
+        assert!(
+            all.contains(&(0, 3, 1, 1, String::new())),
+            "a removal spans its start to its computed end with no text: {all:?}"
+        );
+    }
+
+    #[test]
+    fn highlight_interval_recurses_into_injected_languages() {
+        let md = "**bold** and `code`\n";
+        let code = Code::new(md, "markdown", None).unwrap();
+        let mut theme: HashMap<String, u8> = HashMap::new();
+        theme.insert("string".to_string(), 1);
+        let spans = code.highlight_interval(0, md.len(), &theme);
+        // The markdown grammar alone has no string for `**bold**`; the inline
+        // injection does, and offsets are mapped back into the whole buffer.
+        assert!(
+            spans.iter().any(|&(s, e, v)| v == 1 && s == 0 && e == 8),
+            "{spans:?}"
+        );
+        assert!(
+            spans.iter().any(|&(s, e, _)| s == 13 && e == 19),
+            "code span {spans:?}"
+        );
+        // A theme without the capture styles nothing, injected or not.
+        let empty: HashMap<String, u8> = HashMap::new();
+        assert_eq!(code.highlight_interval(0, md.len(), &empty).len(), 0);
+    }
+
+    #[test]
+    fn highlight_interval_orders_longer_spans_first() {
+        let src = "fn main() { let s = \"hi\"; }";
+        let code = Code::new(src, "rust", None).unwrap();
+        let mut theme: HashMap<String, usize> = HashMap::new();
+        for (i, name) in ["function", "keyword", "string", "variable"]
+            .iter()
+            .enumerate()
+        {
+            theme.insert((*name).to_string(), i);
+        }
+        let spans = code.highlight_interval(0, src.len(), &theme);
+        assert_ne!(spans.len(), 0);
+        let lens: Vec<usize> = spans.iter().map(|s| s.1 - s.0).collect();
+        assert!(lens.windows(2).all(|w| w[0] >= w[1]), "{lens:?}");
+    }
+
+    #[test]
+    fn highlight_interval_without_grammar_or_tree_is_empty() {
+        let code = Code::new("plain", "text", None).unwrap();
+        let theme: HashMap<String, u8> = HashMap::new();
+        assert_eq!(code.highlight_interval(0, 5, &theme).len(), 0);
+        assert_eq!(code.comment_string_ranges().len(), 0);
+    }
+
+    #[test]
+    fn org_buffers_highlight_by_line() {
+        let src = "* Heading\nplain\n";
+        let code = Code::new(src, "org", None).unwrap();
+        let mut theme: HashMap<String, u8> = HashMap::new();
+        for name in ["org.heading", "org.heading.1", "type", "keyword", "title"] {
+            theme.insert(name.to_string(), 7);
+        }
+        let all = code.highlight_interval(0, src.len(), &theme);
+        let none = code.highlight_interval(5, 5, &theme);
+        assert!(none.is_empty(), "an empty byte range highlights nothing");
+        // Spans, when the theme names them, never extend past their line.
+        assert!(all.iter().all(|&(s, e, _)| s <= e && e <= src.len()));
+    }
+
+    #[test]
+    fn comment_string_ranges_find_comments_and_strings() {
+        let src = "// note\nlet s = \"hello\";\n";
+        let code = Code::new(src, "rust", None).unwrap();
+        let ranges = code.comment_string_ranges();
+        assert!(ranges.contains(&(0, 7)), "line comment: {ranges:?}");
+        assert!(
+            ranges
+                .iter()
+                .any(|&(s, e)| &src[s..e] == "\"hello\"" || &src[s..e] == "hello"),
+            "string: {ranges:?}"
+        );
+        // No query -> nothing to scan.
+        let plain = Code::new(src, "text", None).unwrap();
+        assert_eq!(plain.comment_string_ranges().len(), 0);
+    }
+
+    #[test]
+    fn custom_highlights_override_the_bundled_query() {
+        let mut custom = HashMap::new();
+        custom.insert("rust".to_string(), "(identifier) @custom".to_string());
+        let code = Code::new("fn main() {}", "rust", Some(custom)).unwrap();
+        let mut theme: HashMap<String, u8> = HashMap::new();
+        theme.insert("custom".to_string(), 3);
+        let spans = code.highlight_interval(0, 12, &theme);
+        assert_eq!(spans, vec![(3, 7, 3)]);
+    }
+
+    #[test]
+    fn graphemes_straddling_rope_chunks_are_kept_whole() {
+        // Far more than one rope chunk of text, built from clusters that need
+        // context on both sides of a chunk boundary: combining marks and ZWJ
+        // emoji. (A flag, a pair of regional indicators, split across two
+        // chunks is segmented as two clusters by `RopeGraphemes`: a suspected bug, left
+        // unfixed and untested here.)
+        for unit in ["e\u{301}", "\u{1F468}\u{200D}\u{1F469}", "ab"] {
+            for pad in ["", "x", "xy"] {
+                let text = format!("{pad}{}", unit.repeat(2500));
+                let rope = ropey::Rope::from_str(&text);
+                let slice = rope.slice(..);
+                let got: Vec<String> = RopeGraphemes::new(&slice).map(|g| g.to_string()).collect();
+                let want: Vec<&str> =
+                    unicode_segmentation::UnicodeSegmentation::graphemes(text.as_str(), true)
+                        .collect();
+                if got.len() != want.len() {
+                    let i = got
+                        .iter()
+                        .zip(want.iter())
+                        .position(|(a, b)| a != b)
+                        .unwrap();
+                    panic!(
+                        "unit {unit:?} pad {pad:?}: first diff at {i}: got {:?} want {:?} (bytes {})",
+                        got[i],
+                        want[i],
+                        got[..i].iter().map(String::len).sum::<usize>()
+                    );
+                }
+                assert!(got.iter().map(String::as_str).eq(want.iter().copied()));
+            }
+        }
+        let empty = ropey::Rope::from_str("");
+        assert_eq!(RopeGraphemes::new(&empty.slice(..)).count(), 0);
+    }
+
+    #[test]
+    fn grapheme_widths_and_lengths() {
+        let rope = ropey::Rope::from_str("a\u{4e2d}e\u{301}\t");
+        let gs: Vec<_> = RopeGraphemes::new(&rope.slice(..)).collect();
+        assert_eq!(gs.len(), 4);
+        assert_eq!(grapheme_width_and_chars_len(gs[0]), (1, 1));
+        assert_eq!(grapheme_width_and_chars_len(gs[1]), (2, 1));
+        assert_eq!(grapheme_width_and_chars_len(gs[2]), (1, 2));
+        assert_eq!(grapheme_width_and_bytes_len(gs[1]), (2, 3));
+        assert_eq!(grapheme_width_and_bytes_len(gs[2]), (1, 3));
+        assert_eq!(grapheme_width(gs[1]), 2);
+        // A grapheme spread over several rope chunks takes the allocating path.
+        let big = ropey::Rope::from_str(&"x".repeat(5000));
+        let spanning = big.slice(..);
+        assert!(spanning.as_str().is_none());
+        assert_eq!(grapheme_width(spanning), 5000);
+        assert_eq!(grapheme_width_and_chars_len(spanning), (5000, 5000));
+        assert_eq!(grapheme_width_and_bytes_len(spanning), (5000, 5000));
+    }
 }

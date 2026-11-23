@@ -985,3 +985,336 @@ mod goal_column_tests {
         assert_eq!(e.code_ref().point(e.get_cursor()), (2, 1));
     }
 }
+
+#[cfg(test)]
+mod action_tests {
+    //! Exact buffer, cursor and selection results of the primitive actions.
+
+    use super::{
+        Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
+        MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, ToggleComment, UnIndent, Undo,
+    };
+    use crate::code::{Edit, EditBatch, EditKind};
+    use crate::editor::Editor;
+    use crate::editor_input::tests_support::CLIP;
+
+    fn ed(text: &str, cursor: usize) -> Editor {
+        let mut e = Editor::new("rust", text, Vec::new()).unwrap();
+        e.set_cursor(cursor);
+        e
+    }
+
+    fn text(e: &Editor) -> String {
+        e.code_ref().get_content()
+    }
+
+    fn sel(e: &mut Editor) -> Option<(usize, usize)> {
+        e.get_selection().map(|s| s.sorted())
+    }
+
+    /// Select with the given anchor and cursor, as a drag would.
+    fn select(e: &mut Editor, anchor: usize, cursor: usize) {
+        e.set_selection_range(anchor, cursor);
+    }
+
+    #[test]
+    fn horizontal_moves_collapse_a_selection_to_its_edge() {
+        let mut e = ed("abcdef", 4);
+        select(&mut e, 1, 4);
+        e.apply(MoveRight { shift: false });
+        assert_eq!((e.get_cursor(), sel(&mut e)), (4, None));
+        select(&mut e, 4, 1);
+        e.apply(MoveLeft { shift: false });
+        assert_eq!((e.get_cursor(), sel(&mut e)), (1, None));
+        // Shift extends instead.
+        e.apply(MoveRight { shift: true });
+        assert_eq!(sel(&mut e), Some((1, 2)));
+        // At the buffer edges they are no-ops.
+        let mut e = ed("ab", 2);
+        e.apply(MoveRight { shift: true });
+        assert_eq!((e.get_cursor(), sel(&mut e)), (2, None));
+        let mut e = ed("ab", 0);
+        e.apply(MoveLeft { shift: true });
+        assert_eq!((e.get_cursor(), sel(&mut e)), (0, None));
+    }
+
+    #[test]
+    fn vertical_moves_stop_at_the_first_and_last_line() {
+        let mut e = ed("ab\ncd", 1);
+        e.apply(MoveUp { shift: false });
+        assert_eq!(e.get_cursor(), 1, "first line: Up does nothing");
+        e.apply(MoveUp { shift: true });
+        assert_eq!(sel(&mut e), None, "and does not start a selection");
+        let mut e = ed("ab\ncd", 4);
+        e.apply(MoveDown { shift: false });
+        assert_eq!(e.get_cursor(), 4, "last line: Down does nothing");
+        // Shift+Down/Up extends and keeps the anchor.
+        let mut e = ed("ab\ncd\nef", 1);
+        e.apply(MoveDown { shift: true });
+        e.apply(MoveDown { shift: true });
+        assert_eq!((e.get_cursor(), sel(&mut e)), (7, Some((1, 7))));
+        e.apply(MoveUp { shift: true });
+        assert_eq!(sel(&mut e), Some((1, 4)));
+    }
+
+    #[test]
+    fn insert_text_replaces_selection_in_one_undo_step() {
+        let mut e = ed("abcdef", 4);
+        select(&mut e, 1, 4);
+        e.apply(InsertText { text: "XY".into() });
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("aXYef", 3));
+        e.undo();
+        assert_eq!(text(&e), "abcdef");
+        assert_eq!(sel(&mut e), Some((1, 4)));
+    }
+
+    #[test]
+    fn insert_newline_keeps_indentation() {
+        let mut e = ed("    a", 5);
+        e.apply(InsertNewline);
+        assert_eq!(text(&e), "    a\n    ");
+        assert_eq!(e.get_cursor(), 10);
+    }
+
+    #[test]
+    fn delete_removes_selection_char_or_indent_and_noops_at_start() {
+        let mut e = ed("abcdef", 4);
+        select(&mut e, 1, 4);
+        e.apply(Delete);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("aef", 1));
+        let mut e = ed("abc", 0);
+        e.apply(Delete);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("abc", 0));
+        let mut e = ed("ab\ncd", 3);
+        e.apply(Delete);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("abcd", 2));
+    }
+
+    fn comment(
+        text_in: &str,
+        anchor: usize,
+        cursor: usize,
+    ) -> (String, usize, Option<(usize, usize)>) {
+        let mut e = ed(text_in, cursor);
+        if anchor != cursor {
+            select(&mut e, anchor, cursor);
+        }
+        e.apply(ToggleComment);
+        let sel = e
+            .get_selection()
+            .and_then(|s| (!s.is_empty()).then(|| s.sorted()));
+        (text(&e), e.get_cursor(), sel)
+    }
+
+    #[test]
+    fn toggle_comment_on_a_single_line_adds_and_removes() {
+        assert_eq!(comment("ab", 1, 1), ("//ab".into(), 3, None));
+        assert_eq!(comment("//ab", 3, 3), ("ab".into(), 1, None));
+        // Blank lines are commented too.
+        assert_eq!(comment("", 0, 0), ("//".into(), 2, None));
+    }
+
+    #[test]
+    fn toggle_comment_forward_selection_shifts_cursor_by_every_marker() {
+        // anchor on line 0, cursor at the end of line 1.
+        assert_eq!(comment("a\nb", 0, 3), ("//a\n//b".into(), 7, Some((2, 7))));
+        assert_eq!(comment("//a\n//b", 0, 7), ("a\nb".into(), 3, Some((0, 3))));
+        // Partly commented: the marker is added to every line.
+        assert_eq!(
+            comment("//a\nb", 0, 5),
+            ("////a\n//b".into(), 9, Some((2, 9)))
+        );
+    }
+
+    #[test]
+    fn toggle_comment_backward_selection_shifts_the_anchor_by_every_marker() {
+        // anchor at the end (3), cursor at the start (0).
+        assert_eq!(comment("a\nb", 3, 0), ("//a\n//b".into(), 2, Some((2, 7))));
+        assert_eq!(comment("//a\n//b", 7, 0), ("a\nb".into(), 0, Some((0, 3))));
+    }
+
+    #[test]
+    fn indent_forward_and_backward_selections() {
+        let mut e = ed("a\nb", 3);
+        select(&mut e, 0, 3);
+        e.apply(Indent);
+        assert_eq!(text(&e), "    a\n    b");
+        assert_eq!((e.get_cursor(), sel(&mut e)), (11, Some((4, 11))));
+        let mut e = ed("a\nb", 0);
+        select(&mut e, 3, 0);
+        e.apply(Indent);
+        assert_eq!(text(&e), "    a\n    b");
+        assert_eq!((e.get_cursor(), sel(&mut e)), (4, Some((4, 11))));
+    }
+
+    #[test]
+    fn unindent_forward_and_backward_selections_and_unindented_lines() {
+        let mut e = ed("    a\n    b", 11);
+        select(&mut e, 0, 11);
+        e.apply(UnIndent);
+        assert_eq!(text(&e), "a\nb");
+        assert_eq!((e.get_cursor(), sel(&mut e)), (3, Some((0, 3))));
+        let mut e = ed("    a\n    b", 0);
+        select(&mut e, 11, 0);
+        e.apply(UnIndent);
+        assert_eq!(text(&e), "a\nb");
+        assert_eq!((e.get_cursor(), sel(&mut e)), (0, Some((0, 3))));
+        // A line with no indent is left alone, and the cursor does not move.
+        let mut e = ed("ab", 1);
+        e.apply(UnIndent);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("ab", 1));
+        // Only whole indent units count: a 2-space indent under a 4-space unit
+        // is left alone (the `UnIndent` doc comment says "less if the line has
+        // less", which the code does not do).
+        let mut e = ed("  ab", 3);
+        e.apply(UnIndent);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("  ab", 3));
+    }
+
+    #[test]
+    fn select_all_selects_without_moving_the_cursor() {
+        let mut e = ed("abc", 1);
+        e.apply(SelectAll);
+        assert_eq!((e.get_cursor(), sel(&mut e)), (1, Some((0, 3))));
+    }
+
+    #[test]
+    fn duplicate_selection_line_and_last_line() {
+        let mut e = ed("abcd", 3);
+        select(&mut e, 1, 3);
+        e.apply(Duplicate);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("abcbcd", 5));
+        let mut e = ed("ab\ncd\n", 4);
+        e.apply(Duplicate);
+        assert_eq!(text(&e), "ab\ncd\ncd\n");
+        assert_eq!(e.get_cursor(), 7);
+        // The last line has no newline: the copy gets a leading one.
+        let mut e = ed("ab\ncd", 4);
+        e.apply(Duplicate);
+        assert_eq!(text(&e), "ab\ncd\ncd");
+        assert_eq!(e.get_cursor(), 7);
+    }
+
+    #[test]
+    fn delete_line_removes_the_line_and_noops_on_the_empty_last_line() {
+        let mut e = ed("ab\ncd\nef", 4);
+        e.apply(DeleteLine);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("ab\nef", 3));
+        let mut e = ed("ab\n", 3);
+        e.apply(DeleteLine);
+        assert_eq!(text(&e), "ab\n");
+        e.undo();
+        assert_eq!(text(&e), "ab\n", "nothing was recorded to undo");
+    }
+
+    #[test]
+    fn cut_copy_paste_single_and_multi_caret() {
+        let _g = CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // Cut with no selection does nothing.
+        let mut e = ed("abc", 1);
+        e.apply(Cut);
+        assert_eq!(text(&e), "abc");
+        // Copy with no / empty selection does nothing either.
+        e.apply(Copy);
+        select(&mut e, 1, 1);
+        e.apply(Copy);
+        // Copy and cut a selection.
+        select(&mut e, 0, 2);
+        e.apply(Copy);
+        assert_eq!(e.get_clipboard().unwrap(), "ab");
+        e.apply(Cut);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("c", 0));
+        e.apply(Paste);
+        assert_eq!(text(&e), "abc");
+        // Multi-caret copy joins the selections with newlines; paste with the
+        // same number of carets puts one line at each.
+        let mut e = ed("aa bb cc", 0);
+        e.set_caret_anchors(&[(0, 2), (3, 5)]);
+        assert!(e.has_multi_carets());
+        e.apply(Copy);
+        assert_eq!(e.get_clipboard().unwrap(), "aa\nbb");
+        // Cut with several carets cuts every selection.
+        e.apply(Cut);
+        assert_eq!(text(&e), "  cc");
+    }
+
+    #[test]
+    fn undo_and_redo_infer_the_cursor_when_no_state_was_recorded() {
+        let mut e = ed("abcdef", 0);
+        e.apply_batch(&EditBatch {
+            edits: vec![
+                Edit {
+                    kind: EditKind::Remove {
+                        offset: 1,
+                        text: "bc".into(),
+                    },
+                },
+                Edit {
+                    kind: EditKind::Insert {
+                        offset: 4,
+                        text: "XYZ".into(),
+                    },
+                },
+            ],
+            state_before: None,
+            state_after: None,
+        });
+        assert_eq!(text(&e), "adefXYZ");
+        // Undo visits the edits last-to-first: the first edit decides, so the
+        // removed range is back and the cursor sits after it.
+        e.apply(Undo);
+        assert_eq!(text(&e), "abcdef");
+        assert_eq!(e.get_cursor(), 3);
+        // Redo replays in order: the last edit (an insert) decides.
+        e.apply(Redo);
+        assert_eq!(text(&e), "adefXYZ");
+        assert_eq!(e.get_cursor(), 7);
+        // Undo of an insert-first batch puts the cursor at its start.
+        let mut e = ed("abc", 0);
+        e.apply_batch(&EditBatch {
+            edits: vec![Edit {
+                kind: EditKind::Insert {
+                    offset: 2,
+                    text: "Q".into(),
+                },
+            }],
+            state_before: None,
+            state_after: None,
+        });
+        e.apply(Undo);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("abc", 2));
+        // Redo of a remove-last batch puts the cursor at the removal offset.
+        let mut e = ed("abc", 0);
+        e.apply_batch(&EditBatch {
+            edits: vec![Edit {
+                kind: EditKind::Remove {
+                    offset: 1,
+                    text: "b".into(),
+                },
+            }],
+            state_before: None,
+            state_after: None,
+        });
+        e.apply(Undo);
+        e.apply(Redo);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("ac", 1));
+    }
+
+    #[test]
+    fn undo_and_redo_with_nothing_to_do_are_noops_and_drop_extra_carets() {
+        let mut e = ed("abc", 1);
+        e.apply(Undo);
+        e.apply(Redo);
+        assert_eq!((text(&e).as_str(), e.get_cursor()), ("abc", 1));
+        e.insert_str_action("x");
+        e.add_caret_at(0);
+        assert!(e.has_multi_carets());
+        e.apply(Undo);
+        assert!(!e.has_multi_carets());
+        e.add_caret_at(0);
+        e.apply(Redo);
+        assert!(!e.has_multi_carets());
+    }
+}
