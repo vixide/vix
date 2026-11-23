@@ -3221,3 +3221,515 @@ fn sql_editor_saves_and_closes() {
     assert!(a.edit.edit_sql().is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ----- Edit menu: motions, selections, transforms -------------------------------------------
+
+fn sel_text(a: &mut App) -> Option<String> {
+    a.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .get_selection_text()
+}
+
+#[test]
+fn edit_motion_actions_move_the_cursor_to_documented_places() {
+    let mut a = app_with("alpha beta\ngamma delta\n\nepsilon (zeta)\n");
+    set_cur(&mut a, 13);
+    a.run_action("edit.line_start");
+    assert_eq!(cursor(&a), 11);
+    a.run_action("edit.line_end");
+    assert_eq!(cursor(&a), 22);
+    a.run_action("edit.go_last");
+    assert_eq!(cursor(&a), 39);
+    a.run_action("edit.go_first");
+    assert_eq!(cursor(&a), 0);
+    a.run_action("edit.para_end");
+    let after_para_end = cursor(&a);
+    assert!(after_para_end > 0);
+    a.run_action("edit.para_start");
+    assert!(cursor(&a) < after_para_end);
+    a.run_action("edit.section_end");
+    let after_section_end = cursor(&a);
+    a.run_action("edit.section_start");
+    assert!(cursor(&a) <= after_section_end);
+    // The motion.* wrappers behave like the arrow keys.
+    set_cur(&mut a, 0);
+    a.run_action("motion.char_right");
+    assert_eq!(cursor(&a), 1);
+    a.run_action("motion.char_left");
+    assert_eq!(cursor(&a), 0);
+    a.run_action("motion.line_down");
+    assert_eq!(a.editor.cursor_line(), 1);
+    a.run_action("motion.line_up");
+    assert_eq!(a.editor.cursor_line(), 0);
+    a.run_action("motion.end");
+    assert_eq!(cursor(&a), 10);
+    a.run_action("motion.home");
+    assert_eq!(cursor(&a), 0);
+    a.run_action("motion.page_down");
+    assert!(a.editor.cursor_line() > 0);
+    a.run_action("motion.page_up");
+    assert_eq!(a.editor.cursor_line(), 0);
+    a.run_action("motion.delete_forward");
+    assert!(active_text(&a).starts_with("lpha"));
+    a.run_action("edit.keyboard_quit");
+    assert_eq!(a.status, t!("status.emacs_quit").to_string());
+}
+
+#[test]
+fn edit_selection_actions_select_words_lines_and_blocks() {
+    let mut a = app_with("alpha beta\ngamma delta\n\nepsilon (zeta)\n");
+    set_cur(&mut a, 0);
+    a.run_action("edit.select_more");
+    assert_eq!(sel_text(&mut a).as_deref(), Some("alpha"));
+    a.run_action("edit.select_less");
+    a.run_action("edit.select_line");
+    assert_eq!(sel_text(&mut a).as_deref(), Some("alpha beta\n"));
+    set_cur(&mut a, 2);
+    a.run_action("edit.select_paragraph");
+    assert!(sel_text(&mut a).unwrap().starts_with("alpha beta"));
+    a.run_action("edit.select_section");
+    assert!(sel_text(&mut a).is_some());
+    a.run_action("edit.select_all");
+    assert_eq!(sel_text(&mut a).unwrap(), active_text(&a));
+    // Matching bracket.
+    set_cur(&mut a, 32);
+    a.run_action("edit.match_bracket");
+    assert!(
+        cursor(&a) >= 37,
+        "jumped to the closing paren: {}",
+        cursor(&a)
+    );
+    // Every occurrence of the word under the cursor, and column selection.
+    let mut a = app_with("ab ab\nab\n");
+    set_cur(&mut a, 0);
+    a.run_action("edit.select_more");
+    a.run_action("edit.select_all_occurrences");
+    a.run_action("edit.column_select_down");
+    a.run_action("edit.column_select_up");
+}
+
+#[test]
+fn edit_move_line_swaps_neighbouring_lines() {
+    let mut a = app_with("one\ntwo\nthree\n");
+    set_cur(&mut a, 4);
+    a.run_action("edit.move_line_up");
+    assert_eq!(active_text(&a), "two\none\nthree\n");
+    a.run_action("edit.move_line_down");
+    assert_eq!(active_text(&a), "one\ntwo\nthree\n");
+}
+
+#[test]
+fn goto_actions_seed_the_palette_with_their_prefix() {
+    for (action, seed) in [
+        ("nav.goto_line", ":"),
+        ("nav.goto_symbol", "@"),
+        ("nav.goto_workspace_symbol", "@@"),
+        ("nav.switch_buffer", "#"),
+    ] {
+        let mut a = app_with("x\n");
+        a.run_action(action);
+        assert_eq!(a.palette.as_ref().expect(action).input, seed, "{action}");
+    }
+}
+
+#[test]
+fn undo_and_redo_walk_the_edit_history() {
+    let mut a = app_with("");
+    type_text(&mut a, "abc");
+    a.run_action("edit.undo");
+    assert_eq!(active_text(&a), "");
+    a.run_action("edit.redo");
+    assert_eq!(active_text(&a), "abc");
+    assert!(a.editor.active_tab().unwrap().dirty);
+}
+
+#[test]
+fn cut_and_copy_record_the_selection_in_the_clipboard_history() {
+    let mut a = app_with("hello world");
+    a.run_action("edit.select_all");
+    a.run_action("edit.copy");
+    assert_eq!(
+        a.clipboard_ring.first().map(String::as_str),
+        Some("hello world")
+    );
+    assert_eq!(active_text(&a), "hello world");
+    a.run_action("edit.cut");
+    assert_eq!(active_text(&a), "");
+    assert!(a.editor.active_tab().unwrap().dirty);
+    a.run_action("edit.paste");
+}
+
+#[test]
+fn case_actions_rewrite_the_selection() {
+    for (action, f) in [
+        ("edit.case_upper", crate::case::upper as fn(&str) -> String),
+        ("edit.case_lower", crate::case::lower),
+        ("edit.case_title", crate::case::title),
+        ("edit.case_kebab", crate::case::kebab),
+        ("edit.case_snake", crate::case::snake),
+        ("edit.case_camel", crate::case::camel),
+        ("edit.case_pascal", crate::case::pascal),
+    ] {
+        let mut a = app_with("Hello big_World");
+        a.run_action("edit.select_all");
+        a.run_action(action);
+        assert_eq!(active_text(&a), f("Hello big_World"), "{action}");
+    }
+}
+
+#[test]
+fn line_transform_actions_reorder_and_clean_lines() {
+    let cases: &[(&str, &str, &str)] = &[
+        ("edit.sort_lines", "b\na\nc\n", "a\nb\nc\n"),
+        ("edit.reverse_lines", "a\nb\nc\n", "c\nb\na\n"),
+        ("edit.remove_duplicate_lines", "a\nb\na\n", "a\nb\n"),
+        ("edit.sort_unique", "b\na\nb\n", "a\nb\n"),
+        ("edit.trim_trailing_whitespace", "a  \nb\t\n", "a\nb\n"),
+        ("edit.squeeze_blank_lines", "a\n\n\n\nb\n", "a\n\nb\n"),
+        ("edit.eol_crlf", "a\nb\n", "a\r\nb\r\n"),
+        ("edit.eol_lf", "a\r\nb\r\n", "a\nb\n"),
+        ("tools.convert.rot13", "abc", "nop"),
+        (
+            "edit.align.equals",
+            "a = 1\nbbb = 2\n",
+            "a   = 1\nbbb = 2\n",
+        ),
+    ];
+    for (action, input, expected) in cases {
+        let mut a = app_with(input);
+        a.run_action("edit.select_all");
+        a.run_action(action);
+        assert_eq!(&active_text(&a), expected, "{action}");
+    }
+    let mut a = app_with("x\ny\n");
+    set_cur(&mut a, 0);
+    a.run_action("edit.duplicate_line");
+    assert_eq!(active_text(&a), "x\nx\ny\n");
+    let mut a = app_with("x\ny\n");
+    a.run_action("edit.select_all");
+    a.run_action("edit.join_lines");
+    assert_eq!(active_text(&a).trim_end(), "x y");
+    let mut a = app_with("c\nb\na\n");
+    a.run_action("edit.select_all");
+    a.run_action("edit.shuffle");
+    let mut got: Vec<char> = active_text(&a)
+        .chars()
+        .filter(|c| c.is_alphabetic())
+        .collect();
+    got.sort_unstable();
+    assert_eq!(got, ['a', 'b', 'c'], "shuffling keeps every line");
+}
+
+#[test]
+fn transpose_delete_and_number_actions_edit_around_the_cursor() {
+    let mut a = app_with("ab");
+    set_cur(&mut a, 1);
+    a.run_action("edit.transpose_chars");
+    assert_eq!(active_text(&a), "ba");
+    let mut a = app_with("one two");
+    set_cur(&mut a, 3);
+    a.run_action("edit.transpose_words");
+    assert_eq!(active_text(&a), "two one");
+    let mut a = app_with("a\nb\n");
+    set_cur(&mut a, 2);
+    a.run_action("edit.transpose_lines");
+    assert_eq!(active_text(&a), "b\na\n");
+    let mut a = app_with("abc");
+    set_cur(&mut a, 1);
+    a.run_action("edit.delete.character");
+    assert_eq!(active_text(&a), "ac");
+    let mut a = app_with("one two three");
+    set_cur(&mut a, 4);
+    a.run_action("edit.delete.word");
+    assert!(!active_text(&a).contains("two"));
+    let mut a = app_with("Hello. World.");
+    set_cur(&mut a, 2);
+    a.run_action("edit.delete.sentence");
+    assert!(!active_text(&a).contains("Hello"));
+    let mut a = app_with("para one\n\npara two\n");
+    set_cur(&mut a, 2);
+    a.run_action("edit.delete.paragraph");
+    assert!(!active_text(&a).contains("para one"));
+    let mut a = app_with("x 41 y");
+    set_cur(&mut a, 3);
+    a.run_action("edit.increment_number");
+    assert_eq!(active_text(&a), "x 42 y");
+    a.run_action("edit.decrement_number");
+    a.run_action("edit.decrement_number");
+    assert_eq!(active_text(&a), "x 40 y");
+}
+
+#[test]
+fn read_only_buffers_refuse_mutating_edit_actions_but_allow_selection() {
+    let mut a = app_with("keep");
+    a.run_action("view.read_only");
+    a.run_action("edit.case_upper");
+    assert_eq!(a.status, t!("status.read_only_blocked").to_string());
+    assert_eq!(active_text(&a), "keep");
+    a.status.clear();
+    a.run_action("edit.select_all");
+    assert_eq!(a.status, "");
+    assert_eq!(sel_text(&mut a).as_deref(), Some("keep"));
+}
+
+#[test]
+fn toggle_comment_comments_and_uncomments_the_line() {
+    let mut a = app();
+    a.editor
+        .new_tab_with_content_as("let x = 1;\n", Some("x.rs"));
+    a.run_action("edit.toggle_comment");
+    assert!(active_text(&a).starts_with("//"));
+    a.run_action("edit.toggle_comment");
+    assert_eq!(active_text(&a), "let x = 1;\n");
+}
+
+// ----- menu bar keyboard ---------------------------------------------------------------------
+
+#[test]
+fn menu_keys_navigate_switch_and_close() {
+    let mut a = app();
+    assert!(!a.menu.is_open());
+    // Alt+<letter> opens a menu; naming it again closes it; another letter switches.
+    a.on_key(alt('e'));
+    assert!(a.menu.is_open());
+    let edit = a.menu.open;
+    a.on_key(alt('e'));
+    assert!(!a.menu.is_open());
+    a.on_key(alt('e'));
+    a.on_key(alt('t'));
+    assert!(a.menu.is_open());
+    assert_ne!(a.menu.open, edit);
+    // Arrow keys move within and across menus.
+    let top = a.menu.open;
+    a.on_key(key(KeyCode::Right));
+    assert_ne!(a.menu.open, top);
+    a.on_key(key(KeyCode::Left));
+    assert_eq!(a.menu.open, top);
+    let first = a.menu.item;
+    a.on_key(key(KeyCode::Down));
+    assert_ne!(a.menu.item, first);
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.menu.item, first);
+    // A plain letter type-aheads without closing.
+    a.on_key(key(KeyCode::Char('c')));
+    assert!(a.menu.is_open());
+    // Esc and F10 close; a stray key is ignored.
+    a.on_key(key(KeyCode::Char('?')));
+    a.on_key(key(KeyCode::Esc));
+    assert!(!a.menu.is_open());
+    a.on_key(alt('h'));
+    assert!(a.menu.is_open());
+    a.on_key(key(KeyCode::F(10)));
+    assert!(!a.menu.is_open());
+}
+
+#[test]
+fn menu_enter_runs_the_highlighted_item_and_closes_the_menu() {
+    let mut a = app();
+    a.on_key(alt('h')); // Help
+    let items = a.menu.defs()[a.menu.open.unwrap()].items;
+    let want = items
+        .iter()
+        .position(|i| i.action == "help.license")
+        .expect("Help lists License");
+    for _ in 0..items.len() {
+        if a.menu.item == Some(want) {
+            break;
+        }
+        a.on_key(key(KeyCode::Down));
+    }
+    assert_eq!(a.menu.item, Some(want));
+    a.on_key(key(KeyCode::Enter));
+    assert!(!a.menu.is_open());
+    assert!(a.welcome.is_some(), "the License overlay opened");
+}
+
+// ----- explorer delete -------------------------------------------------------------------------
+
+#[test]
+fn explorer_delete_asks_then_removes_the_file_and_closes_its_buffer() {
+    let dir = tmp("delete");
+    std::fs::write(dir.join("gone.txt"), "x").unwrap();
+    std::fs::write(dir.join("stay.txt"), "y").unwrap();
+    let mut a = app_in(&dir);
+    a.settings.explorer_delete = "hard".to_string();
+    a.explorer.rebuild();
+    a.focus = Focus::Explorer;
+    a.on_key(key(KeyCode::Delete));
+    let c = a.confirm.as_ref().expect("asks first");
+    assert_eq!(c.message, t!("confirm.delete_hard", n = 1).to_string());
+    let target = c.paths[0].clone();
+    a.on_key(key(KeyCode::Char('x'))); // unrelated key keeps asking
+    assert!(a.confirm.is_some());
+    a.on_key(key(KeyCode::Char('n')));
+    assert!(a.confirm.is_none());
+    assert_eq!(a.status, t!("status.delete_cancelled").to_string());
+    assert!(target.exists());
+    // Open it, delete it for real, and its tab goes away.
+    a.open_path(&target, false);
+    a.on_key(key(KeyCode::Delete));
+    a.on_key(key(KeyCode::Char('y')));
+    assert!(!target.exists());
+    assert_eq!(a.status, t!("status.deleted_n", n = 1).to_string());
+    assert!(
+        a.editor
+            .tabs
+            .iter()
+            .all(|t| t.path.as_deref() != Some(target.as_path()))
+    );
+    assert!(dir.join("stay.txt").exists() || dir.join("gone.txt").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- mouse dispatch --------------------------------------------------------------------------
+
+fn mouse(kind: MouseEventKind, col: u16, row: u16) -> MouseEvent {
+    MouseEvent {
+        kind,
+        column: col,
+        row,
+        modifiers: KeyModifiers::NONE,
+    }
+}
+
+#[test]
+fn clicking_the_menu_bar_opens_and_closes_a_menu() {
+    let mut a = app();
+    a.layout.menu = Rect::new(0, 0, 80, 1);
+    a.on_mouse(left_click(2, 0));
+    assert!(a.menu.is_open());
+    a.on_mouse(left_click(2, 0));
+    assert!(
+        !a.menu.is_open(),
+        "clicking the open menu's title closes it"
+    );
+    // Hover / wheel follow the highlight while a menu is open.
+    a.on_mouse(left_click(2, 0));
+    let item = a.menu.item;
+    a.on_mouse(mouse(MouseEventKind::ScrollDown, 5, 5));
+    assert_ne!(a.menu.item, item);
+    a.on_mouse(mouse(MouseEventKind::ScrollUp, 5, 5));
+    assert_eq!(a.menu.item, item);
+    a.on_mouse(mouse(MouseEventKind::Moved, 5, 5));
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 5, 5));
+    assert!(a.menu.is_open());
+    // A click far away from every dropdown closes it.
+    a.layout.menu_dropdown = Rect::new(0, 1, 20, 10);
+    a.on_mouse(left_click(70, 20));
+    assert!(!a.menu.is_open());
+}
+
+#[test]
+fn tab_strip_click_activates_the_clicked_tab() {
+    let mut a = app_with("one");
+    a.editor.new_tab_with_content("two");
+    a.layout.tabs = Rect::new(0, 1, 80, 1);
+    let last = a.editor.tabs.len() - 1;
+    assert_eq!(a.editor.active, last);
+    let origin = crate::ui::tabs_origin(&a, a.layout.tabs);
+    a.on_mouse(left_click(origin, 1));
+    assert_eq!(a.editor.active, 0);
+    assert_eq!(a.focus, Focus::Editor);
+    // Past the last tab does nothing.
+    a.on_mouse(left_click(79, 1));
+    assert_eq!(a.editor.active, 0);
+    let second = origin + u16::try_from(a.editor.tabs[0].title().chars().count()).unwrap() + 3;
+    a.on_mouse(left_click(second, 1));
+    assert_eq!(a.editor.active, 1);
+    // Non-click events on the tab strip are ignored.
+    a.on_mouse(mouse(MouseEventKind::ScrollDown, origin, 1));
+    assert_eq!(a.editor.active, 1);
+}
+
+#[test]
+fn clicking_the_editor_moves_the_cursor_and_the_side_panes_route_their_own_clicks() {
+    let dir = tmp("mouse-routes");
+    std::fs::write(dir.join("a.txt"), "A").unwrap();
+    let mut a = app_in(&dir);
+    a.editor.new_tab_with_content("abc\ndef\nghi\n");
+    a.layout.editor = Rect::new(20, 3, 50, 15);
+    a.layout.explorer = Rect::new(0, 3, 20, 15);
+    a.layout.messages = Rect::new(70, 3, 10, 15);
+    a.visible.set(Visible::EXPLORER, true);
+    a.visible.set(Visible::MESSAGES, true);
+    a.on_mouse(left_click(30, 4));
+    assert_eq!(a.editor.cursor_line(), 1, "clicked the second text row");
+    // Explorer and messages clicks focus their panes.
+    a.explorer.rebuild();
+    a.on_mouse(left_click(3, 5));
+    assert_eq!(a.focus, Focus::Explorer);
+    a.messages.info("hi".to_string());
+    a.on_mouse(left_click(72, 4));
+    assert_eq!(a.focus, Focus::Messages);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_panel_and_outline_dock_clicks_jump_to_their_targets() {
+    let dir = tmp("mouse-panels");
+    std::fs::write(dir.join("t.rs"), "fn a() {}\n\nfn b() {}\n").unwrap();
+    let mut a = app_in(&dir);
+    a.open_path(&dir.join("t.rs"), false);
+    a.visible.set(Visible::TEST_PANEL, true);
+    a.layout.editor = Rect::new(0, 3, 50, 10);
+    a.layout.test_panel = Rect::new(0, 20, 40, 4);
+    a.test_results = crate::test_runner::parse(
+        "test t::a ... FAILED\n\nfailures:\n\n---- t::a stdout ----\nthread 't::a' panicked at t.rs:3:1:\nboom\n",
+    );
+    assert_eq!(a.test_results.len(), 1);
+    a.on_mouse(left_click(2, 20));
+    assert_eq!(a.test_selected, 0);
+    assert_eq!(a.editor.cursor_line(), 2);
+    // A click past the last result does nothing.
+    set_cur(&mut a, 0);
+    a.on_mouse(left_click(2, 22));
+    assert_eq!(a.editor.cursor_line(), 0);
+    // The outline dock.
+    a.settings.secondary_panels.show_outline_dock = true;
+    a.refresh_outline_dock();
+    a.layout.outline_dock = Rect::new(60, 3, 20, 10);
+    a.on_mouse(left_click(62, 4));
+    assert_eq!(a.editor.cursor_line(), 2, "jumped to the second symbol");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn bottom_dock_clicks_route_through_dispatch() {
+    let mut a = app();
+    a.visible.set(Visible::BOTTOM_DOCK, true);
+    a.layout.editor = Rect::new(0, 3, 80, 10);
+    a.layout.bottom_dock = Rect::new(0, 18, 80, 6);
+    a.bottom_dock.push("plain output");
+    a.on_mouse(left_click(3, 19));
+    assert_eq!(a.focus, Focus::BottomDock);
+}
+
+#[test]
+fn folding_actions_report_when_there_is_nothing_to_fold() {
+    let mut a = app_with("plain\n");
+    a.fold_at_cursor(true);
+    assert_eq!(a.status, t!("status.no_fold").to_string());
+    a.status.clear();
+    a.fold_at_cursor(false);
+    assert_eq!(a.status, t!("status.no_fold").to_string());
+    let mut a = app();
+    a.editor.new_tab_with_content_as(
+        "fn f() {\n    let x = 1;\n    let y = 2;\n}\n",
+        Some("x.rs"),
+    );
+    a.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_fold_ranges(vec![(0, 3)]);
+    set_cur(&mut a, 12);
+    a.status.clear();
+    a.fold_at_cursor(true);
+    assert_eq!(a.status, "", "a real fold leaves the status alone");
+    assert!(a.editor.active_tab().unwrap().editor.is_line_hidden(1));
+    a.fold_at_cursor(false);
+    assert_eq!(a.status, "");
+    assert!(!a.editor.active_tab().unwrap().editor.is_line_hidden(1));
+}
