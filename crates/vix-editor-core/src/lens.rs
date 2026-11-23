@@ -13,6 +13,18 @@
 //! ([`Editor::filler_before`] is `0` there) and does not consult folds.
 //! See `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 
@@ -30,6 +42,20 @@ pub(crate) enum ViewRow {
     Filler(usize),
     /// Logical line `.0`'s own text.
     Text(usize),
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
 }
 
 impl Editor {
@@ -73,7 +99,7 @@ impl Editor {
     #[must_use]
     pub fn code_lens_at(&self, line: usize) -> Option<&str> {
         let i = self.code_lenses.binary_search_by_key(&line, |l| l.0).ok()?;
-        Some(self.code_lenses[i].1.as_str())
+        self.code_lenses.get(i).map(|lens| lens.1.as_str())
     }
 
     /// Whether a lens row is drawn above `line` (it has a lens and the line
@@ -93,7 +119,7 @@ impl Editor {
         let total = self.code.len_lines();
         // At most one text row plus one lens row per line, so `2 * total`
         // bounds the allocation when the view is taller than the buffer.
-        let mut rows = Vec::with_capacity(max_rows.min(total.saturating_mul(2)));
+        let mut rows = Vec::new();
         let mut line = self.offset_y;
         while line < total && rows.len() < max_rows {
             if !self.is_line_hidden(line) {
@@ -114,7 +140,7 @@ impl Editor {
                 }
                 rows.push(ViewRow::Text(line));
             }
-            line += 1;
+            line = add_or(line, 1, usize::MAX);
         }
         if line >= total {
             // Filler rows after the last line (the other side ends with more).
@@ -151,7 +177,7 @@ impl Editor {
         }
         // Fast path: with no virtual rows or folds, rows map 1:1 to lines.
         if !self.has_folds() && self.code_lenses.is_empty() && self.fillers.is_empty() {
-            return Some(line - self.offset_y);
+            return Some(sub_or(line, self.offset_y, 0));
         }
         if self.is_line_hidden(line) {
             return None;
@@ -159,16 +185,30 @@ impl Editor {
         let rows = if self.has_folds() || !self.fillers.is_empty() {
             (self.offset_y..line)
                 .filter(|&l| !self.is_line_hidden(l))
-                .map(|l| 1 + usize::from(self.lens_row_above(l)) + self.filler_before(l))
-                .sum()
+                .map(|l| {
+                    add_or(
+                        add_or(1, usize::from(self.lens_row_above(l)), usize::MAX),
+                        self.filler_before(l),
+                        usize::MAX,
+                    )
+                })
+                .fold(0, |total, n| add_or(total, n, usize::MAX))
         } else {
             // Only lenses (sorted by line): count those in
             // `[offset_y, line)` by binary search instead of walking lines.
             let lo = self.code_lenses.partition_point(|l| l.0 < self.offset_y);
             let hi = self.code_lenses.partition_point(|l| l.0 < line);
-            (line - self.offset_y) + (hi - lo)
+            add_or(
+                sub_or(line, self.offset_y, 0),
+                sub_or(hi, lo, 0),
+                usize::MAX,
+            )
         };
-        Some(rows + usize::from(self.lens_row_above(line)) + self.filler_before(line))
+        Some(add_or(
+            add_or(rows, usize::from(self.lens_row_above(line)), usize::MAX),
+            self.filler_before(line),
+            usize::MAX,
+        ))
     }
 
     /// The row (0-based, within a view of `area`'s size) where `line`'s text
@@ -178,9 +218,9 @@ impl Editor {
     /// labels) to a line.
     #[must_use]
     pub fn text_screen_row(&self, line: usize, area: Rect) -> Option<usize> {
-        let height = area.height as usize;
+        let height = usize::from(area.height);
         if self.flags.contains(Flags::SOFT_WRAP) {
-            let text_width = (area.width as usize).saturating_sub(self.get_line_number_width());
+            let text_width = sub_or(usize::from(area.width), self.get_line_number_width(), 0);
             return self
                 .visual_rows(text_width, height)
                 .iter()
@@ -210,17 +250,20 @@ impl Editor {
         let len = self.code.line_len(line);
         let indent: usize = self
             .code
-            .char_slice(start, start + len)
+            .char_slice(start, add_or(start, len, usize::MAX))
             .chars()
             .take_while(|c| *c == ' ' || *c == '\t')
             .count();
         // Follow horizontal scroll so the label stays above its line's text.
-        let indent = indent.saturating_sub(self.offset_x);
-        let x = text_x.saturating_add(u16::try_from(indent).unwrap_or(u16::MAX));
-        if x >= right {
+        let indent = sub_or(indent, self.offset_x, 0);
+        // A column past the top of `u16` is past the right edge: nothing to draw.
+        let Some(x) = text_x.checked_add(u16::try_from(indent).unwrap_or(u16::MAX)) else {
             return;
-        }
-        let width = usize::from(right - x);
+        };
+        let Some(room) = right.checked_sub(x).filter(|room| *room > 0) else {
+            return;
+        };
+        let width = usize::from(room);
         buf.set_stringn(x, y, label, width, self.whitespace_style);
     }
 }

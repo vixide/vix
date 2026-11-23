@@ -14,6 +14,18 @@
 //! leaves, so the root-to-current path is always intact. See
 //! `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::collections::HashSet;
 
 use crate::code::EditBatch;
@@ -128,7 +140,7 @@ impl History {
             active_child: None,
             at: now_secs(),
         }));
-        if let Some(cur) = self.nodes[self.current].as_mut() {
+        if let Some(cur) = self.node_mut(self.current) {
             cur.children.push(new);
             cur.active_child = Some(new);
         }
@@ -136,15 +148,25 @@ impl History {
         self.prune();
     }
 
+    /// The live state at `i`, if there is one.
+    fn node(&self, i: usize) -> Option<&Node> {
+        self.nodes.get(i).and_then(Option::as_ref)
+    }
+
+    /// The live state at `i`, to change, if there is one.
+    fn node_mut(&mut self, i: usize) -> Option<&mut Node> {
+        self.nodes.get_mut(i).and_then(Option::as_mut)
+    }
+
     /// Step back to the parent state, returning the batch to invert (or `None` at
     /// the root). The branch just left becomes the parent's active redo branch.
     pub fn undo(&mut self) -> Option<EditBatch> {
         // `?` on the root (no parent/batch) makes undo-at-root a clean `None`.
-        let node = self.nodes[self.current].as_ref()?;
+        let node = self.node(self.current)?;
         let parent = node.parent?;
         let batch = node.batch.clone()?;
         let left = self.current;
-        if let Some(p) = self.nodes[parent].as_mut() {
+        if let Some(p) = self.node_mut(parent) {
             p.active_child = Some(left);
         }
         self.current = parent;
@@ -154,8 +176,8 @@ impl History {
     /// Step forward into the active child branch, returning the batch to apply (or
     /// `None` if the current state is a tip).
     pub fn redo(&mut self) -> Option<EditBatch> {
-        let active = self.nodes[self.current].as_ref()?.active_child?;
-        let batch = self.nodes[active].as_ref()?.batch.clone()?;
+        let active = self.node(self.current)?.active_child?;
+        let batch = self.node(active)?.batch.clone()?;
         self.current = active;
         Some(batch)
     }
@@ -163,16 +185,23 @@ impl History {
     /// Cycle which child branch `redo` will follow from the current state. Returns
     /// `true` when the current state has more than one branch to choose between.
     pub fn switch_branch(&mut self) -> bool {
-        let Some(node) = self.nodes[self.current].as_mut() else {
+        let Some(node) = self.node_mut(self.current) else {
             return false;
         };
         if node.children.len() < 2 {
             return false;
         }
         // With no explicit active child, start the cycle from the first one.
-        let active = node.active_child.unwrap_or(node.children[0]);
+        let Some(&first) = node.children.first() else {
+            return false;
+        };
+        let active = node.active_child.unwrap_or(first);
         let pos = node.children.iter().position(|&c| c == active).unwrap_or(0);
-        let next = node.children[(pos + 1) % node.children.len()];
+        // After the last branch comes the first.
+        let next_pos = pos.checked_add(1).filter(|p| *p < node.children.len());
+        let Some(&next) = node.children.get(next_pos.unwrap_or(0)) else {
+            return false;
+        };
         node.active_child = Some(next);
         true
     }
@@ -220,7 +249,7 @@ impl History {
     /// `false` (and changes nothing) when `child` is not a child of the
     /// current state.
     pub fn select_redo_branch(&mut self, child: usize) -> bool {
-        let Some(node) = self.nodes[self.current].as_mut() else {
+        let Some(node) = self.node_mut(self.current) else {
             return false;
         };
         if !node.children.contains(&child) {
@@ -237,7 +266,7 @@ impl History {
         let mut cur = Some(self.current);
         while let Some(i) = cur {
             set.insert(i);
-            cur = self.nodes[i].as_ref().and_then(|n| n.parent);
+            cur = self.node(i).and_then(|n| n.parent);
         }
         set
     }
@@ -264,8 +293,8 @@ impl History {
             // Everything left is on the current path or has children: the cap
             // is soft, so give up rather than break the tree.
             let Some(v) = victim else { return };
-            if let Some(parent) = self.nodes[v].as_ref().and_then(|n| n.parent)
-                && let Some(p) = self.nodes[parent].as_mut()
+            if let Some(parent) = self.node(v).and_then(|n| n.parent)
+                && let Some(p) = self.node_mut(parent)
             {
                 p.children.retain(|&c| c != v);
                 // Keep `active_child` pointing at a live node.
@@ -273,7 +302,9 @@ impl History {
                     p.active_child = p.children.last().copied();
                 }
             }
-            self.nodes[v] = None;
+            if let Some(slot) = self.nodes.get_mut(v) {
+                *slot = None;
+            }
         }
     }
 }
