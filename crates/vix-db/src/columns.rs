@@ -689,4 +689,77 @@ mod tests {
         let lite = columns_sql(Kind::Sqlite, "main", "o't");
         assert!(lite.contains("pragma_table_xinfo('o''t')"), "{lite}");
     }
+
+    #[test]
+    fn every_engine_has_column_and_check_queries() {
+        let my = columns_sql(Kind::Mysql, "shop", "it's");
+        assert!(my.contains("information_schema.columns") && my.contains("'it''s'"), "{my}");
+        assert!(my.contains("VIRTUAL GENERATED"));
+        let pg = checks_sql(Kind::Postgres, "public", "t");
+        assert!(pg.contains("pg_get_constraintdef") && pg.contains("contype = 'c'"), "{pg}");
+        let sqlite = checks_sql(Kind::Sqlite, "main", "t");
+        assert!(sqlite.contains("sqlite_master"));
+        let mysql = checks_sql(Kind::Mysql, "shop", "t");
+        assert!(mysql.contains("check_constraints"));
+        let sqlite_cols = columns_sql(Kind::Sqlite, "main", "t");
+        assert!(sqlite_cols.contains("pragma_table_xinfo"));
+        let pg_cols = columns_sql(Kind::Postgres, "public", "t");
+        assert!(pg_cols.contains("attgenerated"));
+    }
+
+    #[test]
+    fn check_bodies_skips_a_check_that_is_not_followed_by_a_group() {
+        assert_eq!(check_bodies("a CHECK b"), [] as [String; 0]);
+        assert_eq!(check_bodies("a CHECK (b > 0"), [] as [String; 0], "unbalanced");
+        assert_eq!(
+            check_bodies("check (a > 0) CHECK (b < 1)"),
+            ["a > 0", "b < 1"],
+            "case-insensitive, several in a row"
+        );
+        assert_eq!(check_bodies("CHECK ('a)' = x)"), ["'a)' = x"]);
+    }
+
+    #[test]
+    fn bracketed_and_quoted_identifiers_and_numbers_tokenize() {
+        assert_eq!(
+            parse_in_check("[size] IN ('S', 'M')"),
+            Some(("size".to_string(), row(&["S", "M"])))
+        );
+        assert_eq!(
+            parse_in_check("`size` IN (1.5, -2)"),
+            Some(("size".to_string(), row(&["1.5", "-2"])))
+        );
+        assert_eq!(
+            parse_in_check("\"a\"\"b\" IN ('x')"),
+            Some(("a\"b".to_string(), row(&["x"])))
+        );
+        assert_eq!(parse_in_check("[size IN ('S')"), None, "an unclosed bracket");
+        assert_eq!(parse_in_check("a IN ('S') #"), None, "a stray character");
+        assert_eq!(parse_in_check("a = ANY (ARRAY['x', 'y'])").map(|c| c.1), Some(row(&["x", "y"])));
+        assert_eq!(parse_in_check("a = 1"), None);
+        assert_eq!(parse_in_check("a = ANY (VALUES)"), None);
+        assert_eq!(parse_in_check("(a)::text[] = ANY (ARRAY['x'])").map(|c| c.0), Some("a".to_string()));
+        assert_eq!(parse_in_check("5 IN ('x')"), None);
+        assert_eq!(parse_in_check(""), None);
+        assert_eq!(parse_in_check("a"), None);
+        assert_eq!(parse_in_check("a IN ('x' 'y')"), None);
+    }
+
+    #[test]
+    fn rows_without_cells_are_skipped_and_other_types_get_no_choices() {
+        let info = from_rows(
+            Kind::Sqlite,
+            &[Vec::new(), row(&["n", "integer"])],
+            &[Vec::new()],
+        );
+        assert_eq!(info.len(), 1);
+        assert_eq!(info[0].choices, [] as [String; 0]);
+        assert!(!info[0].generated);
+        let mysql_bool = from_rows(Kind::Mysql, &[row(&["b", "BOOL", "0", ""])], &[]);
+        assert_eq!(mysql_bool[0].choices, row(&["1", "0"]));
+        let pg_not_bool = from_rows(Kind::Postgres, &[row(&["b", "integer", "0", ""])], &[]);
+        assert_eq!(pg_not_bool[0].choices, [] as [String; 0]);
+        assert_eq!(mysql_enum_values("enum()"), None);
+        assert_eq!(mysql_enum_values("enum('a"), None);
+    }
 }
