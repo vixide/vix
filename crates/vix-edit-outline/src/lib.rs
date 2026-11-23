@@ -23,7 +23,33 @@
 //! - **Space**: toggle collapse. **Ctrl+S**: save. **u** / **Ctrl+R**:
 //!   undo / redo. **Esc** / **q**: close.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// What the host should do after the outline handled a key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,10 +117,10 @@ impl Tree {
             .map(|line| {
                 let (level, rest) = if tab_indent {
                     let n = line.chars().take_while(|&c| c == '\t').count();
-                    (n, &line[n..])
+                    (n, line.get(n..).unwrap_or(""))
                 } else {
                     let n = line.chars().take_while(|&c| c == ' ').count();
-                    (n / 2, &line[n..])
+                    (n.div_euclid(2), line.get(n..).unwrap_or(""))
                 };
                 Item {
                     text: rest.to_string(),
@@ -167,7 +193,10 @@ impl Tree {
     #[must_use]
     pub fn has_children(&self, i: usize) -> bool {
         match self.items.get(i) {
-            Some(it) => self.items.get(i + 1).is_some_and(|n| n.level > it.level),
+            Some(it) => self
+                .items
+                .get(add_or(i, 1, usize::MAX))
+                .is_some_and(|n| n.level > it.level),
             None => false,
         }
     }
@@ -262,11 +291,13 @@ impl Tree {
         }
         let pos = vis.iter().position(|&i| i == self.sel).unwrap_or(0);
         let np = if up {
-            pos.saturating_sub(n)
+            sub_or(pos, n, 0)
         } else {
-            (pos + n).min(vis.len() - 1)
+            add_or(pos, n, usize::MAX).min(sub_or(vis.len(), 1, 0))
         };
-        self.sel = vis[np];
+        if let Some(&i) = vis.get(np) {
+            self.sel = i;
+        }
     }
 
     /// Move the selection to the first or last visible item.
@@ -281,8 +312,12 @@ impl Tree {
     /// Close (collapse) the current item, or jump to its parent if it has no
     /// collapsible children.
     fn close(&mut self) {
-        if self.has_children(self.sel) && !self.items[self.sel].collapsed {
-            self.items[self.sel].collapsed = true;
+        let expanded_parent =
+            self.has_children(self.sel) && self.items.get(self.sel).is_some_and(|it| !it.collapsed);
+        if expanded_parent {
+            if let Some(it) = self.items.get_mut(self.sel) {
+                it.collapsed = true;
+            }
         } else if let Some(p) = self.parent(self.sel) {
             self.sel = p;
         }
@@ -294,17 +329,19 @@ impl Tree {
         if !self.has_children(self.sel) {
             return;
         }
-        if self.items[self.sel].collapsed {
-            self.items[self.sel].collapsed = false;
-        } else {
-            self.sel += 1;
+        match self.items.get_mut(self.sel) {
+            Some(it) if it.collapsed => it.collapsed = false,
+            // Already expanded: step to the first child (the next item).
+            _ => self.sel = add_or(self.sel, 1, self.sel),
         }
     }
 
     /// Toggle the current item's collapse state.
     fn toggle(&mut self) {
-        if self.has_children(self.sel) {
-            self.items[self.sel].collapsed = !self.items[self.sel].collapsed;
+        if self.has_children(self.sel)
+            && let Some(it) = self.items.get_mut(self.sel)
+        {
+            it.collapsed = !it.collapsed;
         }
     }
 
@@ -318,22 +355,24 @@ impl Tree {
         };
         self.push_undo();
         let (i, j) = self.block(self.sel);
-        for it in &mut self.items[i..j] {
-            it.level += 1;
+        for it in self.items.get_mut(i..j).unwrap_or(&mut []) {
+            it.level = add_or(it.level, 1, usize::MAX);
         }
-        self.items[p].collapsed = false;
+        if let Some(parent) = self.items.get_mut(p) {
+            parent.collapsed = false;
+        }
         self.dirty = true;
     }
 
     /// Outdent the item (and its subtree) one level, if not already at the root.
     fn outdent(&mut self) {
-        if self.items[self.sel].level == 0 {
+        if self.items.get(self.sel).is_none_or(|it| it.level == 0) {
             return;
         }
         self.push_undo();
         let (i, j) = self.block(self.sel);
-        for it in &mut self.items[i..j] {
-            it.level -= 1;
+        for it in self.items.get_mut(i..j).unwrap_or(&mut []) {
+            it.level = sub_or(it.level, 1, 0);
         }
         self.dirty = true;
     }
@@ -354,14 +393,16 @@ impl Tree {
     /// Move the current item (with its subtree) below its next sibling.
     fn move_item_down(&mut self) {
         let (i, j) = self.block(self.sel);
-        let l = self.items[i].level;
-        if j >= self.items.len() || self.items[j].level != l {
+        let Some(l) = self.items.get(i).map(|it| it.level) else {
+            return;
+        };
+        if self.items.get(j).is_none_or(|next| next.level != l) {
             return; // no next sibling at the same level
         }
         let (_, j2) = self.block(j);
         self.push_undo();
         let block: Vec<Item> = self.items.drain(i..j).collect();
-        let insert_at = i + (j2 - j);
+        let insert_at = add_or(i, sub_or(j2, j, 0), usize::MAX);
         self.items.splice(insert_at..insert_at, block);
         self.sel = insert_at;
         self.dirty = true;
@@ -372,10 +413,12 @@ impl Tree {
     /// The half-open index range `[i, end)` of the item at `i` plus its subtree
     /// (all following deeper items).
     fn block(&self, i: usize) -> (usize, usize) {
-        let l = self.items[i].level;
-        let mut k = i + 1;
-        while k < self.items.len() && self.items[k].level > l {
-            k += 1;
+        let Some(l) = self.items.get(i).map(|it| it.level) else {
+            return (i, i);
+        };
+        let mut k = add_or(i, 1, usize::MAX);
+        while self.items.get(k).is_some_and(|it| it.level > l) {
+            k = add_or(k, 1, usize::MAX);
         }
         (i, k)
     }
@@ -383,14 +426,15 @@ impl Tree {
     /// The nearest preceding item at the same level without crossing a shallower
     /// item (i.e. the previous sibling), if any.
     fn prev_sibling(&self, i: usize) -> Option<usize> {
-        let l = self.items[i].level;
+        let l = self.items.get(i)?.level;
         let mut k = i;
-        while k > 0 {
-            k -= 1;
-            if self.items[k].level < l {
+        while let Some(before) = k.checked_sub(1) {
+            k = before;
+            let level = self.items.get(k)?.level;
+            if level < l {
                 return None;
             }
-            if self.items[k].level == l {
+            if level == l {
                 return Some(k);
             }
         }
@@ -399,14 +443,14 @@ impl Tree {
 
     /// The nearest preceding item at a shallower level (the parent), if any.
     fn parent(&self, i: usize) -> Option<usize> {
-        let l = self.items[i].level;
+        let l = self.items.get(i)?.level;
         if l == 0 {
             return None;
         }
         let mut k = i;
-        while k > 0 {
-            k -= 1;
-            if self.items[k].level < l {
+        while let Some(before) = k.checked_sub(1) {
+            k = before;
+            if self.items.get(k)?.level < l {
                 return Some(k);
             }
         }
@@ -437,7 +481,7 @@ impl Tree {
             sel: self.sel,
         };
         self.items = snap.items;
-        self.sel = snap.sel.min(self.items.len().saturating_sub(1));
+        self.sel = snap.sel.min(sub_or(self.items.len(), 1, 0));
         self.dirty = true;
         prior
     }
