@@ -182,10 +182,8 @@ pub(super) fn draw_outline_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let view_h = usize::from(inner.height);
     o.ensure_visible(view_h);
-    let total = o.len();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for idx in o.scroll..o.scroll.plus(view_h).min(total) {
-        let e = &o.entries[idx];
+    for (idx, e) in o.entries.iter().enumerate().skip(o.scroll).take(view_h) {
         let kind = if e.kind.is_empty() {
             String::new()
         } else {
@@ -269,18 +267,10 @@ pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
     let total = app.messages.items.len();
     let allow_bars = app.settings.viewport.show_scrollbar && inner.width > 1 && inner.height > 1;
     let vbar = allow_bars && total > usize::from(inner.height);
-    let text_w = if vbar {
-        inner.width.minus(1)
-    } else {
-        inner.width
-    } as usize;
+    let text_w = usize::from(inner.width.minus(u16::from(vbar)));
     let content_w = rows.iter().map(|s| span_line_width(s)).max().unwrap_or(0);
     let hbar = allow_bars && content_w > text_w;
-    let body_h = if hbar {
-        inner.height.minus(1)
-    } else {
-        inner.height
-    };
+    let body_h = inner.height.minus(u16::from(hbar));
     let hmax = content_w.minus(text_w);
     app.messages_hmax = hmax;
     app.messages_hscroll = app.messages_hscroll.min(hmax);

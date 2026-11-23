@@ -103,7 +103,13 @@ pub(super) fn draw_ai_diff(app: &mut App, frame: &mut Frame, area: Rect) {
     // Scroll so the selected hunk stays visible: anchor the view near it.
     let view_h = usize::from(body.height);
     let anchor = selected_seg.map_or(0, |sid| {
-        review.segs[..sid].iter().map(seg_line_count).sum::<usize>()
+        review
+            .segs
+            .get(..sid)
+            .unwrap_or(&[])
+            .iter()
+            .map(seg_line_count)
+            .sum::<usize>()
     });
     let start = anchor.minus(view_h.quot(3)).min(lines.len().minus(view_h));
     let window: Vec<Line> = lines.into_iter().skip(start).take(view_h).collect();

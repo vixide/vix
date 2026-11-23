@@ -172,12 +172,13 @@ pub(crate) fn clean_title(title: &str) -> String {
     let mut out = String::with_capacity(title.len());
     let mut rest = title;
     while let Some(i) = rest.find("$(") {
-        out.push_str(&rest[..i]);
-        let Some(j) = rest[i..].find(')') else {
-            rest = &rest[i..];
+        out.push_str(rest.get(..i).unwrap_or(""));
+        let tail = rest.get(i..).unwrap_or("");
+        let Some(j) = tail.find(')') else {
+            rest = tail;
             break;
         };
-        rest = &rest[i.plus(j).plus(1)..];
+        rest = rest.get(i.plus(j).plus(1)..).unwrap_or("");
     }
     out.push_str(rest);
     out.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -349,7 +350,7 @@ impl App {
                 st.lsp = lenses.into_iter().map(lsp_lens).collect();
                 st.unresolved = unresolved
                     .into_iter()
-                    .map(|(line, raw)| (line as usize, raw, false))
+                    .map(|(line, raw)| (usize::try_from(line).unwrap_or(usize::MAX), raw, false))
                     .collect();
                 self.apply_code_lenses(&path);
             }
@@ -476,8 +477,10 @@ impl App {
             lenses.retain(|l| l.line == cursor);
             match lenses.len() {
                 0 => self.status = t!("status.code_lens_none_here").to_string(),
-                1 => self.run_lens(&lenses[0]),
-                _ => self.open_lens_choice(lenses, cursor),
+                _ => match lenses.first() {
+                    Some(only) if lenses.len() == 1 => self.run_lens(only),
+                    _ => self.open_lens_choice(lenses, cursor),
+                },
             }
             return;
         }
@@ -581,7 +584,7 @@ impl App {
 /// A language server lens as shown.
 fn lsp_lens((line, title, command, arguments): crate::lsp_core::message::CodeLens) -> Lens {
     Lens {
-        line: line as usize,
+        line: usize::try_from(line).unwrap_or(usize::MAX),
         title: clean_title(&title),
         action: LensAction::Lsp { command, arguments },
     }

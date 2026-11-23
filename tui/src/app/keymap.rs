@@ -533,7 +533,7 @@ impl App {
                     })
                     .map(|b| {
                         (
-                            display_key(&b.key_token[seq.len()..]),
+                            display_key(b.key_token.get(seq.len()..).unwrap_or("")),
                             b.action_id.to_string(),
                         )
                     })

@@ -350,7 +350,7 @@ impl App {
     /// stale if it came from persisted `command_recents` and the script was
     /// since removed or renamed.
     pub(super) fn run_script_command(&mut self, action: &str) {
-        let rest = &action["script:".len()..];
+        let rest = action.get("script:".len()..).unwrap_or("");
         let found = rest.split_once(':').and_then(|(stem, id)| {
             self.scripts
                 .iter()
@@ -367,12 +367,13 @@ impl App {
             );
             return;
         };
-        let Some(handler) = self.scripts[idx]
-            .commands
-            .iter()
-            .find(|c| c.id == id)
-            .map(|c| c.handler.clone())
-        else {
+        let Some(handler) = self.scripts.get(idx).and_then(|script| {
+            script
+                .commands
+                .iter()
+                .find(|c| c.id == id)
+                .map(|c| c.handler.clone())
+        }) else {
             self.messages.error(
                 t!(
                     "msg.script_command_unavailable",
@@ -414,16 +415,20 @@ impl App {
             return;
         }
         let state = self.build_script_host_state();
-        let outcome = self
-            .script_runtime
-            .invoke(&self.scripts[script_idx], handler, args, state);
+        let Some(script) = self.scripts.get(script_idx) else {
+            return;
+        };
+        let outcome = self.script_runtime.invoke(script, handler, args, state);
         match outcome {
             vix_script::InvokeOutcome::Ran(state) => {
                 self.apply_script_host_state(script_idx, state);
             }
             vix_script::InvokeOutcome::Error { message, state } => {
                 self.apply_script_host_state(script_idx, state);
-                let stem = self.scripts[script_idx].stem.clone();
+                let stem = self
+                    .scripts
+                    .get(script_idx)
+                    .map_or_default(|s| s.stem.clone());
                 self.messages
                     .error(t!("msg.script_error", stem = stem, message = message).to_string());
             }

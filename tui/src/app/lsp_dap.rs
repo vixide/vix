@@ -38,6 +38,12 @@ use super::{
 use crate::editor::SEARCH_MARK;
 use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
 
+/// A 0-based LSP line or column as an index; a value past `usize` cannot occur
+/// and would name a position past the end of any buffer.
+fn lsp_index(n: u32) -> usize {
+    usize::try_from(n).unwrap_or(usize::MAX)
+}
+
 impl App {
     /// Dispatch a `run.*` debugger action. Returns `true` if `action` was handled.
     pub(super) fn run_dap_action(&mut self, action: &str) -> bool {
@@ -106,7 +112,7 @@ impl App {
             hints
                 .iter()
                 .filter_map(|&(line, character, ref label)| {
-                    let line_idx = line as usize;
+                    let line_idx = lsp_index(line);
                     if line_idx >= code.len_lines() {
                         return None;
                     }
@@ -144,7 +150,7 @@ impl App {
                 .iter()
                 .filter_map(|tok| {
                     let capture = semantic_token_capture(&tok.token_type)?;
-                    let line_idx = tok.line as usize;
+                    let line_idx = lsp_index(tok.line);
                     if line_idx >= code.len_lines() {
                         return None;
                     }
@@ -507,7 +513,7 @@ impl App {
                     return;
                 };
                 let code = t.editor.code_ref();
-                let ln = (line as usize).min(code.len_lines().minus(1));
+                let ln = lsp_index(line).min(code.len_lines().minus(1));
                 let line_start = code.line_to_char(ln);
                 let line_text = code.slice(line_start, line_start.plus(code.line_len(ln)));
                 let col = crate::lsp_core::position::col_to_char(&line_text, character, enc);
@@ -751,7 +757,7 @@ impl App {
     pub(super) fn apply_folding_ranges(&mut self, ranges: &[(u32, u32)]) {
         let ranges: Vec<(usize, usize)> = ranges
             .iter()
-            .map(|&(s, e)| (s as usize, e as usize))
+            .map(|&(s, e)| (lsp_index(s), lsp_index(e)))
             .collect();
         if let Some(t) = self.editor.active_tab_mut() {
             t.editor.set_fold_ranges(ranges);
@@ -782,7 +788,8 @@ impl App {
             .iter()
             .position(|t| t.path.as_deref() == Some(path))?;
         let synced = self.lsp_synced.get(path).copied();
-        Some((idx, synced == Some(self.editor.tabs[idx].editor.revision())))
+        let revision = self.editor.tabs.get(idx)?.editor.revision();
+        Some((idx, synced == Some(revision)))
     }
 
     /// Apply a formatting reply's text edits to `path`'s tab -- the file the
@@ -801,7 +808,9 @@ impl App {
             return;
         };
         let enc = self.lsp.encoding_for(path);
-        let t = &mut self.editor.tabs[idx];
+        let Some(t) = self.editor.tabs.get_mut(idx) else {
+            return;
+        };
         // Resolve every range to char offsets first, then apply tail-to-head.
         let mut resolved: Vec<(usize, usize, String)> = {
             let code = t.editor.code_ref();
@@ -874,7 +883,7 @@ impl App {
                 .iter()
                 .find(|&&l| l > cur)
                 .copied()
-                .unwrap_or(lines[0])
+                .unwrap_or_else(|| lines.first().copied().unwrap_or(cur))
         } else {
             lines
                 .iter()
@@ -886,7 +895,7 @@ impl App {
         let area = self.editor_view();
         // `target` is a 0-based LSP line; `goto` takes a 1-based one (T614:
         // passing it unconverted landed one line above the diagnostic).
-        self.editor.goto(target as usize + 1, None, area);
+        self.editor.goto(lsp_index(target).plus(1), None, area);
         self.show_cursor_diagnostic();
     }
 
@@ -1051,7 +1060,7 @@ impl App {
                     Severity::Information => "info",
                     Severity::Hint => "hint",
                 };
-                let line = d.range.start.line as usize + 1;
+                let line = lsp_index(d.range.start.line).plus(1);
                 let msg: String = d
                     .message
                     .lines()
@@ -1064,7 +1073,7 @@ impl App {
                     path: path.clone(),
                     rel: rel.clone(),
                     line,
-                    col: d.range.start.character as usize + 1,
+                    col: lsp_index(d.range.start.character).plus(1),
                     display: format!("{rel}:{line}: [{sev}] {msg}"),
                     text: msg,
                 };
@@ -1074,13 +1083,13 @@ impl App {
                     .map(|(related_loc, related_msg)| {
                         let related_path = crate::lsp::uri_to_path(&related_loc.uri);
                         let related_rel = self.root_relative(&related_path);
-                        let related_line = related_loc.range.start.line as usize + 1;
+                        let related_line = lsp_index(related_loc.range.start.line).plus(1);
                         let text: String = related_msg.chars().take(100).collect();
                         Hit {
                             path: related_path,
                             rel: related_rel.clone(),
                             line: related_line,
-                            col: related_loc.range.start.character as usize + 1,
+                            col: lsp_index(related_loc.range.start.character).plus(1),
                             display: format!("    ↳ {related_rel}:{related_line}: {text}"),
                             text,
                         }

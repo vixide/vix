@@ -194,7 +194,7 @@ impl App {
         let Some(open) = self.choice_list.as_mut() else {
             return;
         };
-        let idx = open.panel.scroll.plus(mouse.row.minus(rect.y) as usize);
+        let idx = open.panel.scroll.plus(usize::from(mouse.row.minus(rect.y)));
         if open.panel.select_index(idx) {
             self.activate_choice(ChoiceAction::Primary);
         }
@@ -777,7 +777,7 @@ impl App {
         if !std::mem::take(&mut self.peek_pending) {
             return false;
         }
-        self.show_peek(path, line0 as usize + 1);
+        self.show_peek(path, usize::try_from(line0).unwrap_or(usize::MAX).plus(1));
         true
     }
 

@@ -396,9 +396,9 @@ pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
             (t!("ui.btn_all").to_string(), theme::selected()),
         ];
         let arects = button_row(frame, chunk(&rows, 3), &actions);
-        app.layout.search_once = arects[0];
-        app.layout.search_ask = arects[1];
-        app.layout.search_all = arects[2];
+        app.layout.search_once = chunk(&arects, 0);
+        app.layout.search_ask = chunk(&arects, 1);
+        app.layout.search_all = chunk(&arects, 2);
     }
 
     let status = if !status_text.is_empty() {
@@ -416,7 +416,7 @@ pub(super) fn draw_search(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(status, theme::dim()))),
-        rows[rows.len().minus(1)],
+        chunk(&rows, rows.len().minus(1)),
     );
     mirror_search_box(app, frame, inner);
 }
@@ -518,7 +518,7 @@ fn draw_prompt_preview(frame: &mut Frame, inner: Rect, text: &str, preview_rows:
     );
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
-            "\u{2500}".repeat(chunk(&rows, 1).width as usize),
+            "\u{2500}".repeat(usize::from(chunk(&rows, 1).width)),
             theme::dim(),
         ))),
         chunk(&rows, 1),

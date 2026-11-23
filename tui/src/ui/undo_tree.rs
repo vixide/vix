@@ -66,7 +66,7 @@ pub(super) fn draw_undo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(s) = app.undo_tree.as_mut() {
         s.panel.ensure_visible(view_h);
     }

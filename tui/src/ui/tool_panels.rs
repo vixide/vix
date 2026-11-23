@@ -122,7 +122,7 @@ pub(super) fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
 
     // Wrap the paragraphs to the text width (reserving the scrollbar column), so
     // the lines below are already soft-wrapped; then clamp the scroll to them.
-    let text_width = body.width.minus(1).max(1) as usize;
+    let text_width = usize::from(body.width.minus(1).max(1));
     if let Some(w) = app.welcome.as_mut() {
         w.wrap_to(text_width);
         w.clamp(view_h);
@@ -142,7 +142,9 @@ pub(super) fn draw_welcome(app: &mut App, frame: &mut Frame, area: Rect) {
         body
     };
     let visible: Vec<Line> = app.welcome.as_ref().map_or_default(|w| {
-        w.lines()[scroll..scroll.plus(view_h).min(total)]
+        w.lines()
+            .get(scroll..scroll.plus(view_h).min(total))
+            .unwrap_or(&[])
             .iter()
             .map(|l| Line::from(Span::raw(l.clone())))
             .collect()
@@ -265,7 +267,7 @@ pub(super) fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect)
 
     for (i, field) in Field::ALL.iter().enumerate() {
         let focused = conv.focus == *field;
-        let text = &conv.fields[field.index()];
+        let text = conv.fields.get(field.index()).map_or("", String::as_str);
         let style = if focused {
             theme::selected()
         } else {
@@ -277,7 +279,9 @@ pub(super) fn draw_color_converter(app: &mut App, frame: &mut Frame, area: Rect)
             Span::styled(format!("{text}{caret}"), style),
         ]);
         frame.render_widget(Paragraph::new(line), chunk(&rows, i));
-        app.layout.color_converter_rows[i] = chunk(&rows, i);
+        if let Some(slot) = app.layout.color_converter_rows.get_mut(i) {
+            *slot = chunk(&rows, i);
+        }
     }
 
     // A swatch of the current color, when the focused field parses.
@@ -364,7 +368,7 @@ pub(super) fn draw_regex_tester(app: &mut App, frame: &mut Frame, area: Rect) {
                 t!("status.matches_n", n = m.len()).to_string(),
                 theme::dim(),
             ))];
-            let view = chunk(&rows, 3).height.minus(1) as usize;
+            let view = usize::from(chunk(&rows, 3).height.minus(1));
             for s in m.iter().take(view) {
                 lines.push(Line::from(format!("  {s}")));
             }
@@ -562,7 +566,7 @@ pub(super) fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) 
         Paragraph::new(Line::from(vec![
             Span::styled(format!(" {:<8}", t!("ui.unit_from")), theme::dim()),
             Span::styled(
-                format!("‹ {} ›", UNITS[conv.from].label),
+                format!("‹ {} ›", UNITS.get(conv.from).map_or("", |u| u.label)),
                 field_style(conv.focus == Focus::From),
             ),
         ])),
@@ -573,7 +577,7 @@ pub(super) fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) 
         Paragraph::new(Line::from(vec![
             Span::styled(format!(" {:<8}", t!("ui.unit_to")), theme::dim()),
             Span::styled(
-                format!("‹ {} ›", UNITS[conv.to].label),
+                format!("‹ {} ›", UNITS.get(conv.to).map_or("", |u| u.label)),
                 field_style(conv.focus == Focus::To),
             ),
             Span::styled(format!("   = {}", conv.output_text()), theme::base()),

@@ -227,7 +227,15 @@ fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .collect();
     let mut start = app.im.panel.scroll().min(anchor);
-    while start < anchor && wrapped[start..=anchor].iter().map(Vec::len).sum::<usize>() > height {
+    while start < anchor
+        && wrapped
+            .get(start..=anchor)
+            .unwrap_or(&[])
+            .iter()
+            .map(Vec::len)
+            .sum::<usize>()
+            > height
+    {
         start = start.plus(1);
     }
     let mut lines: Vec<Line> = Vec::new();

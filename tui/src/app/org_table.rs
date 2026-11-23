@@ -58,7 +58,7 @@ impl App {
         let line_start = code.line_to_char(line);
         let line_text = code.slice(line_start, line_start.plus(code.line_len(line)));
         let b = byte_col.min(line_text.len());
-        let char_col = line_text[..b].chars().count();
+        let char_col = line_text.get(..b).unwrap_or("").chars().count();
         tab.editor.set_cursor(line_start.plus(char_col));
     }
 
@@ -347,12 +347,21 @@ impl App {
         }
     }
 
+    /// `v` rounded to the nearest integer.
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        reason = "RCA-EXC-2: the caller checked `v` is within 1e-9 of an integer, and table sums are small; float-to-int `as` saturates, never wraps"
+    )]
+    fn rounded_to_i64(v: f64) -> i64 {
+        v.round() as i64
+    }
+
     /// Format a table-formula-style number: integers with no decimal point,
     /// non-integers to 2 decimal places with trailing zeros trimmed.
     fn format_table_number(v: f64) -> String {
         if v.fract().abs() < 1e-9 {
-            #[allow(clippy::cast_possible_truncation, reason = "table sums are small")]
-            return (v.round() as i64).to_string();
+            return Self::rounded_to_i64(v).to_string();
         }
         let s = format!("{v:.2}");
         let trimmed = s.trim_end_matches('0').trim_end_matches('.');
