@@ -22,6 +22,18 @@
 //!
 //! See `crates/vix-editor-core/spec/index.md` and `spec/actions.tsv`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::code::EditKind;
 use crate::editor::Editor;
 use crate::selection::Selection;
@@ -36,6 +48,25 @@ pub trait Action {
     /// Actions never fail: one that has nothing to do (cursor at the buffer
     /// edge, no selection to copy) is a silent no-op.
     fn apply(&mut self, editor: &mut Editor);
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a * b`, or the declared `fallback` when the product does not fit.
+fn mul_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_mul(b).unwrap_or(fallback)
 }
 
 /// Moves the cursor one character to the right.
@@ -64,7 +95,7 @@ impl Action for MoveRight {
         }
 
         if cursor < editor.code_mut().len() {
-            let new_cursor = cursor.saturating_add(1);
+            let new_cursor = add_or(cursor, 1, usize::MAX);
             if self.shift {
                 editor.extend_selection(new_cursor);
             } else {
@@ -101,7 +132,7 @@ impl Action for MoveLeft {
         }
 
         if cursor > 0 {
-            let new_cursor = cursor.saturating_sub(1);
+            let new_cursor = sub_or(cursor, 1, 0);
             if self.shift {
                 editor.extend_selection(new_cursor);
             } else {
@@ -143,7 +174,7 @@ impl Action for MoveUp {
         let target_col = goal.unwrap_or(col);
         let prev_start = code.line_to_char(prev);
         let prev_len = code.line_len(prev);
-        let new_cursor = prev_start + target_col.min(prev_len);
+        let new_cursor = add_or(prev_start, target_col.min(prev_len), usize::MAX);
 
         // Update selection or clear it
         if self.shift {
@@ -179,7 +210,9 @@ impl Action for MoveDown {
         let (row, col) = editor.code_ref().point(cursor);
         let len_lines = editor.code_ref().len_lines();
         // The nearest line below that a fold does not hide.
-        let Some(next) = (row + 1..len_lines).find(|&l| !editor.is_line_hidden(l)) else {
+        let Some(next) =
+            (add_or(row, 1, usize::MAX)..len_lines).find(|&l| !editor.is_line_hidden(l))
+        else {
             return;
         };
         let code = editor.code_mut();
@@ -189,7 +222,7 @@ impl Action for MoveDown {
         let target_col = goal.unwrap_or(col);
         let next_start = code.line_to_char(next);
         let next_len = code.line_len(next);
-        let new_cursor = next_start + target_col.min(next_len);
+        let new_cursor = add_or(next_start, target_col.min(next_len), usize::MAX);
 
         // Update selection or clear it
         if self.shift {
@@ -237,7 +270,7 @@ impl Action for InsertText {
 
         // 4. Insert the text at the cursor
         code.insert(cursor, &self.text);
-        cursor += self.text.chars().count();
+        cursor = add_or(cursor, self.text.chars().count(), usize::MAX);
 
         // 5. Update editor state
         code.set_state_after(cursor, selection);
@@ -311,12 +344,12 @@ impl Action for Delete {
             // Delete single char or indentation
             let (row, col) = code.point(cursor);
             if code.is_only_indentation_before(row, col) {
-                let from = cursor - col;
+                let from = sub_or(cursor, col, 0);
                 code.remove(from, cursor);
                 cursor = from;
             } else {
-                code.remove(cursor - 1, cursor);
-                cursor -= 1;
+                code.remove(sub_or(cursor, 1, 0), cursor);
+                cursor = sub_or(cursor, 1, 0);
             }
         }
 
@@ -380,8 +413,9 @@ impl Action for ToggleComment {
         let all_have_comment = lines_to_handle.iter().all(|&line_idx| {
             let line_start = code.line_to_char(line_idx);
             let line_len = code.line_len(line_idx);
-            line_start + comment_len <= line_start + line_len
-                && code.slice(line_start, line_start + comment_len) == comment_text
+            add_or(line_start, comment_len, usize::MAX) <= add_or(line_start, line_len, usize::MAX)
+                && code.slice(line_start, add_or(line_start, comment_len, usize::MAX))
+                    == comment_text
         });
 
         // 5. Apply changes (add or remove comment), bottom line first so the
@@ -393,15 +427,15 @@ impl Action for ToggleComment {
             let start = code.line_to_char(line_idx);
             if all_have_comment {
                 // Remove comment if present at start
-                let slice = code.slice(start, start + comment_len);
+                let slice = code.slice(start, add_or(start, comment_len, usize::MAX));
                 if slice == comment_text {
-                    code.remove(start, start + comment_len);
-                    comments_removed += 1;
+                    code.remove(start, add_or(start, comment_len, usize::MAX));
+                    comments_removed = add_or(comments_removed, 1, usize::MAX);
                 }
             } else {
                 // Add comment at start
                 code.insert(start, &comment_text);
-                comments_added += 1;
+                comments_added = add_or(comments_added, 1, usize::MAX);
             }
         }
 
@@ -418,27 +452,35 @@ impl Action for ToggleComment {
 
             if is_forward {
                 if all_have_comment {
-                    cursor = cursor.saturating_sub(comment_len * comments_removed);
-                    anchor = anchor.saturating_sub(comment_len);
+                    cursor = sub_or(cursor, mul_or(comment_len, comments_removed, usize::MAX), 0);
+                    anchor = sub_or(anchor, comment_len, 0);
                 } else {
-                    cursor += comment_len * comments_added;
-                    anchor += comment_len;
+                    cursor = add_or(
+                        cursor,
+                        mul_or(comment_len, comments_added, usize::MAX),
+                        usize::MAX,
+                    );
+                    anchor = add_or(anchor, comment_len, usize::MAX);
                 }
             } else {
                 if all_have_comment {
-                    cursor = cursor.saturating_sub(comment_len);
-                    anchor = anchor.saturating_sub(comment_len * comments_removed);
+                    cursor = sub_or(cursor, comment_len, 0);
+                    anchor = sub_or(anchor, mul_or(comment_len, comments_removed, usize::MAX), 0);
                 } else {
-                    cursor += comment_len;
-                    anchor += comment_len * comments_added;
+                    cursor = add_or(cursor, comment_len, usize::MAX);
+                    anchor = add_or(
+                        anchor,
+                        mul_or(comment_len, comments_added, usize::MAX),
+                        usize::MAX,
+                    );
                 }
             }
 
             selection = Some(Selection::from_anchor_and_cursor(anchor, cursor));
         } else if all_have_comment {
-            cursor = cursor.saturating_sub(comment_len);
+            cursor = sub_or(cursor, comment_len, 0);
         } else {
-            cursor += comment_len;
+            cursor = add_or(cursor, comment_len, usize::MAX);
         }
 
         // 7. Commit changes
@@ -498,7 +540,7 @@ impl Action for Indent {
         for &line_idx in lines_to_handle.iter().rev() {
             let line_start = code.line_to_char(line_idx);
             code.insert(line_start, &indent_text);
-            indents_added += 1;
+            indents_added = add_or(indents_added, 1, usize::MAX);
         }
 
         // 5. Update cursor and selection
@@ -510,16 +552,24 @@ impl Action for Indent {
             let is_forward = anchor == smin;
 
             if is_forward {
-                cursor += indent_text.len() * indents_added;
-                anchor += indent_text.len();
+                cursor = add_or(
+                    cursor,
+                    mul_or(indent_text.len(), indents_added, usize::MAX),
+                    usize::MAX,
+                );
+                anchor = add_or(anchor, indent_text.len(), usize::MAX);
             } else {
-                cursor += indent_text.len();
-                anchor += indent_text.len() * indents_added;
+                cursor = add_or(cursor, indent_text.len(), usize::MAX);
+                anchor = add_or(
+                    anchor,
+                    mul_or(indent_text.len(), indents_added, usize::MAX),
+                    usize::MAX,
+                );
             }
 
             selection = Some(Selection::from_anchor_and_cursor(anchor, cursor));
         } else {
-            cursor += indent_text.len();
+            cursor = add_or(cursor, indent_text.len(), usize::MAX);
         }
 
         // 6. Commit changes
@@ -578,8 +628,8 @@ impl Action for UnIndent {
                 let remove_count = indent_cols.min(indent_len);
                 if remove_count > 0 {
                     let line_start = code.line_to_char(line_idx);
-                    code.remove(line_start, line_start + remove_count);
-                    lines_untabbed += 1;
+                    code.remove(line_start, add_or(line_start, remove_count, usize::MAX));
+                    lines_untabbed = add_or(lines_untabbed, 1, usize::MAX);
                 }
             }
         }
@@ -593,16 +643,16 @@ impl Action for UnIndent {
             let is_forward = anchor == smin;
 
             if is_forward {
-                cursor = cursor.saturating_sub(indent_len * lines_untabbed);
-                anchor = anchor.saturating_sub(indent_len);
+                cursor = sub_or(cursor, mul_or(indent_len, lines_untabbed, usize::MAX), 0);
+                anchor = sub_or(anchor, indent_len, 0);
             } else {
-                cursor = cursor.saturating_sub(indent_len);
-                anchor = anchor.saturating_sub(indent_len * lines_untabbed);
+                cursor = sub_or(cursor, indent_len, 0);
+                anchor = sub_or(anchor, mul_or(indent_len, lines_untabbed, usize::MAX), 0);
             }
 
             selection = Some(Selection::from_anchor_and_cursor(anchor, cursor));
         } else {
-            cursor = cursor.saturating_sub(indent_len * lines_untabbed);
+            cursor = sub_or(cursor, mul_or(indent_len, lines_untabbed, usize::MAX), 0);
         }
 
         // 6. Commit changes
@@ -657,13 +707,13 @@ impl Action for Duplicate {
             let text = code.slice(sel.start, sel.end);
             let insert_pos = sel.end;
             code.insert(insert_pos, &text);
-            cursor = insert_pos + text.chars().count();
+            cursor = add_or(insert_pos, text.chars().count(), usize::MAX);
             selection = None;
         } else {
             // Duplicate the current line
             let (line_start, line_end) = code.line_boundaries(cursor);
             let line_text = code.slice(line_start, line_end);
-            let column = cursor - line_start;
+            let column = sub_or(cursor, line_start, 0);
 
             let insert_pos = line_end;
             // When the line ends in a newline, the duplicate goes at the start of
@@ -672,14 +722,14 @@ impl Action for Duplicate {
             let (to_insert, line_base) = if line_text.ends_with('\n') {
                 (line_text, insert_pos)
             } else {
-                (format!("\n{line_text}"), insert_pos + 1)
+                (format!("\n{line_text}"), add_or(insert_pos, 1, usize::MAX))
             };
             code.insert(insert_pos, &to_insert);
 
             // Keep cursor on the same relative column in the new line
             let new_line_len = to_insert.trim_matches('\n').chars().count();
             let new_column = column.min(new_line_len);
-            cursor = line_base + new_column;
+            cursor = add_or(line_base, new_column, usize::MAX);
         }
 
         code.set_state_after(cursor, selection);
@@ -862,7 +912,7 @@ impl Action for Undo {
                     editor.set_cursor(*offset);
                 }
                 EditKind::Remove { offset, text } => {
-                    editor.set_cursor(*offset + text.chars().count());
+                    editor.set_cursor(add_or(*offset, text.chars().count(), usize::MAX));
                 }
             }
         }
@@ -904,7 +954,7 @@ impl Action for Redo {
         for edit in batch.edits {
             match &edit.kind {
                 EditKind::Insert { offset, text } => {
-                    editor.set_cursor(*offset + text.chars().count());
+                    editor.set_cursor(add_or(*offset, text.chars().count(), usize::MAX));
                 }
                 EditKind::Remove { offset, .. } => {
                     editor.set_cursor(*offset);
