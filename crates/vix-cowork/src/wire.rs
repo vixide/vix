@@ -430,7 +430,7 @@ impl<'a> Reader<'a> {
         Ok(slice)
     }
     fn u8(&mut self) -> Result<u8, WireProblem> {
-        Ok(self.take(1)?[0])
+        self.take(1)?.first().copied().ok_or(WireProblem::Truncated)
     }
     fn u64(&mut self) -> Result<u64, WireProblem> {
         let mut a = [0u8; 8];
@@ -574,7 +574,7 @@ impl Message {
             Self::ListFiles => w.u8(14),
             Self::FileList { paths } => {
                 w.u8(15);
-                let shown = &paths[..paths.len().min(MAX_LISTED_FILES)];
+                let shown: Vec<_> = paths.iter().take(MAX_LISTED_FILES).collect();
                 // Bounded by MAX_LISTED_FILES, far below u32::MAX.
                 w.u32(u32::try_from(shown.len()).unwrap_or(u32::MAX));
                 for p in shown {

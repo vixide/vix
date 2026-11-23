@@ -16,7 +16,12 @@ impl PeerId {
     /// The id handed to the nth guest to join (the first guest is peer 2).
     #[must_use]
     pub const fn guest(index: u64) -> Self {
-        Self(index.saturating_add(2))
+        // The nth guest is peer n + 2; a count past the top of the type (which
+        // a session never reaches) takes the top id.
+        match index.checked_add(2) {
+            Some(id) => Self(id),
+            None => Self(u64::MAX),
+        }
     }
 
     /// A small stable index (for choosing a palette color): the id itself.
