@@ -1034,3 +1034,6 @@ impl App {
         self.im.load_history(&notes, self.settings.im.history_days);
     }
 }
+
+#[cfg(test)]
+mod tests;
