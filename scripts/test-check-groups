@@ -115,11 +115,11 @@ cat >"$work/bin/cargo-nextest" <<'E'
 exit 0
 E
 chmod +x "$work/bin/cargo-nextest"
-st=$(run nx_on VIX_NEXTEST=1 -- --tier push)
+st=$(run nx_on VIX_NEXTEST=1 -- --tier push --scope all)
 [ "$st" = 0 ] || bad "nextest run exit $st"
 has "VIX_NEXTEST=1 runs nextest" "$work/log.nx_on" "^nextest target"
 has "doctests still run with cargo test" "$work/log.nx_on" "^test .*--doc"
-st=$(run nx_off VIX_NEXTEST=0 -- --tier push)
+st=$(run nx_off VIX_NEXTEST=0 -- --tier push --scope all)
 [ "$st" = 0 ] || bad "cargo test run exit $st"
 hasnt "VIX_NEXTEST=0 skips nextest" "$work/log.nx_off" "^nextest"
 echo seeded >"$work/main-target/marker"
@@ -132,7 +132,7 @@ else
 	bad "private target not seeded (exit $st)"
 fi
 
-st=$(run par -- --tier full)
+st=$(run par -- --tier full --scope all)
 [ "$st" = 0 ] && ok "parallel run succeeds" || bad "parallel run exit $st"
 has "doc runs in its own target" "$work/log.par" "^doc target=$work/main-target.par-doc"
 has "semver runs in the baseline cache" "$work/log.par" "^semver-checks target=$work/semver-target"
@@ -140,12 +140,12 @@ has "the main group stays in the main target" "$work/log.par" "^test target=$wor
 has "every group prints a header" "$work/out.par" "==> group doc"
 has "the semver group header" "$work/out.par" "==> group semver"
 
-st=$(run seq VIX_PARALLEL=0 -- --tier full)
+st=$(run seq VIX_PARALLEL=0 -- --tier full --scope all)
 [ "$st" = 0 ] && ok "sequential run succeeds" || bad "sequential run exit $st"
 has "sequential doc uses the main target" "$work/log.seq" "^doc target=$work/main-target "
 hasnt "sequential makes no group headers" "$work/out.seq" "==> group"
 
-st=$(run fail VIX_TEST_FAIL=doc -- --tier full)
+st=$(run fail VIX_TEST_FAIL=doc -- --tier full --scope all)
 [ "$st" != 0 ] && ok "a failing group fails the run" || bad "failing doc group exited 0"
 has "the other groups still finished" "$work/log.fail" "^semver-checks "
 has "the failing group's output is shown" "$work/out.fail" "stub: doc failed on purpose"
@@ -154,15 +154,20 @@ st=$(run badscope -- --scope nonsense)
 eq_ok=$([ "$st" = 2 ] && echo y || echo n)
 [ "$eq_ok" = y ] && ok "an unknown scope exits 2" || bad "unknown scope exit $st"
 
-# --scope changed: change a file in `core`; doc and semver cover core, mid, top
+# The default scope is `changed`: change a file in `core`; doc and semver cover core, mid, top
 # but not loner (mid and top come from the stub's dependency graph).
 echo x >"$repo/crates/core/lib.rs"
-st=$(run scoped -- --tier full --scope changed)
+st=$(run scoped -- --tier full)
 [ "$st" = 0 ] && ok "scoped run succeeds" || bad "scoped run exit $st"
 has "doc is narrowed to the closure" "$work/log.scoped" "^doc .*-p core -p mid -p top"
 hasnt "doc skips the unrelated crate" "$work/log.scoped" "^doc .*-p loner"
 has "semver is narrowed to the closure" "$work/log.scoped" "^semver-checks .*--package core --package mid --package top"
 hasnt "semver skips the unrelated crate" "$work/log.scoped" "^semver-checks .*--package loner"
+
+# An explicit --scope all widens it again, whatever changed.
+st=$(run wide -- --tier full --scope all)
+[ "$st" = 0 ] || bad "wide run exit $st"
+has "--scope all covers the whole workspace" "$work/log.wide" "^doc .*--workspace"
 
 if [ "$fails" -ne 0 ]; then
 	echo "scripts/test-check-groups: $fails failed"

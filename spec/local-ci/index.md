@@ -82,13 +82,17 @@ The landing bar is unchanged; these make the same checks wait less.
   `cargo semver-checks` runs in a persistent target
   (`VIX_SEMVER_TARGET`, default `${XDG_CACHE_HOME:-~/.cache}/vix/semver-target`)
   and builds each baseline once.
-- **`--scope changed`** (or `VIX_SCOPE=changed`) limits `cargo doc` and semver to
-  the crates changed since the merge base with `main` plus every workspace crate
-  that depends on them (the dependency closure), because a crate's doc warnings
-  and public API can only change through itself or something it re-exports. It
-  is for the edit loop and for local landings backed by a full CI pass: it ends
-  with `OK (scope changed, tier …): … NOT a full pass`, which the attestation
-  does not accept. The default scope is `all`.
+- **`--scope changed` is the default for local runs** (`--scope all`, or
+  `VIX_SCOPE=all`, widens it). It limits `cargo doc` and semver to the crates
+  changed since the merge base with `main` plus every workspace crate that
+  depends on them (the dependency closure), because a crate's doc warnings and
+  public API can only change through itself or something it re-exports. A
+  change to a root manifest, lockfile, toolchain, lint or `scripts/check` file,
+  or no `main` to compare with, widens it to the whole workspace. The run ends
+  with `OK (scope changed, tier …)`. CI (the forge workflows and `scripts/ci`)
+  runs the whole workspace and the attestation runs `--scope all` explicitly,
+  so an attested tree always passed the whole-workspace doc and semver checks;
+  run `--scope all` yourself before publishing a crate.
 - **nextest by default off macOS.** When `cargo-nextest` is installed the gate
   runs the test suite with it on Linux (parallel across binaries, one process
   per test, one retry reported as FLAKY; documentation tests still run with

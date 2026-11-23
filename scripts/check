@@ -13,16 +13,19 @@
 # a wrapper made it pass or fail spuriously; VIX_CLEAN_ROOM=0 opts out. See
 # scripts/clean-room.sh and spec/local-ci "Build caching".
 #
-# Usage: scripts/check [--tier fast|push|full] [--scope all|changed]   (T760; default: full, all)
+# Usage: scripts/check [--tier fast|push|full] [--scope all|changed]   (T760; default: full, changed)
 #   fast  fmt + clippy + tests of the crates changed since the merge base with main
 #   push  clippy and tests on the whole workspace, plus build, doc, the generated
 #         reference docs and man page, check-docs
 #   full  push plus feature combinations, headless examples, chaos smoke,
 #         semver, packaging and license checks -- the bar a landing needs
-#   --scope changed  (push/full) runs `cargo doc` and semver only on the crates
-#         changed since the merge base with main plus the workspace crates that
-#         depend on them; everything else still runs on the whole workspace. The
-#         final line says so, and the attestation accepts only the default scope.
+#   --scope changed  (the default; push/full) runs `cargo doc` and semver only on
+#         the crates changed since the merge base with main plus the workspace
+#         crates that depend on them; everything else still runs on the whole
+#         workspace. A change to a root, toolchain or lint file, or no `main`,
+#         widens it to the whole workspace. The final line says "scope changed".
+#   --scope all  runs doc and semver on the whole workspace: what CI, the
+#         attestation and a release run (they pass it explicitly).
 # The independent slow steps (feature combinations, examples and generated docs;
 # `cargo doc`; semver) run concurrently, each on its own target directory, unless
 # VIX_PARALLEL=0, which runs them one after another. Semver keeps its baselines
@@ -35,11 +38,11 @@ usage() {
 	echo "  fast  fmt + clippy + tests of changed crates" >&2
 	echo "  push  adds build, full tests, doc, generated docs, check-docs" >&2
 	echo "  full  adds feature combinations, examples, semver, packaging, licenses (default)" >&2
-	echo "  --scope changed  doc and semver only on changed crates + dependents (not the landing bar)" >&2
+	echo "  --scope changed|all  doc and semver on changed crates + dependents (default) or the whole workspace" >&2
 }
 
 tier=full
-scope_mode=${VIX_SCOPE:-all}
+scope_mode=${VIX_SCOPE:-changed}
 parallel=${VIX_PARALLEL:-1}
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -561,7 +564,7 @@ fi
 
 print_summary
 if [ "$scope_mode" = changed ] && [ "$tier" != fast ]; then
-	echo "OK (scope changed, tier $tier): doc and semver ran on the changed crates and their dependents only; NOT a full pass"
+	echo "OK (scope changed, tier $tier): doc and semver ran on the changed crates and their dependents only; CI runs the whole workspace (--scope all)"
 	exit 0
 fi
 case "$tier" in
