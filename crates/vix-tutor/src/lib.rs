@@ -7,6 +7,18 @@
 //! temp dir, chapter navigation — lives in the App shell's `tutor.rs` slice
 //! (T402).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod chapter;
 pub mod check;
 

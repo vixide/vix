@@ -210,3 +210,7 @@ wrong." The `tutor.rs` slice's own tests (working-copy creation, `next`/
 `prev` clamping, restart) follow the terminal-independent pattern
 (`spec/test/index.md`): build an `App`, drive it with `KeyEvent`s, assert
 on `App::tutor` and the temp dir's file contents.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Task counters and the chapter number carry `RCA-EXC-2` proofs (a chapter has a handful of tasks; the chapter list has a few dozen entries). No fallbacks are declared.
