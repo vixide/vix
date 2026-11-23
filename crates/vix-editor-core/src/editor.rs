@@ -861,12 +861,16 @@ impl Editor {
         self.code.comment()
     }
 
-    /// Move the cursor to the start of 0-based `line` (clamped to the buffer) and
-    /// clear any selection.
-    pub fn set_cursor_line(&mut self, line: usize) {
-        let last = sub_or(self.code.len_lines(), 1, 0);
-        self.cursor = self.code.line_to_char(line.min(last));
+    /// Move the cursor to the start of 0-based `line` and clear any
+    /// selection. Returns `false`, changing nothing, when the buffer has no
+    /// such line (it is not moved to the last line).
+    pub fn set_cursor_line(&mut self, line: usize) -> bool {
+        if line >= self.code.len_lines() {
+            return false;
+        }
+        self.cursor = self.code.line_to_char(line);
         self.selection = None;
+        true
     }
 
     /// Copy `text` to the clipboard, falling back to an in-memory clipboard
@@ -1767,5 +1771,16 @@ mod tests {
         e.start_edit_log();
         assert!(!e.goto_undo_state(0));
         assert_eq!(e.get_content(), "y");
+    }
+
+    #[test]
+    fn a_line_the_buffer_lacks_is_refused_not_clamped() {
+        let mut e = Editor::new("text", "one\ntwo\nthree", Vec::new()).unwrap();
+        assert!(e.set_cursor_line(2));
+        assert_eq!(e.cursor_line(), 2);
+        let before = e.get_cursor();
+        assert!(!e.set_cursor_line(3));
+        assert!(!e.set_cursor_line(usize::MAX));
+        assert_eq!(e.get_cursor(), before, "the cursor did not move");
     }
 }

@@ -446,7 +446,13 @@ impl App {
                 let id = vix_im::thread::new_id(now_ms(), |id| {
                     store.get(id).is_some() || auth.exists(&dir.join(format!("{id}.json")))
                 });
-                let mut thread = Thread::new(id.clone(), path, &buffer_lines(&text), start, end);
+                let Some(mut thread) =
+                    Thread::new(id.clone(), path, &buffer_lines(&text), start, end)
+                else {
+                    self.status =
+                        t!("status.im_thread_range", start = start, end = end).to_string();
+                    return;
+                };
                 thread.reply(message);
                 self.status = t!("status.im_thread_started", line = thread.start_line).to_string();
                 self.im.threads.threads.push(thread);
@@ -684,8 +690,8 @@ mod tests {
     fn anchoring_moves_and_marks_outdated() {
         let old = buffer_lines("a\nb\nc\nd\ne\n");
         let mut threads = [
-            Thread::new("t1", "f", &old, 3, 3),
-            Thread::new("t2", "f", &old, 5, 5),
+            Thread::new("t1", "f", &old, 3, 3).unwrap(),
+            Thread::new("t2", "f", &old, 5, 5).unwrap(),
         ];
         let none: [String; 0] = [];
         // Unchanged: nothing moves.

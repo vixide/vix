@@ -115,7 +115,9 @@ start_line, end_line, resolved, messages }` is stored as pretty JSON in
 default and unknown fields are ignored, so T665's saved line comments can
 share the format. `from_json` and `reply` sanitize message text.
 `Thread::new(id, path, lines, start, end)` captures the anchored lines and
-`CONTEXT_LINES` (3) lines of context on each side.
+`CONTEXT_LINES` (3) lines of context on each side. It returns `None` when
+the range is not inside the file (a line of 0 or past the last line, an end
+before the start, or a file with no lines); it never moves the range.
 
 `reanchor(thread, lines)` returns:
 
@@ -145,4 +147,4 @@ than the cutoff and returns how many.
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). History pruning, mention and code-reference parsing, thread anchoring and unread bookkeeping use `get`, `strip_prefix`, iterators and `checked_*`. **Declared (INBOX-F1):** a retention span or cutoff that does not fit keeps every message; counters and line numbers stop at the top of their type; an unread marker trimmed away points at the oldest kept message. **Kept as documented:** `Thread::new` still moves a line range past the end of the file to the last line (and an end before the start to the start), a documented clamp of a requested range that is open to a decision.
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). History pruning, mention and code-reference parsing, thread anchoring and unread bookkeeping use `get`, `strip_prefix`, iterators and `checked_*`. **Declared (INBOX-F1):** a retention span or cutoff that does not fit keeps every message; counters and line numbers stop at the top of their type; an unread marker trimmed away points at the oldest kept message.

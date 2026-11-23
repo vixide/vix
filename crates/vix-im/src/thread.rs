@@ -16,7 +16,7 @@
 //! ```
 //! use vix_im::{reanchor, Anchor, Thread};
 //! let before = ["a", "b", "c", "d"];
-//! let thread = Thread::new("t1", "x.rs", &before, 3, 3);
+//! let thread = Thread::new("t1", "x.rs", &before, 3, 3).unwrap();
 //! // Two lines were inserted above: the anchor is found again, now at 5.
 //! let after = ["new", "new", "a", "b", "c", "d"];
 //! assert_eq!(reanchor(&thread, &after), Anchor::Exact(5));
@@ -126,9 +126,9 @@ pub fn is_valid_id(id: &str) -> bool {
 
 impl Thread {
     /// A new, empty thread on `start_line..=end_line` (1-based) of
-    /// `file_lines`, capturing the anchored text and its context. Lines past
-    /// the end of the file are clamped; `end_line` before `start_line` is
-    /// taken as `start_line`.
+    /// `file_lines`, capturing the anchored text and its context. `None` when
+    /// the range is not inside the file: a line of 0 or past the last line,
+    /// `end_line` before `start_line`, or a file with no lines.
     #[must_use]
     pub fn new<S: AsRef<str>>(
         id: impl Into<String>,
@@ -136,11 +136,15 @@ impl Thread {
         file_lines: &[S],
         start_line: u32,
         end_line: u32,
-    ) -> Thread {
+    ) -> Option<Thread> {
         let len = file_lines.len();
-        let last = sub_or(len, 1, 0);
-        let start = to_index(start_line).min(last);
-        let end = to_index(end_line).max(start).min(last);
+        if start_line == 0 || end_line < start_line {
+            return None;
+        }
+        let (start, end) = (to_index(start_line), to_index(end_line));
+        if end >= len {
+            return None;
+        }
         let after = add_or(end, 1, usize::MAX);
         let get = |range: std::ops::Range<usize>| -> Vec<String> {
             file_lines
@@ -155,7 +159,7 @@ impl Thread {
         } else {
             get(start..after)
         };
-        Thread {
+        Some(Thread {
             id: id.into(),
             path: path.into(),
             anchor_text: anchor.join("\n"),
@@ -165,7 +169,7 @@ impl Thread {
             end_line: to_line(end),
             resolved: false,
             messages: Vec::new(),
-        }
+        })
     }
 
     /// The thread as pretty-printed JSON, for `.vix/im/threads/<id>.json`.
@@ -403,7 +407,7 @@ mod tests {
     ];
 
     fn thread() -> Thread {
-        Thread::new("t1", "src/main.rs", FILE, 4, 4)
+        Thread::new("t1", "src/main.rs", FILE, 4, 4).unwrap()
     }
 
     #[test]
@@ -413,9 +417,17 @@ mod tests {
         assert_eq!(t.context_before, FILE[0..3]);
         assert_eq!(t.context_after, FILE[4..7]);
         assert_eq!((t.start_line, t.end_line), (4, 4));
-        let edge = Thread::new("t2", "a", FILE, 1, 99);
+        let edge = Thread::new("t2", "a", FILE, 1, 7).unwrap();
         assert_eq!((edge.start_line, edge.end_line), (1, 7));
         assert!(edge.context_before.is_empty() && edge.context_after.is_empty());
+        // A range that is not inside the file is no thread, not a moved one.
+        for (start, end) in [(0, 1), (1, 8), (8, 8), (3, 2)] {
+            assert!(
+                Thread::new("t3", "a", FILE, start, end).is_none(),
+                "{start}..{end}"
+            );
+        }
+        assert!(Thread::new("t4", "a", &[] as &[&str], 1, 1).is_none());
     }
 
     #[test]
@@ -470,7 +482,7 @@ mod tests {
 
     #[test]
     fn apply_moves_range() {
-        let mut t = Thread::new("t", "a", FILE, 2, 3);
+        let mut t = Thread::new("t", "a", FILE, 2, 3).unwrap();
         t.apply(Anchor::Exact(5));
         assert_eq!((t.start_line, t.end_line), (5, 6));
         t.apply(Anchor::Outdated);
@@ -500,7 +512,7 @@ mod tests {
 
     #[test]
     fn covers_its_range() {
-        let t = Thread::new("t", "a", FILE, 2, 4);
+        let t = Thread::new("t", "a", FILE, 2, 4).unwrap();
         assert!(!t.covers(1));
         assert!(t.covers(2) && t.covers(3) && t.covers(4));
         assert!(!t.covers(5));

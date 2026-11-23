@@ -922,12 +922,12 @@ fn thread_files_from_elsewhere_load_and_unsafe_ones_are_skipped() {
     let dir = root.join(".vix/im/threads");
     fs::create_dir_all(&dir).unwrap();
     let lines = ["fn a() {}", "fn b() {}", "fn c() {}"];
-    let mut good = vix_im::Thread::new("from-git", "src/a.rs", &lines, 3, 3);
+    let mut good = vix_im::Thread::new("from-git", "src/a.rs", &lines, 3, 3).unwrap();
     good.reply(Message::text("bob", 0, "see \u{1b}[31mthis"));
     fs::write(dir.join("from-git.json"), good.to_json().unwrap()).unwrap();
-    let escape = vix_im::Thread::new("escape", "../outside.rs", &lines, 1, 1);
+    let escape = vix_im::Thread::new("escape", "../outside.rs", &lines, 1, 1).unwrap();
     fs::write(dir.join("escape.json"), escape.to_json().unwrap()).unwrap();
-    let renamed = vix_im::Thread::new("other", "src/a.rs", &lines, 1, 1);
+    let renamed = vix_im::Thread::new("other", "src/a.rs", &lines, 1, 1).unwrap();
     fs::write(dir.join("renamed.json"), renamed.to_json().unwrap()).unwrap();
     fs::write(dir.join("junk.json"), "{").unwrap();
 
@@ -956,7 +956,7 @@ fn outdated_threads_have_no_mark_and_say_so_on_jump() {
     let dir = root.join(".vix/im/threads");
     fs::create_dir_all(&dir).unwrap();
     let lines = ["unrelated", "text that", "is gone"];
-    let t = vix_im::Thread::new("gone", "src/a.rs", &lines, 2, 2);
+    let t = vix_im::Thread::new("gone", "src/a.rs", &lines, 2, 2).unwrap();
     fs::write(dir.join("gone.json"), t.to_json().unwrap()).unwrap();
     let mut app = app_at(&root);
     app.open_initial(&root.join("src/a.rs"));
