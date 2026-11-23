@@ -275,4 +275,10 @@ mod tests {
         s.upsert("orders", "select * from orders");
         assert_eq!(s.queries.len(), 2);
     }
+
+    #[test]
+    fn origins_have_short_log_tags() {
+        assert_eq!(Origin::User.label(), "user");
+        assert_eq!(Origin::App.label(), "app");
+    }
 }

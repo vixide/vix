@@ -1530,8 +1530,8 @@ mod tests {
 
 #[cfg(test)]
 mod browser_tests {
-    use super::*;
     use super::tests::seeded;
+    use super::*;
     use crate::test_support::{family, file_workbench, press, select_table, typed};
 
     fn settle(b: &mut Browser) {
@@ -1829,23 +1829,47 @@ mod browser_tests {
         assert_eq!(Value::Bool(true).text(), "true");
         assert_eq!(Value::Bool(false).json(), serde_json::Value::from(false));
         assert_eq!(Value::Null.text(), "");
-        assert_eq!(Value::Bytes(b"hi".to_vec()).json(), serde_json::Value::from("hi"));
+        assert_eq!(
+            Value::Bytes(b"hi".to_vec()).json(),
+            serde_json::Value::from("hi")
+        );
     }
 
     #[test]
     fn sequences_are_reset_per_engine_and_odd_rows_are_skipped() {
         let mysql = sequences_sql(Kind::Mysql, "app", "o'k");
-        assert!(mysql.contains("AUTO_INCREMENT") && mysql.contains("'o''k'"), "{mysql}");
-        let rows = |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_string()).collect::<Vec<_>>()];
+        assert!(
+            mysql.contains("AUTO_INCREMENT") && mysql.contains("'o''k'"),
+            "{mysql}"
+        );
+        let rows =
+            |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_string()).collect::<Vec<_>>()];
         assert_eq!(
             sequence_reset_sql(Kind::Mysql, "app", "users", &rows(&["42"])),
             ["ALTER TABLE `users` AUTO_INCREMENT = 42;"]
         );
-        assert_eq!(sequence_reset_sql(Kind::Mysql, "app", "users", &rows(&["NULL"])), [] as [String; 0]);
-        assert_eq!(sequence_reset_sql(Kind::Sqlite, "main", "t", &rows(&["x"])), [] as [String; 0]);
-        assert_eq!(sequence_reset_sql(Kind::Postgres, "public", "t", &rows(&["id"])), [] as [String; 0]);
-        assert_eq!(sequence_reset_sql(Kind::Postgres, "public", "t", &rows(&["id", ""])), [] as [String; 0]);
-        let pg = sequence_reset_sql(Kind::Postgres, "public", "t", &rows(&["id", "public.t_id_seq"]));
+        assert_eq!(
+            sequence_reset_sql(Kind::Mysql, "app", "users", &rows(&["NULL"])),
+            [] as [String; 0]
+        );
+        assert_eq!(
+            sequence_reset_sql(Kind::Sqlite, "main", "t", &rows(&["x"])),
+            [] as [String; 0]
+        );
+        assert_eq!(
+            sequence_reset_sql(Kind::Postgres, "public", "t", &rows(&["id"])),
+            [] as [String; 0]
+        );
+        assert_eq!(
+            sequence_reset_sql(Kind::Postgres, "public", "t", &rows(&["id", ""])),
+            [] as [String; 0]
+        );
+        let pg = sequence_reset_sql(
+            Kind::Postgres,
+            "public",
+            "t",
+            &rows(&["id", "public.t_id_seq"]),
+        );
         assert_eq!(pg.len(), 1);
         assert!(pg[0].contains("setval('public.t_id_seq'"), "{}", pg[0]);
     }
@@ -1864,7 +1888,10 @@ mod browser_tests {
 
     #[test]
     fn an_unwritable_destination_fails_the_export_and_leaves_no_part_file() {
-        let (dir, file) = seeded("badpath", &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1)"]);
+        let (dir, file) = seeded(
+            "badpath",
+            &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1)"],
+        );
         let job = Job {
             kind: Kind::Sqlite,
             url: format!("sqlite:{}?mode=rwc", file.display()),
@@ -1881,7 +1908,10 @@ mod browser_tests {
                 _ => {}
             }
         };
-        assert!(!outcome.is_empty());
+        assert!(
+            outcome.contains("out.sql") || outcome.contains("directory"),
+            "{outcome}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1904,7 +1934,10 @@ mod browser_tests {
                 _ => {}
             }
         };
-        assert_eq!(message, t!("msg.db_table_export_no_columns", table = "ghost"));
+        assert_eq!(
+            message,
+            t!("msg.db_table_export_no_columns", table = "ghost")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

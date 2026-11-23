@@ -277,4 +277,16 @@ mod tests {
         let got = beautify("select * from a left join b on a.id=b.id");
         assert!(got.contains("\nLEFT JOIN b ON a.id = b.id"), "{got}");
     }
+
+    #[test]
+    fn line_comments_end_their_line_and_trailing_blanks_are_trimmed() {
+        let out = beautify("select 1 -- note\nfrom t");
+        assert_eq!(out.lines().next(), Some("SELECT 1 -- note"));
+        assert!(out.contains("FROM t"), "{out}");
+        assert!(!out.ends_with('\n') && !out.ends_with(' '));
+        let tail = beautify("select 1 -- only a comment at the end");
+        assert!(tail.ends_with("end"), "{tail}");
+        assert_eq!(beautify(""), "");
+        assert_eq!(beautify("   "), "");
+    }
 }

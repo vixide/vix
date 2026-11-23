@@ -274,4 +274,35 @@ mod tests {
         let sql = statements(Kind::Sqlite, "t", &parse("a,b\n", ','));
         assert_eq!(sql.len(), 1, "just the CREATE");
     }
+
+    #[test]
+    fn crlf_lines_and_an_unterminated_last_record_parse() {
+        assert_eq!(
+            parse("a,b\r\n1,2\r\n3,4", ','),
+            [["a", "b"], ["1", "2"], ["3", "4"]]
+        );
+        assert_eq!(parse("a,\"x\"\"y\"", ','), [["a", "x\"y"]]);
+        assert_eq!(parse("\n\n", ','), Vec::<Vec<String>>::new());
+        assert_eq!(parse(",", ','), [["", ""]]);
+    }
+
+    #[test]
+    fn header_names_are_sanitized_and_blank_ones_numbered() {
+        let records = vec![
+            vec![
+                "first name".to_string(),
+                "!!".to_string(),
+                "ok_1".to_string(),
+            ],
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        ];
+        let sql = statements(Kind::Sqlite, "t", &records);
+        assert!(
+            sql[0].contains("\"first_name\"")
+                && sql[0].contains("\"col2\"")
+                && sql[0].contains("\"ok_1\""),
+            "{}",
+            sql[0]
+        );
+    }
 }

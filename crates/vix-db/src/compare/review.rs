@@ -1288,13 +1288,16 @@ mod tests {
             &mut s,
             &[
                 "CREATE TABLE p (id INTEGER PRIMARY KEY)".to_string(),
-                "CREATE TABLE c (p INTEGER REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED)".to_string(),
+                "CREATE TABLE c (p INTEGER REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED)"
+                    .to_string(),
                 "INSERT INTO c VALUES (9)".to_string(),
             ],
         )
         .unwrap_err();
         assert!(err.to_lowercase().contains("foreign key"), "{err}");
-        let (_, rows) = s.run("SELECT count(*) FROM sqlite_master WHERE name = 'c'").unwrap();
+        let (_, rows) = s
+            .run("SELECT count(*) FROM sqlite_master WHERE name = 'c'")
+            .unwrap();
         assert_eq!(rows, [["0"]], "everything was rolled back");
         // A BEGIN the server refuses is reported too.
         s.run("BEGIN").unwrap();
@@ -1314,7 +1317,11 @@ mod tests {
         press(&mut b, KeyCode::Esc);
         crate::test_support::select_table(&mut b, "a");
         b.open_compare();
-        assert_eq!(b.compare().unwrap().schema, "main", "the selected object's schema");
+        assert_eq!(
+            b.compare().unwrap().schema,
+            "main",
+            "the selected object's schema"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1454,7 +1461,11 @@ mod tests {
         assert!(b.compare().unwrap().target_write_enabled(), "unchanged");
         b.compare.as_mut().unwrap().screen = Screen::Confirm;
         press(&mut b, KeyCode::Enter);
-        assert_eq!(b.compare().unwrap().screen, Screen::Review, "nothing to run on");
+        assert_eq!(
+            b.compare().unwrap().screen,
+            Screen::Review,
+            "nothing to run on"
+        );
         // A dead target session reports the toggle's error.
         let mut dead = memory_session();
         dead.cancel();
@@ -1462,7 +1473,10 @@ mod tests {
         b.compare.as_mut().unwrap().session = Some(dead);
         press(&mut b, KeyCode::F(8));
         assert!(b.message.is_some());
-        assert!(b.compare().unwrap().target_write_enabled(), "the mode did not change");
+        assert!(
+            b.compare().unwrap().target_write_enabled(),
+            "the mode did not change"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
