@@ -798,3 +798,450 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::Settings;
+    use ratatui::{Terminal, backend::TestBackend, layout::Rect};
+    use std::path::PathBuf;
+    use vix_input::{KeyModifiers, MouseButton, MouseEventKind};
+
+    fn app() -> App {
+        let mut a = App::new(std::env::temp_dir(), Settings::default());
+        a.layout.editor = Rect::new(0, 0, 80, 24);
+        a
+    }
+
+    fn press(a: &mut App, code: KeyCode) {
+        a.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+    }
+
+    /// Draw a full frame so the panels record their hit areas in `layout`.
+    fn draw(a: &mut App) {
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        terminal.draw(|f| crate::ui::draw(a, f)).unwrap();
+    }
+
+    fn click(a: &mut App, rect: Rect, row: u16) {
+        a.on_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x.plus(1),
+            row: rect.y.plus(row),
+            modifiers: KeyModifiers::NONE,
+        });
+    }
+
+    fn tab_text(a: &App) -> String {
+        a.editor.active_tab().unwrap().text()
+    }
+
+    fn vcf_dir(tag: &str) -> (PathBuf, Vec<crate::contact_panel::Contact>) {
+        let dir = std::env::temp_dir().join(format!("vix-r2c-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut list = Vec::new();
+        for (i, name) in ["Ada Lovelace", "Grace Hopper"].iter().enumerate() {
+            let path = dir.join(format!("c{i}.vcf"));
+            std::fs::write(
+                &path,
+                format!("BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nEMAIL:c{i}@example.org\nEND:VCARD\n"),
+            )
+            .unwrap();
+            list.push(crate::contact_panel::Contact {
+                name: (*name).to_string(),
+                path,
+            });
+        }
+        (dir, list)
+    }
+
+    #[test]
+    fn contacts_keys_navigate_open_a_card_and_close() {
+        let (dir, list) = vcf_dir("contacts-keys");
+        let mut a = app();
+        a.contacts = Some(ContactPanel::open(list));
+        draw(&mut a);
+        press(&mut a, KeyCode::Down);
+        assert_eq!(a.contacts.as_ref().unwrap().selected, 1);
+        press(&mut a, KeyCode::Home);
+        assert_eq!(a.contacts.as_ref().unwrap().selected, 0);
+        press(&mut a, KeyCode::End);
+        assert_eq!(a.contacts.as_ref().unwrap().selected, 1);
+        press(&mut a, KeyCode::Enter);
+        let card = a.vcard.as_ref().expect("Enter opens the selected card");
+        assert!(card.title().contains("Grace Hopper"));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.vcard.is_none());
+        press(&mut a, KeyCode::Esc);
+        assert!(a.contacts.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn contacts_click_opens_that_contact_and_a_missing_file_reports() {
+        let (dir, mut list) = vcf_dir("contacts-click");
+        list.push(crate::contact_panel::Contact {
+            name: "Ghost".to_string(),
+            path: dir.join("missing.vcf"),
+        });
+        let mut a = app();
+        a.contacts = Some(ContactPanel::open(list));
+        draw(&mut a);
+        let rect = a.layout.contacts;
+        click(&mut a, rect, 1);
+        assert!(a.vcard.as_ref().unwrap().title().contains("Grace Hopper"));
+        a.vcard = None;
+        // A click outside the rows does nothing; the unreadable card reports.
+        a.on_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert!(a.vcard.is_none());
+        click(&mut a, rect, 2);
+        assert!(a.vcard.is_none(), "an unreadable card is not opened");
+        assert!(!a.messages.items.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn vcard_enter_and_click_insert_the_highlighted_value() {
+        let (dir, list) = vcf_dir("vcard");
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.contacts = Some(ContactPanel::open(list));
+        draw(&mut a);
+        press(&mut a, KeyCode::Enter);
+        draw(&mut a);
+        let value = a.vcard.as_ref().unwrap().selected_value();
+        assert!(!value.is_empty());
+        press(&mut a, KeyCode::Enter);
+        assert_eq!(tab_text(&a), value);
+        assert_eq!(
+            a.status,
+            t!("status.ascii_inserted", name = value.clone()).to_string()
+        );
+        // Navigation keys move the selection; a click inserts that row.
+        press(&mut a, KeyCode::Down);
+        let second = a.vcard.as_ref().unwrap().selected_value();
+        let rect = a.layout.vcard;
+        click(&mut a, rect, 1);
+        assert!(tab_text(&a).contains(&second));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.vcard.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn vcard_with_an_empty_value_inserts_nothing() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        let mut p = VcardPanel::open(crate::vcard_parser::parse("BEGIN:VCARD\nEND:VCARD\n"));
+        p.selected = p.len();
+        a.vcard = Some(p);
+        press(&mut a, KeyCode::Enter);
+        assert_eq!(tab_text(&a), "");
+    }
+
+    #[test]
+    fn file_info_keys_and_clicks_insert_values_and_esc_closes() {
+        let dir = std::env::temp_dir().join(format!("vix-r2c-fi-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("note.txt");
+        std::fs::write(&file, "alpha beta\ngamma\n").unwrap();
+        let mut a = App::new(dir.clone(), Settings::default());
+        a.layout.editor = Rect::new(0, 0, 80, 24);
+        a.open_initial(&file);
+        a.run_action("tools.file_info");
+        draw(&mut a);
+        let panel = a.info.file_info().unwrap();
+        let rows: Vec<(String, String)> = panel
+            .rows
+            .iter()
+            .map(|r| (r.label.clone(), r.value.clone()))
+            .collect();
+        assert!(rows.iter().any(|(_, v)| v.contains("note.txt")));
+        // Keys move the selection and Enter inserts the highlighted value.
+        press(&mut a, KeyCode::Down);
+        let value = a.info.file_info().unwrap().selected_value();
+        press(&mut a, KeyCode::Enter);
+        if !value.is_empty() {
+            assert!(tab_text(&a).contains(&value));
+        }
+        press(&mut a, KeyCode::PageDown);
+        press(&mut a, KeyCode::PageUp);
+        // A click on the first row inserts it too, and the panel stays open.
+        let rect = a.layout.file_info;
+        let before = tab_text(&a);
+        click(&mut a, rect, 0);
+        assert!(a.info.file_info().is_some());
+        let first = a.info.file_info().unwrap().selected_value();
+        if !first.is_empty() {
+            assert!(tab_text(&a).len() > before.len());
+        }
+        press(&mut a, KeyCode::Esc);
+        assert!(a.info.file_info().is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn file_info_of_an_unsaved_buffer_still_counts_the_text() {
+        let mut a = app();
+        a.editor.new_tab_with_content("one two\nthree\n");
+        a.open_file_info();
+        let rows = &a.info.file_info().unwrap().rows;
+        assert!(rows.iter().any(|r| r.value == "3" || r.value == "2"));
+    }
+
+    #[test]
+    fn text_info_uses_the_selection_and_keys_insert_values() {
+        let mut a = app();
+        a.editor.new_tab_with_content("alpha beta gamma\nsecond line\n");
+        a.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 10);
+        assert_eq!(a.selected_or_all_text(), "alpha beta");
+        a.run_action("tools.text_info");
+        draw(&mut a);
+        // Down then Enter inserts the second statistic and keeps the panel.
+        press(&mut a, KeyCode::Down);
+        let value = a.info.text_info().unwrap().selected_value();
+        assert!(!value.is_empty());
+        press(&mut a, KeyCode::Enter);
+        assert!(tab_text(&a).contains(&value));
+        press(&mut a, KeyCode::Up);
+        assert_eq!(a.info.text_info().unwrap().selected, 0);
+        // Clicking a row inserts that row's value.
+        let rect = a.layout.text_info;
+        click(&mut a, rect, 1);
+        assert_eq!(a.info.text_info().unwrap().selected, 1);
+        press(&mut a, KeyCode::Esc);
+        assert!(a.info.text_info().is_none());
+    }
+
+    #[test]
+    fn markdown_preview_keys_scroll_open_the_toc_and_close() {
+        let mut a = app();
+        let body: String = (0..30)
+            .map(|i| format!("# Heading {i}\n\ntext {i}\n\n"))
+            .collect();
+        a.editor.new_tab_with_content(&body);
+        a.run_action("tools.markdown_preview");
+        draw(&mut a);
+        press(&mut a, KeyCode::Down);
+        assert_eq!(a.markdown_preview.as_ref().unwrap().scroll, 1);
+        press(&mut a, KeyCode::Up);
+        assert_eq!(a.markdown_preview.as_ref().unwrap().scroll, 0);
+        press(&mut a, KeyCode::PageDown);
+        let after_page = a.markdown_preview.as_ref().unwrap().scroll;
+        assert!(after_page > 1);
+        press(&mut a, KeyCode::PageUp);
+        assert!(a.markdown_preview.as_ref().unwrap().scroll < after_page);
+
+        // `t` opens the table of contents; its keys walk the headings and
+        // Enter scrolls the preview to the chosen one.
+        press(&mut a, KeyCode::Char('t'));
+        assert!(a.markdown_toc.is_some());
+        press(&mut a, KeyCode::Down);
+        press(&mut a, KeyCode::Down);
+        press(&mut a, KeyCode::PageDown);
+        press(&mut a, KeyCode::PageUp);
+        press(&mut a, KeyCode::Up);
+        let sel = a.markdown_toc.as_ref().unwrap().selected;
+        assert!(sel > 0);
+        let line = a.markdown_toc.as_ref().unwrap().selected_line().unwrap();
+        press(&mut a, KeyCode::Enter);
+        assert!(a.markdown_toc.is_none());
+        assert!(a.markdown_preview.is_some(), "back in the preview");
+        let _ = line;
+        press(&mut a, KeyCode::Char('t'));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.markdown_toc.is_none());
+        press(&mut a, KeyCode::Char('q'));
+        assert!(a.markdown_preview.is_none());
+    }
+
+    #[test]
+    fn markdown_toc_without_headings_says_so() {
+        let mut a = app();
+        a.editor.new_tab_with_content("just a paragraph\n");
+        a.run_action("tools.markdown_preview");
+        press(&mut a, KeyCode::Char('T'));
+        assert!(a.markdown_toc.is_none());
+        assert_eq!(a.status, t!("status.markdown_toc_empty").to_string());
+        press(&mut a, KeyCode::Esc);
+        assert!(a.markdown_preview.is_none());
+    }
+
+    #[test]
+    fn markdown_preview_of_no_tab_opens_nothing() {
+        let mut a = app();
+        a.open_markdown_preview();
+        // The scratch tab App::new opens is text, so a preview exists...
+        assert!(a.markdown_preview.is_some());
+        a.markdown_preview = None;
+        // ...but a key with no panel open is simply ignored.
+        a.markdown_preview_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        a.markdown_toc_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        assert!(a.markdown_preview.is_none() && a.markdown_toc.is_none());
+    }
+
+    fn snippet(name: &str, prefix: &str, body: &str) -> crate::snippets::Snippet {
+        crate::snippets::Snippet {
+            name: name.to_string(),
+            prefixes: vec![prefix.to_string()],
+            body: body.to_string(),
+            description: String::new(),
+            scope: crate::snippets::Scope::Global,
+        }
+    }
+
+    #[test]
+    fn snippets_picker_filters_and_enter_inserts_the_body() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.run_action("tools.snippets");
+        a.snippet_library = vec![
+            snippet("alpha", "al", "ALPHA-BODY"),
+            snippet("beta", "be", "BETA-BODY"),
+        ];
+        draw(&mut a);
+        for c in "bet".chars() {
+            press(&mut a, KeyCode::Char(c));
+        }
+        press(&mut a, KeyCode::Backspace);
+        press(&mut a, KeyCode::Char('t'));
+        press(&mut a, KeyCode::Down);
+        press(&mut a, KeyCode::PageDown);
+        press(&mut a, KeyCode::Up);
+        press(&mut a, KeyCode::PageUp);
+        press(&mut a, KeyCode::Enter);
+        assert!(a.snippets.is_none());
+        assert_eq!(tab_text(&a), "BETA-BODY");
+        assert_eq!(a.status, t!("status.snippet_inserted").to_string());
+        a.run_action("tools.snippets");
+        press(&mut a, KeyCode::Esc);
+        assert!(a.snippets.is_none());
+    }
+
+    #[test]
+    fn snippets_click_inserts_the_clicked_row() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.run_action("tools.snippets");
+        a.snippet_library = vec![
+            snippet("alpha", "al", "ALPHA-BODY"),
+            snippet("beta", "be", "BETA-BODY"),
+        ];
+        draw(&mut a);
+        let rect = a.layout.snippets;
+        click(&mut a, rect, 1);
+        assert_eq!(tab_text(&a), "BETA-BODY");
+        assert!(a.snippets.is_none());
+    }
+
+    #[test]
+    fn a_snippet_prefix_expands_and_tab_walks_its_stops() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.snippet_library = vec![snippet("loop", "lp", "for ${1:i} in ${2:xs} { $0 }")];
+        a.snippet_library_key = Some(String::new());
+        for c in "lp".chars() {
+            press(&mut a, KeyCode::Char(c));
+        }
+        assert!(a.expand_snippet_prefix());
+        assert_eq!(tab_text(&a), "for i in xs {  }");
+        assert!(a.snippet_active());
+        // The first field is selected; typing replaces it, Tab moves on.
+        let sel = a.editor.active_tab_mut().unwrap().editor.get_selection_text();
+        assert_eq!(sel.as_deref(), Some("i"));
+        press(&mut a, KeyCode::Char('n'));
+        a.snippet_tab();
+        let sel = a.editor.active_tab_mut().unwrap().editor.get_selection_text();
+        assert_eq!(sel.as_deref(), Some("xs"));
+        a.snippet_tab();
+        a.snippet_tab();
+        assert!(!a.snippet_active(), "the session ends after the last stop");
+        assert!(tab_text(&a).starts_with("for n in xs"));
+    }
+
+    #[test]
+    fn a_word_that_is_no_snippet_prefix_does_not_expand() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.snippet_library_key = Some(String::new());
+        assert!(!a.expand_snippet_prefix(), "an empty line has no word");
+        for c in "zzz".chars() {
+            press(&mut a, KeyCode::Char(c));
+        }
+        assert!(!a.expand_snippet_prefix());
+        assert_eq!(tab_text(&a), "zzz");
+        a.snippet_tab();
+        assert!(!a.snippet_active());
+    }
+
+    #[test]
+    fn new_snippet_from_selection_needs_a_selection() {
+        let mut a = app();
+        a.editor.new_tab_with_content("some text");
+        a.new_snippet_from_selection();
+        assert_eq!(a.status, t!("status.no_selection").to_string());
+        assert!(a.prompt.is_none());
+        a.editor.active_tab_mut().unwrap().editor.set_selection_range(0, 4);
+        a.new_snippet_from_selection();
+        assert!(a.prompt.is_some());
+        assert_eq!(a.pending_snippet_body.as_deref(), Some("some"));
+        // An empty prefix saves nothing and an absent capture is ignored.
+        a.save_snippet_from_selection("");
+        assert!(a.pending_snippet_body.is_none());
+        a.save_snippet_from_selection("anything");
+    }
+
+    #[test]
+    fn media_type_comes_from_the_file_extension() {
+        let mut a = app();
+        assert_eq!(a.active_media_type(), None);
+        a.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("main.rs"));
+        assert!(a.active_media_type().is_some());
+        a.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("noext"));
+        assert_eq!(a.active_media_type(), None);
+    }
+
+    #[test]
+    fn system_info_keys_and_clicks_walk_and_insert() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.run_action("tools.system_info");
+        draw(&mut a);
+        let n = a.info.system_info().unwrap().len();
+        press(&mut a, KeyCode::End);
+        assert!(a.info.system_info().unwrap().selected > 0);
+        press(&mut a, KeyCode::Home);
+        assert_eq!(a.info.system_info().unwrap().selected, 0);
+        press(&mut a, KeyCode::PageDown);
+        assert!(a.info.system_info().unwrap().selected > 0);
+        press(&mut a, KeyCode::PageUp);
+        press(&mut a, KeyCode::Down);
+        press(&mut a, KeyCode::Up);
+        assert!(n > 3);
+        // Walk to a row that has a value and insert it with Enter.
+        let mut value = String::new();
+        for _ in 0..n {
+            press(&mut a, KeyCode::Down);
+            value = a.info.system_info().unwrap().selected_value();
+            if !value.is_empty() {
+                break;
+            }
+        }
+        assert!(!value.is_empty());
+        press(&mut a, KeyCode::Enter);
+        assert!(tab_text(&a).contains(&value));
+        // A click on a heading row inserts nothing.
+        let before = tab_text(&a);
+        a.info.system_info_mut().unwrap().scroll = 0;
+        let rect = a.layout.system_info;
+        click(&mut a, rect, 0);
+        assert_eq!(tab_text(&a), before);
+        press(&mut a, KeyCode::Esc);
+        assert!(a.info.system_info().is_none());
+    }
+}

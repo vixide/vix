@@ -652,3 +652,279 @@ pub(super) fn draw_system_info(app: &mut App, frame: &mut Frame, area: Rect) {
             .min(chunk(&chunks, 0).height),
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::Settings;
+    use ratatui::{Terminal, backend::TestBackend, buffer::Buffer};
+    use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+
+    fn app() -> App {
+        let mut a = App::new(std::env::temp_dir(), Settings::default());
+        a.layout.editor = Rect::new(0, 0, 80, 24);
+        a
+    }
+
+    fn render(app: &mut App, w: u16, h: u16, f: fn(&mut App, &mut Frame, Rect)) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                f(app, frame, area);
+            })
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    fn text(buf: &Buffer) -> String {
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn blank(buf: &Buffer) -> bool {
+        text(buf).chars().all(|c| c == ' ' || c == '\n')
+    }
+
+    fn key(c: KeyCode) -> KeyEvent {
+        KeyEvent::new(c, KeyModifiers::NONE)
+    }
+
+    fn contacts(n: usize) -> Vec<crate::contact_panel::Contact> {
+        (0..n)
+            .map(|i| crate::contact_panel::Contact {
+                name: format!("Person {i:02}"),
+                path: std::path::PathBuf::from(format!("/nowhere/{i}.vcf")),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn contacts_panel_lists_names_and_records_its_hit_area() {
+        let mut a = app();
+        assert!(blank(&render(&mut a, 60, 20, draw_contacts)));
+        a.contacts = Some(crate::contact_panel::Panel::open(contacts(3)));
+        let buf = render(&mut a, 60, 20, draw_contacts);
+        let t = text(&buf);
+        assert!(t.contains(&t!("ui.contacts").to_string()));
+        assert!(t.contains("Person 00") && t.contains("Person 02"));
+        assert!(t.contains(&t!("ui.contacts_hint").to_string()));
+        assert_eq!(a.layout.contacts.height, 3);
+        assert_eq!(a.layout.contacts.width, 38);
+    }
+
+    #[test]
+    fn contacts_panel_scrolls_with_a_scrollbar_when_long() {
+        let mut a = app();
+        let mut p = crate::contact_panel::Panel::open(contacts(40));
+        p.selected = 30;
+        a.contacts = Some(p);
+        let buf = render(&mut a, 60, 12, draw_contacts);
+        let t = text(&buf);
+        assert!(t.contains("Person 30"), "the selection is scrolled into view");
+        assert!(!t.contains("Person 00"));
+        // A scrollbar takes the last column of the list, so rows are one narrower.
+        assert_eq!(a.layout.contacts.width, 37);
+    }
+
+    #[test]
+    fn contacts_panel_with_no_contacts_says_so() {
+        let mut a = app();
+        a.contacts = Some(crate::contact_panel::Panel::open(Vec::new()));
+        let t = text(&render(&mut a, 60, 12, draw_contacts));
+        assert!(t.contains(&t!("ui.no_contacts").to_string()));
+    }
+
+    fn vcard() -> crate::vcard_panel::Panel {
+        crate::vcard_panel::Panel::open(crate::vcard_parser::parse(
+            "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nEMAIL:ada@example.org\nTEL:555-0100\nEND:VCARD\n",
+        ))
+    }
+
+    #[test]
+    fn vcard_panel_shows_the_card_rows_under_its_name() {
+        let mut a = app();
+        assert!(blank(&render(&mut a, 80, 20, draw_vcard)));
+        a.vcard = Some(vcard());
+        let t = text(&render(&mut a, 80, 20, draw_vcard));
+        assert!(t.contains("Ada Lovelace"));
+        assert!(t.contains("ada@example.org"));
+        assert!(t.contains("555-0100"));
+        assert!(t.contains(&t!("ui.vcard_hint").to_string()));
+        assert!(a.layout.vcard.height >= 2);
+    }
+
+    #[test]
+    fn vcard_panel_gets_a_scrollbar_when_taller_than_the_screen() {
+        let mut a = app();
+        a.vcard = Some(vcard());
+        let rows = a.vcard.as_ref().unwrap().len();
+        assert!(rows >= 3);
+        // A screen too short for every row scrolls instead of growing.
+        let _ = render(&mut a, 80, 5, draw_vcard);
+        assert!(usize::from(a.layout.vcard.height) < rows);
+        assert_eq!(a.layout.vcard.width, 57);
+    }
+
+    #[test]
+    fn snippets_panel_filters_and_marks_the_selected_row() {
+        let mut a = app();
+        assert!(blank(&render(&mut a, 80, 24, draw_snippets)));
+        a.run_action("tools.snippets");
+        let t = text(&render(&mut a, 80, 24, draw_snippets));
+        assert!(t.contains(&t!("ui.snippets").to_string()));
+        assert!(t.contains(&t!("ui.snippets_filter").to_string()));
+        assert!(t.contains(&t!("ui.snippets_hint").to_string()));
+        assert!(a.layout.snippets.height > 0);
+
+        // Typing narrows the list and shows the query instead of the hint.
+        for c in "zzzz".chars() {
+            a.on_key(key(KeyCode::Char(c)));
+        }
+        let t = text(&render(&mut a, 80, 24, draw_snippets));
+        assert!(t.contains("/ zzzz"));
+        assert!(!t.contains(&t!("ui.snippets_filter").to_string()));
+    }
+
+    #[test]
+    fn snippets_panel_scrolls_a_long_library_with_a_scrollbar() {
+        let mut a = app();
+        a.run_action("tools.snippets");
+        let total = a.snippet_library.len();
+        assert!(total > 5, "bundled snippets exist");
+        let before = a.layout.snippets;
+        let _ = render(&mut a, 80, 10, draw_snippets);
+        assert!(a.layout.snippets.height < u16::try_from(total).unwrap());
+        assert_ne!(before, a.layout.snippets);
+        // Walking to the end keeps the selection inside the visible rows.
+        for _ in 0..total {
+            a.on_key(key(KeyCode::Down));
+        }
+        let t = text(&render(&mut a, 80, 10, draw_snippets));
+        assert!(t.contains(&t!("ui.snippets_hint").to_string()));
+    }
+
+    fn markdown_app(n_sections: usize) -> App {
+        let mut a = app();
+        let body: String = (0..n_sections)
+            .map(|i| format!("# Section {i}\n\nSome text for section {i}.\n\n"))
+            .collect();
+        a.editor.new_tab_with_content(&body);
+        a.run_action("tools.markdown_preview");
+        assert!(a.markdown_preview.is_some());
+        a
+    }
+
+    #[test]
+    fn markdown_preview_renders_rules_dim_and_scrolls_with_a_scrollbar() {
+        let mut a = app();
+        assert!(blank(&render(&mut a, 90, 24, draw_markdown_preview)));
+        let mut a = markdown_app(30);
+        let t = text(&render(&mut a, 90, 20, draw_markdown_preview));
+        assert!(t.contains(&t!("ui.markdown_preview").to_string()));
+        assert!(t.contains("Section 0"));
+        // Scrolling far past the end clamps to the last page.
+        a.markdown_preview.as_mut().unwrap().scroll = usize::MAX / 2;
+        let t = text(&render(&mut a, 90, 20, draw_markdown_preview));
+        assert!(t.contains("Section 29"));
+        assert!(!t.contains("Section 0"));
+        let max = a.markdown_preview.as_ref().unwrap().scroll;
+        assert!(max < usize::MAX / 2);
+    }
+
+    #[test]
+    fn markdown_preview_records_urls_when_the_terminal_has_hyperlinks() {
+        let mut a = app();
+        a.editor
+            .new_tab_with_content("see [the site](https://example.org/page) now\n");
+        a.run_action("tools.markdown_preview");
+        a.terminal_caps.hyperlinks = true;
+        let _ = render(&mut a, 90, 20, draw_markdown_preview);
+        assert_eq!(a.layout.hyperlink_regions.len(), 1);
+        assert!(
+            a.layout
+                .hyperlink_regions
+                .iter()
+                .any(|(_, urls)| urls.iter().any(|u| u.contains("example.org")))
+        );
+    }
+
+    #[test]
+    fn markdown_toc_lists_headings_indented_by_level() {
+        let mut a = app();
+        assert!(blank(&render(&mut a, 90, 24, draw_markdown_toc)));
+        a.editor
+            .new_tab_with_content("# Top\n\ntext\n\n## Child\n\nmore\n\n### Grand\n");
+        a.run_action("tools.markdown_preview");
+        a.on_key(key(KeyCode::Char('t')));
+        assert!(a.markdown_toc.is_some());
+        let buf = render(&mut a, 90, 24, draw_markdown_toc);
+        let t = text(&buf);
+        assert!(t.contains(&t!("ui.markdown_toc").to_string()));
+        let line_of = |needle: &str| {
+            text(&buf)
+                .lines()
+                .find(|l| l.contains(needle))
+                .map(|l| l.find(needle).unwrap())
+                .unwrap()
+        };
+        assert!(line_of("Child") > line_of("Top"));
+        assert!(line_of("Grand") > line_of("Child"));
+        assert!(t.contains(&t!("ui.markdown_toc_hint").to_string()));
+    }
+
+    #[test]
+    fn text_info_panel_shows_statistics_for_the_buffer() {
+        let mut a = app();
+        assert!(blank(&render(&mut a, 80, 24, draw_text_info)));
+        a.editor.new_tab_with_content("one two three\nfour\n");
+        a.run_action("tools.text_info");
+        let t = text(&render(&mut a, 80, 24, draw_text_info));
+        assert!(t.contains(&t!("ui.text_info").to_string()));
+        let first = a.info.text_info().unwrap().rows.first().unwrap().label.clone();
+        assert!(t.contains(&first), "the first statistic row is drawn");
+        assert!(a.layout.text_info.height > 0);
+    }
+
+    #[test]
+    fn file_info_panel_shows_the_active_file_facts() {
+        let dir = std::env::temp_dir().join(format!("vix-r2c-fileinfo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("facts.txt");
+        std::fs::write(&file, "hello world\n").unwrap();
+        let mut a = App::new(dir.clone(), Settings::default());
+        a.layout.editor = Rect::new(0, 0, 80, 24);
+        a.open_initial(&file);
+        assert!(blank(&render(&mut a, 90, 24, draw_file_info)));
+        a.run_action("tools.file_info");
+        let t = text(&render(&mut a, 90, 24, draw_file_info));
+        assert!(t.contains(&t!("ui.file_info").to_string()));
+        assert!(t.contains("facts.txt"));
+        assert!(a.layout.file_info.height > 0);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn system_info_panel_has_headings_and_scrolls() {
+        let mut a = app();
+        assert!(blank(&render(&mut a, 90, 24, draw_system_info)));
+        a.run_action("tools.system_info");
+        let t = text(&render(&mut a, 90, 24, draw_system_info));
+        assert!(t.contains(&t!("ui.system_info").to_string()));
+        assert!(t.contains(&t!("ui.system_info_hint").to_string()));
+        // A short screen shows only part of the rows, and moving down scrolls.
+        let _ = render(&mut a, 90, 8, draw_system_info);
+        let first = a.info.system_info().unwrap().scroll;
+        for _ in 0..a.info.system_info().unwrap().len() {
+            a.on_key(key(KeyCode::Down));
+        }
+        let _ = render(&mut a, 90, 8, draw_system_info);
+        assert!(a.info.system_info().unwrap().scroll > first);
+    }
+}
