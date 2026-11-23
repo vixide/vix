@@ -15,13 +15,11 @@ const MAX_IPC_PREFIX: usize = 96;
 pub(crate) fn random_hex(n: usize) -> io::Result<String> {
     let mut bytes = vec![0u8; n];
     getrandom::fill(&mut bytes).map_err(|e| io::Error::other(e.to_string()))?;
-    Ok(bytes
-        .iter()
-        .fold(String::with_capacity(n * 2), |mut out, b| {
-            use std::fmt::Write as _;
-            let _ = write!(out, "{b:02x}");
-            out
-        }))
+    Ok(bytes.iter().fold(String::new(), |mut out, b| {
+        use std::fmt::Write as _;
+        let _ = write!(out, "{b:02x}");
+        out
+    }))
 }
 
 /// A directory only the user can enter, removed (with everything in it)

@@ -140,3 +140,7 @@ never lands in a shared, predictable temporary path.
   it.
 - `runtime_dir` unit tests check the `0700`/`0600` modes and that the
   directory is removed; `discover` tests check precedence and caps.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). A start timeout too large to be a deadline ends the worker with `DeathReason::StartTimeout`. **Declared fallback:** a shutdown grace period too large to be a deadline is not honored and the kernel is killed at once instead of waited on without end. A wire message with no frames is a transport error, never an empty frame, and the stderr tail drops bytes only when it is over its cap. Counters, read lengths and the one-byte-larger cap carry `RCA-EXC-2` proofs.

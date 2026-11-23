@@ -173,13 +173,18 @@ async fn connect_sockets(
 }
 
 /// Convert wire frames to a multipart ZeroMQ message.
-fn to_zmq(frames: Vec<Vec<u8>>) -> ZmqMessage {
+///
+/// A message with no frames is not a message: it is a transport error, never an empty frame.
+fn to_zmq(frames: Vec<Vec<u8>>) -> ZmqResult<ZmqMessage> {
     let mut frames = frames.into_iter();
-    let mut message = ZmqMessage::from(frames.next().unwrap_or_default());
+    let first = frames.next().ok_or(zeromq::ZmqError::Other(
+        "a message needs at least one frame",
+    ))?;
+    let mut message = ZmqMessage::from(first);
     for frame in frames {
         message.push_back(frame.into());
     }
-    message
+    Ok(message)
 }
 
 impl Worker {
@@ -265,7 +270,10 @@ impl Worker {
             self.start_timeout,
         );
         tokio::pin!(connecting);
-        let deadline = Instant::now() + self.start_timeout;
+        // A start timeout too large to be a deadline is a start timeout error.
+        let Some(deadline) = Instant::now().checked_add(self.start_timeout) else {
+            return Err(Next::Stop(DeathReason::StartTimeout));
+        };
         let mut tick = interval(EXIT_POLL);
         loop {
             tokio::select! {
@@ -292,7 +300,13 @@ impl Worker {
 
     /// A fresh message id: the session id plus a worker-local counter (`_w` marks worker-originated messages; `KernelHandle::execute` uses plain numbers).
     fn next_id(&mut self) -> String {
-        self.counter += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: the counter has one step per message this worker sends in one session, so a u64 cannot overflow"
+        )]
+        {
+            self.counter += 1;
+        }
         format!("{}_w{}", self.session, self.counter)
     }
 
@@ -308,7 +322,7 @@ impl Worker {
         let date = jiff::Timestamp::now().to_string();
         let message = Message::new(msg_type, content, &id, &self.session, &self.username, &date);
         socket
-            .send(to_zmq(wire::encode(&message, &self.signer)))
+            .send(to_zmq(wire::encode(&message, &self.signer))?)
             .await
     }
 
@@ -347,7 +361,9 @@ impl Worker {
             return self.socket_failed(&e).await;
         }
         let mut ready = false;
-        let deadline = Instant::now() + self.start_timeout;
+        let Some(deadline) = Instant::now().checked_add(self.start_timeout) else {
+            return Next::Stop(DeathReason::StartTimeout);
+        };
         let mut tick = interval(EXIT_POLL);
 
         for command in std::mem::take(&mut self.pending) {
@@ -473,8 +489,10 @@ impl Worker {
             .await;
             return;
         };
-        let deadline = Instant::now() + self.grace;
-        while Instant::now() < deadline {
+        // A grace period too large to be a deadline is not honored: the kernel
+        // is killed at once rather than waited on without end.
+        let deadline = Instant::now().checked_add(self.grace);
+        while deadline.is_some_and(|d| Instant::now() < d) {
             if !matches!(launched.child.try_wait(), Ok(None)) {
                 return;
             }
@@ -606,5 +624,17 @@ impl Worker {
                 output,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod rca_tests {
+    use super::to_zmq;
+
+    /// A message needs at least one frame; none is an error, not an empty frame.
+    #[test]
+    fn a_message_without_frames_is_an_error() {
+        assert!(to_zmq(Vec::new()).is_err());
+        assert_eq!(to_zmq(vec![b"a".to_vec(), b"b".to_vec()]).unwrap().len(), 2);
     }
 }

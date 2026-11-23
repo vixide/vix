@@ -72,6 +72,10 @@ pub fn path_env() -> PathEnv {
 fn read_capped(path: &Path) -> Option<String> {
     let file = fs::File::open(path).ok()?;
     let mut text = String::new();
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: MAX_KERNEL_JSON_BYTES is a small constant, so one more than it fits u64"
+    )]
     let cap = u64::try_from(MAX_KERNEL_JSON_BYTES).unwrap_or(u64::MAX) + 1;
     file.take(cap).read_to_string(&mut text).ok()?;
     Some(text)

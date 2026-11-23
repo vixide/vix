@@ -108,8 +108,10 @@ impl StderrTail {
     fn push(&self, chunk: &[u8]) {
         if let Ok(mut buf) = self.0.lock() {
             buf.extend_from_slice(chunk);
-            let excess = buf.len().saturating_sub(STDERR_TAIL_BYTES);
-            buf.drain(..excess);
+            // Below the cap there is nothing to drop.
+            if let Some(excess) = buf.len().checked_sub(STDERR_TAIL_BYTES) {
+                buf.drain(..excess);
+            }
         }
     }
 
@@ -161,7 +163,12 @@ pub(crate) fn spawn_kernel(
                     if n == 0 {
                         break;
                     }
-                    sink.push(&buf[..n]);
+                    #[expect(
+                        clippy::indexing_slicing,
+                        reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most buf.len()"
+                    )]
+                    let received = &buf[..n];
+                    sink.push(received);
                 }
             });
     }
