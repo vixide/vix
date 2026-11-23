@@ -39,6 +39,17 @@
 //! assert_eq!(node_id(&note).as_deref(), Some("ABC-123"));
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
 #![warn(clippy::string_slice)]
 
 use std::fmt::Write as _;
@@ -48,6 +59,20 @@ use regex::Regex;
 
 /// The dailies sub-directory, matching org-roam's default `org-roam-dailies-directory`.
 pub const DAILIES_DIR: &str = "daily";
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Turn a node title into a filesystem-safe slug: lowercase, runs of
 /// non-alphanumeric characters collapsed to a single `-`, with no leading or
@@ -90,18 +115,15 @@ pub fn slugify(title: &str) -> String {
 /// no title line; an empty `#+title:` yields `Some("")`.
 #[must_use]
 pub fn node_title(content: &str) -> Option<String> {
+    const KEY: &str = "#+title:";
     for line in content.lines() {
-        let lower = line.trim_start().to_ascii_lowercase();
-        if let Some(rest) = lower.strip_prefix("#+title:") {
-            // Index into the *original* line (to keep the user's casing) by
-            // measuring how much of the lowercased copy is left after the key.
-            let start = line.len() - rest.len();
-            #[expect(
-                clippy::string_slice,
-                reason = "`to_ascii_lowercase` keeps byte offsets, and the stripped prefix is ASCII, so `start` is a char boundary"
-            )]
-            let value = &line[start..];
-            return Some(value.trim().to_string());
+        let trimmed = line.trim_start();
+        // The key matches in any case; the value keeps the user's casing.
+        if trimmed
+            .get(..KEY.len())
+            .is_some_and(|key| key.eq_ignore_ascii_case(KEY))
+        {
+            return Some(trimmed.get(KEY.len()..)?.trim().to_string());
         }
     }
     None
@@ -165,12 +187,8 @@ pub fn transclusion(id: &str, title: &str) -> String {
 /// `None`. Mirrors `org::headline_level` so this module stays self-contained
 /// (this crate must not depend on the Org crate).
 fn headline_stars(line: &str) -> Option<usize> {
-    let stars = line.len() - line.trim_start_matches('*').len();
-    #[expect(
-        clippy::string_slice,
-        reason = "`stars` counts leading ASCII `*` bytes, so it is a char boundary"
-    )]
-    let rest = &line[stars..];
+    let stars = line.chars().take_while(|c| *c == '*').count();
+    let rest = line.trim_start_matches('*');
     (stars > 0 && rest.starts_with(' ')).then_some(stars)
 }
 
@@ -193,28 +211,31 @@ fn headline_stars(line: &str) -> Option<usize> {
 pub fn nodeify(text: &str, line: usize, id: &str) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
     headline_stars(lines.get(line)?)?;
+    // The line after the headline; `line` is an index, so this cannot overflow.
+    let below = line.checked_add(1)?;
     // An existing drawer must start on the very next line.
     if lines
-        .get(line + 1)
+        .get(below)
         .is_some_and(|l| l.trim().eq_ignore_ascii_case(":PROPERTIES:"))
     {
-        let mut i = line + 2;
-        while i < lines.len() && !lines[i].trim().eq_ignore_ascii_case(":END:") {
-            if lines[i].trim().to_ascii_uppercase().starts_with(":ID:") {
-                return None; // already a node
-            }
-            // (An unterminated drawer just runs to end of file; the ID is then
-            // inserted right after `:PROPERTIES:`, which is still valid.)
-            i += 1;
+        // (An unterminated drawer just runs to end of file; the ID is then
+        // inserted right after `:PROPERTIES:`, which is still valid.)
+        let already = lines
+            .iter()
+            .skip(below.checked_add(1)?)
+            .take_while(|l| !l.trim().eq_ignore_ascii_case(":END:"))
+            .any(|l| l.trim().to_ascii_uppercase().starts_with(":ID:"));
+        if already {
+            return None; // already a node
         }
-        lines.insert(line + 2, format!(":ID:       {id}"));
+        lines.insert(below.checked_add(1)?, format!(":ID:       {id}"));
     } else {
         // Three inserts at the same index, in reverse, build the drawer in
         // order: `:PROPERTIES:`, `:ID:`, `:END:` end up directly below the
         // headline.
-        lines.insert(line + 1, ":END:".to_string());
-        lines.insert(line + 1, format!(":ID:       {id}"));
-        lines.insert(line + 1, ":PROPERTIES:".to_string());
+        lines.insert(below, ":END:".to_string());
+        lines.insert(below, format!(":ID:       {id}"));
+        lines.insert(below, ":PROPERTIES:".to_string());
     }
     Some(lines.join("\n"))
 }
@@ -262,11 +283,9 @@ pub fn all_ids(content: &str) -> Vec<String> {
 #[must_use]
 pub fn is_valid_daily_date(date: &str) -> bool {
     let b = date.as_bytes();
-    // The length check short-circuits first, so the `b[4]`/`b[7]` indexing
-    // below can never panic.
     b.len() == 10
-        && b[4] == b'-'
-        && b[7] == b'-'
+        && b.get(4) == Some(&b'-')
+        && b.get(7) == Some(&b'-')
         && date
             .bytes()
             .enumerate()
@@ -310,22 +329,21 @@ pub fn daily_entry(time: &str, text: &str) -> String {
 /// index of the `:END:` line. `None` if the file does not open with a drawer or
 /// the drawer is unterminated.
 fn drawer_range(lines: &[&str]) -> Option<(usize, usize)> {
-    let mut i = 0;
-    while i < lines.len() && lines[i].trim().is_empty() {
-        i += 1;
-    }
-    if i >= lines.len() || !lines[i].trim().eq_ignore_ascii_case(":PROPERTIES:") {
+    let start = lines.iter().position(|l| !l.trim().is_empty())?;
+    if !lines
+        .get(start)?
+        .trim()
+        .eq_ignore_ascii_case(":PROPERTIES:")
+    {
         return None;
     }
-    let start = i;
-    i += 1;
-    while i < lines.len() {
-        if lines[i].trim().eq_ignore_ascii_case(":END:") {
-            return Some((start, i + 1));
-        }
-        i += 1;
-    }
-    None
+    let end_at = lines
+        .iter()
+        .enumerate()
+        .skip(start.checked_add(1)?)
+        .find(|(_, l)| l.trim().eq_ignore_ascii_case(":END:"))?
+        .0;
+    Some((start, end_at.checked_add(1)?))
 }
 
 /// Append a `:KEY: value` line to the file-level property drawer (creating the
@@ -350,13 +368,18 @@ pub fn append_property(content: &str, key: &str, value: &str) -> String {
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
     if let Some((start, end)) = drawer_range(&refs) {
         let want = format!(":{key}:");
-        for line in lines.iter_mut().take(end).skip(start + 1) {
+        for line in lines
+            .iter_mut()
+            .take(end)
+            .skip(add_or(start, 1, usize::MAX))
+        {
             if line.trim().to_ascii_uppercase().starts_with(&want) {
                 let _ = write!(line, " {value}");
                 return lines.join("\n");
             }
         }
-        lines.insert(end - 1, format!(":{key}: {value}"));
+        // `end` is one past the `:END:` line, which the new line goes before.
+        lines.insert(sub_or(end, 1, 0), format!(":{key}: {value}"));
         return lines.join("\n");
     }
     format!(":PROPERTIES:\n:{key}: {value}\n:END:\n{content}")
@@ -401,7 +424,7 @@ pub fn add_filetag(content: &str, tag: &str) -> String {
     let pos = lines
         .iter()
         .position(|l| l.trim_start().to_ascii_lowercase().starts_with("#+title:"))
-        .map_or(0, |i| i + 1);
+        .map_or(0, |i| add_or(i, 1, usize::MAX));
     lines.insert(pos, new);
     lines.join("\n")
 }
