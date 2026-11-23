@@ -1,3 +1,14 @@
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
 #![warn(clippy::string_slice)]
 
 //! Org-capture: template-driven capture, in the shape of Emacs
@@ -34,6 +45,36 @@
 // ----- Template shape --------------------------------------------------------
 
 pub use vix_settings::EntryType;
+
+/// The char at `i`, or NUL past the end of `chars`: the end-of-template
+/// sentinel (the scanners below stop at the end before reading it).
+fn ch(chars: &[char], i: usize) -> char {
+    chars.get(i).copied().unwrap_or('\0')
+}
+
+/// The chars between `from` and `to`; empty for a range that is not inside `chars`.
+fn span(chars: &[char], from: usize, to: usize) -> &[char] {
+    chars.get(from..to).unwrap_or(&[])
+}
+
+/// `from + step`; an index past the top of `usize` is past any text.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Where a captured entry is filed, parsed from a template's `target` string.
 ///
@@ -141,25 +182,29 @@ pub fn extract_prompts(template: &str) -> Vec<FieldPrompt> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < chars.len() {
-        if chars[i] == '%'
-            && chars.get(i + 1) == Some(&'^')
-            && chars.get(i + 2) == Some(&'{')
-            && let Some(close) = find_char(&chars, i + 3, '}')
+        if ch(&chars, i) == '%'
+            && chars.get(ahead(i, 1)) == Some(&'^')
+            && chars.get(ahead(i, 2)) == Some(&'{')
+            && let Some(close) = find_char(&chars, ahead(i, 3), '}')
         {
-            let inner: String = chars[i + 3..close].iter().collect();
+            let inner: String = span(&chars, ahead(i, 3), close).iter().collect();
             let mut parts = inner.split('|');
-            let label = parts.next().unwrap_or_default().to_string();
+            let label = parts.next().unwrap_or("").to_string();
             let choices: Vec<String> = parts.map(str::to_string).collect();
-            let default = choices.first().cloned().unwrap_or_default();
+            // A prompt with no choices has an empty default.
+            let mut default = String::new();
+            if let Some(first) = choices.first() {
+                default.clone_from(first);
+            }
             out.push(FieldPrompt {
                 label,
                 default,
                 choices,
             });
-            i = close + 1;
+            i = ahead(close, 1);
             continue;
         }
-        i += 1;
+        i = ahead(i, 1);
     }
     out
 }
@@ -175,14 +220,12 @@ pub fn extract_prompts(template: &str) -> Vec<FieldPrompt> {
 #[must_use]
 pub fn wants_tags(template: &str) -> bool {
     let chars: Vec<char> = template.chars().collect();
-    chars
-        .windows(3)
-        .any(|w| w[0] == '%' && w[1] == '^' && (w[2] == 'g' || w[2] == 'G'))
+    chars.windows(3).any(|w| matches!(w, ['%', '^', 'g' | 'G']))
 }
 
 /// Index of the first `target` at or after `from` in `chars`, if any.
 fn find_char(chars: &[char], from: usize, target: char) -> Option<usize> {
-    (from..chars.len()).find(|&i| chars[i] == target)
+    (from..chars.len()).find(|&i| ch(chars, i) == target)
 }
 
 // ----- Expansion --------------------------------------------------------------
@@ -239,8 +282,8 @@ fn strftime(fmt: &str, ctx: &Context) -> String {
     let mut out = String::new();
     let mut i = 0;
     while i < chars.len() {
-        if chars[i] == '%' && i + 1 < chars.len() {
-            match chars[i + 1] {
+        if ch(&chars, i) == '%' && ahead(i, 1) < chars.len() {
+            match ch(&chars, ahead(i, 1)) {
                 'Y' => {
                     let _ = write!(out, "{:04}", ctx.year);
                 }
@@ -263,10 +306,10 @@ fn strftime(fmt: &str, ctx: &Context) -> String {
                     out.push(other);
                 }
             }
-            i += 2;
+            i = ahead(i, 2);
         } else {
-            out.push(chars[i]);
-            i += 1;
+            out.push(ch(&chars, i));
+            i = ahead(i, 1);
         }
     }
     out
@@ -309,42 +352,42 @@ pub fn expand(template: &str, answers: &[String], tags: Option<&str>, ctx: &Cont
     let mut answer_idx = 0;
     let mut i = 0;
     while i < chars.len() {
-        if chars[i] != '%' {
-            out.push(chars[i]);
-            i += 1;
+        if ch(&chars, i) != '%' {
+            out.push(ch(&chars, i));
+            i = ahead(i, 1);
             continue;
         }
         // A lone trailing `%` is literal.
-        let Some(&next) = chars.get(i + 1) else {
+        let Some(&next) = chars.get(ahead(i, 1)) else {
             out.push('%');
-            i += 1;
+            i = ahead(i, 1);
             continue;
         };
         if let Some(text) = simple_placeholder(next, ctx) {
             out.push_str(&text);
-            i += 2;
+            i = ahead(i, 2);
             continue;
         }
         match next {
             '%' => {
                 out.push('%');
-                i += 2;
+                i = ahead(i, 2);
             }
             '?' => {
                 // Counted in chars, not bytes, to match the editor's addressing.
                 // If `%?` appears more than once, the last one wins.
                 cursor_offset = Some(out.chars().count());
-                i += 2;
+                i = ahead(i, 2);
             }
             '<' => {
-                if let Some(close) = find_char(&chars, i + 2, '>') {
-                    let fmt: String = chars[i + 2..close].iter().collect();
+                if let Some(close) = find_char(&chars, ahead(i, 2), '>') {
+                    let fmt: String = span(&chars, ahead(i, 2), close).iter().collect();
                     out.push_str(&strftime(&fmt, ctx));
-                    i = close + 1;
+                    i = ahead(close, 1);
                 } else {
                     // No closing `>`: keep the `%` and rescan the rest as text.
                     out.push('%');
-                    i += 1;
+                    i = ahead(i, 1);
                 }
             }
             '^' => {
@@ -354,7 +397,7 @@ pub fn expand(template: &str, answers: &[String], tags: Option<&str>, ctx: &Cont
             // ordinary text (so `%z` stays `%z`).
             _ => {
                 out.push('%');
-                i += 1;
+                i = ahead(i, 1);
             }
         }
     }
@@ -395,24 +438,24 @@ fn expand_caret(
 ) -> usize {
     // Prompt answers are consumed positionally: the n-th `%^{}` takes
     // `answers[n]`, matching the order [`extract_prompts`] reports.
-    match chars.get(i + 2) {
+    match chars.get(ahead(i, 2)) {
         Some('{') => {
-            if let Some(close) = find_char(chars, i + 3, '}') {
+            if let Some(close) = find_char(chars, ahead(i, 3), '}') {
                 out.push_str(answers.get(*answer_idx).map_or("", String::as_str));
-                *answer_idx += 1;
-                close + 1
+                *answer_idx = ahead(*answer_idx, 1);
+                ahead(close, 1)
             } else {
                 out.push('%');
-                i + 1
+                ahead(i, 1)
             }
         }
         Some('g' | 'G') => {
             out.push_str(tags.unwrap_or(""));
-            i + 3
+            ahead(i, 3)
         }
         _ => {
             out.push('%');
-            i + 1
+            ahead(i, 1)
         }
     }
 }
@@ -524,7 +567,7 @@ pub fn wrap_entry(entry_type: EntryType, expanded: &str) -> String {
 /// `None`.
 fn headline_stars(line: &str) -> Option<usize> {
     // `*` is one byte, so the byte-length difference is the star count.
-    let stars = line.len() - line.trim_start_matches('*').len();
+    let stars = sub_or(line.len(), line.trim_start_matches('*').len(), 0);
     (stars > 0 && after_stars(line, stars).starts_with(' ')).then_some(stars)
 }
 
@@ -533,11 +576,7 @@ fn headline_stars(line: &str) -> Option<usize> {
 /// `stars` must come from [`headline_stars`] (or the same leading-`*` count),
 /// so it only ever spans ASCII `*` bytes and is a char boundary.
 fn after_stars(line: &str, stars: usize) -> &str {
-    #[expect(
-        clippy::string_slice,
-        reason = "`stars` counts leading ASCII `*` bytes, so it is a char boundary"
-    )]
-    &line[stars..]
+    line.get(stars..).unwrap_or("")
 }
 
 /// Strip a trailing ` :tag:tag:` block from a headline's text, if present.
@@ -570,8 +609,13 @@ fn find_headline(lines: &[String], title: &str) -> Option<(usize, usize)> {
 /// The end of the subtree starting at `lines[start]` (a headline at `level`):
 /// the index of the next headline at `level` or shallower, or `lines.len()`.
 fn subtree_end(lines: &[String], start: usize, level: usize) -> usize {
-    (start + 1..lines.len())
-        .find(|&i| headline_stars(&lines[i]).is_some_and(|s| s <= level))
+    (ahead(start, 1)..lines.len())
+        .find(|&i| {
+            lines
+                .get(i)
+                .and_then(|l| headline_stars(l))
+                .is_some_and(|s| s <= level)
+        })
         .unwrap_or(lines.len())
 }
 
@@ -581,38 +625,47 @@ fn subtree_end(lines: &[String], start: usize, level: usize) -> usize {
 fn child_insert_point(lines: &[String], headline_idx: usize) -> usize {
     // Insert before existing children (prepend), but after the headline's own
     // `:PROPERTIES:` drawer, which Org requires to sit directly under it.
-    let mut i = headline_idx + 1;
+    let mut i = ahead(headline_idx, 1);
     if lines
         .get(i)
         .is_some_and(|l| l.trim().eq_ignore_ascii_case(":PROPERTIES:"))
     {
-        i += 1;
-        while i < lines.len() && !lines[i].trim().eq_ignore_ascii_case(":END:") {
-            i += 1;
-        }
-        // Step past `:END:` (an unterminated drawer is left as found).
-        i = if i < lines.len() { i + 1 } else { i };
+        i = skip_drawer(lines, i);
     }
     i
+}
+
+/// The index just past the `:PROPERTIES:` drawer that opens at `open` (an
+/// unterminated drawer is left as found: the index of its last line).
+fn skip_drawer(lines: &[String], open: usize) -> usize {
+    let mut i = ahead(open, 1);
+    while lines
+        .get(i)
+        .is_some_and(|l| !l.trim().eq_ignore_ascii_case(":END:"))
+    {
+        i = ahead(i, 1);
+    }
+    if i < lines.len() { ahead(i, 1) } else { i }
 }
 
 /// The end of the file's front matter: leading blank lines, an optional
 /// file-level `:PROPERTIES:`/`:END:` drawer, then any run of `#+` lines.
 fn front_matter_end(lines: &[String]) -> usize {
     let mut i = 0;
-    while i < lines.len() && lines[i].trim().is_empty() {
-        i += 1;
+    while lines.get(i).is_some_and(|l| l.trim().is_empty()) {
+        i = ahead(i, 1);
     }
-    if i < lines.len() && lines[i].trim().eq_ignore_ascii_case(":PROPERTIES:") {
-        i += 1;
-        while i < lines.len() && !lines[i].trim().eq_ignore_ascii_case(":END:") {
-            i += 1;
-        }
-        i = if i < lines.len() { i + 1 } else { i };
-    }
-    while i < lines.len() && (lines[i].trim_start().starts_with("#+") || lines[i].trim().is_empty())
+    if lines
+        .get(i)
+        .is_some_and(|l| l.trim().eq_ignore_ascii_case(":PROPERTIES:"))
     {
-        i += 1;
+        i = skip_drawer(lines, i);
+    }
+    while lines
+        .get(i)
+        .is_some_and(|l| l.trim_start().starts_with("#+") || l.trim().is_empty())
+    {
+        i = ahead(i, 1);
     }
     i
 }
@@ -621,13 +674,13 @@ fn front_matter_end(lines: &[String]) -> usize {
 /// both sides.
 fn splice(lines: &mut Vec<String>, at: usize, block: Vec<String>, empty_lines: u8) {
     // The same padding goes before and after, mirroring Org's `:empty-lines`.
-    let pad = vec![String::new(); empty_lines as usize];
+    let pad = vec![String::new(); usize::from(empty_lines)];
     let mut insert = pad.clone();
     insert.extend(block);
     insert.extend(pad);
     // Inserted one by one (O(n*m)); capture entries are a handful of lines.
     for (offset, line) in insert.into_iter().enumerate() {
-        lines.insert(at + offset, line);
+        lines.insert(ahead(at, offset), line);
     }
 }
 
@@ -640,13 +693,21 @@ fn bump_stars(entry_lines: &[String], target_level: usize) -> Vec<String> {
     };
     // Every headline shifts by the same delta so the entry's internal
     // hierarchy is preserved; `.max(1)` guards against going below one star.
-    let delta =
-        i64::try_from(target_level + 1).unwrap_or(0) - i64::try_from(first_stars).unwrap_or(0);
+    let Some(delta) = i64::try_from(ahead(target_level, 1))
+        .ok()
+        .zip(i64::try_from(first_stars).ok())
+        .and_then(|(want, have)| want.checked_sub(have))
+    else {
+        return entry_lines.to_vec();
+    };
     entry_lines
         .iter()
         .map(|l| match headline_stars(l) {
             Some(s) => {
-                let new_s = (i64::try_from(s).unwrap_or(0) + delta).max(1);
+                let new_s = i64::try_from(s)
+                    .ok()
+                    .and_then(|s| s.checked_add(delta))
+                    .map_or(1, |n| n.max(1));
                 let new_s = usize::try_from(new_s).unwrap_or(1);
                 format!("{}{}", "*".repeat(new_s), after_stars(l, s))
             }
@@ -714,7 +775,10 @@ pub fn insert_under_headline(
         || create_child_headline(&mut lines, None, 1, title),
         |(i, _)| i,
     );
-    let level = headline_stars(&lines[h_idx]).unwrap_or(1);
+    let level = lines
+        .get(h_idx)
+        .and_then(|l| headline_stars(l))
+        .unwrap_or(1);
     let entry_lines: Vec<String> = entry.split('\n').map(str::to_string).collect();
     let bumped = bump_stars(&entry_lines, level);
     let at = if prepend {
@@ -761,7 +825,7 @@ pub fn insert_under_id(
     })?;
     let owner = (0..id_line)
         .rev()
-        .find_map(|i| headline_stars(&lines[i]).map(|s| (i, s)));
+        .find_map(|i| lines.get(i).and_then(|l| headline_stars(l)).map(|s| (i, s)));
     let entry_lines: Vec<String> = entry.split('\n').map(str::to_string).collect();
     if let Some((h_idx, level)) = owner {
         let bumped = bump_stars(&entry_lines, level);
@@ -807,7 +871,7 @@ pub fn datetree_path(ctx: &Context) -> [String; 3] {
     let month_name = ctx
         .month
         .checked_sub(1)
-        .and_then(|i| MONTH_NAMES.get(i as usize))
+        .and_then(|i| MONTH_NAMES.get(usize::try_from(i).ok()?))
         .copied()
         .unwrap_or("");
     [
@@ -830,10 +894,12 @@ fn find_child_headline(
 ) -> Option<usize> {
     let (start, end) = match parent {
         None => (0, lines.len()),
-        Some(p) => (p + 1, subtree_end(lines, p, level - 1)),
+        Some(p) => (ahead(p, 1), subtree_end(lines, p, sub_or(level, 1, 0))),
     };
     (start..end).find(|&i| {
-        headline_stars(&lines[i]) == Some(level) && after_stars(&lines[i], level).trim() == title
+        lines.get(i).is_some_and(|l| {
+            headline_stars(l) == Some(level) && after_stars(l, level).trim() == title
+        })
     })
 }
 
@@ -851,21 +917,24 @@ fn create_child_headline(
             0
         }
         None => lines.len(),
-        Some(p) => subtree_end(lines, p, level - 1),
+        Some(p) => subtree_end(lines, p, sub_or(level, 1, 0)),
     };
     // Only pad top-level appends with a separating blank line; a freshly
     // created child headline nests directly under its parent, no gap.
-    let need_blank =
-        parent.is_none() && at > 0 && lines.get(at - 1).is_some_and(|l| !l.trim().is_empty());
+    let need_blank = parent.is_none()
+        && at
+            .checked_sub(1)
+            .and_then(|before| lines.get(before))
+            .is_some_and(|l| !l.trim().is_empty());
     let mut block = Vec::new();
     if need_blank {
         block.push(String::new());
     }
     block.push(format!("{} {title}", "*".repeat(level)));
     for (offset, line) in block.into_iter().enumerate() {
-        lines.insert(at + offset, line);
+        lines.insert(ahead(at, offset), line);
     }
-    at + usize::from(need_blank)
+    ahead(at, usize::from(need_blank))
 }
 
 /// Insert `entry` under the dated subtree for `ctx`'s date in `file_text` (a
@@ -897,7 +966,7 @@ pub fn insert_datetree(
     let path = datetree_path(ctx);
     let mut parent: Option<usize> = None;
     for (level_idx, title) in path.iter().enumerate() {
-        let level = level_idx + 1;
+        let level = ahead(level_idx, 1);
         let found = find_child_headline(&lines, parent, level, title);
         parent =
             Some(found.unwrap_or_else(|| create_child_headline(&mut lines, parent, level, title)));
