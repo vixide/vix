@@ -293,7 +293,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(3), Constraint::Length(h)])
             .split(chunk(&rows, 1));
-        (v[0], Some(v[1]))
+        (chunk(&v, 0), Some(chunk(&v, 1)))
     } else {
         (chunk(&rows, 1), None)
     };
@@ -329,7 +329,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 
     // Keep the explorer selection within its viewport (also used by mouse).
     if let Some(r) = explorer_rect {
-        let h = r.height.minus(2) as usize;
+        let h = usize::from(r.height.minus(2));
         app.explorer.ensure_visible(h);
     }
 
@@ -621,7 +621,10 @@ fn menu_offsets(defs: &[MenuDef]) -> Vec<u16> {
 /// menu bar as shown, [`crate::menu::Menu::defs`]), padding included.
 #[must_use]
 pub fn menu_title_width(defs: &[MenuDef], index: usize) -> u16 {
-    (u16::try_from(defs[index].title().chars().count()).unwrap_or(u16::MAX)).plus(2)
+    let title_w = defs.get(index).map_or(0, |d| {
+        u16::try_from(d.title().chars().count()).unwrap_or(u16::MAX)
+    });
+    title_w.plus(2)
 }
 
 /// Screen column where the top-level menu title at `index` starts. Left to right
@@ -629,7 +632,7 @@ pub fn menu_title_width(defs: &[MenuDef], index: usize) -> u16 {
 /// the first menu is rightmost (T564).
 #[must_use]
 pub fn menu_title_x(defs: &[MenuDef], bar: Rect, index: usize, mirrored: bool) -> u16 {
-    let offset = menu_offsets(defs)[index];
+    let offset = menu_offsets(defs).get(index).copied().unwrap_or(0);
     if mirrored {
         bar.x
             .plus(bar.width)
@@ -676,7 +679,9 @@ pub fn menu_dropdown_rect_for(
     index: usize,
     mirrored: bool,
 ) -> Rect {
-    let def = &defs[index];
+    let Some(def) = defs.get(index) else {
+        return Rect::default();
+    };
     let width = dropdown_width(def.items);
     let x = if mirrored {
         menu_title_x(defs, bar, index, true)
@@ -857,7 +862,11 @@ fn hslice_spans(spans: &[Span], offset: usize, width: usize) -> Vec<Span<'static
         let start = skip;
         skip = 0;
         let take = remaining.min(len.minus(start));
-        let text: String = chars[start..start.plus(take)].iter().collect();
+        let text: String = chars
+            .get(start..start.plus(take))
+            .unwrap_or(&[])
+            .iter()
+            .collect();
         remaining = remaining.minus(take);
         out.push(Span::styled(text, sp.style));
     }
@@ -937,14 +946,15 @@ fn centered(area: Rect, pct_x: u16, pct_y: u16) -> Rect {
             Constraint::Percentage(100_u16.minus(pct_y).quot(2)),
         ])
         .split(area);
-    Layout::default()
+    let h = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(100_u16.minus(pct_x).quot(2)),
             Constraint::Percentage(pct_x),
             Constraint::Percentage(100_u16.minus(pct_x).quot(2)),
         ])
-        .split(v[1])[1]
+        .split(chunk(&v, 1));
+    chunk(&h, 1)
 }
 
 #[cfg(test)]

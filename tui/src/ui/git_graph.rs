@@ -66,6 +66,36 @@ fn footer(p: &Panel) -> String {
     }
 }
 
+/// One commit row of the graph: lane glyphs, short sha, decorations, subject
+/// padded to fill `widths` (graph, available), then author and date.
+fn commit_line(
+    c: &Commit,
+    r: &vix_git_graph::Row,
+    (graph_w, avail): (usize, usize),
+    selected: bool,
+) -> Line<'static> {
+    let graph = r.glyphs(graph_w);
+    let deco = decoration(c);
+    let tail = format!("  {} {}", trunc(&c.author, 16), c.date);
+    let used = graph
+        .chars()
+        .count()
+        .plus(c.abbrev.chars().count())
+        .plus(2)
+        .plus(deco.chars().count());
+    let subject_w = avail.minus(used.plus(tail.chars().count())).max(8);
+    let subject = trunc(&c.subject, subject_w);
+    let pad = " ".repeat(subject_w.minus(subject.chars().count()));
+    let style = |s: Style| if selected { theme::selected() } else { s };
+    Line::from(vec![
+        Span::styled(graph, style(theme::dim())),
+        Span::styled(format!(" {} ", c.abbrev), style(Style::default())),
+        Span::styled(deco, style(Style::default().add_modifier(Modifier::BOLD))),
+        Span::styled(format!("{subject}{pad}"), style(Style::default())),
+        Span::styled(tail, style(theme::dim())),
+    ])
+}
+
 /// Draw the commit-graph overlay (up to 120 columns wide, nearly full height).
 /// No-op when none is open.
 pub(super) fn draw_git_graph(app: &mut App, frame: &mut Frame, area: Rect) {
@@ -98,7 +128,7 @@ pub(super) fn draw_git_graph(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.git_graph.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -124,31 +154,13 @@ pub(super) fn draw_git_graph(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(header), chunk(&chunks, 0));
 
     let graph_w = p.graph_width();
-    let avail = chunk(&chunks, 1).width as usize;
+    let avail = usize::from(chunk(&chunks, 1).width);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for (row, &idx) in p.visible().iter().enumerate().skip(p.scroll).take(view_h) {
-        let (c, r) = (&p.commits[idx], &p.rows[idx]);
-        let graph = r.glyphs(graph_w);
-        let deco = decoration(c);
-        let tail = format!("  {} {}", trunc(&c.author, 16), c.date);
-        let used = graph
-            .chars()
-            .count()
-            .plus(c.abbrev.chars().count())
-            .plus(2)
-            .plus(deco.chars().count());
-        let subject_w = avail.minus(used.plus(tail.chars().count())).max(8);
-        let subject = trunc(&c.subject, subject_w);
-        let pad = " ".repeat(subject_w.minus(subject.chars().count()));
-        let selected = row == p.selected;
-        let style = |s: Style| if selected { theme::selected() } else { s };
-        lines.push(Line::from(vec![
-            Span::styled(graph, style(theme::dim())),
-            Span::styled(format!(" {} ", c.abbrev), style(Style::default())),
-            Span::styled(deco, style(Style::default().add_modifier(Modifier::BOLD))),
-            Span::styled(format!("{subject}{pad}"), style(Style::default())),
-            Span::styled(tail, style(theme::dim())),
-        ]));
+    let visible = p.visible();
+    let shown = visible.iter().enumerate().skip(p.scroll).take(view_h);
+    let rows = shown.filter_map(|(n, &i)| Some((n, p.commits.get(i)?, p.rows.get(i)?)));
+    for (row, c, r) in rows {
+        lines.push(commit_line(c, r, (graph_w, avail), row == p.selected));
     }
     let total = p.len();
     let show_bar = total > view_h && chunk(&chunks, 1).width > 1;

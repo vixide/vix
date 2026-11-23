@@ -119,7 +119,7 @@ pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.oc.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -143,7 +143,7 @@ pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(tabs)), chunk(&chunks, 0));
 
     let total = p.len();
-    let avail = chunk(&chunks, 1).width as usize;
+    let avail = usize::from(chunk(&chunks, 1).width);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     if total == 0 {
         lines.push(Line::from(Span::styled(

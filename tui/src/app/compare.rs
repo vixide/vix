@@ -136,29 +136,26 @@ impl App {
         let Some((l, r)) = self.compare_tabs() else {
             return false;
         };
-        let revisions = (
-            self.editor.tabs[l].editor.revision(),
-            self.editor.tabs[r].editor.revision(),
-        );
+        let (Some(lt), Some(rt)) = (self.editor.tabs.get(l), self.editor.tabs.get(r)) else {
+            return false;
+        };
+        let revisions = (lt.editor.revision(), rt.editor.revision());
         if let Some(c) = self.compare.as_mut()
             && c.revisions != Some(revisions)
         {
-            c.hunks = compare::hunks(
-                &self.editor.tabs[l].editor.get_content(),
-                &self.editor.tabs[r].editor.get_content(),
-            );
+            c.hunks = compare::hunks(&lt.editor.get_content(), &rt.editor.get_content());
             c.revisions = Some(revisions);
             for (side, i) in [(Side::Left, l), (Side::Right, r)] {
                 let marks: Vec<(usize, &str)> = compare::marks(&c.hunks, side)
                     .into_iter()
                     .map(|(line, m)| (line, mark_hex(m)))
                     .collect();
-                self.editor.tabs[i].editor.set_gutter_marks(marks);
-                // Filler rows (T671) keep the shorter side of each change
-                // row-aligned with the longer one.
-                self.editor.tabs[i]
-                    .editor
-                    .set_filler_rows(compare::fillers(&c.hunks, side));
+                if let Some(tab) = self.editor.tabs.get_mut(i) {
+                    tab.editor.set_gutter_marks(marks);
+                    // Filler rows (T671) keep the shorter side of each change
+                    // row-aligned with the longer one.
+                    tab.editor.set_filler_rows(compare::fillers(&c.hunks, side));
+                }
             }
         }
         let Some((side, l, r)) = self.compare_side() else {
@@ -168,12 +165,16 @@ impl App {
             Side::Left => (l, r),
             Side::Right => (r, l),
         };
-        let top = self.editor.tabs[here].editor.get_offset_y();
+        let Some(top) = self.editor.tabs.get(here).map(|t| t.editor.get_offset_y()) else {
+            return false;
+        };
         if let Some(c) = self.compare.as_ref() {
             // A line the hunk table cannot map (an inconsistent table) leaves the
             // other pane where it is.
-            if let Some(mapped) = compare::map_line(&c.hunks, side, top) {
-                self.editor.tabs[there].editor.set_offset_y(mapped);
+            if let Some(mapped) = compare::map_line(&c.hunks, side, top)
+                && let Some(tab) = self.editor.tabs.get_mut(there)
+            {
+                tab.editor.set_offset_y(mapped);
             }
         }
         true
@@ -218,7 +219,7 @@ impl App {
         } else {
             compare::prev_hunk(&c.hunks, side, line)
         };
-        let Some(start) = found.map(|i| c.hunks[i].on(side).start) else {
+        let Some(start) = found.and_then(|i| c.hunks.get(i)).map(|h| h.on(side).start) else {
             self.status = t!("status.compare_no_more").to_string();
             return;
         };
@@ -246,7 +247,10 @@ impl App {
             Side::Left => r,
             Side::Right => l,
         };
-        if self.editor.tabs[target].read_only {
+        let Some(target_tab) = self.editor.tabs.get(target) else {
+            return;
+        };
+        if target_tab.read_only {
             self.status = t!("status.read_only_blocked").to_string();
             return;
         }
@@ -257,12 +261,17 @@ impl App {
             self.status = t!("status.compare_no_change_here").to_string();
             return;
         };
-        let left = self.editor.tabs[l].editor.get_content();
-        let right = self.editor.tabs[r].editor.get_content();
+        let (Some(lt), Some(rt)) = (self.editor.tabs.get(l), self.editor.tabs.get(r)) else {
+            return;
+        };
+        let left = lt.editor.get_content();
+        let right = rt.editor.get_content();
         let Some(new) = compare::copy_hunk(&c.hunks, index, from, &left, &right) else {
             return;
         };
-        let tab = &mut self.editor.tabs[target];
+        let Some(tab) = self.editor.tabs.get_mut(target) else {
+            return;
+        };
         let cursor = tab.editor.get_cursor();
         tab.editor.set_content(&new);
         tab.editor.set_selection(None);
@@ -278,18 +287,17 @@ impl App {
             self.status = t!("status.compare_inactive").to_string();
             return;
         };
-        let name = |i: usize| {
-            self.editor.tabs[i]
-                .path
+        let (Some(lt), Some(rt)) = (self.editor.tabs.get(l), self.editor.tabs.get(r)) else {
+            return;
+        };
+        let name = |t: &vix_editor::editor::Tab| {
+            t.path
                 .as_deref()
                 .and_then(Path::file_name)
                 .map_or_default(|n| n.to_string_lossy().into_owned())
         };
-        let title = format!("{} ↔ {}", name(l), name(r));
-        let lines = crate::diff_view::build(
-            &self.editor.tabs[l].editor.get_content(),
-            &self.editor.tabs[r].editor.get_content(),
-        );
+        let title = format!("{} ↔ {}", name(lt), name(rt));
+        let lines = crate::diff_view::build(&lt.editor.get_content(), &rt.editor.get_content());
         if lines.is_empty() {
             self.status = t!("status.diff_identical").to_string();
             return;
@@ -309,8 +317,10 @@ impl App {
             return;
         };
         for i in [l, r] {
-            self.editor.tabs[i].editor.clear_gutter_marks();
-            self.editor.tabs[i].editor.clear_filler_rows();
+            if let Some(tab) = self.editor.tabs.get_mut(i) {
+                tab.editor.clear_gutter_marks();
+                tab.editor.clear_filler_rows();
+            }
         }
         self.compare = None;
         self.editor.split_root = None;

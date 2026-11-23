@@ -59,7 +59,7 @@ pub(super) fn draw_hl7_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.hl7_panel.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -81,22 +81,23 @@ pub(super) fn draw_hl7_panel(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let matches = p.matches();
     let total = matches.len();
-    let text_w = (chunk(&chunks, 1).width as usize).minus(1);
+    let text_w = usize::from(chunk(&chunks, 1).width).minus(1);
     let lines: Vec<Line> = matches
         .iter()
         .enumerate()
         .skip(p.scroll)
         .take(view_h)
-        .map(|(row, &idx)| {
-            let text = trunc(&p.rows[idx].display(), text_w);
+        .filter_map(|(row, &idx)| {
+            let r = p.rows.get(idx)?;
+            let text = trunc(&r.display(), text_w);
             let style = if row == p.selected {
                 theme::selected()
-            } else if p.rows[idx].kind == RowKind::Segment {
+            } else if r.kind == RowKind::Segment {
                 theme::title(true)
             } else {
                 Style::default()
             };
-            Line::from(Span::styled(text, style))
+            Some(Line::from(Span::styled(text, style)))
         })
         .collect();
     let show_bar = total > view_h && chunk(&chunks, 1).width > 1;

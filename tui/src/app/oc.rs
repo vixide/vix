@@ -135,7 +135,12 @@ impl App {
             .iter()
             .position(|c| *c == self.settings.oc_engine)
             .unwrap_or(0);
-        let next = choices[vix_list_state::wrap_down(at, choices.len())].clone();
+        let Some(next) = choices
+            .get(vix_list_state::wrap_down(at, choices.len()))
+            .cloned()
+        else {
+            return;
+        };
         self.status = t!("status.oc_engine_set", name = next.as_str()).to_string();
         self.settings.oc_engine = next;
     }

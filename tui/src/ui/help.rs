@@ -23,6 +23,14 @@ use super::{centered, trunc};
 use crate::app::App;
 use crate::theme::{self, icon};
 
+/// One row of the shortcut table: the action name padded to `action_w`, then its keys.
+fn shortcut_line(s: &crate::keyboard_shortcut_panel::Shortcut, action_w: usize) -> Line<'static> {
+    Line::from(vec![
+        Span::raw(format!(" {:<action_w$}", trunc(&s.action, action_w))),
+        Span::styled(format!("  {}", s.keys), theme::title(true)),
+    ])
+}
+
 /// Draw the keyboard-shortcut help overlay.
 pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
     use crate::keyboard_shortcut_panel::Column;
@@ -66,7 +74,7 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
         .max()
         .unwrap_or(8)
         .clamp(8, 28);
-    let action_w = (chunk(&chunks, 1).width as usize)
+    let action_w = usize::from(chunk(&chunks, 1).width)
         .minus(keys_w.plus(3))
         .max(8);
 
@@ -108,20 +116,16 @@ pub(super) fn draw_help(app: &mut App, frame: &mut Frame, area: Rect) {
         },
     ];
 
-    let view_h = chunk(&chunks, 2).height as usize;
+    let view_h = usize::from(chunk(&chunks, 2).height);
     if let Some(h) = app.help.as_mut() {
         h.clamp_scroll(view_h);
     }
     let Some(h) = app.help.as_ref() else { return };
     let filtered = h.matches();
-    let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for &idx in filtered.iter().skip(h.scroll).take(view_h) {
-        let s = &h.rows[idx];
-        lines.push(Line::from(vec![
-            Span::raw(format!(" {:<action_w$}", trunc(&s.action, action_w))),
-            Span::styled(format!("  {}", s.keys), theme::title(true)),
-        ]));
-    }
+    let lines: Vec<Line> = (filtered.iter().skip(h.scroll).take(view_h))
+        .filter_map(|&idx| h.rows.get(idx))
+        .map(|s| shortcut_line(s, action_w))
+        .collect();
     let body = if lines.is_empty() {
         vec![Line::from(Span::styled(
             t!("ui.no_matches").to_string(),
@@ -185,7 +189,7 @@ pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rec
         .max()
         .unwrap_or(8)
         .clamp(8, 28);
-    let action_w = (chunk(&chunks, 1).width as usize)
+    let action_w = usize::from(chunk(&chunks, 1).width)
         .minus(keys_w.plus(3))
         .max(8);
 
@@ -226,7 +230,7 @@ pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rec
         },
     ];
 
-    let view_h = chunk(&chunks, 2).height as usize;
+    let view_h = usize::from(chunk(&chunks, 2).height);
     if let Some(p) = app.keybinding_editor.as_mut() {
         p.clamp_scroll(view_h);
     }
@@ -236,8 +240,11 @@ pub(super) fn draw_keybinding_editor(app: &mut App, frame: &mut Frame, area: Rec
     let filtered = p.matches();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (row_pos, &idx) in filtered.iter().enumerate().skip(p.scroll).take(view_h) {
+        let Some(row) = p.rows.get(idx) else {
+            continue;
+        };
         lines.push(keybinding_editor_row_line(
-            &p.rows[idx],
+            row,
             row_pos == p.selected,
             action_w,
         ));

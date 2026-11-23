@@ -53,7 +53,7 @@ pub(super) fn draw_choice_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(o) = app.choice_list.as_mut() {
         o.panel.ensure_visible(view_h);
     }

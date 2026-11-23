@@ -548,7 +548,8 @@ impl App {
             s.im_threads_refresh_active();
             let line = s.im.threads.get(id).map_or(1, |t| t.start_line);
             let area = s.editor_view();
-            s.editor.goto(line as usize, None, area);
+            s.editor
+                .goto(usize::try_from(line).unwrap_or(usize::MAX), None, area);
             s.focus = super::Focus::Editor;
         });
         if self.im.threads.outdated.contains(id) {
@@ -598,7 +599,8 @@ impl App {
             .map(|(id, _)| id.clone());
         self.with_jump(|s| {
             let area = s.editor_view();
-            s.editor.goto(line as usize, None, area);
+            s.editor
+                .goto(usize::try_from(line).unwrap_or(usize::MAX), None, area);
         });
         if let Some(id) = id {
             self.im_thread_status(&id);

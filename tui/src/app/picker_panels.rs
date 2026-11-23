@@ -195,8 +195,8 @@ impl App {
         if !rect_contains(r, mouse.column, mouse.row) {
             return;
         }
-        let col = mouse.column.minus(r.x).quot(crate::ui::NERD_CELL_W) as usize;
-        let row = mouse.row.minus(r.y) as usize;
+        let col = usize::from(mouse.column.minus(r.x).quot(crate::ui::NERD_CELL_W));
+        let row = usize::from(mouse.row.minus(r.y));
         if let Some(p) = self.info.nerd_palette_mut()
             && p.select_at(row, col)
         {

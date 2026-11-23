@@ -196,20 +196,18 @@ impl App {
 
     /// The breakpoints as session records, in a stable order.
     fn breakpoint_records(&self) -> Vec<crate::session::BreakpointRecord> {
-        let mut paths: Vec<&PathBuf> = self.breakpoints.keys().collect();
-        paths.sort();
+        let mut paths: Vec<_> = self.breakpoints.iter().collect();
+        paths.sort_by_key(|&(path, _)| path);
         paths
             .into_iter()
-            .flat_map(|path| {
-                self.breakpoints[path]
-                    .values()
-                    .map(|bp| crate::session::BreakpointRecord {
-                        path: path.to_string_lossy().into_owned(),
-                        line: bp.line,
-                        condition: bp.condition.clone(),
-                        hit_condition: bp.hit_condition.clone(),
-                        log_message: bp.log_message.clone(),
-                    })
+            .flat_map(|(path, points)| {
+                points.values().map(|bp| crate::session::BreakpointRecord {
+                    path: path.to_string_lossy().into_owned(),
+                    line: bp.line,
+                    condition: bp.condition.clone(),
+                    hit_condition: bp.hit_condition.clone(),
+                    log_message: bp.log_message.clone(),
+                })
             })
             .collect()
     }
@@ -219,10 +217,10 @@ impl App {
     /// directly; the fresh app's blank untitled buffer is dropped once at least
     /// one real file is reopened.
     pub fn apply_session(&mut self, ws: &crate::session::WorkspaceSession) -> usize {
-        let had_blank = self.editor.tabs.len() == 1
-            && self.editor.tabs[0].path.is_none()
-            && !self.editor.tabs[0].dirty
-            && self.editor.tabs[0].text().trim().is_empty();
+        let had_blank = match self.editor.tabs.as_slice() {
+            [only] => only.path.is_none() && !only.dirty && only.text().trim().is_empty(),
+            _ => false,
+        };
 
         let mut opened = 0usize;
         for (i, file) in ws.files.iter().enumerate() {

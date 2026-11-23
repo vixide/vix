@@ -331,8 +331,9 @@ impl App {
         match self.settings.ai_agents.len() {
             0 => self.status = t!("status.acp_no_agent").to_string(),
             1 => {
-                let command = self.settings.ai_agents[0].clone();
-                self.acp_spawn(&command, None);
+                if let Some(command) = self.settings.ai_agents.first().cloned() {
+                    self.acp_spawn(&command, None);
+                }
             }
             _ => {
                 let list: Vec<String> = self
@@ -496,7 +497,13 @@ impl App {
         if view.truncated || skip > 0 {
             lines.push(format!("  {}", t!("ui.acp_term_truncated")));
         }
-        lines.extend(output[skip..].iter().map(|l| format!("  {l}")));
+        lines.extend(
+            output
+                .get(skip..)
+                .unwrap_or(&[])
+                .iter()
+                .map(|l| format!("  {l}")),
+        );
         lines
     }
 
