@@ -17,6 +17,8 @@ set -u
 src=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+# The gate may run this with its own knobs set; the scratch runs must not see them.
+unset VIX_PRIVATE_TARGET VIX_SCOPE VIX_PARALLEL VIX_NEXTEST VIX_SEMVER_TARGET VIX_CLEAN_ROOM XDG_CACHE_HOME CARGO_TARGET_DIR
 export HOME="$work/home"
 mkdir -p "$HOME" "$work/bin"
 

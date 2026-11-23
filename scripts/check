@@ -482,6 +482,8 @@ run_groups() {
 	par_pids=""
 	for g in "$@"; do
 		(
+			# Only this group's own steps belong in its timings.
+			timings=""
 			trap 'printf "%s" "$timings" >"$par_tmp/$g.timings"' EXIT
 			exec >"$par_tmp/$g.log" 2>&1
 			"grp_$g"
