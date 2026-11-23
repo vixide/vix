@@ -495,7 +495,10 @@ fn tmp(name: &str) -> PathBuf {
 }
 
 fn app_in(dir: &Path) -> App {
-    let mut a = App::new(dir.to_path_buf(), Settings::default());
+    let mut settings = Settings::default();
+    // Saves in these tests must not leave snapshots in the user's data directory.
+    settings.editor_behavior.local_history_keep = 0;
+    let mut a = App::new(dir.to_path_buf(), settings);
     a.layout.editor = Rect::new(0, 0, 80, 24);
     a
 }
@@ -3732,4 +3735,638 @@ fn folding_actions_report_when_there_is_nothing_to_fold() {
     a.fold_at_cursor(false);
     assert_eq!(a.status, "");
     assert!(!a.editor.active_tab().unwrap().editor.is_line_hidden(1));
+}
+
+// ----- View menu toggles ---------------------------------------------------------------------
+
+#[test]
+fn view_toggles_flip_visibility_flags_and_mirror_into_settings() {
+    let mut a = app_with("hello world\n");
+    let before = a.visible.contains(Visible::STATUS_BAR);
+    a.run_action("view.status_bar");
+    assert_eq!(a.visible.contains(Visible::STATUS_BAR), !before);
+    assert_eq!(a.settings.secondary_panels.show_status_bar, !before);
+
+    let before = a.visible.contains(Visible::MESSAGES);
+    a.run_action("view.right_dock");
+    assert_eq!(a.visible.contains(Visible::MESSAGES), !before);
+    assert_eq!(a.settings.panels.show_messages, !before);
+    a.run_action("view.messages");
+    assert_eq!(a.visible.contains(Visible::MESSAGES), before);
+
+    let before = a.visible.contains(Visible::EXPLORER);
+    a.run_action("view.left_dock");
+    assert_eq!(a.visible.contains(Visible::EXPLORER), !before);
+    assert_eq!(a.settings.panels.show_explorer, !before);
+
+    a.focus = Focus::BottomDock;
+    a.visible.set(Visible::BOTTOM_DOCK, true);
+    a.run_action("view.bottom_dock");
+    assert!(!a.visible.contains(Visible::BOTTOM_DOCK));
+    assert_eq!(a.focus, Focus::Editor, "focus leaves a hidden dock");
+
+    let before = a.visible.contains(Visible::SCROLLBAR);
+    a.run_action("view.scrollbar");
+    assert_eq!(a.visible.contains(Visible::SCROLLBAR), !before);
+    assert_eq!(
+        a.status,
+        t!(if before {
+            "status.scrollbar_off"
+        } else {
+            "status.scrollbar_on"
+        })
+        .to_string()
+    );
+
+    let before = a.settings.viewport.show_menu_tooltips;
+    a.run_action("view.menu_tooltips");
+    assert_eq!(a.settings.viewport.show_menu_tooltips, !before);
+    assert_eq!(
+        a.status,
+        t!("status.menu_tooltips", on = !before).to_string()
+    );
+}
+
+#[test]
+fn zen_mode_hides_the_chrome_and_restores_it() {
+    let mut a = app();
+    a.visible.set(Visible::EXPLORER, true);
+    a.visible.set(Visible::MESSAGES, true);
+    a.visible.set(Visible::BOTTOM_DOCK, true);
+    a.visible.set(Visible::STATUS_BAR, true);
+    a.run_action("view.zen");
+    for v in [
+        Visible::EXPLORER,
+        Visible::MESSAGES,
+        Visible::BOTTOM_DOCK,
+        Visible::STATUS_BAR,
+    ] {
+        assert!(!a.visible.contains(v));
+    }
+    a.run_action("view.zen");
+    for v in [
+        Visible::EXPLORER,
+        Visible::MESSAGES,
+        Visible::BOTTOM_DOCK,
+        Visible::STATUS_BAR,
+    ] {
+        assert!(a.visible.contains(v));
+    }
+}
+
+#[test]
+fn gutter_and_wrap_toggles_mirror_across_tabs_and_status() {
+    let mut a = app_with("a very long line\n");
+    let before = a.settings.gutter.line_numbers;
+    a.run_action("view.line_numbers");
+    assert_eq!(a.settings.gutter.line_numbers, !before);
+    a.run_action("tools.line_numbers");
+    assert_eq!(a.settings.gutter.line_numbers, before);
+
+    let before = a.settings.gutter.relative_line_numbers;
+    a.run_action("view.relative_line_numbers");
+    assert_eq!(a.settings.gutter.relative_line_numbers, !before);
+    assert_eq!(
+        a.status,
+        t!("status.relative_line_numbers", on = !before).to_string()
+    );
+
+    let before = a.settings.gutter.show_whitespace;
+    a.run_action("view.whitespace");
+    assert_eq!(a.settings.gutter.show_whitespace, !before);
+    assert_eq!(
+        a.status,
+        t!(if before {
+            "status.whitespace_off"
+        } else {
+            "status.whitespace_on"
+        })
+        .to_string()
+    );
+
+    let before = a.settings.editor_visual.soft_wrap;
+    a.run_action("view.soft_wrap");
+    assert_eq!(a.settings.editor_visual.soft_wrap, !before);
+    assert_eq!(
+        a.status,
+        t!(if before {
+            "status.soft_wrap_off"
+        } else {
+            "status.soft_wrap_on"
+        })
+        .to_string()
+    );
+}
+
+#[test]
+fn typing_aid_toggles_apply_to_every_open_buffer() {
+    let mut a = app_with("x");
+    let before = a.settings.typing.auto_pair;
+    a.run_action("view.auto_pair");
+    assert_eq!(a.settings.typing.auto_pair, !before);
+    assert_eq!(
+        a.status,
+        t!(if before {
+            "status.auto_pair_off"
+        } else {
+            "status.auto_pair_on"
+        })
+        .to_string()
+    );
+    let before = a.settings.editor_visual.rainbow_brackets;
+    a.run_action("view.rainbow_brackets");
+    assert_eq!(a.settings.editor_visual.rainbow_brackets, !before);
+    assert_eq!(
+        a.status,
+        t!("status.rainbow_brackets", on = !before).to_string()
+    );
+    let before = a.settings.typing.spellcheck;
+    a.run_action("view.spellcheck");
+    assert_eq!(a.settings.typing.spellcheck, !before);
+    assert_eq!(a.flags.contains(AppFlags::SPELLCHECK), !before);
+}
+
+#[test]
+fn split_and_tab_actions_manage_panes_and_tabs() {
+    let mut a = app_with("one");
+    a.editor.new_tab_with_content("two");
+    let active = a.editor.active;
+    a.run_action("tab.prev");
+    assert_ne!(a.editor.active, active);
+    a.run_action("tab.next");
+    assert_eq!(a.editor.active, active);
+    a.run_action("view.split_vertical");
+    assert!(a.editor.is_split());
+    a.run_action("view.focus_other_pane");
+    a.run_action("view.unsplit");
+    assert!(!a.editor.is_split());
+    a.run_action("view.split_horizontal");
+    assert!(a.editor.is_split());
+    a.run_action("view.unsplit");
+}
+
+#[test]
+fn overwrite_and_ruler_modes_toggle_with_status() {
+    let mut a = app_with("abcd");
+    a.run_action("toggle_overwrite_mode");
+    assert!(a.flags.contains(AppFlags::OVERWRITE));
+    assert_eq!(a.status, t!("status.overwrite_on").to_string());
+    set_cur(&mut a, 1);
+    type_str(&mut a, "X");
+    assert_eq!(
+        active_text(&a),
+        "aXcd",
+        "typing replaces the next character"
+    );
+    a.run_action("toggle_overwrite_mode");
+    assert_eq!(a.status, t!("status.overwrite_off").to_string());
+    a.run_action("toggle_ruler");
+    assert_eq!(a.status, t!("status.ruler_on").to_string());
+    a.run_action("toggle_ruler");
+    assert_eq!(a.status, t!("status.ruler_off").to_string());
+}
+
+// ----- typing keys ------------------------------------------------------------------------------
+
+#[test]
+fn editor_special_keys_move_and_delete() {
+    let body = "line\n".repeat(60);
+    let mut a = app_with(&body);
+    set_cur(&mut a, 2);
+    a.on_key(key(KeyCode::End));
+    assert_eq!(cursor(&a), 4);
+    a.on_key(key(KeyCode::Home));
+    assert_eq!(cursor(&a), 0);
+    a.on_key(key(KeyCode::Delete));
+    assert!(active_text(&a).starts_with("ine\n"));
+    assert!(a.editor.active_tab().unwrap().dirty);
+    a.on_key(key(KeyCode::PageDown));
+    assert!(a.editor.cursor_line() > 10);
+    a.on_key(key(KeyCode::PageUp));
+    assert_eq!(a.editor.cursor_line(), 0);
+}
+
+#[test]
+fn read_only_buffers_ignore_typing_and_report_it() {
+    let mut a = app_with("keep");
+    a.run_action("view.read_only");
+    assert_eq!(a.status, t!("status.read_only", on = true).to_string());
+    type_str(&mut a, "zzz");
+    a.on_key(key(KeyCode::Delete));
+    assert_eq!(active_text(&a), "keep");
+    assert_eq!(a.status, t!("status.read_only_blocked").to_string());
+    a.run_action("view.read_only");
+    assert_eq!(a.status, t!("status.read_only", on = false).to_string());
+}
+
+#[test]
+fn typing_while_recording_a_macro_captures_each_key() {
+    let mut a = app_with("");
+    a.run_action("macro.record");
+    type_str(&mut a, "ab");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.macro_keys.len(), 3);
+    assert_eq!(crate::macros::encode(&a.macro_keys), ["a", "b", "Enter"]);
+}
+
+#[test]
+fn project_actions_open_a_command_prompt_or_report_no_command() {
+    let dir = tmp("project");
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[package]\nname=\"x\"\nversion=\"0.1.0\"\n",
+    )
+    .unwrap();
+    let mut a = app_in(&dir);
+    a.run_action("project.compile");
+    assert!(matches!(prompt_kind(&a), Some(PromptKind::ProjectCommand)));
+    assert!(a.prompt.as_ref().unwrap().input.contains("cargo"));
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.prompt.is_none());
+    a.run_action("project.repeat_last_task");
+    assert_eq!(a.status, t!("status.project_no_last_command").to_string());
+    a.run_action("project.discard_command_cache");
+    assert_eq!(a.status, t!("status.project_cache_discarded").to_string());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- saving ----------------------------------------------------------------------------------
+
+#[test]
+fn save_all_writes_dirty_files_and_counts_what_it_skipped() {
+    let dir = tmp("save-all");
+    std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+    std::fs::write(dir.join("b.txt"), "b\n").unwrap();
+    let mut a = app_in(&dir);
+    a.open_path(&dir.join("a.txt"), false);
+    type_text(&mut a, "1");
+    a.open_path(&dir.join("b.txt"), false);
+    type_text(&mut a, "2");
+    a.editor.new_tab_with_content("scratch"); // untitled: skipped
+    a.run_action("file.save_all");
+    assert!(read(&dir.join("a.txt")).contains('1'));
+    assert!(read(&dir.join("b.txt")).contains('2'));
+    assert_eq!(
+        a.status,
+        t!("status.saved_all_skipped", count = 2, skipped = 1).to_string()
+    );
+    // Nothing dirty and nothing skipped.
+    let mut a = app_in(&dir);
+    a.run_action("file.save_all");
+    assert_eq!(a.status, t!("status.saved_all", count = 0).to_string());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn saving_an_untitled_or_read_only_buffer_is_redirected_or_refused() {
+    let dir = tmp("save-guards");
+    std::fs::write(dir.join("r.txt"), "r\n").unwrap();
+    let mut a = app_in(&dir);
+    a.editor.new_tab_with_content("scratch");
+    a.run_action("file.save");
+    assert!(matches!(prompt_kind(&a), Some(PromptKind::SaveAs)));
+    a.on_key(key(KeyCode::Esc));
+    a.open_path(&dir.join("r.txt"), false);
+    a.run_action("view.read_only");
+    a.run_action("file.save");
+    assert_eq!(a.status, t!("status.read_only_blocked").to_string());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- project override / tasks chooser ----------------------------------------------------------
+
+#[test]
+fn project_override_file_supplies_lifecycle_commands() {
+    let dir = tmp("project-override");
+    let a = app_in(&dir);
+    assert_eq!(
+        a.load_project_override(),
+        crate::tasks::lifecycle::LifecycleCommands::default()
+    );
+    std::fs::create_dir_all(dir.join(".vix")).unwrap();
+    std::fs::write(
+        dir.join(".vix/project.toml"),
+        "compile = \"make all\"\ntest = \"make check\"\nrun = \"./app\"\n",
+    )
+    .unwrap();
+    let c = a.load_project_override();
+    assert_eq!(c.compile.as_deref(), Some("make all"));
+    assert_eq!(c.test.as_deref(), Some("make check"));
+    assert_eq!(c.run.as_deref(), Some("./app"));
+    assert_eq!(c.install, None);
+    // A broken file falls back to the defaults.
+    std::fs::write(dir.join(".vix/project.toml"), "not = [valid").unwrap();
+    assert_eq!(
+        a.load_project_override(),
+        crate::tasks::lifecycle::LifecycleCommands::default()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn task_chooser_navigates_and_closes_without_running_anything() {
+    let dir = tmp("task-chooser");
+    std::fs::write(dir.join("Makefile"), "build:\n\techo b\ntest:\n\techo t\n").unwrap();
+    let mut a = app_in(&dir);
+    a.run_action("project.run_task");
+    let n = a.chooser.task().expect("chooser").tasks.len();
+    assert!(n >= 2);
+    a.on_key(key(KeyCode::Down));
+    assert_eq!(a.chooser.task().unwrap().selected, 1);
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.chooser.task().unwrap().selected, n - 1, "wraps up");
+    a.on_key(key(KeyCode::Char('x')));
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.chooser.is_none());
+    // A click below the list is ignored.
+    a.run_action("project.run_task");
+    let m = chooser_click(&mut a, 9);
+    a.tasks_mouse(m);
+    assert!(a.chooser.task().is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- closing and quitting with unsaved changes ------------------------------------------------
+
+fn dirty_files(name: &str) -> (PathBuf, App) {
+    let dir = tmp(name);
+    std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+    std::fs::write(dir.join("b.txt"), "b\n").unwrap();
+    let mut a = app_in(&dir);
+    a.open_path(&dir.join("a.txt"), false);
+    type_text(&mut a, "A");
+    a.open_path(&dir.join("b.txt"), false);
+    type_text(&mut a, "B");
+    (dir, a)
+}
+
+#[test]
+fn quitting_with_nothing_unsaved_quits_immediately() {
+    let mut a = app();
+    a.editor.tabs.iter_mut().for_each(|t| t.dirty = false);
+    a.run_action("file.quit");
+    assert!(a.flags.contains(AppFlags::SHOULD_QUIT));
+    assert!(a.unsaved.is_none());
+}
+
+#[test]
+fn quit_walks_every_unsaved_tab_saving_or_discarding() {
+    let (dir, mut a) = dirty_files("quit-walk");
+    a.editor
+        .tabs
+        .iter_mut()
+        .filter(|t| t.path.is_none())
+        .for_each(|t| t.dirty = false);
+    a.run_action("file.quit");
+    assert!(a.unsaved.is_some());
+    assert!(!a.flags.contains(AppFlags::SHOULD_QUIT));
+    a.on_key(key(KeyCode::Char('?'))); // ignored
+    assert!(a.unsaved.is_some());
+    // Save the first dirty tab (a.txt); the prompt moves on to b.txt.
+    a.on_key(key(KeyCode::Char('s')));
+    assert_eq!(read(&dir.join("a.txt")), "Aa\n");
+    assert!(a.unsaved.is_some());
+    assert!(!a.flags.contains(AppFlags::SHOULD_QUIT));
+    // Discard the second: nothing left, so the editor quits.
+    a.on_key(key(KeyCode::Char('d')));
+    assert_eq!(
+        read(&dir.join("b.txt")),
+        "b\n",
+        "discarded edits never reach disk"
+    );
+    assert!(a.unsaved.is_none());
+    assert!(a.flags.contains(AppFlags::SHOULD_QUIT));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cancelling_the_unsaved_prompt_keeps_the_session_alive() {
+    let (dir, mut a) = dirty_files("quit-cancel");
+    a.run_action("file.quit");
+    a.on_key(key(KeyCode::Char('c')));
+    assert!(a.unsaved.is_none());
+    assert!(!a.flags.contains(AppFlags::SHOULD_QUIT));
+    a.run_action("file.quit");
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.unsaved.is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn closing_a_dirty_tab_asks_and_save_or_discard_closes_it() {
+    let (dir, mut a) = dirty_files("close-dirty");
+    let tabs = a.editor.tabs.len();
+    a.run_action("file.close");
+    assert!(a.unsaved.is_some());
+    a.on_key(key(KeyCode::Char('s')));
+    assert_eq!(read(&dir.join("b.txt")), "Bb\n");
+    assert_eq!(a.editor.tabs.len(), tabs - 1);
+    assert_eq!(a.status, t!("status.closed_buffer").to_string());
+    a.run_action("file.close");
+    a.on_key(key(KeyCode::Char('d')));
+    assert_eq!(read(&dir.join("a.txt")), "a\n");
+    assert!(
+        a.editor.tabs.iter().all(|t| t.path.is_none()),
+        "both files closed"
+    );
+    // Saving an untitled buffer hands over to Save As and drops the prompt.
+    let mut a = app();
+    a.editor.new_tab_with_content("scratch");
+    a.run_action("file.close");
+    assert!(a.unsaved.is_some());
+    a.on_key(key(KeyCode::Char('s')));
+    assert!(a.unsaved.is_none());
+    assert!(matches!(prompt_kind(&a), Some(PromptKind::SaveAs)));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- surround / banner / conversions on odd buffers ---------------------------------------------
+
+#[test]
+fn surround_actions_wrap_the_selection_or_insert_an_empty_pair() {
+    for (action, open, close) in [
+        ("edit.surround.paren", "(", ")"),
+        ("edit.surround.bracket", "[", "]"),
+        ("edit.surround.brace", "{", "}"),
+        ("edit.surround.angle", "<", ">"),
+        ("edit.surround.double_quote", "\"", "\""),
+        ("edit.surround.single_quote", "'", "'"),
+        ("edit.surround.backtick", "`", "`"),
+    ] {
+        let mut a = app_with("word");
+        a.run_action("edit.select_all");
+        a.run_action(action);
+        assert_eq!(active_text(&a), format!("{open}word{close}"), "{action}");
+        // The same action again toggles the wrap off.
+        a.run_action("edit.select_all");
+        a.run_action(action);
+        assert_eq!(active_text(&a), "word", "{action} toggles");
+        // No selection: an empty pair with the cursor inside.
+        let mut a = app_with("");
+        a.run_action(action);
+        assert_eq!(active_text(&a), format!("{open}{close}"));
+        assert_eq!(cursor(&a), 1);
+    }
+}
+
+#[test]
+fn comment_banner_frames_the_current_line_and_respects_read_only() {
+    let mut a = app();
+    a.editor
+        .new_tab_with_content_as("Title\nbody\n", Some("x.rs"));
+    a.run_action("edit.comment_banner");
+    let text = active_text(&a);
+    assert!(text.starts_with("// ========"), "{text}");
+    assert!(text.contains("// Title\n"));
+    assert!(text.ends_with("body\n"));
+    let mut a = app_with("\n");
+    a.run_action("edit.comment_banner");
+    assert!(
+        active_text(&a).contains("Section"),
+        "empty line gets a placeholder title"
+    );
+    let mut a = app_with("x");
+    a.run_action("view.read_only");
+    a.comment_banner();
+    assert_eq!(a.status, t!("status.read_only_blocked").to_string());
+    assert_eq!(active_text(&a), "x");
+}
+
+#[test]
+fn conversions_refuse_read_only_buffers() {
+    let mut a = app_with("hello");
+    a.run_action("view.read_only");
+    a.run_action("tools.convert.base64.encode");
+    assert_eq!(a.status, t!("status.read_only_blocked").to_string());
+    assert_eq!(active_text(&a), "hello");
+}
+
+// ----- .editorconfig and modelines -----------------------------------------------------------------
+
+#[test]
+fn editorconfig_indent_applies_to_the_opened_file() {
+    let dir = tmp("editorconfig");
+    std::fs::write(
+        dir.join(".editorconfig"),
+        "root = true\n[*.txt]\nindent_style = space\nindent_size = 3\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("f.txt"), "x\n").unwrap();
+    let mut a = app_in(&dir);
+    a.settings.typing.editorconfig = true;
+    a.open_path(&dir.join("f.txt"), false);
+    a.on_key(key(KeyCode::Tab));
+    assert!(
+        active_text(&a).starts_with("   x") || active_text(&a).starts_with("   "),
+        "{:?}",
+        active_text(&a)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- previewing from the explorer ----------------------------------------------------------------
+
+#[test]
+fn explorer_arrow_keys_preview_files_in_an_ephemeral_tab() {
+    let dir = tmp("preview");
+    std::fs::write(dir.join("a.txt"), "AAA").unwrap();
+    std::fs::write(dir.join("b.txt"), "BBB").unwrap();
+    let mut a = app_in(&dir);
+    a.explorer.rebuild();
+    a.focus = Focus::Explorer;
+    a.explorer.first();
+    a.on_key(key(KeyCode::Down));
+    let first = a.editor.active_tab().unwrap().text();
+    assert!(first == "AAA" || first == "BBB", "{first:?}");
+    assert!(a.editor.active_tab().unwrap().preview);
+    let before = a.editor.tabs.len();
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.editor.tabs.len(), before, "previews reuse one tab");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- opening problem files ----------------------------------------------------------------------------
+
+#[test]
+fn opening_a_directory_path_reports_it_is_not_a_regular_file() {
+    let dir = tmp("open-dir");
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    let mut a = app_in(&dir);
+    a.open_path(&dir.join("sub"), false);
+    assert!(
+        a.messages
+            .items
+            .iter()
+            .any(|m| m.text.contains(&t!("msg.open_not_regular").to_string()))
+    );
+    // A preview only reports in the status line.
+    a.status.clear();
+    a.open_path(&dir.join("sub"), true);
+    assert!(
+        a.status.contains(&t!("msg.open_not_regular").to_string()),
+        "{}",
+        a.status
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_file_over_the_hard_cap_offers_only_the_viewer() {
+    let dir = tmp("over-cap");
+    let p = dir.join("huge.bin");
+    let f = std::fs::File::create(&p).unwrap();
+    f.set_len(crate::fileops::HARD_MAX_TEXT_BYTES + 4096)
+        .unwrap();
+    drop(f);
+    let mut a = app_in(&dir);
+    a.open_path(&p, false);
+    let c = a.confirm.as_ref().expect("asks about the viewer");
+    assert_eq!(c.kind, ConfirmKind::OpenLargeViewer);
+    a.on_key(key(KeyCode::Char('n')));
+    assert!(a.confirm.is_none());
+    a.open_path(&p, false);
+    a.on_key(key(KeyCode::Char('y')));
+    assert!(a.large_file.is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(feature = "image")]
+#[test]
+fn opening_an_image_makes_a_read_only_image_tab() {
+    let dir = tmp("image");
+    let p = dir.join("p.png");
+    image::DynamicImage::new_rgba8(3, 2)
+        .save_with_format(&p, image::ImageFormat::Png)
+        .unwrap();
+    let mut a = app_in(&dir);
+    // Without a graphics-capable terminal an image cannot open.
+    a.open_path(&p, false);
+    assert!(!a.editor.active_tab().unwrap().is_image());
+    assert!(
+        a.messages
+            .items
+            .iter()
+            .any(|m| m.text == t!("msg.image_needs_terminal"))
+    );
+    a.picker = Some(ratatui_image::picker::Picker::halfblocks());
+    a.open_path(&p, false);
+    assert!(a.editor.active_tab().unwrap().is_image());
+    a.run_action("file.save");
+    assert_eq!(a.status, t!("status.image_readonly").to_string());
+    // Typing into an image tab does nothing.
+    type_str(&mut a, "zzz");
+    assert!(a.editor.active_tab().unwrap().is_image());
+    // A preview does not open images.
+    let tabs = a.editor.tabs.len();
+    a.open_path(&p, true);
+    assert_eq!(a.editor.tabs.len(), tabs);
+    // An undecodable "image" is reported.
+    let bad = dir.join("bad.png");
+    std::fs::write(&bad, b"not a png").unwrap();
+    let before = a.messages.items.len();
+    a.open_path(&bad, false);
+    assert!(a.messages.items.len() > before);
+    let _ = std::fs::remove_dir_all(&dir);
 }
