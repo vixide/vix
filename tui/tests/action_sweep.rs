@@ -250,7 +250,7 @@ fn sweep(progress: &Path) {
     make_workspace(&root);
     make_git_history(&root);
     let session = base.join("session.toml");
-    let ids = every_dispatchable_action_id(&workspace_root());
+    let ids = every_dispatchable_action_id(&workspace_root()).unwrap();
     assert!(
         ids.len() > 100,
         "the dispatch scan found only {} ids",

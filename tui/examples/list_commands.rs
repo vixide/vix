@@ -128,7 +128,10 @@ fn resolve_title(id: &str) -> (String, &'static str) {
 }
 
 fn render_actions(root: &Path) -> String {
-    let dispatchable = dispatch_scan::every_dispatchable_action_id(root);
+    let dispatchable = dispatch_scan::every_dispatchable_action_id(root).unwrap_or_else(|e| {
+        eprintln!("list_commands: {e}");
+        std::process::exit(1);
+    });
     let mut out = String::new();
     out.push_str("# Action Reference\n\n");
     out.push_str(

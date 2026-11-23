@@ -48,7 +48,7 @@ fn menu_action_ids() -> BTreeSet<String> {
 #[test]
 fn every_dispatchable_action_is_titled_by_the_menu_the_catalog_or_the_palette() {
     let root = workspace_root();
-    let dispatchable = every_dispatchable_action_id(&root);
+    let dispatchable = every_dispatchable_action_id(&root).unwrap();
     assert!(
         dispatchable.len() > 600,
         "only found {} action ids — DISPATCHERS is probably missing a function \

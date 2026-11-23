@@ -86,3 +86,7 @@ key)]` reverse lookup, not yet used by any UI) can pair its results with
   from here directly, rather than duplicating the id list, once that
   crate's codegen has a reason to depend on catalog data (not yet true —
   the two lists are cross-checked by hand today, not code).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). **Changed:** `dispatch_scan::every_dispatchable_action_id` returns `Result<BTreeSet<String>, String>` instead of panicking when a dispatcher file cannot be read or a listed function drifted from the source; the generator example prints the message and exits, and the tests unwrap it. The scan uses `split_once`, `get` and `checked_*` instead of slicing. No fallbacks are declared.

@@ -36,6 +36,18 @@
 //!
 //! Spec: `crates/vix-action-catalog/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// One catalog entry: an action id and the i18n key for its title.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Action {
@@ -918,43 +930,41 @@ pub mod dispatch_scan {
     /// first `fn fn_name(` to the matching close brace. The scan counts raw
     /// `{`/`}` bytes without parsing Rust, so a brace inside a string or char
     /// literal would skew it; the dispatcher bodies listed in [`DISPATCHERS`]
-    /// are known not to contain unbalanced ones, and the panic below flags
+    /// are known not to contain unbalanced ones, and the error below flags
     /// drift loudly rather than returning a wrong slice.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `fn_name` isn't found in `text`, or its body's braces don't
-    /// balance — both mean [`DISPATCHERS`] has drifted from the real source
-    /// and needs a human to look, not a silently wrong scan.
-    #[must_use]
-    fn function_body<'a>(text: &'a str, fn_name: &str) -> &'a str {
+    /// A message when `fn_name` isn't found in `text`, or its body's braces
+    /// don't balance: both mean [`DISPATCHERS`] has drifted from the real
+    /// source and needs a human to look, not a silently wrong scan.
+    fn function_body<'a>(text: &'a str, fn_name: &str) -> Result<&'a str, String> {
         let needle = format!("fn {fn_name}(");
         let start = text
             .find(&needle)
-            .unwrap_or_else(|| panic!("`fn {fn_name}` not found"));
-        let bytes = text.as_bytes();
-        let body_start = text[start..].find('{').map_or_else(
-            || panic!("no open brace after `fn {fn_name}`"),
-            |i| start + i,
-        );
+            .ok_or_else(|| format!("`fn {fn_name}` not found"))?;
+        let from_fn = text.get(start..).ok_or("scan start is not a boundary")?;
+        let open = from_fn
+            .find('{')
+            .ok_or_else(|| format!("no open brace after `fn {fn_name}`"))?;
         // Start on the opening brace so depth first becomes 1 there and the
-        // loop returns only when it falls back to 0 (the function's own close).
+        // scan ends only when it falls back to 0 (the function's own close).
         let mut depth = 0i32;
-        let mut i = body_start;
-        loop {
-            match bytes[i] {
-                b'{' => depth += 1,
+        for (offset, byte) in from_fn.bytes().enumerate().skip(open) {
+            match byte {
+                b'{' => depth = depth.checked_add(1).ok_or("brace depth overflow")?,
                 b'}' => {
-                    depth -= 1;
+                    depth = depth.checked_sub(1).ok_or("brace depth underflow")?;
                     if depth == 0 {
-                        return &text[start..=i];
+                        return from_fn
+                            .get(..=offset)
+                            .ok_or_else(|| format!("body of `fn {fn_name}` is not a boundary"));
                     }
                 }
                 _ => {}
             }
-            i += 1;
-            assert!(i < bytes.len(), "unbalanced braces in `fn {fn_name}`");
         }
+        Err(format!("unbalanced braces in `fn {fn_name}`"))
     }
 
     /// Every quoted string literal in `s`, in order. A plain scan (no
@@ -963,13 +973,12 @@ pub mod dispatch_scan {
     fn quoted_strings(s: &str) -> Vec<&str> {
         let mut out = Vec::new();
         let mut rest = s;
-        while let Some(open) = rest.find('"') {
-            rest = &rest[open + 1..];
-            let Some(close) = rest.find('"') else {
+        while let Some((_, after_open)) = rest.split_once('"') {
+            let Some((literal, after_close)) = after_open.split_once('"') else {
                 break;
             };
-            out.push(&rest[..close]);
-            rest = &rest[close + 1..];
+            out.push(literal);
+            rest = after_close;
         }
         out
     }
@@ -988,10 +997,10 @@ pub mod dispatch_scan {
             }
             // Lines with no `=>` (a literal that starts a continuation line of a
             // multi-line expression, say) are not arms.
-            let Some(arrow) = trimmed.find("=>") else {
+            let Some((pattern, _)) = trimmed.split_once("=>") else {
                 continue;
             };
-            for id in quoted_strings(&trimmed[..arrow]) {
+            for id in quoted_strings(pattern) {
                 ids.insert(id.to_string());
             }
         }
@@ -1001,21 +1010,22 @@ pub mod dispatch_scan {
     /// Every action id [`DISPATCHERS`] can actually match, read out of
     /// `workspace_root`'s own source files.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if a `DISPATCHERS` file can't be read, or a listed function
-    /// isn't found in it (brace-balanced out of the file's own text).
-    #[must_use]
-    pub fn every_dispatchable_action_id(workspace_root: &Path) -> BTreeSet<String> {
+    /// A message when a `DISPATCHERS` file can't be read, or a listed function
+    /// isn't found in it or has unbalanced braces (brace-balanced out of the
+    /// file's own text).
+    pub fn every_dispatchable_action_id(workspace_root: &Path) -> Result<BTreeSet<String>, String> {
         let mut ids = BTreeSet::new();
         for (file, func) in DISPATCHERS {
             let path: PathBuf = workspace_root.join(file);
             let text = std::fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
-            let body = function_body(&text, func);
+                .map_err(|e| format!("reading {}: {e}", path.display()))?;
+            let body =
+                function_body(&text, func).map_err(|e| format!("{}: {e}", path.display()))?;
             ids.extend(arm_ids_in(body));
         }
-        ids
+        Ok(ids)
     }
 }
 
