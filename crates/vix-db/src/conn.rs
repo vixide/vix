@@ -461,4 +461,67 @@ mod tests {
         let err = rt.block_on(Conn::connect("mssql://h/d")).err().unwrap();
         assert!(matches!(err, sqlx::Error::Configuration(_)));
     }
+
+    fn block_on<F: std::future::Future>(f: F) -> F::Output {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(f)
+    }
+
+    #[test]
+    fn a_sqlite_connection_reads_every_storage_class_as_text_and_typed_values() {
+        block_on(async {
+            let mut conn = Conn::connect("sqlite::memory:").await.unwrap();
+            let changed = conn
+                .execute(
+                    "CREATE TABLE t (i INTEGER, r REAL, s TEXT, b BLOB, n TEXT);\
+                     INSERT INTO t VALUES (7, 2.5, 'hi', X'00ff', NULL);\
+                     INSERT INTO t VALUES (8, 0.5, 'yo', X'6869', NULL)",
+                )
+                .await
+                .unwrap();
+            assert_eq!(changed, 2);
+            let rows = conn.fetch_text("SELECT * FROM t ORDER BY i").await.unwrap();
+            assert_eq!(
+                rows,
+                [
+                    ["7", "2.5", "hi", "\\x00ff", ""],
+                    ["8", "0.5", "yo", "hi", ""]
+                ]
+            );
+            let mut stream = conn.fetch("SELECT * FROM t WHERE i = 7");
+            let row = stream.next().await.unwrap().unwrap();
+            assert_eq!(row.len(), 5);
+            assert_eq!(row.names(), ["i", "r", "s", "b", "n"]);
+            assert_eq!(row.text(4), None, "NULL has no text");
+            assert_eq!(row.value(0), Value::Int(7));
+            assert_eq!(row.value(1), Value::Float(2.5));
+            assert_eq!(row.value(2), Value::Text("hi".into()));
+            assert_eq!(row.value(3), Value::Bytes(vec![0, 255]));
+            assert_eq!(row.value(4), Value::Null);
+            assert_eq!(row.value(99), Value::Null, "past the last column");
+            drop(stream);
+            assert!(conn.execute("SELECT * FROM nope").await.is_err());
+            conn.close().await.unwrap();
+        });
+    }
+
+    #[test]
+    fn an_unknown_scheme_is_a_configuration_error_not_a_panic() {
+        let Err(err) = block_on(Conn::connect("oracle://h/db")) else {
+            panic!("an unsupported scheme must not connect");
+        };
+        assert!(matches!(err, sqlx::Error::Configuration(_)), "{err}");
+    }
+
+    #[test]
+    fn binary_columns_read_as_text_or_hex() {
+        assert_eq!(bytes_text(b"plain"), "plain");
+        assert_eq!(bytes_text(&[0, 255]), "\\x00ff");
+        assert_eq!(mysql_text("BLOB", &[0xff, 2]), "\\xff02");
+        assert_eq!(mysql_text("VARCHAR", b"abc"), "abc");
+        assert_eq!(mysql_value("VARBINARY", &[9]), Value::Bytes(vec![9]));
+    }
 }
