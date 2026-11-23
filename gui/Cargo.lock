@@ -12857,6 +12857,7 @@ name = "vix-oci"
 version = "3.0.0"
 dependencies = [
  "serde_json",
+ "vix-civil-date",
 ]
 
 [[package]]
