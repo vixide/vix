@@ -2509,3 +2509,569 @@ fn file_browser_wheel_and_click_navigate_and_open() {
     assert_eq!(active_text(&a), "A");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ----- test runner results ---------------------------------------------------------
+
+#[test]
+fn finished_test_run_parses_output_and_jumps_to_the_failing_test() {
+    let dir = tmp("testrun");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/lib.rs"), "a\nb\nc\nd\n").unwrap();
+    let mut a = app_in(&dir);
+    a.flags.insert(AppFlags::TEST_CAPTURE);
+    a.test_buffer = "running 3 tests
+test mod_a::works ... ok
+test mod_a::ignored_one ... ignored
+test mod_b::breaks ... FAILED
+
+failures:
+
+---- mod_b::breaks stdout ----
+thread 'mod_b::breaks' panicked at src/lib.rs:3:5:
+assertion failed
+
+test result: FAILED. 1 passed; 1 failed; 1 ignored;
+"
+    .lines()
+    .map(str::to_string)
+    .collect();
+    a.finish_test_run();
+    assert!(!a.flags.contains(AppFlags::TEST_CAPTURE));
+    assert_eq!(a.test_results.len(), 3);
+    assert_eq!(
+        a.status,
+        t!("status.tests_done", pass = 1, fail = 1, ignore = 1).to_string()
+    );
+    assert!(a.messages.items.iter().any(|m| m.text == a.status));
+    let idx = a
+        .test_results
+        .iter()
+        .position(|r| r.name == "mod_b::breaks")
+        .unwrap();
+    a.jump_to_test(idx);
+    assert_eq!(a.test_selected, idx);
+    assert!(a.active_path().unwrap().ends_with("src/lib.rs"));
+    assert_eq!(a.editor.cursor_line(), 2);
+    // A test with no location, or a missing file, does not jump.
+    let tabs = a.editor.tabs.len();
+    a.jump_to_test(0);
+    assert_eq!(a.editor.tabs.len(), tabs);
+    a.test_results[idx].location = Some(("nope.rs".to_string(), 1));
+    a.jump_to_test(idx);
+    assert_eq!(a.editor.tabs.len(), tabs);
+    // An all-passing run reports through an info message.
+    a.test_buffer = vec!["test x ... ok".to_string()];
+    a.finish_test_run();
+    assert_eq!(
+        a.status,
+        t!("status.tests_done", pass = 1, fail = 0, ignore = 0).to_string()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_panel_toggles_with_its_action() {
+    let mut a = app();
+    a.run_action("tools.test_panel");
+    assert!(a.visible.contains(Visible::TEST_PANEL));
+    a.run_action("tools.test_panel");
+    assert!(!a.visible.contains(Visible::TEST_PANEL));
+}
+
+#[test]
+fn cancelling_with_nothing_running_does_nothing() {
+    let mut a = app();
+    assert!(!a.command_running());
+    a.run_action("tools.cancel_command");
+    assert_eq!(a.bottom_dock.lines.len(), 0);
+}
+
+// ----- language-server notices -----------------------------------------------------
+
+#[test]
+fn language_server_down_events_become_error_messages() {
+    let mut a = app();
+    a.report_lsp_server_down(&crate::lsp::LspEvent::ServerCrashed("rust".to_string()));
+    a.report_lsp_server_down(&crate::lsp::LspEvent::ServerNotInstalled {
+        language_id: "go".to_string(),
+        install: "go install gopls".to_string(),
+    });
+    // Any other event is not a "server down" notice.
+    let before = a.messages.items.len();
+    a.report_lsp_server_down(&crate::lsp::LspEvent::CodeLensRefresh);
+    assert_eq!(a.messages.items.len(), before);
+    let texts: Vec<&str> = a.messages.items.iter().map(|m| m.text.as_str()).collect();
+    assert!(texts.contains(&t!("msg.lsp_server_crashed", language = "rust").as_ref()));
+    assert!(
+        texts.contains(
+            &t!(
+                "msg.lsp_server_not_installed",
+                language = "go",
+                install = "go install gopls"
+            )
+            .as_ref()
+        )
+    );
+}
+
+#[test]
+fn polling_the_language_server_with_none_running_is_a_quiet_no_op() {
+    let mut a = app_with("x");
+    a.completion_due = Some((std::time::Instant::now(), None));
+    a.poll_lsp();
+    assert!(a.completion_due.is_none());
+}
+
+// ----- word autocomplete -------------------------------------------------------------
+
+#[test]
+fn autocomplete_cycles_buffer_words_sharing_the_prefix() {
+    let mut a = app_with("foobar foobaz fooqux fo");
+    let end = active_text(&a).chars().count();
+    set_cur(&mut a, end);
+    a.run_action("autocomplete");
+    assert_eq!(active_text(&a), "foobar foobaz fooqux foobar");
+    a.run_action("autocomplete");
+    assert_eq!(active_text(&a), "foobar foobaz fooqux foobaz");
+    a.run_action("autocomplete");
+    assert_eq!(active_text(&a), "foobar foobaz fooqux fooqux");
+    a.run_action("autocomplete"); // wraps
+    assert_eq!(active_text(&a), "foobar foobaz fooqux foobar");
+    a.run_action("cycle_autocomplete_back");
+    assert_eq!(active_text(&a), "foobar foobaz fooqux fooqux");
+}
+
+#[test]
+fn autocomplete_reports_when_there_is_nothing_to_complete() {
+    let mut a = app_with("zzz ");
+    let end = active_text(&a).chars().count();
+    set_cur(&mut a, end);
+    a.run_action("autocomplete");
+    assert_eq!(a.status, t!("status.no_completions").to_string());
+    let mut a = app_with("zzz zz");
+    let end = active_text(&a).chars().count();
+    set_cur(&mut a, end);
+    a.run_action("autocomplete");
+    assert_eq!(active_text(&a), "zzz zzz");
+    // Nothing else shares the prefix `abc`.
+    let mut a = app_with("abc");
+    set_cur(&mut a, 3);
+    a.status.clear();
+    a.run_action("autocomplete");
+    assert_eq!(a.status, t!("status.no_completions").to_string());
+    // No active text tab: ignored.
+    let mut a = app();
+    a.run_action("autocomplete");
+}
+
+// ----- message / dock / explorer panes ------------------------------------------------
+
+#[test]
+fn messages_pane_keys_select_close_and_return_focus() {
+    let mut a = app();
+    a.messages.info("one".to_string());
+    a.messages.info("two".to_string());
+    a.messages.info("three".to_string());
+    a.focus = Focus::Messages;
+    let n = a.messages.items.len();
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Char('x')));
+    assert_eq!(a.messages.items.len(), n - 1);
+    a.on_key(key(KeyCode::Delete));
+    assert_eq!(a.messages.items.len(), n - 2);
+    a.on_key(key(KeyCode::Enter));
+    a.on_key(key(KeyCode::Char('?')));
+    a.on_key(key(KeyCode::Esc));
+    assert_eq!(a.focus, Focus::Editor);
+}
+
+#[test]
+fn messages_pane_mouse_selects_and_closes_by_the_right_edge() {
+    let mut a = app();
+    for t in ["one", "two", "three", "four"] {
+        a.messages.info(t.to_string());
+    }
+    a.layout.messages = Rect::new(60, 2, 20, 10);
+    a.settings.viewport.show_scrollbar = true;
+    let n = a.messages.items.len();
+    let wheel = |kind| MouseEvent {
+        kind,
+        column: 62,
+        row: 5,
+        modifiers: KeyModifiers::NONE,
+    };
+    a.messages_mouse(wheel(MouseEventKind::ScrollDown));
+    a.messages_mouse(wheel(MouseEventKind::ScrollUp));
+    // Click on a row selects it and focuses the pane.
+    a.messages_mouse(left_click(62, 4));
+    assert_eq!(a.messages.selected, 1);
+    assert_eq!(a.focus, Focus::Messages);
+    assert_eq!(a.messages.items.len(), n);
+    // Click near the right edge closes it.
+    a.messages_mouse(left_click(78, 4));
+    assert_eq!(a.messages.items.len(), n - 1);
+    // Below the last message: nothing.
+    a.messages_mouse(left_click(62, 11));
+    assert_eq!(a.messages.items.len(), n - 1);
+}
+
+#[test]
+fn bottom_dock_keys_scroll_and_return_focus() {
+    let mut a = app();
+    a.layout.bottom_dock = Rect::new(0, 10, 40, 6);
+    for i in 0..40 {
+        a.bottom_dock.push(format!("l{i}"));
+    }
+    a.focus = Focus::BottomDock;
+    a.on_key(key(KeyCode::Home));
+    assert_eq!(a.bottom_dock.scroll, 0);
+    a.on_key(key(KeyCode::Down));
+    assert_eq!(a.bottom_dock.scroll, 1);
+    a.on_key(key(KeyCode::PageDown));
+    assert_eq!(a.bottom_dock.scroll, 6);
+    a.on_key(key(KeyCode::PageUp));
+    assert_eq!(a.bottom_dock.scroll, 1);
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.bottom_dock.scroll, 0);
+    a.on_key(key(KeyCode::End));
+    assert!(a.bottom_dock.scroll > 20);
+    a.on_key(key(KeyCode::Esc));
+    assert_eq!(a.focus, Focus::Editor);
+}
+
+#[test]
+fn explorer_mouse_previews_opens_and_scrolls() {
+    let dir = tmp("explorer-mouse");
+    std::fs::write(dir.join("a.txt"), "A").unwrap();
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    std::fs::write(dir.join("sub/inner.txt"), "I").unwrap();
+    let mut a = app_in(&dir);
+    a.explorer.rebuild();
+    a.layout.explorer = Rect::new(0, 2, 30, 12);
+    let wheel = |kind| MouseEvent {
+        kind,
+        column: 3,
+        row: 5,
+        modifiers: KeyModifiers::NONE,
+    };
+    a.explorer_mouse(wheel(MouseEventKind::ScrollDown));
+    let after_down = a.explorer.selected;
+    a.explorer_mouse(wheel(MouseEventKind::ScrollUp));
+    assert!(a.explorer.selected < after_down || after_down == 0);
+    let file_row = a
+        .explorer
+        .nodes
+        .iter()
+        .position(|n| n.path.ends_with("a.txt"))
+        .unwrap();
+    let dir_row = a
+        .explorer
+        .nodes
+        .iter()
+        .position(|n| n.path.ends_with("sub"))
+        .unwrap();
+    // The row above the first node is the border: focuses only.
+    a.explorer_mouse(left_click(3, 2));
+    assert_eq!(a.focus, Focus::Explorer);
+    // First click previews, second click on the same file opens a real tab.
+    a.explorer_mouse(left_click(3, 3 + u16::try_from(file_row).unwrap()));
+    assert_eq!(a.explorer.selected, file_row);
+    a.explorer_mouse(left_click(3, 3 + u16::try_from(file_row).unwrap()));
+    assert!(a.editor.tabs.iter().any(|t| !t.preview && t.text() == "A"));
+    // A click on a directory expands it.
+    let nodes_before = a.explorer.nodes.len();
+    a.explorer_mouse(left_click(3, 3 + u16::try_from(dir_row).unwrap()));
+    assert!(a.explorer.nodes.len() > nodes_before);
+    // A click below the last node does nothing.
+    let sel = a.explorer.selected;
+    a.explorer_mouse(left_click(3, 12));
+    assert_eq!(a.explorer.selected, sel);
+    // Dragging the scrollbar column jumps the selection.
+    a.settings.viewport.show_scrollbar = true;
+    a.layout.explorer = Rect::new(0, 2, 30, 3); // tiny viewport: scrollbar shows
+    a.explorer_mouse(left_click(28, 3));
+    assert_eq!(a.focus, Focus::Explorer);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- workspace files ------------------------------------------------------------------
+
+#[test]
+fn workspace_prompts_seed_a_default_save_path() {
+    let dir = tmp("ws-prompt");
+    let mut a = app_in(&dir);
+    a.prompt_workspace(PromptKind::WorkspaceSave);
+    let seed = a.prompt.as_ref().unwrap().input.clone();
+    assert!(seed.starts_with(&dir.to_string_lossy().into_owned()));
+    assert!(seed.ends_with(&format!(".{}", crate::workspace::EXTENSION)));
+    a.prompt_workspace(PromptKind::WorkspaceOpen);
+    assert!(prompt_kind(&a) == Some(PromptKind::WorkspaceOpen));
+    assert_eq!(a.prompt.as_ref().unwrap().input, "");
+    a.prompt_workspace(PromptKind::WorkspaceAddFolder);
+    assert!(prompt_kind(&a) == Some(PromptKind::WorkspaceAddFolder));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn workspace_open_of_a_missing_or_broken_file_reports_an_error() {
+    let dir = tmp("ws-open-bad");
+    std::fs::write(dir.join("broken.vix-workspace"), "{{{ not a workspace").unwrap();
+    let mut a = app_in(&dir);
+    let before = a.messages.items.len();
+    a.workspace_open(&dir.join("missing.vix-workspace").to_string_lossy());
+    assert!(a.messages.items.len() > before);
+    let before = a.messages.items.len();
+    a.workspace_open(&dir.join("broken.vix-workspace").to_string_lossy());
+    assert!(a.messages.items.len() > before);
+    a.workspace_add_folder(&dir.join("not-a-dir").to_string_lossy());
+    assert!(!a.workspace_folders.contains(&dir.join("not-a-dir")));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- project-wide replace / editable results --------------------------------------
+
+fn search_fixture(name: &str) -> (PathBuf, App) {
+    let dir = tmp(name);
+    std::fs::write(dir.join("a.txt"), "foo here\nfoo again\n").unwrap();
+    std::fs::write(dir.join("b.txt"), "nothing\n").unwrap();
+    std::fs::write(dir.join("c.txt"), "foo there\n").unwrap();
+    let mut a = app_in(&dir);
+    a.build_file_index();
+    (dir, a)
+}
+
+fn start_replace(a: &mut App, query: &str, with: &str) {
+    a.run_action("search.workspace_replace");
+    type_str(a, query);
+    a.on_key(key(KeyCode::Tab));
+    type_str(a, with);
+}
+
+#[test]
+fn workspace_replace_previews_then_writes_every_file_on_confirm() {
+    let (dir, mut a) = search_fixture("ws-replace");
+    start_replace(&mut a, "foo", "BAR");
+    assert_eq!(a.workspace_search.as_ref().unwrap().hits.len(), 3);
+    a.on_key(key(KeyCode::Enter));
+    let rc = a.replace_confirm.as_ref().expect("preview opens");
+    assert_eq!(rc.replaced, 3);
+    assert_eq!(rc.lines.len(), 2);
+    assert!(rc.lines.contains(&"a.txt (2)".to_string()));
+    // Scrolling stays within the list.
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    assert_eq!(a.replace_confirm.as_ref().unwrap().scroll, 1);
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.replace_confirm.as_ref().unwrap().scroll, 0);
+    a.on_key(key(KeyCode::Char('?')));
+    // Nothing has been written yet; n cancels.
+    a.on_key(key(KeyCode::Char('n')));
+    assert!(a.replace_confirm.is_none());
+    assert_eq!(read(&dir.join("a.txt")), "foo here\nfoo again\n");
+    // Enter on the Replace field again, then confirm with y.
+    a.on_key(key(KeyCode::Enter));
+    a.on_key(key(KeyCode::Char('y')));
+    assert!(a.replace_confirm.is_none());
+    assert_eq!(read(&dir.join("a.txt")), "BAR here\nBAR again\n");
+    assert_eq!(read(&dir.join("c.txt")), "BAR there\n");
+    assert_eq!(read(&dir.join("b.txt")), "nothing\n");
+    assert_eq!(
+        a.workspace_search.as_ref().unwrap().status,
+        t!("status.replaced_in_files", replaced = 3, files = 2).to_string()
+    );
+    assert_eq!(a.workspace_search.as_ref().unwrap().hits.len(), 0);
+    assert!(
+        a.messages
+            .items
+            .iter()
+            .any(|m| m.text == t!("status.replaced_in_files", replaced = 3, files = 2).to_string())
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn workspace_replace_keeps_dirty_buffers_unsaved_and_skips_read_only_ones() {
+    let (dir, mut a) = search_fixture("ws-replace-open");
+    a.open_path(&dir.join("a.txt"), false);
+    type_text(&mut a, "x");
+    a.open_path(&dir.join("c.txt"), false);
+    a.run_action("view.read_only");
+    start_replace(&mut a, "foo", "BAR");
+    a.on_key(key(KeyCode::Enter));
+    a.on_key(key(KeyCode::Enter));
+    // The dirty buffer changed in memory only; the read-only one is refused.
+    assert_eq!(read(&dir.join("a.txt")), "foo here\nfoo again\n");
+    assert!(a.editor.tabs[0].text().contains("BAR"));
+    assert!(a.editor.tabs[0].dirty);
+    assert_eq!(read(&dir.join("c.txt")), "foo there\n");
+    assert!(a.messages.items.iter().any(|m| {
+        m.text
+            == t!(
+                "msg.replace_read_only_skipped",
+                path = dir.join("c.txt").display()
+            )
+    }));
+    assert!(
+        a.messages
+            .items
+            .iter()
+            .any(|m| m.text == t!("msg.replace_buffer_only", count = 1))
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn workspace_replace_handles_no_hits_and_bad_patterns() {
+    let (dir, mut a) = search_fixture("ws-replace-none");
+    // Not in replace mode: Enter just opens the (absent) selected hit.
+    a.run_action("search.workspace");
+    a.workspace_replace_all();
+    assert!(a.replace_confirm.is_none());
+    a.on_key(key(KeyCode::Esc));
+    // A pattern with no matches plans nothing.
+    start_replace(&mut a, "zzzzz", "q");
+    a.on_key(key(KeyCode::Enter));
+    assert!(a.replace_confirm.is_none());
+    // A pattern matching only text equal to its replacement plans nothing.
+    a.workspace_search.as_mut().unwrap().query = "foo".to_string();
+    a.workspace_search.as_mut().unwrap().replace = "foo".to_string();
+    a.run_workspace_search();
+    a.workspace_replace_all();
+    assert!(a.replace_confirm.is_none());
+    assert_eq!(
+        a.workspace_search.as_ref().unwrap().status,
+        t!("status.replaced_in_files", replaced = 0, files = 0).to_string()
+    );
+    // Empty query clears the hits; a bad regex is reported.
+    a.workspace_search.as_mut().unwrap().query.clear();
+    a.run_workspace_search();
+    assert_eq!(a.workspace_search.as_ref().unwrap().hits.len(), 0);
+    assert_eq!(
+        a.workspace_search.as_ref().unwrap().status,
+        t!("status.workspace_search_prompt").to_string()
+    );
+    a.on_key(alt('r'));
+    a.workspace_search.as_mut().unwrap().query = "(".to_string();
+    a.run_workspace_search();
+    assert_ne!(a.workspace_search.as_ref().unwrap().status, "");
+    a.workspace_replace_all();
+    assert!(a.replace_confirm.is_none());
+    // Static result lists are never re-searched.
+    a.workspace_search
+        .as_mut()
+        .unwrap()
+        .flags
+        .insert(WorkspaceFlags::STATIC_RESULTS);
+    a.run_workspace_search();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn editable_search_results_write_changed_lines_back_after_confirmation() {
+    let (dir, mut a) = search_fixture("wgrep");
+    a.run_action("search.edit_results"); // no search open: nothing
+    assert!(a.wgrep_baseline.is_none());
+    a.run_action("search.workspace");
+    type_str(&mut a, "foo");
+    a.on_key(alt('e'));
+    assert!(a.workspace_search.is_none());
+    assert_eq!(
+        a.editor.active_tab().unwrap().path.as_deref(),
+        Some(Path::new(App::WGREP_RESULTS_PATH))
+    );
+    assert_eq!(a.status, t!("status.wgrep_opened", count = 3).to_string());
+    // Saving unchanged results reports that nothing changed.
+    a.run_action("file.save");
+    assert_eq!(a.status, t!("status.wgrep_no_changes").to_string());
+    // Edit one result line and save: a confirmation lists the file.
+    let edited = active_text(&a).replace("foo again", "baz again");
+    a.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_content(&edited);
+    a.run_action("file.save");
+    let wc = a.wgrep_confirm.as_ref().expect("confirm");
+    assert_eq!(wc.lines, vec!["a.txt (1)".to_string()]);
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Char('n')));
+    assert!(a.wgrep_confirm.is_none());
+    assert_eq!(read(&dir.join("a.txt")), "foo here\nfoo again\n");
+    a.run_action("file.save");
+    a.on_key(key(KeyCode::Char('y')));
+    assert_eq!(read(&dir.join("a.txt")), "foo here\nbaz again\n");
+    assert_eq!(
+        a.status,
+        t!("status.wgrep_applied", edited = 1, files = 1).to_string()
+    );
+    // The edited line is the new baseline: saving again is a no-op.
+    a.run_action("file.save");
+    assert_eq!(a.status, t!("status.wgrep_no_changes").to_string());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- outline -----------------------------------------------------------------------
+
+const RUST_SRC: &str = "fn alpha() {}\n\nfn beta() {}\n\nfn gamma() {}\n";
+
+#[test]
+fn outline_panel_lists_symbols_and_jumps() {
+    let mut a = app();
+    a.run_action("nav.outline");
+    assert_eq!(a.status, t!("status.outline_empty").to_string());
+    a.editor.new_tab_with_content_as(RUST_SRC, Some("x.rs"));
+    set_cur(&mut a, 20);
+    a.run_action("nav.outline");
+    let o = a.outline.as_ref().expect("outline");
+    assert_eq!(o.entries.len(), 3);
+    a.layout.outline = Rect::new(0, 3, 40, 10);
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Enter));
+    assert!(a.outline.is_none());
+    assert_eq!(a.editor.cursor_line(), 4, "jumped to gamma");
+    // A click on a row jumps; Esc closes without moving.
+    a.run_action("nav.outline");
+    a.outline_mouse(left_click(2, 3));
+    assert!(a.outline.is_none());
+    assert_eq!(a.editor.cursor_line(), 0);
+    a.run_action("nav.outline");
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.outline.is_none());
+    // A click past the last row is ignored.
+    a.run_action("nav.outline");
+    a.outline_mouse(left_click(2, 12));
+    assert!(a.outline.is_some());
+}
+
+#[test]
+fn outline_dock_tracks_the_cursor_and_clicks_jump() {
+    let mut a = app();
+    a.editor.new_tab_with_content_as(RUST_SRC, Some("x.rs"));
+    a.run_action("view.outline_dock");
+    assert!(a.settings.secondary_panels.show_outline_dock);
+    let o = a.outline_dock.as_ref().expect("dock outline");
+    assert_eq!(o.entries.len(), 3);
+    assert_eq!(o.selected, 0);
+    set_cur(&mut a, 30);
+    a.refresh_outline_dock();
+    assert_eq!(
+        a.outline_dock.as_ref().unwrap().selected,
+        2,
+        "nearest symbol"
+    );
+    a.outline_dock_click(1);
+    assert_eq!(a.editor.cursor_line(), 2);
+    assert_eq!(a.focus, Focus::Editor);
+    a.outline_dock_click(50); // past the end: ignored
+    assert_eq!(a.editor.cursor_line(), 2);
+    // A buffer with no symbols empties the dock; turning it off clears it.
+    a.editor.new_tab_with_content("plain words\n");
+    a.refresh_outline_dock();
+    assert!(a.outline_dock.is_none());
+    a.run_action("view.outline_dock");
+    assert!(a.outline_dock.is_none());
+}
