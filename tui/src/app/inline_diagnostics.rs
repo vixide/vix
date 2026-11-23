@@ -69,7 +69,7 @@ impl App {
             inline::inline_entries(&diags, mode, u32::try_from(cursor).unwrap_or(u32::MAX))
                 .into_iter()
                 .map(|e| {
-                    EolText::new(e.line as usize, e.message)
+                    EolText::new(usize::try_from(e.line).unwrap_or(usize::MAX), e.message)
                         .with_color(super::severity_color(e.severity))
                 })
                 .collect();

@@ -15,7 +15,7 @@
     )
 )]
 
-use crate::geo::Geo;
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Paragraph};
 
@@ -49,7 +49,7 @@ pub(super) fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) 
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Min(1), Constraint::Length(MINIMAP_WIDTH)])
                 .split(inner);
-            (s[0], s[1])
+            (chunk(&s, 0), chunk(&s, 1))
         } else {
             (
                 inner,
@@ -72,7 +72,10 @@ pub(super) fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) 
                     [Constraint::Min(1), Constraint::Length(1)]
                 })
                 .split(inner);
-            if mirrored { (s[1], s[0]) } else { (s[0], s[1]) }
+            (
+                chunk(&s, usize::from(mirrored)),
+                chunk(&s, usize::from(!mirrored)),
+            )
         } else {
             (
                 inner,
@@ -95,7 +98,7 @@ pub(super) fn draw_editor_region(app: &mut App, frame: &mut Frame, inner: Rect) 
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Length(1), Constraint::Min(1)])
                     .split(editor_area);
-                (Some(r[0]), r[1])
+                (Some(chunk(&r, 0)), chunk(&r, 1))
             }
             None => (None, editor_area),
         };
@@ -152,7 +155,7 @@ fn draw_pane(app: &mut App, frame: &mut Frame, area: Rect, tab_index: usize) -> 
             .direction(Direction::Horizontal)
             .constraints([Constraint::Min(1), Constraint::Length(1)])
             .split(area);
-        (s[0], s[1])
+        (chunk(&s, 0), chunk(&s, 1))
     } else {
         (
             area,

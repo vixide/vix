@@ -138,7 +138,10 @@ impl App {
         let Some(state) = self.undo_tree.as_mut() else {
             return;
         };
-        let row = state.panel.scroll.plus(mouse.row.minus(rect.y) as usize);
+        let row = state
+            .panel
+            .scroll
+            .plus(usize::from(mouse.row.minus(rect.y)));
         if state.panel.select_row(row) {
             self.preview_undo_tree();
         }

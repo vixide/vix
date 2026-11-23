@@ -44,7 +44,7 @@ pub(super) fn draw_which_key(app: &App, frame: &mut Frame, area: Rect) {
         .map(|(k, a)| k.len().plus(a.len()).plus(7))
         .max()
         .unwrap_or(20)
-        .clamp(20, area.width.max(20) as usize);
+        .clamp(20, usize::from(area.width.max(20)));
     let width = u16::try_from(width).unwrap_or(20).min(area.width);
     let height = (u16::try_from(rows.len()).unwrap_or(1))
         .plus(2)

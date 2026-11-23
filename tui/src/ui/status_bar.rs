@@ -14,7 +14,7 @@
     )
 )]
 
-use crate::geo::Geo;
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
 
@@ -87,13 +87,13 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
             .split(inner);
         frame.render_widget(
             Paragraph::new(left).style(bg).alignment(Alignment::Right),
-            c[1],
+            chunk(&c, 1),
         );
         frame.render_widget(
             Paragraph::new(right).style(bg).alignment(Alignment::Left),
-            c[0],
+            chunk(&c, 0),
         );
-        c[0]
+        chunk(&c, 0)
     } else {
         let c = Layout::default()
             .direction(Direction::Horizontal)
@@ -101,13 +101,13 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
             .split(inner);
         frame.render_widget(
             Paragraph::new(left).style(bg).alignment(Alignment::Left),
-            c[0],
+            chunk(&c, 0),
         );
         frame.render_widget(
             Paragraph::new(right).style(bg).alignment(Alignment::Right),
-            c[1],
+            chunk(&c, 1),
         );
-        c[1]
+        chunk(&c, 1)
     };
 
     // Record the git/branch segment's rectangle (the leftmost part of the

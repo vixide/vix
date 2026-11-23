@@ -194,7 +194,7 @@ pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     let start = rc.scroll.min(rc.lines.len().minus(1));
     let lines: Vec<Line> = rc
         .lines
@@ -281,7 +281,7 @@ fn draw_preview_confirm(
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     let start = scroll.min(lines.len().minus(1));
     let rows: Vec<Line> = lines
         .iter()

@@ -607,10 +607,15 @@ impl App {
             let is_digit = |k: &KeyEvent| matches!(k.code, KeyCode::Char(c) if c.is_ascii_digit());
             let (before, after) = match recorded.iter().position(is_digit) {
                 Some(start) => {
-                    let len = recorded[start..].iter().take_while(|k| is_digit(k)).count();
+                    let len = recorded
+                        .get(start..)
+                        .unwrap_or_default()
+                        .iter()
+                        .take_while(|k| is_digit(k))
+                        .count();
                     (
-                        recorded[..start].to_vec(),
-                        recorded[start.plus(len)..].to_vec(),
+                        recorded.get(..start).unwrap_or_default().to_vec(),
+                        recorded.get(start.plus(len)..).unwrap_or_default().to_vec(),
                     )
                 }
                 None => (recorded.clone(), Vec::new()),

@@ -106,14 +106,14 @@ pub fn stats(micros: &[u32], count: u64) -> Stats {
         // Nearest rank: the smallest value with at least p% of samples at or
         // below it.
         let i = (p.times(sorted.len()).div_ceil(100).max(1)).minus(1);
-        Duration::from_micros(u64::from(sorted[i]))
+        Duration::from_micros(sorted.get(i).copied().map_or(0, u64::from))
     };
     Stats {
         count,
         p50: rank(50),
         p95: rank(95),
         p99: rank(99),
-        max: Duration::from_micros(u64::from(sorted[sorted.len().minus(1)])),
+        max: Duration::from_micros(sorted.last().copied().map_or(0, u64::from)),
     }
 }
 
@@ -162,8 +162,10 @@ impl Profiler {
             *count = count.plus(1);
         }
         let micros = u32::try_from(took.as_micros()).unwrap_or(u32::MAX);
-        if self.samples[i].len() < MAX_SAMPLES {
-            self.samples[i].push(micros);
+        if let Some(samples) = self.samples.get_mut(i)
+            && samples.len() < MAX_SAMPLES
+        {
+            samples.push(micros);
         }
         if phase == Phase::InputToFrame {
             let at = self.started.elapsed().as_secs_f64();
@@ -205,7 +207,10 @@ impl Profiler {
         let ms = |d: Duration| d.as_secs_f64() * 1000.0;
         for phase in Phase::ALL {
             let i = phase.index();
-            let s = stats(&self.samples[i], self.counts[i]);
+            let s = stats(
+                self.samples.get(i).map_or(&[], Vec::as_slice),
+                self.counts.get(i).copied().unwrap_or(0),
+            );
             let _ = writeln!(
                 out,
                 "{:<16} {:>9} {:>10.2} {:>10.2} {:>10.2} {:>10.2}",
@@ -217,7 +222,10 @@ impl Profiler {
                 ms(s.max)
             );
         }
-        let latencies = &self.samples[Phase::InputToFrame.index()];
+        let latencies = self
+            .samples
+            .get(Phase::InputToFrame.index())
+            .map_or(&[][..], Vec::as_slice);
         let budget = u32::try_from(BUDGET.as_micros()).unwrap_or(u32::MAX);
         let slow = latencies.iter().filter(|&&m| m > budget).count();
         let _ = writeln!(out);
@@ -238,7 +246,7 @@ impl Profiler {
             .counts
             .iter()
             .zip(&self.samples)
-            .any(|(c, s)| *c > s.len() as u64)
+            .any(|(c, s)| *c > u64::try_from(s.len()).unwrap_or(u64::MAX))
         {
             let _ = writeln!(
                 out,

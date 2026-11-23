@@ -256,8 +256,9 @@ fn column_view_row_line(
         let w = widths.get(c).copied().unwrap_or(3);
         let selected = !is_header && r == view.row() && c == view.col();
         let text = if is_header {
-            let def = &view.columns()[c];
-            def.title.clone().unwrap_or_else(|| def.property.clone())
+            view.columns().get(c).map_or_else(String::new, |def| {
+                def.title.clone().unwrap_or_else(|| def.property.clone())
+            })
         } else if selected && view.is_editing() {
             view.edit_buffer().to_string()
         } else {
@@ -418,7 +419,7 @@ pub(super) fn draw_edit_sql(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let total = editor.len();
-    let width = chunk(&chunks, 0).width as usize;
+    let width = usize::from(chunk(&chunks, 0).width);
     let mut lines: Vec<Line> = Vec::with_capacity(body_h);
     for i in editor.scroll()..editor.scroll().plus(body_h).min(total) {
         let kind = editor.kind(i);
@@ -733,7 +734,7 @@ pub(super) fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let header = Line::from(Span::styled(t!("ui.html_header").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(header), chunk(&chunks, 0));
 
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.html_panel.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -741,7 +742,9 @@ pub(super) fn draw_html_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for (i, e) in entities[p.scroll..p.scroll.plus(view_h).min(total)]
+    for (i, e) in entities
+        .get(p.scroll..p.scroll.plus(view_h).min(total))
+        .unwrap_or_default()
         .iter()
         .enumerate()
     {
@@ -817,7 +820,7 @@ pub(super) fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(o) = app.outline.as_mut() {
         o.ensure_visible(view_h);
     }
@@ -826,7 +829,9 @@ pub(super) fn draw_outline(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in o.scroll..o.scroll.plus(view_h).min(o.len()) {
-        let e = &o.entries[idx];
+        let Some(e) = o.entries.get(idx) else {
+            break;
+        };
         let kind = if e.kind.is_empty() {
             String::new()
         } else {
@@ -905,7 +910,7 @@ pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(l) = app.conflict_list.as_mut() {
         l.ensure_visible(view_h);
     }
@@ -914,10 +919,12 @@ pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     // Reserve room for the row number and the " → " separator so both
     // previews get a fair, even share of the remaining width.
-    let side_width = ((chunk(&chunks, 0).width as usize).minus(9)).quot(2);
+    let side_width = ((usize::from(chunk(&chunks, 0).width)).minus(9)).quot(2);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in l.scroll..l.scroll.plus(view_h).min(l.len()) {
-        let c = &l.entries[idx];
+        let Some(c) = l.entries.get(idx) else {
+            break;
+        };
         let text = format!(
             "{:>3}: {} → {}",
             idx.plus(1),

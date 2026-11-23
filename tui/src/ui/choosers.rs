@@ -152,7 +152,7 @@ pub(super) fn draw_git_rebase(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     let Some(t) = app.git_rebase.as_mut() else {
         return;
     };
@@ -215,7 +215,7 @@ pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     let start = d.scroll.min(d.lines.len().minus(1));
     let lines: Vec<Line> = d
         .lines
@@ -240,10 +240,19 @@ pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
             let mut i = 0;
             for &(s, e) in &l.emphasis {
                 if s > i {
-                    spans.push(Span::styled(chars[i..s].iter().collect::<String>(), style));
+                    spans.push(Span::styled(
+                        chars
+                            .get(i..s)
+                            .unwrap_or_default()
+                            .iter()
+                            .collect::<String>(),
+                        style,
+                    ));
                 }
                 spans.push(Span::styled(
-                    chars[s.min(chars.len())..e.min(chars.len())]
+                    chars
+                        .get(s.min(chars.len())..e.min(chars.len()))
+                        .unwrap_or_default()
                         .iter()
                         .collect::<String>(),
                     emph,
@@ -251,7 +260,14 @@ pub(super) fn draw_diff_view(app: &mut App, frame: &mut Frame, area: Rect) {
                 i = e;
             }
             if i < chars.len() {
-                spans.push(Span::styled(chars[i..].iter().collect::<String>(), style));
+                spans.push(Span::styled(
+                    chars
+                        .get(i..)
+                        .unwrap_or_default()
+                        .iter()
+                        .collect::<String>(),
+                    style,
+                ));
             }
             Line::from(spans)
         })
@@ -294,7 +310,7 @@ fn project_label(root: &str, home: Option<&str>) -> String {
     let name = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
     let place = match home {
         Some(h) if root == h || root.starts_with(&format!("{h}/")) => {
-            format!("~{}", &root[h.len()..])
+            format!("~{}", root.get(h.len()..).unwrap_or_default())
         }
         _ => root.to_string(),
     };
@@ -561,7 +577,7 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(p) = app.git_log.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -570,7 +586,9 @@ pub(super) fn draw_git_log(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for idx in p.scroll..p.scroll.plus(view_h).min(p.entries.len()) {
-        let e = &p.entries[idx];
+        let Some(e) = p.entries.get(idx) else {
+            break;
+        };
         let text = format!(
             "  {:<8} {:<10} {:<20} {}",
             e.abbrev,
@@ -644,7 +662,7 @@ pub(super) fn draw_context_menu(app: &mut App, frame: &mut Frame, area: Rect) {
                     theme::dim(),
                 ))
             } else {
-                let text = format!(" {} ", labels[i]);
+                let text = format!(" {} ", labels.get(i).map_or("", String::as_str));
                 if i == cm.selected {
                     Line::from(Span::styled(text, theme::selected()))
                 } else {
@@ -837,7 +855,7 @@ pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
 
     // Fixed name (22), size (9), and date (16 + 16) columns; path gets the rest.
     let name_w = 22usize;
-    let path_w = (chunk(&chunks, 0).width as usize)
+    let path_w = (usize::from(chunk(&chunks, 0).width))
         .minus((name_w + 9).plus(16).plus(16).plus(6))
         .max(8);
     let row_text = |name: &str, path: &str, size: &str, created: &str, modified: &str| {
@@ -862,7 +880,7 @@ pub(super) fn draw_recent_chooser(app: &mut App, frame: &mut Frame, area: Rect) 
         chunk(&chunks, 0),
     );
 
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (row, e) in rc.entries.iter().enumerate().take(view_h) {
         let name = e
