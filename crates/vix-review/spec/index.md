@@ -219,3 +219,7 @@ the same shape as the storage file.
 - Tests: the unit tests in `vix-review`, and `tui/tests/integration/git.rs`
   (comments saved, exported and reloaded; hunk navigation; real git ranges,
   ignored by default).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Row layout, wrapping, scrolling, hunk lookup and patch building use `get`, iterators and `checked_*`. **Changed:** a hunk header whose `-start` or `+start` cannot be read makes `lines_patch` fail with `SelectError::NoHunk`; it used to start the side at line 0 and hand git a patch that could apply at the wrong place. **Declared (REVIEW-F1):** row and wrap arithmetic stops at the top of `usize` (past any real diff); scrolling and the highlight stop at the first and last row; a review whose comments cannot be serialized saves as empty text.
