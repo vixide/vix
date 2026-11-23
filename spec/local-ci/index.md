@@ -35,7 +35,8 @@ Measured or observed, not assumed:
   `cargo hack check --each-feature` (39 builds), the semver step (two builds
   of every crate) and the test suite. Under heavy machine load the
   each-feature step alone took about an hour. `nextest` measured about twice
-  as slow as `cargo test` on macOS (process-spawn scanning), so it is opt-in.
+  as slow as `cargo test` on macOS (process-spawn scanning), so it is opt-in
+  there and the default elsewhere.
 - **Four hand-kept copies of the gate** (GitHub, GitLab, Forgejo, `Makefile`)
   drift. `spec/ci` calls this deliberate; it is also a standing maintenance
   cost.
@@ -90,8 +91,8 @@ The landing bar is unchanged; these make the same checks wait less.
   does not accept. The default scope is `all`.
 - **nextest by default off macOS.** When `cargo-nextest` is installed the gate
   runs the test suite with it on Linux (parallel across binaries, one process
-  per test, one retry reported as FLAKY; doctests still run with `cargo test
-  --doc`). On macOS it stays opt-in (`VIX_NEXTEST=1`) because every process
+  per test, one retry reported as FLAKY; documentation tests still run with
+  `cargo test --doc`). On macOS it stays opt-in (`VIX_NEXTEST=1`) because every process
   spawn is scanned by the OS and it measured about twice as slow; `VIX_NEXTEST=0`
   forces `cargo test` anywhere. CI and `scripts/ci` already behaved this way.
 - **Test builds carry less debug information.** `[profile.test]` uses
