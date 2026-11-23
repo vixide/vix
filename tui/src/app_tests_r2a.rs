@@ -3075,3 +3075,149 @@ fn outline_dock_tracks_the_cursor_and_clicks_jump() {
     a.run_action("view.outline_dock");
     assert!(a.outline_dock.is_none());
 }
+
+// ----- edit surfaces: open, save through the buffer, close ---------------------------------
+
+fn ctrl_s() -> KeyEvent {
+    KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL)
+}
+
+fn surface_app(name: &str, file: &str, body: &str) -> (PathBuf, App) {
+    let dir = tmp(name);
+    std::fs::write(dir.join(file), body).unwrap();
+    let mut a = app_in(&dir);
+    a.layout.edit_table = Rect::new(0, 0, 60, 12);
+    a.layout.edit_outline = Rect::new(0, 0, 60, 12);
+    a.layout.edit_value = Rect::new(0, 0, 60, 12);
+    a.layout.edit_bytes = Rect::new(0, 0, 60, 12);
+    a.open_path(&dir.join(file), false);
+    (dir, a)
+}
+
+#[test]
+fn table_editor_saves_the_grid_back_to_the_file_and_closes() {
+    let (dir, mut a) = surface_app("surf-table", "t.csv", "a,b\n1,2\n");
+    a.run_action("tools.edit_table");
+    assert!(a.edit.edit_table().is_some());
+    a.on_key(ctrl_s());
+    assert_eq!(read(&dir.join("t.csv")), "a,b\n1,2\n");
+    assert!(!a.editor.active_tab().unwrap().dirty);
+    a.on_key(key(KeyCode::Char('q')));
+    assert!(a.edit.edit_table().is_none());
+    // A TSV file opens as tab-separated.
+    std::fs::write(dir.join("t.tsv"), "x\ty\n").unwrap();
+    a.open_path(&dir.join("t.tsv"), false);
+    a.run_action("tools.edit_table");
+    a.on_key(ctrl_s());
+    assert_eq!(read(&dir.join("t.tsv")), "x\ty\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn outline_editor_saves_and_closes() {
+    let (dir, mut a) = surface_app("surf-outline", "o.txt", "top\n  child\n");
+    a.run_action("tools.edit_outline");
+    assert!(a.edit.edit_outline().is_some());
+    a.on_key(ctrl_s());
+    assert_eq!(read(&dir.join("o.txt")), "top\n  child\n");
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.edit.edit_outline().is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn value_editor_round_trips_json_and_yaml_and_rejects_bad_input() {
+    let (dir, mut a) = surface_app("surf-json", "v.json", "{\"a\": 1}\n");
+    a.run_action("tools.edit_json");
+    assert!(a.edit.edit_value().is_some());
+    a.on_key(ctrl_s());
+    let saved = read(&dir.join("v.json"));
+    assert!(saved.contains("\"a\"") && saved.contains('1'), "{saved}");
+    a.on_key(key(KeyCode::Char('q')));
+    assert!(a.edit.edit_value().is_none());
+    std::fs::write(dir.join("v.yaml"), "a: 1\n").unwrap();
+    a.open_path(&dir.join("v.yaml"), false);
+    a.run_action("tools.edit_yaml");
+    assert!(a.edit.edit_value().is_some());
+    a.on_key(ctrl_s());
+    assert!(read(&dir.join("v.yaml")).contains("a:"));
+    a.on_key(key(KeyCode::Esc));
+    // Text that does not parse is reported and nothing opens.
+    a.editor.new_tab_with_content("{ not json");
+    a.run_action("tools.edit_json");
+    assert!(a.edit.edit_value().is_none());
+    assert!(a.messages.items.iter().any(|m| {
+        m.text.starts_with(
+            t!("msg.edit_value_parse", error = "")
+                .to_string()
+                .trim_end_matches(|c: char| !c.is_alphanumeric()),
+        )
+    }));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn edit_surfaces_warn_when_there_is_no_buffer() {
+    let mut a = app();
+    a.editor.tabs.clear();
+    a.run_action("tools.edit_table");
+    a.run_action("tools.edit_outline");
+    a.run_action("tools.edit_json");
+    a.run_action("tools.edit_bytes");
+    let warned: Vec<&str> = a.messages.items.iter().map(|m| m.text.as_str()).collect();
+    for key in [
+        "msg.edit_table_no_buffer",
+        "msg.edit_outline_no_buffer",
+        "msg.edit_value_no_buffer",
+        "msg.edit_bytes_no_buffer",
+    ] {
+        assert!(warned.contains(&t!(key).as_ref()), "{key}");
+    }
+    assert!(a.edit.edit_table().is_none());
+}
+
+#[test]
+fn byte_editor_saves_a_text_buffer_and_a_binary_file_byte_for_byte() {
+    let (dir, mut a) = surface_app("surf-bytes", "b.txt", "hello\n");
+    a.run_action("tools.edit_bytes");
+    assert!(a.edit.edit_bytes().is_some());
+    a.on_key(ctrl_s());
+    assert_eq!(read(&dir.join("b.txt")), "hello\n");
+    a.on_key(key(KeyCode::Char('q')));
+    assert!(a.edit.edit_bytes().is_none());
+
+    // A binary file opened straight into the byte editor is rewritten as bytes.
+    let bin = dir.join("raw.bin");
+    std::fs::write(&bin, [0u8, 159, 146, 150, 0]).unwrap();
+    a.open_path(&bin, false);
+    a.on_key(key(KeyCode::Char('y')));
+    assert_eq!(a.edit_bytes_file.as_deref(), Some(bin.as_path()));
+    a.layout.edit_bytes = Rect::new(0, 0, 60, 12);
+    a.on_key(ctrl_s());
+    assert_eq!(std::fs::read(&bin).unwrap(), [0u8, 159, 146, 150, 0]);
+    assert_eq!(
+        a.status,
+        t!("status.saved", path = bin.display()).to_string()
+    );
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.edit.edit_bytes().is_none());
+    assert!(a.edit_bytes_file.is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(feature = "sql")]
+#[test]
+fn sql_editor_saves_and_closes() {
+    let (dir, mut a) = surface_app("surf-sql", "q.sql", "select 1;\n");
+    a.run_action("tools.edit_sql");
+    assert!(a.edit.edit_sql().is_some());
+    a.layout.edit_sql = Rect::new(0, 0, 60, 12);
+    a.on_key(ctrl_s());
+    assert!(read(&dir.join("q.sql")).to_lowercase().contains("select 1"));
+    a.on_key(key(KeyCode::Char('q')));
+    assert!(a.edit.edit_sql().is_none());
+    a.editor.tabs.clear();
+    a.run_action("tools.edit_sql");
+    assert!(a.edit.edit_sql().is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
