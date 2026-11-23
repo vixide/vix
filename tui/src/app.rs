@@ -15138,6 +15138,10 @@ fn highlight_match(t: &mut Tab, cs: usize, ce: usize, area: Rect) {
 const MIN_EDITOR_WIDTH: u16 = 20;
 
 #[cfg(test)]
+#[path = "app_tests_r2a.rs"]
+mod app_tests_r2a;
+
+#[cfg(test)]
 mod tests {
     #[cfg(not(feature = "jj"))]
     #[test]
