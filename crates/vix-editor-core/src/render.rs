@@ -9,12 +9,81 @@
 //! The App shell (`src/ui.rs`) draws everything *around* the editor; the editor
 //! itself is drawn only here. See `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::code::{RopeGraphemes, grapheme_width_and_bytes_len, grapheme_width_and_chars_len};
 use crate::editor::{CommentMark, Editor, Flags};
 use ratatui_core::buffer::Buffer;
 use ratatui_core::layout::Rect;
 use ratatui_core::style::{Color, Modifier, Style};
 use ratatui_core::widgets::Widget;
+
+/// Checked `+` and `-` on the screen and text offsets drawn here: a sum past
+/// the top of the type is the top (off-screen or past the text), and a
+/// difference below zero is zero.
+trait Geo: Sized {
+    /// `self + other`, or the type's top when it does not fit.
+    fn plus(self, other: Self) -> Self;
+    /// `self - other`, or zero when it would go below zero.
+    fn minus(self, other: Self) -> Self;
+}
+
+impl Geo for usize {
+    fn plus(self, other: Self) -> Self {
+        add_or(self, other, Self::MAX)
+    }
+    fn minus(self, other: Self) -> Self {
+        sub_or(self, other, 0)
+    }
+}
+
+impl Geo for u16 {
+    fn plus(self, other: Self) -> Self {
+        add_u16_or(self, other, Self::MAX)
+    }
+    fn minus(self, other: Self) -> Self {
+        sub_u16_or(self, other, 0)
+    }
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit.
+fn add_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero.
+fn sub_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a * b`, or the declared `fallback` when the product does not fit.
+fn mul_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_mul(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Draws the main editor view in the provided area using the ratatui rendering buffer.
 ///
@@ -202,7 +271,7 @@ impl Editor {
             .iter()
             .filter(|(l, c, _)| *l == line && *c <= col)
             .map(|(_, _, label)| unicode_width::UnicodeWidthStr::width(label.as_str()))
-            .sum();
+            .fold(0, |total: usize, w| total.plus(w));
         u16::try_from(w).unwrap_or(u16::MAX)
     }
 
@@ -248,9 +317,13 @@ impl Editor {
         let code = self.code_ref();
         let default_text_style = self.text_style;
 
-        let text_x0 = area.left() + line_number_width_u16;
-        for (row, view_row) in self.view_rows(area.height as usize).into_iter().enumerate() {
-            let draw_y = area.top() + u16::try_from(row).unwrap_or(u16::MAX);
+        let text_x0 = area.left().plus(line_number_width_u16);
+        for (row, view_row) in self
+            .view_rows(usize::from(area.height))
+            .into_iter()
+            .enumerate()
+        {
+            let draw_y = area.top().plus(u16::try_from(row).unwrap_or(u16::MAX));
             if draw_y >= area.bottom() {
                 break;
             }
@@ -270,19 +343,19 @@ impl Editor {
             }
             self.draw_line_gutter(buf, area, draw_y, line_idx, line_number_digits);
             let line_len = code.line_len(line_idx);
-            let max_x = (area.width as usize).saturating_sub(line_number_width);
+            let max_x = usize::from(area.width).minus(line_number_width);
 
             let start_col = self.offset_x.min(line_len);
-            let end_col = (start_col + max_x).min(line_len);
+            let end_col = start_col.plus(max_x).min(line_len);
 
             let line_start_char = code.line_to_char(line_idx);
-            let char_start = line_start_char + start_col;
-            let char_end = line_start_char + end_col;
+            let char_start = line_start_char.plus(start_col);
+            let char_end = line_start_char.plus(end_col);
 
             let visible_chars = code.char_slice(char_start, char_end);
 
-            let text_x = area.left() + line_number_width_u16;
-            let right_edge = area.left() + area.width;
+            let text_x = area.left().plus(line_number_width_u16);
+            let right_edge = area.left().plus(area.width);
 
             self.draw_fold_marker(buf, line_idx, area.left(), text_x, right_edge, draw_y);
 
@@ -302,7 +375,7 @@ impl Editor {
                 );
             } else {
                 let hints = self.line_inlays(line_idx);
-                if !(text_x < right_edge && draw_y < area.top() + area.height) {
+                if !(text_x < right_edge && draw_y < area.top().plus(area.height)) {
                     // off the right edge / below the view
                 } else if hints.is_empty() {
                     let displayed_line = visible_chars.to_string().replace('\t', " ");
@@ -347,7 +420,7 @@ impl Editor {
     fn draw_filler_row(&self, area: Rect, buf: &mut Buffer, y: u16) {
         let text_x = area
             .left()
-            .saturating_add(u16::try_from(self.get_line_number_width()).unwrap_or(u16::MAX));
+            .plus(u16::try_from(self.get_line_number_width()).unwrap_or(u16::MAX));
         for x in text_x..area.right() {
             buf[(x, y)]
                 .set_symbol("\u{2571}")
@@ -373,7 +446,7 @@ impl Editor {
                 if self.flags.contains(Flags::RELATIVE_LINE_NUMBERS) && line_idx != cursor_line {
                     line_idx.abs_diff(cursor_line)
                 } else {
-                    line_idx + 1
+                    line_idx.plus(1)
                 };
             let line_number = format!("{value:>line_number_digits$}");
             buf.set_string(area.left(), draw_y, &line_number, self.line_number_style);
@@ -381,7 +454,8 @@ impl Editor {
         // Gutter sign column (just before the text, or column 0 when line
         // numbers are hidden).
         let sign_x = if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
-            area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
+            area.left()
+                .plus(u16::try_from(line_number_digits).unwrap_or(u16::MAX))
         } else {
             area.left()
         };
@@ -400,7 +474,7 @@ impl Editor {
         draw_y: u16,
     ) {
         if let Some(folded) = self.fold_marker(line_idx) {
-            let fx = text_x.saturating_sub(1);
+            let fx = text_x.minus(1);
             if fx >= area_left && fx < right_edge {
                 let sym = if folded { "\u{25b8}" } else { "\u{25be}" }; // ▸ folded, ▾ open
                 buf[(fx, draw_y)]
@@ -433,13 +507,13 @@ impl Editor {
         }
         let full = self
             .code_ref()
-            .char_slice(line_start_char, line_start_char + line_len);
+            .char_slice(line_start_char, line_start_char.plus(line_len));
         let lw: usize = RopeGraphemes::new(&full)
             .map(|g| grapheme_width_and_chars_len(g).0)
-            .sum();
-        let ex = text_x + u16::try_from(lw).unwrap_or(u16::MAX);
+            .fold(0, |total: usize, w| total.plus(w));
+        let ex = text_x.plus(u16::try_from(lw).unwrap_or(u16::MAX));
         if ex < right_edge {
-            let avail = (right_edge - ex) as usize;
+            let avail = usize::from(right_edge.minus(ex));
             let shown: String = "...".chars().take(avail).collect();
             buf.set_string(ex, draw_y, &shown, text_style);
         }
@@ -478,7 +552,7 @@ impl Editor {
                 other => other,
             })
             .collect();
-        if text_x < right_edge && draw_y < area.top() + area.height {
+        if text_x < right_edge && draw_y < area.top().plus(area.height) {
             buf.set_string(text_x, draw_y, &displayed_line, default_text_style);
             // Dim the glyph cells, tracking display columns so wide characters
             // elsewhere on the line don't shift the marks.
@@ -486,17 +560,17 @@ impl Editor {
             for g in RopeGraphemes::new(visible) {
                 let (g_width, _g_chars) = grapheme_width_and_chars_len(g);
                 if matches!(g.chars().next(), Some('\t' | ' ' | '\r')) {
-                    let gx = text_x + u16::try_from(x).unwrap_or(u16::MAX);
+                    let gx = text_x.plus(u16::try_from(x).unwrap_or(u16::MAX));
                     if gx < right_edge {
                         buf[(gx, draw_y)].set_style(self.whitespace_style);
                     }
                 }
-                x = x.saturating_add(g_width);
+                x = x.plus(g_width);
             }
             // A line-ending glyph after the content, when the line's end is in
             // view and it is not the final (newline-less) line.
-            if end_col == line_len && line_idx + 1 < total_lines {
-                let nl_x = text_x + u16::try_from(x).unwrap_or(u16::MAX);
+            if end_col == line_len && line_idx.plus(1) < total_lines {
+                let nl_x = text_x.plus(u16::try_from(x).unwrap_or(u16::MAX));
                 if nl_x < right_edge {
                     buf.set_string(nl_x, draw_y, "\u{00B6}", self.whitespace_style); // ¶
                 }
@@ -571,18 +645,19 @@ impl Editor {
         {
             let full = self
                 .code_ref()
-                .char_slice(line_start_char, line_start_char + line_len);
+                .char_slice(line_start_char, line_start_char.plus(line_len));
             let lw: usize = RopeGraphemes::new(&full)
                 .map(|g| grapheme_width_and_chars_len(g).0)
-                .sum();
-            let nx = text_x + u16::try_from(lw + 2).unwrap_or(u16::MAX);
+                .fold(0, |total: usize, w| total.plus(w));
+            let nx = text_x.plus(u16::try_from(lw.plus(2)).unwrap_or(u16::MAX));
             if nx < right_edge {
-                let avail = (right_edge - nx) as usize;
+                let avail = usize::from(right_edge.minus(nx));
                 let shown: String = note.chars().take(avail).collect();
                 let style = self.whitespace_style.add_modifier(Modifier::ITALIC);
                 buf.set_string(nx, draw_y, &shown, style);
-                note_end =
-                    Some(usize::from(nx) + unicode_width::UnicodeWidthStr::width(shown.as_str()));
+                note_end = Some(
+                    usize::from(nx).plus(unicode_width::UnicodeWidthStr::width(shown.as_str())),
+                );
             }
         }
         // Skip measuring the line on the (usual) frame with no virtual text.
@@ -591,10 +666,10 @@ impl Editor {
         }
         let content_end = note_end.unwrap_or_else(|| {
             let mut end = usize::from(text_x)
-                + self.line_width_from(line_idx, self.offset_x)
-                + usize::from(self.inlay_shift(line_idx, usize::MAX));
+                .plus(self.line_width_from(line_idx, self.offset_x))
+                .plus(usize::from(self.inlay_shift(line_idx, usize::MAX)));
             if self.offset_x == 0 && self.fold_marker(line_idx) == Some(true) {
-                end += 3; // the folded line's `...`
+                end = end.plus(3); // the folded line's `...`
             }
             end
         });
@@ -623,29 +698,31 @@ impl Editor {
         let mut disp_col = 0usize;
         let mut hi = 0usize;
         for (i, ch) in visible_chars.chars().enumerate() {
-            while hi < hints.len() && hints[hi].0 == i {
-                let w = UnicodeWidthStr::width(hints[hi].1);
+            while let Some(&(at, label)) = hints.get(hi)
+                && at == i
+            {
+                let w = UnicodeWidthStr::width(label);
                 hint_spans.push((disp_col, w));
-                displayed.push_str(hints[hi].1);
-                disp_col += w;
-                hi += 1;
+                displayed.push_str(label);
+                disp_col = disp_col.plus(w);
+                hi = hi.plus(1);
             }
             let c = if ch == '\t' { ' ' } else { ch };
             displayed.push(c);
-            disp_col += UnicodeWidthChar::width(c).unwrap_or(1);
+            disp_col = disp_col.plus(UnicodeWidthChar::width(c).unwrap_or(1));
         }
         // Hints anchored at or past the end of the visible text.
-        while hi < hints.len() {
-            let w = UnicodeWidthStr::width(hints[hi].1);
+        while let Some(&(_, label)) = hints.get(hi) {
+            let w = UnicodeWidthStr::width(label);
             hint_spans.push((disp_col, w));
-            displayed.push_str(hints[hi].1);
-            disp_col += w;
-            hi += 1;
+            displayed.push_str(label);
+            disp_col = disp_col.plus(w);
+            hi = hi.plus(1);
         }
         buf.set_string(text_x, draw_y, &displayed, text_style);
         for (start, w) in hint_spans {
             for dx in 0..w {
-                let x = text_x + u16::try_from(start + dx).unwrap_or(u16::MAX);
+                let x = text_x.plus(u16::try_from(start.plus(dx)).unwrap_or(u16::MAX));
                 if x < right_edge {
                     buf[(x, draw_y)].set_style(self.whitespace_style);
                 }
@@ -669,30 +746,32 @@ impl Editor {
             return;
         }
         let step = unit.chars().count();
-        let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
-        for (screen_y, line_idx) in self.text_rows(area.height as usize) {
+        let max_x = usize::from(area.width).minus(usize::from(line_number_width_u16));
+        for (screen_y, line_idx) in self.text_rows(usize::from(area.height)) {
             if line_idx >= total_lines {
                 break;
             }
             let line_start = code.line_to_char(line_idx);
             let len = code.line_len(line_idx);
             let leading = code
-                .char_slice(line_start, line_start + len)
+                .char_slice(line_start, line_start.plus(len))
                 .chars()
                 .take_while(|c| *c == ' ')
                 .count();
-            let levels = leading / step;
-            for col in (0..levels).map(|k| k * step) {
+            let levels = leading.checked_div(step).unwrap_or(0);
+            for col in (0..levels).map(|k| mul_or(k, step, usize::MAX)) {
                 if col < self.offset_x {
                     continue;
                 }
-                let x = col - self.offset_x;
+                let x = col.minus(self.offset_x);
                 if x >= max_x {
                     break;
                 }
-                let draw_x =
-                    area.left() + line_number_width_u16 + u16::try_from(x).unwrap_or(u16::MAX);
-                let draw_y = area.top() + u16::try_from(screen_y).unwrap_or(u16::MAX);
+                let draw_x = area
+                    .left()
+                    .plus(line_number_width_u16)
+                    .plus(u16::try_from(x).unwrap_or(u16::MAX));
+                let draw_y = area.top().plus(u16::try_from(screen_y).unwrap_or(u16::MAX));
                 if draw_x < area.right() && draw_y < area.bottom() {
                     buf[(draw_x, draw_y)]
                         .set_symbol("\u{2502}")
@@ -722,8 +801,15 @@ impl Editor {
             Color::Rgb(0xff, 0x8c, 0x42), // orange
             Color::Rgb(0x4d, 0xd0, 0xe1), // cyan
         ];
+        // The colour for a nesting depth (the depth wraps around the six colours).
+        let color_at = |depth: usize| {
+            depth
+                .checked_rem(COLORS.len())
+                .and_then(|i| COLORS.get(i))
+                .copied()
+        };
         let code = self.code_ref();
-        let rows = self.text_rows(area.height as usize);
+        let rows = self.text_rows(usize::from(area.height));
         let Some(&(_, first)) = rows.first() else {
             return;
         };
@@ -739,18 +825,18 @@ impl Editor {
             .char_slice(0, base)
             .chars()
             .fold(0usize, |d, c| match c {
-                '(' | '[' | '{' => d + 1,
-                ')' | ']' | '}' => d.saturating_sub(1),
+                '(' | '[' | '{' => d.plus(1),
+                ')' | ']' | '}' => d.minus(1),
                 _ => d,
             });
-        let max_x = (area.width as usize).saturating_sub(line_number_width_u16 as usize);
+        let max_x = usize::from(area.width).minus(usize::from(line_number_width_u16));
         for (screen_y, line_idx) in rows {
             if line_idx >= total_lines {
                 break;
             }
             let ls = code.line_to_char(line_idx);
             let len = code.line_len(line_idx);
-            let slice = code.char_slice(ls, ls + len);
+            let slice = code.char_slice(ls, ls.plus(len));
             let mut vcol = 0usize;
             for g in RopeGraphemes::new(&slice) {
                 let w = grapheme_width_and_bytes_len(g).0;
@@ -758,32 +844,33 @@ impl Editor {
                     let c = g.char(0);
                     let color = match c {
                         '(' | '[' | '{' => {
-                            let col = COLORS[depth % COLORS.len()];
-                            depth += 1;
-                            Some(col)
+                            let col = color_at(depth);
+                            depth = depth.plus(1);
+                            col
                         }
                         ')' | ']' | '}' => {
-                            depth = depth.saturating_sub(1);
-                            Some(COLORS[depth % COLORS.len()])
+                            depth = depth.minus(1);
+                            color_at(depth)
                         }
                         _ => None,
                     };
                     if let Some(color) = color
                         && vcol >= self.offset_x
                     {
-                        let x = vcol - self.offset_x;
+                        let x = vcol.minus(self.offset_x);
                         if x < max_x {
-                            let dx = area.left()
-                                + line_number_width_u16
-                                + u16::try_from(x).unwrap_or(u16::MAX);
-                            let dy = area.top() + u16::try_from(screen_y).unwrap_or(u16::MAX);
+                            let dx = area
+                                .left()
+                                .plus(line_number_width_u16)
+                                .plus(u16::try_from(x).unwrap_or(u16::MAX));
+                            let dy = area.top().plus(u16::try_from(screen_y).unwrap_or(u16::MAX));
                             if dx < area.right() && dy < area.bottom() {
                                 buf[(dx, dy)].set_fg(color);
                             }
                         }
                     }
                 }
-                vcol += w;
+                vcol = vcol.plus(w);
             }
         }
     }
@@ -806,14 +893,14 @@ impl Editor {
         // than one query per line: cheaper while typing, and the (start, end) cache
         // now memoizes one entry instead of one per visible line.
         let mut region: Option<(usize, usize)> = None;
-        let rows = self.text_rows(area.height as usize);
+        let rows = self.text_rows(usize::from(area.height));
         for &(_, line_idx) in &rows {
             if line_idx >= total_lines {
                 break;
             }
             let ls = code.line_to_char(line_idx);
             let s = code.char_to_byte(ls);
-            let e = code.char_to_byte(ls + code.line_len(line_idx));
+            let e = code.char_to_byte(ls.plus(code.line_len(line_idx)));
             region = Some(region.map_or((s, e), |(rs, re)| (rs.min(s), re.max(e))));
         }
         let treesitter_highlights =
@@ -858,13 +945,13 @@ impl Editor {
             }
 
             let line_len = code.line_len(line_idx);
-            let max_x = (area.width as usize).saturating_sub(line_number_width);
+            let max_x = usize::from(area.width).minus(line_number_width);
 
             let line_start_char = code.line_to_char(line_idx);
-            let start_char = line_start_char + self.offset_x;
-            let visible_len = line_len.saturating_sub(self.offset_x);
+            let start_char = line_start_char.plus(self.offset_x);
+            let visible_len = line_len.minus(self.offset_x);
             let end = max_x.min(visible_len);
-            let end_char = start_char + end;
+            let end_char = start_char.plus(end);
 
             if start_char > total_chars || end_char > total_chars {
                 continue; // last line offset case
@@ -886,18 +973,19 @@ impl Editor {
                 }
 
                 let shift = self.inlay_shift(line_idx, char_col);
-                char_col += g.chars().count();
-                let start_x = area.left()
-                    + line_number_width_u16
-                    + shift
-                    + u16::try_from(x).unwrap_or(u16::MAX);
-                let draw_y = area.top() + u16::try_from(screen_y).unwrap_or(u16::MAX);
+                char_col = char_col.plus(g.chars().count());
+                let start_x = area
+                    .left()
+                    .plus(line_number_width_u16)
+                    .plus(shift)
+                    .plus(u16::try_from(x).unwrap_or(u16::MAX));
+                let draw_y = area.top().plus(u16::try_from(screen_y).unwrap_or(u16::MAX));
 
                 for dx in 0..g_width {
-                    if x + dx >= max_x {
+                    if x.plus(dx) >= max_x {
                         break;
                     }
-                    let draw_x = start_x + u16::try_from(dx).unwrap_or(u16::MAX);
+                    let draw_x = start_x.plus(u16::try_from(dx).unwrap_or(u16::MAX));
                     for &(start, end, s) in &highlights {
                         if start <= byte_idx_in_rope && byte_idx_in_rope < end {
                             buf[(draw_x, draw_y)].set_style(s);
@@ -906,8 +994,8 @@ impl Editor {
                     }
                 }
 
-                x = x.saturating_add(g_width);
-                byte_idx_in_rope += g_bytes;
+                x = x.plus(g_width);
+                byte_idx_in_rope = byte_idx_in_rope.plus(g_bytes);
             }
         }
     }
@@ -936,20 +1024,20 @@ impl Editor {
 
             let line_start_char = code.line_to_char(line_idx);
             let line_len = code.line_len(line_idx);
-            let line_end_char = line_start_char + line_len;
+            let line_end_char = line_start_char.plus(line_len);
 
             let highlight_start = start.max(line_start_char);
             let highlight_end = end.min(line_end_char);
 
-            let rel_start = highlight_start - line_start_char;
-            let rel_end = highlight_end - line_start_char;
+            let rel_start = highlight_start.minus(line_start_char);
+            let rel_end = highlight_end.minus(line_start_char);
 
             let start_col = self.offset_x.min(line_len);
-            let max_text_width = (area.width as usize).saturating_sub(line_number_width);
-            let end_col = (start_col + max_text_width).min(line_len);
+            let max_text_width = usize::from(area.width).minus(line_number_width);
+            let end_col = start_col.plus(max_text_width).min(line_len);
 
-            let char_slice_start = line_start_char + start_col;
-            let char_slice_end = line_start_char + end_col;
+            let char_slice_start = line_start_char.plus(start_col);
+            let char_slice_end = line_start_char.plus(end_col);
 
             let visible_chars = code.char_slice(char_slice_start, char_slice_end);
 
@@ -959,19 +1047,23 @@ impl Editor {
             for g in RopeGraphemes::new(&visible_chars) {
                 let (g_width, g_chars) = grapheme_width_and_chars_len(g);
 
-                if char_col < rel_end && char_col + g_chars > rel_start {
+                if char_col < rel_end && char_col.plus(g_chars) > rel_start {
                     let shift = self.inlay_shift(line_idx, char_col);
-                    let start_x = area.left() + line_number_width_u16 + shift + visual_x;
+                    let start_x = area
+                        .left()
+                        .plus(line_number_width_u16)
+                        .plus(shift)
+                        .plus(visual_x);
                     for dx in 0..u16::try_from(g_width).unwrap_or(u16::MAX) {
-                        let draw_x = start_x + dx;
+                        let draw_x = start_x.plus(dx);
                         if draw_x < area.right() && draw_y < area.bottom() {
                             buf[(draw_x, draw_y)].set_style(style);
                         }
                     }
                 }
 
-                visual_x = visual_x.saturating_add(u16::try_from(g_width).unwrap_or(u16::MAX));
-                char_col += g_chars;
+                visual_x = visual_x.plus(u16::try_from(g_width).unwrap_or(u16::MAX));
+                char_col = char_col.plus(g_chars);
             }
         }
     }
@@ -996,10 +1088,10 @@ impl Editor {
         };
         let line_start_char = code.line_to_char(line_idx);
         let line_len = code.line_len(line_idx);
-        let rel = pos - line_start_char;
+        let rel = pos.minus(line_start_char);
         let start_col = self.offset_x.min(line_len);
-        let max_text_width = (area.width as usize).saturating_sub(line_number_width);
-        let end_col = (start_col + max_text_width).min(line_len);
+        let max_text_width = usize::from(area.width).minus(line_number_width);
+        let end_col = start_col.plus(max_text_width).min(line_len);
 
         let in_view = if exclusive_end {
             rel >= start_col && rel < end_col
@@ -1010,7 +1102,10 @@ impl Editor {
             return;
         }
 
-        let visible = code.char_slice(line_start_char + start_col, line_start_char + end_col);
+        let visible = code.char_slice(
+            line_start_char.plus(start_col),
+            line_start_char.plus(end_col),
+        );
         let mut visual_x: u16 = 0;
         let mut char_col = start_col;
         for g in RopeGraphemes::new(&visible) {
@@ -1018,11 +1113,14 @@ impl Editor {
                 break;
             }
             let (g_width, g_chars) = grapheme_width_and_chars_len(g);
-            visual_x = visual_x.saturating_add(u16::try_from(g_width).unwrap_or(u16::MAX));
-            char_col += g_chars;
+            visual_x = visual_x.plus(u16::try_from(g_width).unwrap_or(u16::MAX));
+            char_col = char_col.plus(g_chars);
         }
-        let draw_x =
-            area.left() + line_number_width_u16 + self.inlay_shift(line_idx, rel) + visual_x;
+        let draw_x = area
+            .left()
+            .plus(line_number_width_u16)
+            .plus(self.inlay_shift(line_idx, rel))
+            .plus(visual_x);
         if draw_x < area.right() && draw_y < area.bottom() {
             buf[(draw_x, draw_y)].set_style(style);
         }
