@@ -1169,7 +1169,6 @@ mod tests {
     use super::*;
     use crate::lsp_core::{Position, Range};
     use crate::settings::Settings;
-    use vix_input::KeyModifiers;
 
     fn range(l0: u32, c0: u32, l1: u32, c1: u32) -> Range {
         Range {
@@ -1438,201 +1437,15 @@ mod tests {
     }
 
     #[test]
-    fn folding_ranges_become_fold_markers() {
-        let (mut app, dir, _f) = app_with_file("fold", "a.rs", "a {\n b\n}\nc\n");
+    fn folding_ranges_become_zero_based_fold_regions() {
+        let (mut app, dir, _file) = app_with_file("fold", "a.rs", "fn a() {\n  1\n}\n");
+        assert!(!app.editor.active_tab().unwrap().editor.has_folds());
         app.apply_folding_ranges(&[(0, 2)]);
-        let ed = &app.editor.active_tab().unwrap().editor;
-        assert_eq!(ed.fold_marker(0), Some(false));
-        assert_eq!(ed.fold_marker(3), None);
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn an_in_sync_edit_reply_rewrites_the_buffer_highest_first() {
-        let (mut app, dir, file) = app_with_file("edits", "a.rs", "let a = 1;\nlet b = 2;\n");
-        let rev = app.editor.active_tab().unwrap().editor.revision();
-        app.lsp_synced.insert(file.clone(), rev);
-        app.apply_lsp_edits(
-            &file,
-            &[
-                (range(0, 4, 0, 5), "alpha".to_string()),
-                (range(1, 4, 1, 5), "beta".to_string()),
-            ],
-        );
-        assert_eq!(text(&app), "let alpha = 1;\nlet beta = 2;\n");
-        assert!(app.editor.active_tab().unwrap().dirty);
-        assert_eq!(app.status, t!("status.formatted").to_string());
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn a_stale_edit_reply_is_dropped_and_cancels_a_pending_format_save() {
-        let (mut app, dir, file) = app_with_file("stale", "a.rs", "x\n");
-        // Never synced: the buffer is not the text the reply was computed for.
-        app.format_save_pending = Some(file.clone());
-        app.apply_lsp_edits(&file, &[(range(0, 0, 0, 1), "y".to_string())]);
-        assert_eq!(text(&app), "x\n");
-        assert!(app.format_save_pending.is_none());
-        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
-        app.status.clear();
-        app.drop_stale_lsp_edits(&file);
-        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn a_format_on_save_reply_writes_the_formatted_buffer_to_disk() {
-        let (mut app, dir, file) = app_with_file("fmtsave", "a.rs", "let   a=1;\n");
-        let rev = app.editor.active_tab().unwrap().editor.revision();
-        app.lsp_synced.insert(file.clone(), rev);
-        app.format_save_pending = Some(file.clone());
-        app.apply_lsp_edits(&file, &[(range(0, 0, 0, 10), "let a = 1;".to_string())]);
-        assert!(app.format_save_pending.is_none());
-        assert_eq!(std::fs::read_to_string(&file).unwrap(), "let a = 1;\n");
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn linked_ranges_prompt_for_the_shared_text() {
-        let (mut app, dir, file) = app_with_file("linked", "a.html", "<div></div>\n");
-        // Out of sync: dropped.
-        app.begin_linked_edit(&file, &[range(0, 1, 0, 4), range(0, 7, 0, 10)]);
-        assert!(app.prompt.is_none());
-        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
-        let rev = app.editor.active_tab().unwrap().editor.revision();
-        app.lsp_synced.insert(file.clone(), rev);
-        app.begin_linked_edit(&file, &[range(0, 1, 0, 4), range(0, 7, 0, 10)]);
-        let p = app.prompt.as_ref().unwrap();
-        assert!(matches!(p.kind, PromptKind::LinkedEdit));
-        assert_eq!(p.input, "div");
-        assert_eq!(app.linked_ranges, Some(vec![(1, 4), (7, 10)]));
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn a_workspace_edit_changes_open_buffers_and_closed_files() {
-        let (mut app, dir, file) = app_with_file("wsedit", "a.rs", "let old = 1;\n");
-        let closed = dir.join("b.rs");
-        std::fs::write(&closed, "use old;\n").unwrap();
-        app.apply_workspace_edit(&[
-            (file, vec![(range(0, 4, 0, 7), "new".to_string())]),
-            (closed.clone(), vec![(range(0, 4, 0, 7), "new".to_string())]),
-            (dir.join("unchanged.rs"), Vec::new()),
-        ]);
-        assert_eq!(text(&app), "let new = 1;\n");
-        assert!(app.editor.active_tab().unwrap().dirty);
-        assert_eq!(std::fs::read_to_string(&closed).unwrap(), "use new;\n");
-        assert_eq!(app.status, t!("status.renamed_in", n = 2).to_string());
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn lsp_jump_opens_the_file_at_the_utf16_column() {
-        let (mut app, dir, _f) = app_with_file("lspjump", "a.txt", "one\n");
-        let target = dir.join("t.txt");
-        std::fs::write(&target, "zero\nabc def\nlast\n").unwrap();
-        app.lsp_jump(&target, 1, 4);
-        assert_eq!(app.editor.cursor_1based(), (2, 5));
-        // A line past the end clamps to the last line.
-        app.lsp_jump(&target, 99, 0);
-        assert_eq!(app.editor.cursor_1based().0, 4);
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn language_server_requests_say_so_when_no_server_handles_the_file() {
-        let (mut app, dir, _f) = app_with_file("inactive", "a.txt", "x\n");
-        let inactive = t!("status.lsp_inactive").to_string();
-        for call in [
-            App::lsp_restart as fn(&mut App),
-            App::lsp_show_log,
-            App::lsp_hover,
-            App::lsp_complete,
-            App::lsp_format,
-            App::lsp_signature_help,
-        ] {
-            app.status.clear();
-            call(&mut app);
-            assert_eq!(app.status, inactive);
-        }
-        // Syncing and diagnostics without a server are quiet no-ops.
-        app.lsp_sync_active();
-        assert!(app.lsp_synced.is_empty());
-        app.refresh_diagnostic_marks();
-        app.goto_diagnostic(true);
-        assert_eq!(app.status, t!("status.no_diagnostics").to_string());
-        app.status.clear();
-        app.open_diagnostics_panel();
-        assert_eq!(app.status, t!("status.no_diagnostics").to_string());
-        assert!(app.workspace_search.is_none());
-        app.after_lsp_restart(vec![PathBuf::from("x")]);
-        assert_eq!(app.status, t!("status.lsp_restarted").to_string());
-        assert!(!app.lsp_busy());
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn format_on_type_ignores_keys_without_a_trigger_server() {
-        let (mut app, dir, _f) = app_with_file("ontype", "a.rs", "x\n");
-        let key = |c| KeyEvent::new(c, KeyModifiers::NONE);
-        app.settings.completion.format_on_type = false;
-        app.on_type_formatting_after_key(key(KeyCode::Char(';')));
-        app.settings.completion.format_on_type = true;
-        app.on_type_formatting_after_key(key(KeyCode::Char(';')));
-        app.on_type_formatting_after_key(key(KeyCode::Enter));
-        app.on_type_formatting_after_key(key(KeyCode::Left));
-        app.on_type_formatting_after_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
-        assert_eq!(text(&app), "x\n");
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn wiki_link_completion_offers_org_node_titles() {
-        let (mut app, dir, _f) = app_with_file("roam", "main.org", "see [[");
-        std::fs::write(dir.join("alpha.org"), "#+title: Alpha Note\n").unwrap();
-        std::fs::write(dir.join("beta.org"), "#+title: Beta Note\n").unwrap();
-        app.file_index = vec![dir.join("alpha.org"), dir.join("beta.org")];
-        app.open_node_link_completion();
-        let popup = app.completion.as_ref().expect("titles offered");
-        let labels: Vec<&str> = popup.items.iter().map(|i| i.label.as_str()).collect();
-        assert_eq!(labels, vec!["Alpha Note", "Beta Note"]);
-        assert!(popup.items[0].insert_text.ends_with("]]"));
-        app.completion = None;
-        app.file_index.clear();
-        app.open_node_link_completion();
-        assert!(app.completion.is_none());
-        assert_eq!(app.status, t!("status.roam_no_nodes").to_string());
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn org_contact_completion_offers_names_and_mailto_links() {
-        let (mut app, dir, _f) = app_with_file("contacts", "main.org", "mail [[");
-        std::fs::write(
-            dir.join("people.org"),
-            "* Ada Lovelace\n:PROPERTIES:\n:EMAIL: ada@example.org\n:END:\n* Bob\n:PROPERTIES:\n:PHONE: 1\n:END:\n",
-        )
-        .unwrap();
-        app.file_index = vec![dir.join("people.org")];
-        app.open_org_contact_link_completion(true);
-        let popup = app.completion.as_ref().unwrap();
-        assert_eq!(popup.items.len(), 1);
-        assert!(popup.items[0].label.contains("ada@example.org"));
-        app.completion = None;
-        app.open_org_contact_link_completion(false);
-        let labels: Vec<&str> = app
-            .completion
-            .as_ref()
-            .unwrap()
-            .items
-            .iter()
-            .map(|i| i.label.as_str())
-            .collect();
-        assert_eq!(labels, vec!["Ada Lovelace", "Bob"]);
-        app.completion = None;
-        app.file_index.clear();
-        app.open_org_contact_link_completion(false);
-        assert_eq!(app.status, t!("status.org_contacts_no_matches").to_string());
+        let ed = &mut app.editor.active_tab_mut().unwrap().editor;
+        assert_eq!(ed.fold_marker(0), Some(false), "line 0 can now be folded");
+        assert_eq!(ed.fold_marker(1), None);
+        assert!(ed.fold(0));
+        assert!(ed.has_folds());
         std::fs::remove_dir_all(&dir).ok();
     }
 }

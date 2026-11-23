@@ -3673,4 +3673,248 @@ mod tests {
         assert!(m.sub_open, "the new item's submenu must open");
         assert!(!m.subsub_open, "no stale third level remains");
     }
+
+    /// Opens Tools -> Insert and highlights its UUID row, one level short of the
+    /// third level.
+    fn at_uuid_row() -> Menu {
+        let (tools, gen_idx) = tools_and_generate();
+        let mut m = Menu::default();
+        m.open_index(tools);
+        m.highlight_item(gen_idx);
+        m.right();
+        m.highlight_sub(0);
+        m
+    }
+
+    /// `enter` on a submenu parent opens the next level without choosing an
+    /// action and with nothing highlighted; `selected_action` is `None` on parents.
+    #[test]
+    fn enter_on_parents_opens_each_level_with_no_action() {
+        let (tools, gen_idx) = tools_and_generate();
+        let mut m = Menu::default();
+        assert_eq!(m.enter(), None, "closed menu has nothing to enter");
+        assert_eq!(m.selected_action(), None);
+        m.open_index(tools);
+        assert_eq!(m.enter(), None, "nothing highlighted");
+        m.highlight_item(gen_idx);
+        assert_eq!(
+            m.selected_action(),
+            None,
+            "a submenu parent is not an action"
+        );
+        assert_eq!(m.enter(), None);
+        assert!(m.submenu_open() && m.sub.is_none());
+        m.highlight_sub(0);
+        assert_eq!(m.selected_action(), None);
+        assert_eq!(m.enter(), None);
+        assert!(m.subsubmenu_open() && m.subsub.is_none());
+        assert_eq!(m.selected_action(), None, "nothing highlighted at level 3");
+        assert_eq!(m.enter(), None);
+        m.subsub = Some(3);
+        assert_eq!(m.selected_action(), Some("tools.insert.uuid.v4"));
+        assert_eq!(m.enter(), Some("tools.insert.uuid.v4"));
+    }
+
+    /// Up/Down inside the third level wrap around the UUID list, and `right`
+    /// at the deepest level is a no-op.
+    #[test]
+    fn third_level_up_down_wrap_and_right_is_noop() {
+        let mut m = at_uuid_row();
+        m.right();
+        assert_eq!(m.subsub, Some(0));
+        m.up();
+        assert_eq!(m.subsub, Some(7), "up from the first wraps to v8");
+        m.down();
+        assert_eq!(m.subsub, Some(0), "down from the last wraps to v1");
+        m.right();
+        assert!(
+            m.subsub_open && m.subsub == Some(0),
+            "right does nothing here"
+        );
+        m.subsub = None;
+        m.down();
+        assert_eq!(
+            m.subsub,
+            Some(0),
+            "down with nothing highlighted picks the first"
+        );
+        assert_eq!(m.subsubmenu_items().map(<[Item]>::len), Some(8));
+        assert_eq!(
+            m.submenu_items().map(<[Item]>::len),
+            Some(TOOLS_INSERT.len())
+        );
+    }
+
+    /// Second-level Up/Down, with and without a highlighted row, and `right`
+    /// on a leaf row of the second level leaves the menu where it is.
+    #[test]
+    fn second_level_up_down_from_nothing() {
+        let (tools, gen_idx) = tools_and_generate();
+        let mut m = Menu::default();
+        m.open_index(tools);
+        m.highlight_item(gen_idx);
+        m.right();
+        let sub = m.submenu_items().expect("submenu");
+        m.sub = None;
+        m.down();
+        assert_eq!(m.sub, Some(first_selectable(sub)));
+        m.sub = None;
+        m.up();
+        assert_eq!(m.sub, Some(prev_selectable(sub, 0)));
+        // A row without its own submenu: `right` leaves the state alone.
+        let leaf = sub
+            .iter()
+            .position(|it| !it.has_submenu() && !it.is_separator());
+        if let Some(leaf) = leaf {
+            m.highlight_sub(leaf);
+            m.right();
+            assert!(!m.subsub_open);
+        }
+    }
+
+    /// Type-ahead steps through rows by first letter at every depth, wrapping,
+    /// and ignores letters nothing starts with.
+    #[test]
+    fn type_ahead_at_each_level() {
+        let mut m = Menu::default();
+        m.type_ahead('f');
+        assert!(!m.is_open(), "closed menu ignores typing");
+        m.open_index(0);
+        let items = menus()[0].items;
+        let first_letter = |it: &Item| it.label().chars().next().unwrap().to_ascii_lowercase();
+        let want = items
+            .iter()
+            .position(|it| {
+                !it.is_separator()
+                    && first_letter(it) == first_letter(&items[first_selectable(items)])
+            })
+            .unwrap();
+        m.type_ahead(first_letter(&items[first_selectable(items)]));
+        assert_eq!(m.item, Some(want));
+        let before = m.item;
+        m.type_ahead('\u{1}');
+        assert_eq!(m.item, before, "no label starts with it");
+
+        // Level 2: UUID row is first among Insert's rows; step by letter.
+        let mut m = at_uuid_row();
+        let sub = m.submenu_items().unwrap();
+        let letter = first_letter(&sub[1]);
+        m.sub = None;
+        m.type_ahead(letter);
+        let hit = m.sub.expect("a row matches");
+        assert_eq!(first_letter(&sub[hit]), letter);
+        m.type_ahead('\u{1}');
+        assert_eq!(m.sub, Some(hit));
+
+        // Level 3: numeric labels; typing a digit highlights it.
+        m.sub = Some(0);
+        m.right();
+        let ss = m.subsubmenu_items().unwrap();
+        let digit = ss[4].label().chars().next().unwrap();
+        m.subsub = None;
+        m.type_ahead(digit);
+        let hit = m.subsub.expect("matches a label");
+        assert_eq!(ss[hit].label().chars().next(), Some(digit));
+        let keep = m.subsub;
+        m.type_ahead('\u{1}');
+        assert_eq!(m.subsub, keep);
+    }
+
+    /// `toggle` opens the first menu then closes; `close` resets every level
+    /// and `open_index` out of range is ignored.
+    #[test]
+    fn toggle_close_and_open_index_bounds() {
+        let mut m = Menu::default();
+        m.toggle();
+        assert_eq!(m.open, Some(0));
+        m.toggle();
+        assert!(!m.is_open());
+        m.open_index(usize::MAX);
+        assert!(!m.is_open(), "out-of-range index is a no-op");
+        let mut m = at_uuid_row();
+        m.right();
+        assert!(m.subsub_open);
+        m.close();
+        assert!(!m.is_open() && m.item.is_none() && m.sub.is_none() && m.subsub.is_none());
+        assert!(!m.sub_open && !m.subsub_open);
+        m.left();
+        m.right();
+        m.up();
+        m.down();
+        assert!(!m.is_open(), "navigation on a closed menu does nothing");
+    }
+
+    /// `left` / `right` at the top level wrap around the menu bar.
+    #[test]
+    fn left_right_wrap_around_the_bar() {
+        let n = menus().len();
+        let mut m = Menu::default();
+        m.open_index(0);
+        m.left();
+        assert_eq!(m.open, Some(n - 1));
+        m.right();
+        assert_eq!(m.open, Some(0));
+    }
+
+    /// With AI hidden, the menu bar loses `ai.*` leaves and the AI menu while
+    /// every other menu survives; `Menu::defs` follows the flag.
+    #[test]
+    fn hiding_ai_removes_ai_actions_only() {
+        fn any_ai(items: &[Item]) -> bool {
+            items
+                .iter()
+                .any(|it| is_ai_action(it.action) || it.submenu.is_some_and(any_ai))
+        }
+        assert!(is_ai_action("ai.chat"));
+        assert!(!is_ai_action("file.new"));
+        let full = menus();
+        let lean = menus_without_ai();
+        assert!(
+            full.iter().any(|m| any_ai(m.items)),
+            "baseline has AI items"
+        );
+        assert!(lean.iter().all(|m| !any_ai(m.items)));
+        assert!(lean.len() < full.len());
+        assert!(lean.iter().any(|m| m.name == "menu.file"));
+        let mut m = Menu::default();
+        assert_eq!(m.defs().len(), full.len());
+        m.ai_hidden = true;
+        assert_eq!(m.defs().len(), lean.len());
+    }
+
+    /// Without any runtime theme list the View -> Theme submenu offers the
+    /// bundled Dark and Light; locale and time-zone submenus dispatch typed ids.
+    #[test]
+    fn runtime_submenus_dispatch_prefixed_actions() {
+        let theme = theme_submenu();
+        assert!(!theme.is_empty());
+        assert!(theme.iter().all(|it| it.action.starts_with("view.theme:")));
+        let locales = locale_submenu();
+        assert_eq!(locales.len(), vix_locale_model::LOCALES.len());
+        assert!(
+            locales
+                .iter()
+                .all(|it| it.action.starts_with("view.locale:"))
+        );
+        let zones = time_zone_submenu();
+        assert_eq!(zones.len(), vix_time_zone_model::ZONES.len());
+        assert!(
+            zones
+                .iter()
+                .all(|it| it.action.starts_with("view.time_zone:"))
+        );
+    }
+
+    /// The ring helpers refuse empty rings.
+    #[test]
+    fn ring_helpers_handle_empty_and_wrap() {
+        assert_eq!(wrap_next(0, 1, 0), None);
+        assert_eq!(wrap_prev(0, 0), None);
+        assert_eq!(wrap_prev(0, 3), Some(2));
+        assert_eq!(wrap_next(2, 1, 3), Some(0));
+        assert_eq!(sub_or(1, 2, 7), 7);
+        assert_eq!(sub_or(5, 2, 7), 3);
+        assert_eq!(first_selectable(&[]), 0);
+        assert_eq!(label_starting(&[], 0, 'a'), None);
+    }
 }

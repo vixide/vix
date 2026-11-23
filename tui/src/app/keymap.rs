@@ -2008,4 +2008,155 @@ mod tests {
             .get_selection_text();
         assert!(back.as_ref().unwrap().len() < wider.as_ref().unwrap().len());
     }
+
+    #[test]
+    fn the_mode_indicator_names_every_modal_mode() {
+        let mut app = with_keymap("km-modes", "vi");
+        for (mode, text) in [
+            (vix_modal::Mode::Insert, t!("status.vim_insert")),
+            (vix_modal::Mode::Visual, t!("status.vim_visual")),
+            (vix_modal::Mode::VisualLine, t!("status.vim_visual_line")),
+            (vix_modal::Mode::Normal, t!("status.vim_normal")),
+        ] {
+            app.modal_mode = mode;
+            assert_eq!(app.mode_indicator(), Some(text.to_string()));
+        }
+        app.vim_cmd = Some("wq".into());
+        assert_eq!(app.mode_indicator(), Some(":wq".to_string()));
+        let mut helix = with_keymap("km-helix", "helix");
+        helix.modal_mode = vix_modal::Mode::Visual;
+        assert_eq!(
+            helix.mode_indicator(),
+            Some(t!("status.helix_select").to_string())
+        );
+        helix.modal_mode = vix_modal::Mode::Normal;
+        assert_eq!(
+            helix.mode_indicator(),
+            Some(t!("status.vim_normal").to_string())
+        );
+        assert_eq!(with_keymap("km-apple", "apple").mode_indicator(), None);
+    }
+
+    #[test]
+    fn vim_ex_commands_save_quit_navigate_and_report_unknown_ones() {
+        let mut app = with_keymap("km-ex", "vi");
+        buffer_with(&mut app, "a\nb\nc\nd\n", 0);
+        app.run_vim_command("3");
+        assert_eq!(app.editor.cursor_line(), 2, ":N goes to line N");
+        app.run_vim_command("");
+        app.run_vim_command("bogus");
+        assert_eq!(
+            app.status,
+            t!("status.vim_no_command", cmd = "bogus").to_string()
+        );
+        app.run_vim_command("Ex");
+        assert_eq!(app.focus, Focus::Explorer);
+        assert!(app.visible.contains(Visible::EXPLORER));
+        app.run_vim_command("q!");
+        assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
+        // `:e path` opens that file, relative to the workspace.
+        let dir = temp("km-ex-open");
+        std::fs::write(dir.join("opened.txt"), "contents\n").unwrap();
+        let mut app = app_with(&dir, {
+            let mut s = crate::settings::Settings::default();
+            s.keymap = "vi".into();
+            s
+        });
+        app.run_vim_command("e opened.txt");
+        assert_eq!(content(&mut app), "contents\n");
+    }
+
+    #[test]
+    fn colon_opens_the_vim_command_line_from_any_pane_and_enter_runs_it() {
+        let mut app = with_keymap("km-colon", "vi");
+        app.modal_mode = vix_modal::Mode::Normal;
+        buffer_with(&mut app, "a\nb\nc\n", 0);
+        app.on_key(key(':'));
+        assert_eq!(app.vim_cmd.as_deref(), Some(""));
+        app.on_key(key('2'));
+        app.on_key(code(KeyCode::Enter));
+        assert!(app.vim_cmd.is_none());
+        assert_eq!(app.editor.cursor_line(), 1);
+        // Outside the editor, other Normal-mode keys are left to the pane.
+        app.focus = Focus::Explorer;
+        assert!(!app.vim_key(key('j')) || app.focus == Focus::Explorer);
+    }
+
+    #[test]
+    fn spacemacs_leader_sequences_run_wait_or_abort() {
+        let mut app = with_keymap("km-spacemacs", "spacemacs");
+        app.modal_mode = vix_modal::Mode::Normal;
+        buffer_with(&mut app, "text", 0);
+        app.focus = Focus::Editor;
+        app.on_key(key(' '));
+        assert_eq!(app.spacemacs_leader.as_deref(), Some(""));
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.spacemacs_leader.is_none(), "Esc abandons the leader");
+        app.on_key(key(' '));
+        app.on_key(code(KeyCode::Tab)); // not a character: ignored, still waiting
+        assert!(app.spacemacs_leader.is_some());
+        app.on_key(key('~')); // no such leader sequence
+        assert!(app.spacemacs_leader.is_none());
+        assert_eq!(
+            app.status,
+            t!("status.spacemacs_no_leader", seq = "~").to_string()
+        );
+        // `:` opens the shared command line, and a pane other than the editor
+        // keeps its own keys.
+        app.on_key(key(':'));
+        assert_eq!(app.vim_cmd.as_deref(), Some(""));
+        app.on_key(code(KeyCode::Esc));
+        app.vim_cmd = None;
+        app.focus = Focus::Explorer;
+        assert!(!app.spacemacs_key(key('j')));
+    }
+
+    #[test]
+    fn emacs_org_chords_run_table_commands() {
+        let mut app = with_keymap("km-cc", "emacs");
+        buffer_with(&mut app, "| a | b |\n| 1 | 2 |\n", 2);
+        // `C-c RET` adds a horizontal line and moves on.
+        assert!(app.emacs_c_chord_key(code(KeyCode::Enter)));
+        // A key that is not a character is no chord.
+        assert!(app.emacs_c_chord_key(code(KeyCode::F(5))));
+        assert_eq!(app.status, t!("status.emacs_no_chord").to_string());
+        // `C-c C-x` opens the third-key family, `C-c p` the project family.
+        assert!(app.emacs_c_chord_key(ctrl('x')));
+        assert_eq!(app.emacs_chord, EmacsChord::CtrlCCtrlX);
+        assert!(app.emacs_c_chord_key(key('p')));
+        assert_eq!(app.emacs_chord, EmacsChord::CtrlCP);
+        // Unknown second keys report instead of acting.
+        app.emacs_chord = EmacsChord::None;
+        assert!(app.emacs_c_chord_key(key('~')));
+        assert_eq!(app.status, t!("status.emacs_no_chord").to_string());
+        // `C-u C-c C-c` force-recalculates the table; `C-u C-c C-t` closes with a note.
+        app.flags.insert(AppFlags::EMACS_UNIVERSAL);
+        assert!(app.emacs_c_chord_key(ctrl('c')));
+        assert!(
+            !app.flags.contains(AppFlags::EMACS_UNIVERSAL),
+            "the prefix is consumed"
+        );
+        app.flags.insert(AppFlags::EMACS_UNIVERSAL);
+        assert!(app.emacs_c_chord_key(ctrl('t')));
+    }
+
+    #[test]
+    fn the_org_table_rectangle_chords_only_apply_inside_a_table() {
+        let mut app = with_keymap("km-cx", "emacs");
+        let dir = temp("km-cx-org");
+        let file = dir.join("t.org");
+        std::fs::write(&file, "| a | b |\n| 1 | 2 |\n\ntext\n").unwrap();
+        app.open_path(&file, false);
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(2);
+        assert!(app.org_table_active_at_cursor());
+        for k in [
+            KeyEvent::new(KeyCode::Char('w'), KeyModifiers::ALT),
+            KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL),
+            KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL),
+        ] {
+            assert!(app.emacs_c_x_chord_key(k), "{k:?} is a table chord");
+        }
+        // An unrelated key inside a table falls through to the general lookup.
+        assert!(app.emacs_c_x_chord_key(key('~')));
+    }
 }

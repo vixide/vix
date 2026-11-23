@@ -807,4 +807,215 @@ mod tests {
         assert!(app.completion_due.is_none(), "no server handles .txt");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn arrows_move_the_highlight_within_the_visible_rows_and_escape_closes() {
+        let (mut app, dir) = app_with("arrows", "");
+        let items = vec![
+            CompletionItem::new("alpha", "alpha"),
+            CompletionItem::new("beta", "beta"),
+            CompletionItem::new("gamma", "gamma"),
+        ];
+        app.on_completion_list(CompletionList::new(items, false));
+        let selected = |app: &App| app.completion_popup().unwrap().selected;
+        assert_eq!(selected(&app), 0);
+        key(&mut app, KeyCode::Up);
+        assert_eq!(selected(&app), 0, "Up stops at the first row");
+        key(&mut app, KeyCode::Down);
+        key(&mut app, KeyCode::Down);
+        key(&mut app, KeyCode::Down);
+        assert_eq!(selected(&app), 2, "Down stops at the last row");
+        assert_eq!(
+            app.completion_popup()
+                .unwrap()
+                .selected_item()
+                .map(|i| i.label.as_str()),
+            Some("gamma")
+        );
+        let detail = "now resolved".to_string();
+        app.completion
+            .as_mut()
+            .unwrap()
+            .selected_item_mut()
+            .unwrap()
+            .detail = Some(detail.clone());
+        assert_eq!(
+            app.completion_popup()
+                .unwrap()
+                .selected_item()
+                .unwrap()
+                .detail,
+            Some(detail)
+        );
+        key(&mut app, KeyCode::Enter);
+        assert_eq!(text(&app), "gamma");
+        assert!(app.completion_popup().is_none());
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("delta", "delta")],
+            false,
+        ));
+        key(&mut app, KeyCode::Esc);
+        assert!(app.completion_popup().is_none());
+        assert_eq!(text(&app), "gamma", "Esc inserts nothing");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_empty_reply_only_closes_an_incomplete_popup_and_a_complete_one_stays() {
+        let (mut app, dir) = app_with("empty", "");
+        app.on_completion_list(CompletionList::new(vec![], false));
+        assert!(app.completion_popup().is_none(), "nothing to show");
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("one", "one")],
+            false,
+        ));
+        app.on_completion_list(CompletionList::new(vec![], false));
+        assert!(
+            app.completion_popup().is_some(),
+            "an empty reply leaves a complete popup alone"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_reply_that_matches_nothing_typed_does_not_open() {
+        let (mut app, dir) = app_with("nomatch", "zzz");
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("apple", "apple")],
+            false,
+        ));
+        assert!(
+            app.completion_popup().is_none(),
+            "no row survives the filter"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_reply_after_the_cursor_left_the_word_is_ignored() {
+        let (mut app, dir) = app_with("left", "foo bar");
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("foo", "foo")],
+            false,
+        ));
+        // Anchor is at "bar"; move the popup's anchor past the cursor's line.
+        app.completion = None;
+        app.completion = Some(crate::app::completion::CompletionPopup::new(
+            vec![CompletionItem::new("bar", "bar")],
+            false,
+            0,
+            "",
+        ));
+        // The typed text between the anchor and cursor holds a space, so the
+        // stale popup is not refreshed by a late reply.
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("qux", "qux")],
+            false,
+        ));
+        let labels = shown(&app);
+        assert_eq!(
+            labels,
+            vec!["bar".to_string()],
+            "the old popup is untouched"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn typing_a_non_word_key_with_ctrl_dismisses_and_backspace_keeps_the_popup() {
+        let (mut app, dir) = app_with("ctrl", "ab");
+        let items = vec![CompletionItem::new("abc", "abc")];
+        app.on_completion_list(CompletionList::new(items.clone(), false));
+        key(&mut app, KeyCode::Backspace);
+        assert!(app.completion_popup().is_some(), "Backspace keeps it");
+        app.on_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        assert!(app.completion_popup().is_none(), "a chord dismisses it");
+        app.on_completion_list(CompletionList::new(items, false));
+        key(&mut app, KeyCode::Left);
+        assert!(app.completion_popup().is_none(), "so does a cursor key");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn accepting_into_a_read_only_tab_changes_nothing() {
+        let (mut app, dir) = app_with("ro", "ab");
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("abc", "abc")],
+            false,
+        ));
+        app.editor.active_tab_mut().unwrap().read_only = true;
+        app.accept_completion();
+        assert_eq!(text(&app), "ab");
+        assert!(app.completion_popup().is_none(), "the popup is consumed");
+        app.accept_completion(); // no popup: nothing
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extra_carets_make_completion_stand_aside() {
+        let (mut app, dir) = app_with("carets", "ab\nab");
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("abc", "abc")],
+            false,
+        ));
+        assert!(app.completion_popup().is_some());
+        app.editor.active_tab_mut().unwrap().editor.add_caret_at(1);
+        assert!(app.multi_caret_active());
+        // A key now closes the popup and schedules nothing.
+        app.completion_after_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+        assert!(app.completion_popup().is_none());
+        assert!(app.completion_due.is_none());
+        // Neither a reply nor a plain list opens one while carets are split.
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("abc", "abc")],
+            false,
+        ));
+        assert!(app.completion_popup().is_none());
+        app.open_completion(vec![CompletionItem::new("abc", "abc")]);
+        assert!(app.completion_popup().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_plain_list_opens_anchored_at_the_word_before_the_cursor() {
+        let (mut app, dir) = app_with("anchor", "let fo");
+        app.open_completion(vec![
+            CompletionItem::new("foo", "foo"),
+            CompletionItem::new("bar", "bar"),
+        ]);
+        let popup = app.completion_popup().unwrap();
+        assert_eq!(popup.anchor, 4);
+        assert_eq!(
+            shown(&app),
+            vec!["foo".to_string()],
+            "filtered by the typed word"
+        );
+        assert_eq!(app.word_anchor(), (4, "fo".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_due_request_is_dropped_without_a_server_and_a_future_one_waits() {
+        let (mut app, dir) = app_with("due", "a");
+        app.poll_completion_due(); // nothing scheduled
+        app.completion_due = Some((
+            std::time::Instant::now() + std::time::Duration::from_secs(60),
+            None,
+        ));
+        app.poll_completion_due();
+        assert!(app.completion_due.is_some(), "not due yet");
+        app.completion_due = Some((std::time::Instant::now(), Some('.')));
+        app.poll_completion_due();
+        assert!(app.completion_due.is_none(), "taken once it is due");
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("a1", "a1")],
+            false,
+        ));
+        app.completion_due = Some((std::time::Instant::now(), None));
+        app.poll_completion_due();
+        assert!(app.completion_due.is_none());
+        assert!(app.completion_popup().is_some(), "an open popup is kept");
+        app.resolve_selected_completion(); // no server: nothing
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
