@@ -10,6 +10,18 @@
 //! `vix-theme-model` directly, so the split is invisible to them. Owning spec:
 //! `crates/vix-theme/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod color_depth;
 
 pub use color_depth::{ColorDepth, TermEnv, downsample};
