@@ -77,3 +77,7 @@ from a live engine**; re-check them against real output when an engine is
 available. `crates/vix-oci/tests/fake_engine.rs` runs `run` against a shell script standing in
 for `docker` (argument passing, stdin-only passwords, failure codes, missing
 binary), so no real engine is ever started.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The engine-output parsers use `get`, `split_at_checked`, `rsplit_once`, `div_euclid` and `checked_*`; the creation date comes from `vix-civil-date` (the crate's own copy of the algorithm is gone), and a time too large for the calendar is no date (empty text). **Declared (ENGINE-F1):** a size whose tenths overflow shows as the largest count; a container id cut inside a wide character is shown whole; a record with no usable creation time has empty text.
