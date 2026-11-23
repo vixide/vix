@@ -84,3 +84,7 @@ expired invites; a pinned-key mismatch; garbage and fake-preamble
 connections; a recording proxy proving neither names, file names nor
 document text, nor a session-chat line (T756), appear on the wire; and a reserved (chat) message being skipped
 while the session carries on.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Invite parsing, framing and the encrypted link use `get`, `try_into` and `checked_*`; nonces and sizes that would overflow end in `NetError::Crypto` or `NetError::TooLarge`. **Changed:** an invite lifetime too long to be a deadline is `NetError::TooLarge` instead of a panic or wrap. Failure counts carry an `RCA-EXC-2` proof (the token is revoked at the limit). No fallbacks are declared.

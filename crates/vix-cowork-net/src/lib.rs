@@ -23,6 +23,18 @@
 //! authenticates the host by its pinned key and the host authenticates the
 //! guest by the invite's secret. See `spec/cowork` and this crate's spec.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Private modules; the public surface is the re-exports below.
 mod error;
 mod handshake;
