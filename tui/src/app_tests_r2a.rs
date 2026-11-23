@@ -565,6 +565,7 @@ fn discovered_tasks_use_alternate_manifest_spellings() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[cfg(feature = "tasks")]
 #[test]
 fn run_task_without_any_tasks_says_so() {
     let dir = tmp("no-tasks");
@@ -1995,6 +1996,7 @@ fn spelling_app(text: &str) -> App {
     a
 }
 
+#[cfg(feature = "hunspell")]
 #[test]
 fn spellcheck_marks_misspelled_words_in_comments_only() {
     let mut a = spelling_app("// helo world\nlet helo = 1;\n");
@@ -2572,6 +2574,7 @@ test result: FAILED. 1 passed; 1 failed; 1 ignored;
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[cfg(feature = "tasks")]
 #[test]
 fn test_panel_toggles_with_its_action() {
     let mut a = app();
@@ -3969,6 +3972,7 @@ fn typing_while_recording_a_macro_captures_each_key() {
     assert_eq!(crate::macros::encode(&a.macro_keys), ["a", "b", "Enter"]);
 }
 
+#[cfg(feature = "tasks")]
 #[test]
 fn project_actions_open_a_command_prompt_or_report_no_command() {
     let dir = tmp("project");
@@ -4063,6 +4067,7 @@ fn project_override_file_supplies_lifecycle_commands() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[cfg(feature = "tasks")]
 #[test]
 fn task_chooser_navigates_and_closes_without_running_anything() {
     let dir = tmp("task-chooser");
@@ -4866,6 +4871,7 @@ fn compare_and_insert_prompts_need_an_open_buffer() {
     assert!(matches!(prompt_kind(&a), Some(PromptKind::InsertFile)));
 }
 
+#[cfg(feature = "tasks")]
 #[test]
 fn subproject_actions_scope_to_the_nearest_nested_project() {
     let dir = tmp("subproject");
@@ -4924,6 +4930,7 @@ fn subproject_actions_scope_to_the_nearest_nested_project() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[cfg(feature = "tasks")]
 #[test]
 fn project_test_at_point_needs_a_file_and_tasks_chooser_needs_tasks() {
     let dir = tmp("test-at-point");

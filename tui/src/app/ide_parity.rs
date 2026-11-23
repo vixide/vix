@@ -1324,6 +1324,7 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    #[cfg(feature = "lsp")]
     #[test]
     fn refactor_and_organize_need_a_language_server() {
         let (mut app, dir) = app_in("needlsp");
@@ -1336,6 +1337,7 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    #[cfg(feature = "tasks")]
     #[test]
     fn run_configurations_list_start_a_template_and_report_errors() {
         let (mut app, dir) = app_in("runcfg");

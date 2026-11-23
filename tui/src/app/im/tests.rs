@@ -395,6 +395,7 @@ fn next_unread_selects_and_shows_the_conversation() {
 
 // ----- connections and rooms without a link ---------------------------------------------------------------------
 
+#[cfg(feature = "im")]
 #[test]
 fn connect_without_accounts_or_with_several() {
     let mut app = app();
@@ -429,6 +430,7 @@ fn connect_without_accounts_or_with_several() {
     app.im_dialog_key(key(KeyCode::Esc));
 }
 
+#[cfg(feature = "im")]
 #[test]
 fn joining_leaving_and_messaging_need_a_connection() {
     let mut app = app();
@@ -579,6 +581,7 @@ fn slash_commands_dispatch() {
     assert_eq!(app.status, t!("status.im_not_a_room").to_string());
 }
 
+#[cfg(not(feature = "cowork"))]
 #[test]
 fn the_cowork_session_conversation_routes_to_cowork() {
     let mut app = app();
@@ -690,6 +693,7 @@ fn sharing_into_a_room_needs_a_link_and_into_a_server_a_room() {
     assert_eq!(app.status, t!("status.im_not_a_room").to_string());
 }
 
+#[cfg(not(feature = "cowork"))]
 #[test]
 fn sharing_to_the_cowork_session_goes_to_cowork() {
     let mut app = app_with_file("share-session", "fn a() {}\n");
