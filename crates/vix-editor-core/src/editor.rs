@@ -12,6 +12,18 @@
 //! `&self` only, so caches the renderer fills sit behind `Cell`/`RefCell`. See
 //! `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::actions::Action;
 use crate::click::{ClickKind, ClickTracker};
 use crate::code::Code;
@@ -38,6 +50,40 @@ pub const MAX_WIDTH_LAZY_BYTES: usize = 4 * 1024 * 1024;
 /// large buffer before it rescans.
 pub const MAX_WIDTH_STALE: Duration = Duration::from_millis(250);
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a + b` for screen columns; a column past the top of `u16` is past the right edge.
+fn add_u16(a: u16, b: u16) -> u16 {
+    add_u16_or(a, b, u16::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit.
+fn add_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b` for screen columns; below zero is zero columns.
+fn sub_u16(a: u16, b: u16) -> u16 {
+    sub_u16_or(a, b, 0)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero.
+fn sub_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// `theme` with the Org entries [`crate::org_highlight`] names, derived from
 /// the four syntax colors a theme has (each kept if the theme sets it
 /// already): a bold `keyword` headline, a bold `number` TODO keyword, a
@@ -45,7 +91,13 @@ pub const MAX_WIDTH_STALE: Duration = Duration::from_millis(250);
 /// markup. With no colors (the monochrome default) the bold, underline and
 /// dim still apply.
 fn with_org_styles(mut theme: Theme) -> Theme {
-    let base = |theme: &Theme, key: &str| theme.get(key).copied().unwrap_or_default();
+    let base = |theme: &Theme, key: &str| {
+        // A theme with no entry for the key has no style for it.
+        let Some(&style) = theme.get(key) else {
+            return Style::default();
+        };
+        style
+    };
     let derived = [
         (
             "org.heading",
@@ -419,7 +471,7 @@ impl Editor {
             let total_lines = self.code.len_lines();
             let max_line_number = total_lines.max(1);
             let line_number_digits = max_line_number.to_string().len().max(5);
-            line_number_digits + self.left_code_padding
+            add_or(line_number_digits, self.left_code_padding, usize::MAX)
         } else {
             self.left_code_padding
         }
@@ -427,12 +479,12 @@ impl Editor {
 
     /// Scroll the viewport so the cursor is visible within `area`.
     pub fn focus(&mut self, area: &Rect) {
-        let width = area.width as usize;
-        let height = area.height as usize;
+        let width = usize::from(area.width);
+        let height = usize::from(area.height);
         let line_number_width = self.get_line_number_width();
 
         let line = self.code.char_to_line(self.cursor);
-        let col = self.cursor - self.code.line_to_char(line);
+        let col = sub_or(self.cursor, self.code.line_to_char(line), 0);
 
         if self.flags.contains(Flags::SOFT_WRAP) {
             // No horizontal scroll; scroll vertically by logical line until the
@@ -441,7 +493,7 @@ impl Editor {
             if line < self.offset_y {
                 self.offset_y = line;
             }
-            let text_width = width.saturating_sub(line_number_width);
+            let text_width = sub_or(width, line_number_width, 0);
             while self.offset_y < line {
                 let rows = self.visual_rows(text_width, height.max(1));
                 let visible = rows
@@ -450,32 +502,34 @@ impl Editor {
                 if visible {
                     break;
                 }
-                self.offset_y += 1;
+                self.offset_y = add_or(self.offset_y, 1, usize::MAX);
             }
             return;
         }
 
-        let visible_width = width.saturating_sub(line_number_width);
+        let visible_width = sub_or(width, line_number_width, 0);
         let visible_height = height;
 
         let step_size = 10;
         if col < self.offset_x {
-            self.offset_x = col.saturating_sub(step_size);
-        } else if col >= self.offset_x + visible_width {
-            self.offset_x = col.saturating_sub(visible_width.saturating_sub(step_size));
+            self.offset_x = sub_or(col, step_size, 0);
+        } else if col >= add_or(self.offset_x, visible_width, usize::MAX) {
+            self.offset_x = sub_or(col, sub_or(visible_width, step_size, 0), 0);
         }
 
         if line < self.offset_y {
             self.offset_y = line;
-        } else if line >= self.offset_y + visible_height {
-            self.offset_y = line.saturating_sub(visible_height.saturating_sub(1));
+        } else if line >= add_or(self.offset_y, visible_height, usize::MAX) {
+            self.offset_y = sub_or(line, sub_or(visible_height, 1, 0), 0);
         }
         // Lens rows (T726) and folds change how many screen rows sit above
         // the cursor's line: scroll on until its text row is inside the view.
         if self.has_code_lenses() || self.has_folds() || !self.fillers.is_empty() {
             while self.offset_y < line {
                 match self.rows_to_text(line) {
-                    Some(r) if r >= visible_height => self.offset_y += 1,
+                    Some(r) if r >= visible_height => {
+                        self.offset_y = add_or(self.offset_y, 1, usize::MAX);
+                    }
                     _ => break,
                 }
             }
@@ -545,21 +599,22 @@ impl Editor {
 
         if mouse_y < area.top()
             || mouse_y >= area.bottom()
-            || mouse_x < area.left() + line_number_width
+            || mouse_x < add_u16(area.left(), line_number_width)
         {
             return None;
         }
 
         if self.flags.contains(Flags::SOFT_WRAP) {
-            let screen_row = (mouse_y - area.top()) as usize;
-            let text_width = (area.width as usize).saturating_sub(line_number_width as usize);
-            let rows = self.visual_rows(text_width, screen_row + 1);
+            let screen_row = usize::from(sub_u16(mouse_y, area.top()));
+            let text_width = sub_or(usize::from(area.width), usize::from(line_number_width), 0);
+            let rows = self.visual_rows(text_width, add_or(screen_row, 1, usize::MAX));
             let vr = rows.get(screen_row)?;
             if vr.lens {
                 // A lens row (T726) maps to the start of the line it annotates.
                 return Some(vr.start);
             }
-            let clicked_col = (mouse_x - area.left() - line_number_width) as usize;
+            let clicked_col =
+                usize::from(sub_u16(sub_u16(mouse_x, area.left()), line_number_width));
             let slice = self.code.char_slice(vr.start, vr.end);
             let mut cur_col = 0usize;
             let mut ch = vr.start;
@@ -570,19 +625,22 @@ impl Editor {
                 } else {
                     gw0
                 };
-                if cur_col + gw > clicked_col {
+                if add_or(cur_col, gw, usize::MAX) > clicked_col {
                     break;
                 }
-                cur_col += gw;
-                ch += gc;
+                cur_col = add_or(cur_col, gw, usize::MAX);
+                ch = add_or(ch, gc, usize::MAX);
             }
             return Some(ch);
         }
 
         // Map the screen row through the layout (folds and lens rows, T726);
         // a lens row maps to the line it annotates.
-        let screen_row = (mouse_y - area.top()) as usize;
-        let clicked_row = match self.view_rows(screen_row + 1).get(screen_row) {
+        let screen_row = usize::from(sub_u16(mouse_y, area.top()));
+        let clicked_row = match self
+            .view_rows(add_or(screen_row, 1, usize::MAX))
+            .get(screen_row)
+        {
             Some(
                 crate::lens::ViewRow::Text(line)
                 | crate::lens::ViewRow::Lens(line)
@@ -594,7 +652,7 @@ impl Editor {
             return None;
         }
 
-        let clicked_col = (mouse_x - area.left() - line_number_width) as usize;
+        let clicked_col = usize::from(sub_u16(sub_u16(mouse_x, area.left()), line_number_width));
 
         let line_start_char = self.code.line_to_char(clicked_row);
         let line_len = self.code.line_len(clicked_row);
@@ -602,35 +660,40 @@ impl Editor {
         let start_col = self.offset_x.min(line_len);
         let end_col = line_len;
 
-        let char_start = line_start_char + start_col;
-        let char_end = line_start_char + end_col;
+        let char_start = add_or(line_start_char, start_col, usize::MAX);
+        let char_end = add_or(line_start_char, end_col, usize::MAX);
 
         let mut current_col = 0;
         let mut char_idx = start_col;
         let visible_chars = self.code.char_slice(char_start, char_end);
         for g in RopeGraphemes::new(&visible_chars) {
             let (g_width, g_chars) = grapheme_width_and_chars_len(g);
-            if current_col + g_width > clicked_col {
+            if add_or(current_col, g_width, usize::MAX) > clicked_col {
                 break;
             }
-            current_col += g_width;
-            char_idx += g_chars;
+            current_col = add_or(current_col, g_width, usize::MAX);
+            char_idx = add_or(char_idx, g_chars, usize::MAX);
         }
 
-        let line = self
-            .code
-            .char_slice(line_start_char, line_start_char + line_len);
-        let visual_width: usize = RopeGraphemes::new(&line).map(grapheme_width).sum();
+        let line = self.code.char_slice(
+            line_start_char,
+            add_or(line_start_char, line_len, usize::MAX),
+        );
+        let visual_width: usize = RopeGraphemes::new(&line)
+            .map(grapheme_width)
+            .fold(0, |total, w| add_or(total, w, usize::MAX));
 
-        if clicked_col + self.offset_x >= visual_width {
+        if add_or(clicked_col, self.offset_x, usize::MAX) >= visual_width {
             let mut end_idx = line.len_chars();
-            if end_idx > 0 && line.char(end_idx - 1) == '\n' {
-                end_idx -= 1;
+            if let Some(before) = end_idx.checked_sub(1)
+                && line.char(before) == '\n'
+            {
+                end_idx = before;
             }
             char_idx = end_idx;
         }
 
-        Some(line_start_char + char_idx)
+        Some(add_or(line_start_char, char_idx, usize::MAX))
     }
 
     /// Clears any active selection.
@@ -700,7 +763,8 @@ impl Editor {
                     self.code.insert(*offset, text);
                 }
                 EditKind::Remove { offset, text } => {
-                    self.code.remove(*offset, *offset + text.chars().count());
+                    self.code
+                        .remove(*offset, add_or(*offset, text.chars().count(), usize::MAX));
                 }
             }
         }
@@ -739,15 +803,17 @@ impl Editor {
         // make sure cursor is not out of bounds on the line
         let (row, col) = self.code.point(self.cursor);
         if col > self.code.line_len(row) {
-            self.cursor = self.code.line_to_char(row) + self.code.line_len(row);
+            self.cursor = add_or(
+                self.code.line_to_char(row),
+                self.code.line_len(row),
+                usize::MAX,
+            );
         }
     }
 
     /// Scroll the viewport up one line.
     pub fn scroll_up(&mut self) {
-        if self.offset_y > 0 {
-            self.offset_y -= 1;
-        }
+        self.offset_y = sub_or(self.offset_y, 1, 0);
     }
 
     /// Scroll the viewport down one line, bounded by the last line. With code
@@ -756,13 +822,13 @@ impl Editor {
     pub fn scroll_down(&mut self, area_height: usize) {
         let len_lines = self.code.len_lines();
         let more_below = if self.has_code_lenses() {
-            self.rows_to_text(len_lines.saturating_sub(1))
+            self.rows_to_text(sub_or(len_lines, 1, 0))
                 .is_some_and(|r| r >= area_height)
         } else {
-            self.offset_y < len_lines.saturating_sub(area_height)
+            self.offset_y < sub_or(len_lines, area_height, 0)
         };
         if more_below {
-            self.offset_y += 1;
+            self.offset_y = add_or(self.offset_y, 1, usize::MAX);
         }
     }
 
@@ -877,7 +943,7 @@ impl Editor {
         }
 
         let inserted = code.smart_paste(cursor, text);
-        cursor += inserted;
+        cursor = add_or(cursor, inserted, usize::MAX);
 
         code.set_state_after(cursor, selection);
         code.commit();
@@ -949,7 +1015,7 @@ impl Editor {
             .iter()
             .copied()
             .filter(|&(s, e)| s <= line && line <= e && e > s && !self.folds.contains(&(s, e)))
-            .min_by_key(|&(s, e)| e - s)
+            .min_by_key(|&(s, e)| sub_or(e, s, 0))
         else {
             return false;
         };
@@ -971,7 +1037,7 @@ impl Editor {
             .iter()
             .enumerate()
             .filter(|&(_, &(s, e))| s <= line && line <= e)
-            .min_by_key(|&(_, &(s, e))| e - s)
+            .min_by_key(|&(_, &(s, e))| sub_or(e, s, 0))
             .map(|(i, _)| i)
         else {
             return false;
@@ -1140,7 +1206,7 @@ impl Editor {
                 continue;
             }
             match merged.last_mut() {
-                Some(last) if last.0 == line => last.1 += count,
+                Some(last) if last.0 == line => last.1 = add_or(last.1, count, usize::MAX),
                 _ => merged.push((line, count)),
             }
         }
@@ -1166,7 +1232,9 @@ impl Editor {
         }
         self.fillers
             .binary_search_by_key(&line, |&(l, _)| l)
-            .map_or(0, |i| self.fillers[i].1)
+            .ok()
+            .and_then(|i| self.fillers.get(i))
+            .map_or(0, |filler| filler.1)
     }
 
     /// The row of `line` within the view (0 is the top), counting fold-hidden
@@ -1182,9 +1250,9 @@ impl Editor {
             if self.is_line_hidden(l) {
                 continue;
             }
-            row += self.filler_before(l);
+            row = add_or(row, self.filler_before(l), usize::MAX);
             if l < line {
-                row += 1;
+                row = add_or(row, 1, usize::MAX);
             }
         }
         row
@@ -1232,7 +1300,8 @@ impl Editor {
         self.comment_marks
             .binary_search_by_key(&line, |&(l, _)| l)
             .ok()
-            .map(|i| self.comment_marks[i].1)
+            .and_then(|i| self.comment_marks.get(i))
+            .map(|mark| mark.1)
     }
 
     /// Char ranges of comment and string tokens in the buffer, for the host's
@@ -1416,7 +1485,7 @@ impl Editor {
         let Some(pos) = path.iter().position(|&n| n == here) else {
             return false;
         };
-        for &next in &path[pos + 1..] {
+        for &next in path.iter().skip(add_or(pos, 1, usize::MAX)) {
             if !self.code.select_redo_branch(next) {
                 return false;
             }
@@ -1489,35 +1558,42 @@ impl Editor {
         // Rows above the cursor's text, folds and lens rows (T726) counted.
         let text_row = self
             .rows_to_text(cursor_line)
-            .filter(|&r| r < area.height as usize);
+            .filter(|&r| r < usize::from(area.height));
         if let Some(text_row) = text_row {
             let line_start_char = self.code.line_to_char(cursor_line);
             let line_len = self.code.line_len(cursor_line);
 
-            let max_x = (area.width as usize).saturating_sub(line_number_width);
+            let max_x = sub_or(usize::from(area.width), line_number_width, 0);
             let start_col = self.offset_x;
 
             let cursor_visual_col: usize = {
                 let slice = self.code.char_slice(
                     line_start_char,
-                    line_start_char + cursor_char_col.min(line_len),
+                    add_or(line_start_char, cursor_char_col.min(line_len), usize::MAX),
                 );
-                RopeGraphemes::new(&slice).map(grapheme_width).sum()
+                RopeGraphemes::new(&slice)
+                    .map(grapheme_width)
+                    .fold(0, |total, w| add_or(total, w, usize::MAX))
             };
 
             let offset_visual_col: usize = {
-                let slice = self
-                    .code
-                    .char_slice(line_start_char, line_start_char + start_col.min(line_len));
-                RopeGraphemes::new(&slice).map(grapheme_width).sum()
+                let slice = self.code.char_slice(
+                    line_start_char,
+                    add_or(line_start_char, start_col.min(line_len), usize::MAX),
+                );
+                RopeGraphemes::new(&slice)
+                    .map(grapheme_width)
+                    .fold(0, |total, w| add_or(total, w, usize::MAX))
             };
 
-            let relative_visual_col = cursor_visual_col.saturating_sub(offset_visual_col);
+            let relative_visual_col = sub_or(cursor_visual_col, offset_visual_col, 0);
             let visible_x = relative_visual_col.min(max_x);
 
-            let cursor_x =
-                area.left() + u16::try_from(line_number_width + visible_x).unwrap_or(u16::MAX);
-            let cursor_y = area.top() + u16::try_from(text_row).unwrap_or(u16::MAX);
+            let cursor_x = add_u16(
+                area.left(),
+                u16::try_from(add_or(line_number_width, visible_x, usize::MAX)).unwrap_or(u16::MAX),
+            );
+            let cursor_y = add_u16(area.top(), u16::try_from(text_row).unwrap_or(u16::MAX));
 
             if cursor_x < area.right() && cursor_y < area.bottom() {
                 return Some((cursor_x, cursor_y));
