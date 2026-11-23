@@ -34,11 +34,37 @@
 //! assert_eq!(ed.get_content(), "x x");
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::ops::Range;
 
 use crate::actions::{MoveDown, MoveLeft, MoveRight, MoveUp};
 use crate::editor::Editor;
 use crate::selection::Selection;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Apply a running signed shift to a `usize` buffer offset (T150): earlier
 /// carets' edits can move a later caret's position forward (an insert) or
@@ -49,22 +75,22 @@ use crate::selection::Selection;
 /// because `shift` only ever reflects edits already applied to this same
 /// buffer: a caret can't be shifted further out of bounds than the buffer
 /// actually grew or shrank.
-#[expect(
-    clippy::expect_used,
-    reason = "the value is bounded well below the target type"
-)]
+///
+/// The offset cannot leave the buffer, so the fallback (no shift) is never
+/// taken; it is the declared answer for an offset that cannot be shifted.
 fn shifted(pos: usize, shift: isize) -> usize {
-    pos.checked_add_signed(shift)
-        .expect("caret offset stays within the buffer after a prior edit's shift")
+    pos.checked_add_signed(shift).unwrap_or(pos)
 }
 
-/// A character count as a signed shift.
-#[expect(
-    clippy::expect_used,
-    reason = "a buffer length is bounded well below isize::MAX"
-)]
+/// A character count as a signed shift (a buffer length is far below `isize::MAX`;
+/// a length that did not fit shifts by `isize::MAX`).
 fn signed(n: usize) -> isize {
-    isize::try_from(n).expect("a buffer length fits in isize")
+    isize::try_from(n).unwrap_or(isize::MAX)
+}
+
+/// `a + b` as signed shifts; a shift past the signed range stays at its end.
+fn shift_by(shift: isize, delta: isize) -> isize {
+    shift.checked_add(delta).unwrap_or(shift)
 }
 
 /// An extra caret beyond the primary cursor. The primary lives in the
@@ -163,7 +189,7 @@ impl Editor {
     /// How many carets are active, the primary included (always at least 1).
     #[must_use]
     pub fn caret_count(&self) -> usize {
-        self.carets.len() + 1
+        add_or(self.carets.len(), 1, usize::MAX)
     }
 
     /// Drop all extra carets, keeping just the primary cursor.
@@ -290,8 +316,9 @@ impl Editor {
         if let Some(s) = self.selection.filter(|s| !s.is_empty())
             && self.cursor != s.start
             && self.cursor != s.end
+            && let Some(first) = out.first_mut()
         {
-            out[0] = (s.start, s.end);
+            *first = (s.start, s.end);
         }
         out
     }
@@ -360,7 +387,7 @@ impl Editor {
         // By range start, so an enclosing selection is applied before a
         // caret inside it.
         let mut order: Vec<usize> = (0..edits.len()).collect();
-        order.sort_by_key(|&i| ranges[i]);
+        order.sort_by_key(|&i| ranges.get(i).copied());
         let primary = (self.cursor, self.selection);
         let code = self.code_mut();
         // One transaction for all carets so a single Undo reverts the lot, and
@@ -377,21 +404,35 @@ impl Editor {
         // shifted offset that no longer exists (T575).
         let mut prev: Option<(usize, usize)> = None;
         for i in order {
-            let (start, end) = ranges[i];
+            let Some(&(start, end)) = ranges.get(i) else {
+                continue;
+            };
             if prev.is_some_and(|(ps, pe)| start < pe || (start, end) == (ps, pe)) {
                 continue;
             }
             prev = Some((start, end));
-            let edit = &edits[i];
+            let Some(edit) = edits.get(i) else {
+                continue;
+            };
             let added = edit.text.chars().count();
             let at = shifted(start, shift);
             if end > start {
                 code.remove(at, shifted(end, shift));
             }
             code.insert(at, &edit.text);
-            shift += signed(added) - signed(end - start);
+            shift = shift_by(
+                shift,
+                signed(added)
+                    .checked_sub(signed(sub_or(end, start, 0)))
+                    .unwrap_or(0),
+            );
             let (from, to) = (edit.select.0.min(added), edit.select.1.min(added));
-            result[i] = Some((at + to, (from != to).then_some(at + from)));
+            if let Some(slot) = result.get_mut(i) {
+                *slot = Some((
+                    add_or(at, to, usize::MAX),
+                    (from != to).then_some(add_or(at, from, usize::MAX)),
+                ));
+            }
         }
         let result: Vec<_> = result.into_iter().flatten().collect();
         if let Some(&(p, a)) = result.first() {
@@ -433,7 +474,7 @@ impl Editor {
             if outdent {
                 let n = code.find_indent_at_line_start(row).unwrap_or(0).min(unit);
                 if n > 0 {
-                    code.remove(start, start + n);
+                    code.remove(start, add_or(start, n, usize::MAX));
                     changes.push((start, n));
                 }
             } else {
@@ -446,16 +487,16 @@ impl Editor {
                 let gone: usize = changes
                     .iter()
                     .filter(|&&(s, _)| s < p)
-                    .map(|&(s, n)| n.min(p - s))
-                    .sum();
-                p - gone
+                    .map(|&(s, n)| n.min(sub_or(p, s, 0)))
+                    .fold(0, |total, n| add_or(total, n, usize::MAX));
+                sub_or(p, gone, 0)
             } else {
                 let added: usize = changes
                     .iter()
                     .filter(|&&(s, _)| s <= p)
                     .map(|&(_, n)| n)
-                    .sum();
-                p + added
+                    .fold(0, |total, n| add_or(total, n, usize::MAX));
+                add_or(p, added, usize::MAX)
             }
         };
         let result: Vec<_> = carets
@@ -476,7 +517,7 @@ impl Editor {
         let len = self.code_ref().len_chars();
         let carets = self.gather();
         let mut order: Vec<usize> = (0..carets.len()).collect();
-        order.sort_by_key(|&i| range_start(carets[i]));
+        order.sort_by_key(|&i| carets.get(i).copied().map(range_start));
         let primary = (self.cursor, self.selection);
         let code = self.code_mut();
         code.tx();
@@ -487,14 +528,16 @@ impl Editor {
         // caret already removed is merged into that caret.
         let mut prev_end = 0;
         for i in order {
-            let (pos, anchor) = carets[i];
+            let Some(&(pos, anchor)) = carets.get(i) else {
+                continue;
+            };
             let (pos, anchor) = (pos.min(len), anchor.map(|a| a.min(len)));
             // Clamped at the buffer edges, so Backspace at 0 or Delete at the
             // end is an empty range (a no-op for that caret).
             let (s, e) = match anchor.filter(|&a| a != pos) {
                 Some(a) => (a.min(pos), a.max(pos)),
-                None if forward => (pos, (pos + 1).min(len)),
-                None => (pos.saturating_sub(1), pos),
+                None if forward => (pos, add_or(pos, 1, usize::MAX).min(len)),
+                None => (sub_or(pos, 1, 0), pos),
             };
             if s < prev_end {
                 continue;
@@ -503,9 +546,11 @@ impl Editor {
             let rs = shifted(s, shift);
             if e > s {
                 code.remove(rs, shifted(e, shift));
-                shift -= signed(e - s);
+                shift = shift_by(shift, signed(sub_or(e, s, 0)).checked_neg().unwrap_or(0));
             }
-            result[i] = Some((rs, None));
+            if let Some(slot) = result.get_mut(i) {
+                *slot = Some((rs, None));
+            }
         }
         let result: Vec<_> = result.into_iter().flatten().collect();
         if let Some(&(p, _)) = result.first() {
@@ -534,10 +579,12 @@ impl Editor {
             // round-trip: `caret_selection_texts` is also in buffer order.
             let carets = self.gather();
             let mut order: Vec<usize> = (0..n).collect();
-            order.sort_by_key(|&i| range_start(carets[i]));
+            order.sort_by_key(|&i| carets.get(i).copied().map(range_start));
             let mut texts = vec![""; n];
             for (line, i) in lines.into_iter().zip(order) {
-                texts[i] = line;
+                if let Some(slot) = texts.get_mut(i) {
+                    *slot = line;
+                }
             }
             self.multi_replace(&texts);
         } else {
@@ -615,13 +662,13 @@ impl Editor {
                 // Smart Home: a line that is blank (or all indent) counts as
                 // indent 0, so Home goes to column 0 rather than toggling.
                 let start = self.line_start(pos);
-                let len = self.line_end(pos) - start;
-                let first = self.line_first_text(pos) - start;
+                let len = sub_or(self.line_end(pos), start, 0);
+                let first = sub_or(self.line_first_text(pos), start, 0);
                 let indent = if first >= len { 0 } else { first };
-                if pos - start == indent {
+                if sub_or(pos, start, 0) == indent {
                     start
                 } else {
-                    start + indent
+                    add_or(start, indent, usize::MAX)
                 }
             }
             CaretMove::BufferStart => 0,
@@ -677,7 +724,7 @@ impl Editor {
         // Search forward from the newest caret, wrapping to the buffer start.
         let found = find_from(&hay, &needle, from).or_else(|| find_from(&hay, &needle, 0));
         if let Some(start) = found {
-            let end = start + needle.len();
+            let end = add_or(start, needle.len(), usize::MAX);
             // Wrapped all the way round onto an existing caret: nothing new.
             if self.caret_selections().contains(&(start, end)) {
                 return;
@@ -707,7 +754,7 @@ impl Editor {
         let taken = self.caret_selections();
         let starts: Vec<usize> = occurrences(&hay, &needle)
             .into_iter()
-            .filter(|&st| !taken.contains(&(st, st + n)))
+            .filter(|&st| !taken.contains(&(st, add_or(st, n, usize::MAX))))
             .collect();
         // `st >= e` / `st + n <= s`: strictly past the current match, so the
         // current selection is never re-picked; the `or_else` arms wrap.
@@ -722,13 +769,13 @@ impl Editor {
                 .iter()
                 .rev()
                 .copied()
-                .find(|&st| st + n <= s)
+                .find(|&st| add_or(st, n, usize::MAX) <= s)
                 .or_else(|| starts.iter().rev().copied().find(|&st| st > s))
         };
         if let Some(start) = pick {
-            self.cursor = start + n;
+            self.cursor = add_or(start, n, usize::MAX);
             self.goal_col = None;
-            self.selection = Some(Selection::new(start, start + n));
+            self.selection = Some(Selection::new(start, add_or(start, n, usize::MAX)));
         }
     }
 
@@ -761,14 +808,16 @@ impl Editor {
         let hay: Vec<char> = self.get_content().chars().collect();
         let matches: Vec<(usize, usize)> = occurrences(&hay, &needle)
             .into_iter()
-            .map(|st| (st, st + needle.len()))
+            .map(|st| (st, add_or(st, needle.len(), usize::MAX)))
             .collect();
         if matches.len() <= 1 {
             return;
         }
         self.carets.clear();
-        let (last_start, last_end) = matches[matches.len() - 1];
-        for &(start, end) in &matches[..matches.len() - 1] {
+        let Some((&(last_start, last_end), earlier)) = matches.split_last() else {
+            return;
+        };
+        for &(start, end) in earlier {
             self.carets.push(Caret {
                 pos: end,
                 anchor: Some(start),
@@ -802,7 +851,7 @@ impl Editor {
             let before = out.len();
             for line in code.char_to_line(s)..=code.char_to_line(e) {
                 let ls = code.line_to_char(line);
-                let le = ls + code.line_len(line);
+                let le = add_or(ls, code.line_len(line), usize::MAX);
                 let (ps, pe) = (s.max(ls), e.min(le));
                 if pe > ps {
                     out.push((pe, Some(ps)));
@@ -841,8 +890,16 @@ impl Editor {
                 {
                     continue;
                 }
-                let cs = s + text[..m.start].chars().count();
-                let ce = cs + text[m.start..m.end].chars().count();
+                let cs = add_or(
+                    s,
+                    text.get(..m.start).unwrap_or("").chars().count(),
+                    usize::MAX,
+                );
+                let ce = add_or(
+                    cs,
+                    text.get(m.start..m.end).unwrap_or("").chars().count(),
+                    usize::MAX,
+                );
                 out.push((ce, Some(cs)));
             }
         }
@@ -915,7 +972,7 @@ impl Editor {
             .first()
             .map_or((self.cursor, self.primary_anchor()), |c| (c.pos, c.anchor));
         let code = self.code_ref();
-        let col_of = |p: usize| p - code.line_to_char(code.char_to_line(p));
+        let col_of = |p: usize| sub_or(p, code.line_to_char(code.char_to_line(p)), 0);
         let cur_col = col_of(origin);
         let anchor_col = origin_anchor.map_or(cur_col, col_of);
         // Frontier = furthest caret line in the direction of travel.
@@ -924,14 +981,23 @@ impl Editor {
             .into_iter()
             .map(|p| code.char_to_line(p));
         let frontier = if down { lines.max() } else { lines.min() }.unwrap_or(0);
-        if (down && frontier + 1 >= code.len_lines()) || (!down && frontier == 0) {
-            return;
-        }
-        let target = if down { frontier + 1 } else { frontier - 1 };
+        let target = if down {
+            let next = add_or(frontier, 1, usize::MAX);
+            if next >= code.len_lines() {
+                return;
+            }
+            next
+        } else {
+            let Some(previous) = frontier.checked_sub(1) else {
+                return;
+            };
+            previous
+        };
         let base = code.line_to_char(target);
         let llen = code.line_len(target);
-        let pos = base + cur_col.min(llen);
-        let anchor = (anchor_col != cur_col).then_some(base + anchor_col.min(llen));
+        let pos = add_or(base, cur_col.min(llen), usize::MAX);
+        let anchor =
+            (anchor_col != cur_col).then_some(add_or(base, anchor_col.min(llen), usize::MAX));
         if pos != self.cursor && !self.carets.iter().any(|c| c.pos == pos) {
             self.push_primary(pos, anchor);
         }
@@ -944,16 +1010,25 @@ impl Editor {
         let pos = {
             let code = self.code_ref();
             let line = code.char_to_line(self.cursor);
-            let col = self.cursor - code.line_to_char(line);
+            let col = sub_or(self.cursor, code.line_to_char(line), 0);
             let n = code.len_lines();
-            if down && line + 1 >= n {
-                return;
-            }
-            if !down && line == 0 {
-                return;
-            }
-            let target = if down { line + 1 } else { line - 1 };
-            code.line_to_char(target) + col.min(code.line_len(target))
+            let target = if down {
+                let next = add_or(line, 1, usize::MAX);
+                if next >= n {
+                    return;
+                }
+                next
+            } else {
+                let Some(previous) = line.checked_sub(1) else {
+                    return;
+                };
+                previous
+            };
+            add_or(
+                code.line_to_char(target),
+                col.min(code.line_len(target)),
+                usize::MAX,
+            )
         };
         self.add_caret_at(pos);
     }
@@ -967,7 +1042,11 @@ fn find_from(hay: &[char], needle: &[char], from: usize) -> Option<usize> {
     // Naive scan: needles here are a selected word or short snippet. The
     // `needle.len() > hay.len()` guard above keeps the range bound from
     // underflowing.
-    (from..=hay.len() - needle.len()).find(|&i| hay[i..i + needle.len()] == *needle)
+    let last_start = sub_or(hay.len(), needle.len(), 0);
+    (from..=last_start).find(|&i| {
+        hay.get(i..add_or(i, needle.len(), usize::MAX))
+            .is_some_and(|window| window == needle)
+    })
 }
 
 /// Every non-overlapping occurrence of `needle` in `hay`, as start indices.
@@ -976,7 +1055,7 @@ fn occurrences(hay: &[char], needle: &[char]) -> Vec<usize> {
     let mut from = 0;
     while let Some(start) = find_from(hay, needle, from) {
         out.push(start);
-        from = start + needle.len();
+        from = add_or(start, needle.len(), usize::MAX);
     }
     out
 }
