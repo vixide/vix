@@ -77,7 +77,7 @@ pub(super) fn draw_fhir_bundle(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.fhir_bundle.as_mut() {
         p.ensure_visible(view_h);
     }

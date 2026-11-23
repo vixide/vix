@@ -14,7 +14,7 @@
     )
 )]
 
-use crate::geo::Geo;
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Paragraph, Tabs};
 
@@ -34,13 +34,13 @@ pub(super) fn center_split(area: Rect, breadcrumbs: bool) -> (Rect, Option<Rect>
                 Constraint::Min(1),
             ])
             .split(area);
-        (c[0], Some(c[1]), c[2])
+        (chunk(&c, 0), Some(chunk(&c, 1)), chunk(&c, 2))
     } else {
         let c = Layout::default()
             .direction(dir)
             .constraints([Constraint::Length(1), Constraint::Min(1)])
             .split(area);
-        (c[0], None, c[1])
+        (chunk(&c, 0), None, chunk(&c, 1))
     }
 }
 

@@ -94,7 +94,7 @@ impl App {
         let Some(p) = self.hl7_panel.as_mut() else {
             return;
         };
-        let idx = p.scroll.plus(mouse.row.minus(rect.y) as usize);
+        let idx = p.scroll.plus(usize::from(mouse.row.minus(rect.y)));
         if p.select_index(idx) {
             self.jump_to_hl7_row();
         }

@@ -600,9 +600,9 @@ impl App {
                 let n = chars.len();
                 let start = start.min(n);
                 let end = end.min(n).max(start);
-                let mut out: String = chars[..start].iter().collect();
+                let mut out: String = chars.get(..start).unwrap_or(&[]).iter().collect();
                 out.push_str(text);
-                out.extend(&chars[end..]);
+                out.extend(chars.get(end..).unwrap_or(&[]));
                 out
             }
         };

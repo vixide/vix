@@ -202,10 +202,13 @@ impl App {
             else {
                 continue;
             };
+            let Some(&file_order) = order.get(path) else {
+                continue;
+            };
             let text = tab.text();
             let rel = self.root_rel(path);
             found.extend(text.lines().enumerate().map(|(n, line)| Found {
-                order: order[path],
+                order: file_order,
                 number: n.plus(1),
                 path: path.to_path_buf(),
                 rel: rel.clone(),
