@@ -4370,3 +4370,206 @@ fn opening_an_image_makes_a_read_only_image_tab() {
     assert!(a.messages.items.len() > before);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ----- docks, scrollbars, drags ---------------------------------------------------------------------
+
+fn chrome_app() -> App {
+    let mut a = app();
+    a.layout.menu = Rect::new(0, 0, 100, 1);
+    a.layout.explorer = Rect::new(0, 2, 25, 18);
+    a.layout.messages = Rect::new(80, 2, 20, 18);
+    a.layout.editor = Rect::new(25, 3, 55, 12);
+    a.layout.bottom_dock = Rect::new(25, 15, 55, 8);
+    a.visible.set(Visible::EXPLORER, true);
+    a.visible.set(Visible::MESSAGES, true);
+    a.visible.set(Visible::BOTTOM_DOCK, true);
+    a
+}
+
+#[test]
+fn dragging_a_side_dock_edge_resizes_it_within_limits() {
+    let mut a = chrome_app();
+    a.on_mouse(left_click(24, 5)); // the explorer's inner edge
+    assert!(a.dock_resize.is_some());
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 40, 5));
+    assert_eq!(a.settings.explorer_width, 41);
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 2, 5));
+    assert_eq!(
+        a.settings.explorer_width, 12,
+        "never narrower than the minimum"
+    );
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 99, 5));
+    assert!(a.settings.explorer_width <= 100 - 20 - a.settings.messages_width);
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 99, 5));
+    assert!(a.dock_resize.is_none());
+    a.settings.explorer_width = 25;
+
+    a.on_mouse(left_click(80, 5)); // the messages drawer's inner edge
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 70, 5));
+    assert_eq!(a.settings.messages_width, 30);
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 70, 5));
+    assert!(a.dock_resize.is_none());
+}
+
+#[test]
+fn dragging_the_bottom_dock_edge_changes_its_height() {
+    let mut a = chrome_app();
+    a.on_mouse(left_click(40, 15));
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 40, 12));
+    assert_eq!(a.settings.bottom_dock_height, 11);
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 40, 22));
+    assert_eq!(
+        a.settings.bottom_dock_height, 3,
+        "never shorter than the minimum"
+    );
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 40, 22));
+    assert!(a.dock_resize.is_none());
+}
+
+#[test]
+fn scrollbar_press_and_drag_follow_the_pointer_then_release() {
+    let body = "line\n".repeat(100);
+    let mut a = app_with(&body);
+    a.layout.scrollbar = Rect::new(79, 2, 1, 20);
+    a.on_mouse(left_click(79, 2));
+    assert!(a.flags.contains(AppFlags::SCROLLBAR_ACTIVE));
+    assert_eq!(a.editor.cursor_line(), 0);
+    // The drag continues even when the pointer leaves the track column.
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 10, 21));
+    assert!(a.editor.cursor_line() > 90, "{}", a.editor.cursor_line());
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 10, 21));
+    assert!(!a.flags.contains(AppFlags::SCROLLBAR_ACTIVE));
+}
+
+#[test]
+fn horizontal_scrollbar_press_and_drag_scroll_a_dock_sideways() {
+    let mut a = chrome_app();
+    a.layout.explorer_hscrollbar = Rect::new(0, 19, 11, 1);
+    a.explorer_hmax = 50;
+    a.on_mouse(left_click(10, 19));
+    assert!(matches!(a.hbar_active, Some(HBar::Explorer)));
+    assert_eq!(a.explorer_hscroll, 50);
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 0, 5));
+    assert_eq!(a.explorer_hscroll, 0);
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 0, 5));
+    assert!(a.hbar_active.is_none());
+}
+
+#[test]
+fn an_editor_drag_tracks_until_release() {
+    let mut a = app_with("abc def ghi\nsecond line\n");
+    a.layout.editor = Rect::new(0, 3, 40, 10);
+    assert!(!a.editor_drag_active());
+    a.poll_editor_drag(); // no drag: nothing to do
+    a.on_mouse(left_click(2, 3));
+    assert!(a.editor_drag_active());
+    a.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 8, 3));
+    a.poll_editor_drag();
+    assert!(
+        a.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text()
+            .is_some()
+    );
+    a.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 8, 3));
+    assert!(!a.editor_drag_active());
+    // Any other event while "dragging" ends it.
+    a.flags.insert(AppFlags::EDITOR_DRAG);
+    a.on_mouse(mouse(MouseEventKind::Moved, 1, 1));
+    assert!(!a.editor_drag_active());
+}
+
+#[test]
+fn alt_click_adds_a_caret_and_a_plain_click_collapses_it() {
+    let mut a = app_with("abc\ndef\n");
+    a.layout.editor = Rect::new(0, 3, 40, 10);
+    a.on_mouse(left_click(8, 3));
+    let alt_click = MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: 8,
+        row: 4,
+        modifiers: KeyModifiers::ALT,
+    };
+    a.on_mouse(alt_click);
+    assert!(a.editor.active_tab().unwrap().editor.has_multi_carets());
+    a.on_mouse(left_click(8, 3));
+    assert!(!a.editor.active_tab().unwrap().editor.has_multi_carets());
+}
+
+#[test]
+fn calendar_clicks_navigate_months_insert_days_and_close_outside() {
+    let mut a = app_with("");
+    a.run_action("tools.calendar");
+    a.layout.calendar = Rect::new(5, 5, 22, 10);
+    let shown = a.calendar.shown_month();
+    a.calendar_mouse(left_click(25, 5)); // the next-month arrow
+    assert_ne!(a.calendar.shown_month(), shown);
+    a.calendar_mouse(left_click(5, 5)); // the previous-month arrow
+    assert_eq!(a.calendar.shown_month(), shown);
+    a.calendar_mouse(left_click(15, 5)); // the title does nothing
+    // A day cell inserts that day in the locale's format.
+    let grid = a.calendar.grid();
+    let (week, col, day) = grid
+        .weeks
+        .iter()
+        .enumerate()
+        .find_map(|(w, row)| {
+            row.iter()
+                .position(Option::is_some)
+                .map(|c| (w, c, row[c].unwrap()))
+        })
+        .unwrap();
+    let expected = a
+        .calendar
+        .format_day(day, App::locale_date_pattern())
+        .unwrap();
+    a.calendar_mouse(left_click(
+        5 + u16::try_from(col * 3).unwrap(),
+        5 + 2 + u16::try_from(week).unwrap(),
+    ));
+    assert_eq!(active_text(&a), expected);
+    assert!(
+        a.visible.contains(Visible::CALENDAR),
+        "stays open for more picks"
+    );
+    // Non-click events are ignored; a click outside closes the box.
+    a.calendar_mouse(mouse(MouseEventKind::Moved, 6, 6));
+    a.calendar_mouse(left_click(70, 20));
+    assert!(!a.visible.contains(Visible::CALENDAR));
+}
+
+#[test]
+fn accepting_the_calendar_inserts_the_selected_date_or_opens_a_daily_note() {
+    let dir = tmp("calendar-accept");
+    let mut a = app_in(&dir);
+    a.editor.new_tab_with_content("");
+    a.run_action("tools.calendar");
+    let expected = a.calendar.selected_formatted(App::locale_date_pattern());
+    a.on_key(key(KeyCode::Enter));
+    assert!(!a.visible.contains(Visible::CALENDAR));
+    assert_eq!(active_text(&a), expected);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn clock_clicks_insert_the_clicked_row_and_close_outside() {
+    let mut a = app_with("");
+    a.run_action("tools.clock");
+    a.layout.clock = Rect::new(5, 5, 30, 8);
+    a.clock_mouse(mouse(MouseEventKind::Moved, 6, 5));
+    a.clock_mouse(left_click(6, 5));
+    assert_eq!(a.clock.selected, 0);
+    assert!(
+        !active_text(&a).is_empty(),
+        "the first row's value was inserted"
+    );
+    assert!(a.visible.contains(Visible::CLOCK));
+    // A row past the table inserts nothing more.
+    let before = active_text(&a);
+    a.clock_mouse(left_click(6, 12));
+    assert_eq!(active_text(&a), before);
+    a.clock_mouse(left_click(60, 20));
+    assert!(!a.visible.contains(Visible::CLOCK));
+}
