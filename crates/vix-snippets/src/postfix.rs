@@ -20,6 +20,14 @@
 //! assert_eq!(e.body, "if ready {\n\t$0\n}");
 //! ```
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// The language family a template set is written for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Family {
@@ -144,25 +152,35 @@ fn expression_before(s: &[char]) -> usize {
     // Every pass either stops or moves `i` strictly left, so `s.len()` passes
     // always suffice.
     for _ in 0..s.len() {
-        if i == 0 {
+        let Some(at) = i.checked_sub(1) else {
             break;
-        }
-        let c = s[i - 1];
+        };
+        let Some(&c) = s.get(at) else {
+            break;
+        };
         if matches!(c, ')' | ']') {
             let (open, close) = if c == ')' { ('(', ')') } else { ('[', ']') };
             let mut depth = 0usize;
             let mut start = None;
             for j in (0..i).rev() {
-                let cj = s[j];
+                let Some(&cj) = s.get(j) else {
+                    continue;
+                };
                 if cj == close {
-                    depth += 1;
-                } else if cj == open {
-                    // Safe: `depth` is already >= 1 here because the first char
-                    // examined is always the `close` bracket checked above.
-                    depth -= 1;
-                    if depth == 0 {
-                        start = Some(j);
+                    let Some(deeper) = depth.checked_add(1) else {
                         break;
+                    };
+                    depth = deeper;
+                } else if cj == open {
+                    // `depth` is at least 1 here because the first char examined
+                    // is always the `close` bracket checked above.
+                    match depth.checked_sub(1) {
+                        Some(0) => {
+                            start = Some(j);
+                            break;
+                        }
+                        Some(shallower) => depth = shallower,
+                        None => {}
                     }
                 }
             }
@@ -172,15 +190,17 @@ fn expression_before(s: &[char]) -> usize {
             i = start;
         } else if is_expr_char(c) && !(c == '-' && s.get(i) != Some(&'>')) {
             // A `-` only belongs to a `->` arrow, never a subtraction.
-            if c == '>' && s.get(i.wrapping_sub(2)) != Some(&'-') {
+            let before_arrow = i.checked_sub(2).and_then(|k| s.get(k));
+            if c == '>' && before_arrow != Some(&'-') {
                 break;
             }
-            i -= 1;
+            i = at;
         } else {
             break;
         }
     }
-    s.len() - i
+    // `i` never passes the end, so this is the length of the expression.
+    sub_or(s.len(), i, 0)
 }
 
 /// The loop variable for iterating `expr`: a trailing plural `s` dropped
@@ -218,26 +238,32 @@ pub fn expand(before: &str, family: Family) -> Option<Expansion> {
         .rev()
         .take_while(|c| c.is_alphanumeric() || **c == '_')
         .count();
-    if key_len == 0 || key_len >= chars.len() || chars[chars.len() - key_len - 1] != '.' {
+    // The key is preceded by a dot, so it starts after index 0.
+    let key_start = chars.len().checked_sub(key_len)?;
+    let dot_at = key_start.checked_sub(1)?;
+    if key_len == 0 || chars.get(dot_at) != Some(&'.') {
         return None;
     }
-    let key: String = chars[chars.len() - key_len..].iter().collect();
+    let key: String = chars.get(key_start..)?.iter().collect();
     let template = templates(family)
         .iter()
         .find_map(|(k, t)| (*k == key).then_some(*t))?;
-    let head = &chars[..chars.len() - key_len - 1];
+    let head = chars.get(..dot_at)?;
     let expr_len = expression_before(head);
     if expr_len == 0 {
         return None;
     }
-    let expr: String = head[head.len() - expr_len..].iter().collect();
+    let expr: String = head
+        .get(sub_or(head.len(), expr_len, 0)..)?
+        .iter()
+        .collect();
     // Substitute `$ITEM` first: its text is derived from the expression, and
     // both are escaped so they cannot introduce tabstops of their own.
     let body = template
         .replace("$ITEM", &escape(&item_name(&expr)))
         .replace("$EXPR", &escape(&expr));
     Some(Expansion {
-        replace_chars: expr_len + 1 + key_len,
+        replace_chars: expr_len.checked_add(1)?.checked_add(key_len)?,
         body,
     })
 }

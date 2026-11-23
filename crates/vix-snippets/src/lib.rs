@@ -22,6 +22,18 @@
 //! assert_eq!(s[0].prefixes, ["log"]);
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod postfix;
 
 use std::path::{Path, PathBuf};
@@ -143,7 +155,8 @@ pub fn to_json(snippets: &[Snippet]) -> String {
         }
         map.insert(s.name.clone(), serde_json::Value::Object(entry));
     }
-    serde_json::to_string_pretty(&serde_json::Value::Object(map)).unwrap_or_default()
+    // A JSON value's alternate display is its pretty form and cannot fail.
+    format!("{:#}", serde_json::Value::Object(map))
 }
 
 /// A JSON string, or an array of strings joined with newlines.
