@@ -1517,3 +1517,405 @@ mod filler_tests {
         assert_eq!(ed.filler_before(3), 0, "unwrapped views only");
     }
 }
+
+#[cfg(test)]
+mod layer_tests {
+    //! What each decoration layer paints, cell by cell, in the no-wrap and
+    //! soft-wrap renderers.
+
+    use crate::editor::Editor;
+    use ratatui_core::buffer::Buffer;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::style::{Color, Modifier, Style};
+    use ratatui_core::widgets::Widget;
+
+    /// An editor with no gutter at all, so screen column == character column.
+    fn bare(lang: &str, text: &str) -> Editor {
+        let mut e = Editor::new(lang, text, Vec::new()).unwrap();
+        e.show_line_numbers(false);
+        e.set_left_code_padding(0);
+        e
+    }
+
+    fn draw(e: &Editor, w: u16, h: u16) -> Buffer {
+        let area = Rect::new(0, 0, w, h);
+        let mut buf = Buffer::empty(area);
+        e.render(area, &mut buf);
+        buf
+    }
+
+    fn row(buf: &Buffer, y: u16) -> String {
+        (0..buf.area.width)
+            .map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' '))
+            .collect()
+    }
+
+    fn has(buf: &Buffer, x: u16, y: u16, m: Modifier) -> bool {
+        buf[(x, y)].modifier.contains(m)
+    }
+
+    #[test]
+    fn mark_layers_paint_their_own_styles() {
+        let mut e = bare("text", "abcdefghijkl");
+        e.set_marks(vec![(0, 2, "#ff0000"), (5, 3, "#00ff00")]);
+        e.set_word_marks(vec![(2, 4)]);
+        e.set_spell_marks(vec![(4, 6)]);
+        e.set_diagnostic_marks(vec![(6, 8, Color::Blue), (9, 999, Color::Blue)]);
+        let b = draw(&e, 20, 2);
+        let ul = Modifier::UNDERLINED;
+        // Highlight marks: underlined (the inverted range is skipped).
+        assert!(has(&b, 0, 0, ul) && has(&b, 1, 0, ul) && !has(&b, 2, 0, ul));
+        // Word-occurrence marks: reversed and dim.
+        assert!(has(&b, 2, 0, Modifier::REVERSED | Modifier::DIM) && has(&b, 3, 0, Modifier::DIM));
+        assert!(!has(&b, 4, 0, Modifier::REVERSED));
+        // Spell marks: red underline.
+        assert_eq!(b[(4, 0)].fg, Color::Red);
+        assert!(has(&b, 4, 0, ul) && has(&b, 5, 0, ul) && !has(&b, 3, 0, ul));
+        // Diagnostics: underline in the diagnostic's colour; a range past the
+        // end of the buffer is ignored rather than clipped.
+        assert_eq!(b[(6, 0)].fg, Color::Blue);
+        assert!(has(&b, 7, 0, ul) && !has(&b, 8, 0, ul));
+        assert!(!has(&b, 10, 0, ul), "out-of-range diagnostic skipped");
+        // The text itself is unchanged underneath.
+        assert_eq!(row(&b, 0).trim_end(), "abcdefghijkl");
+    }
+
+    #[test]
+    fn soft_wrap_paints_marks_selection_and_spell_underlines() {
+        let mut e = bare("text", "abcdefghij");
+        e.set_soft_wrap(true);
+        e.set_marks(vec![(1, 3, "#ff0000")]);
+        e.set_spell_marks(vec![(7, 9)]);
+        e.set_selection_range(4, 6);
+        e.set_selection_style(Style::default().bg(Color::Rgb(1, 2, 3)));
+        // Five columns per row: "abcde" / "fghij".
+        let b = draw(&e, 5, 3);
+        assert_eq!(row(&b, 0), "abcde");
+        assert_eq!(row(&b, 1), "fghij");
+        assert!(has(&b, 1, 0, Modifier::UNDERLINED) && has(&b, 2, 0, Modifier::UNDERLINED));
+        assert!(!has(&b, 0, 0, Modifier::UNDERLINED));
+        assert_eq!(b[(4, 0)].bg, Color::Rgb(1, 2, 3), "selection on 'e'");
+        assert_eq!(b[(0, 1)].bg, Color::Rgb(1, 2, 3), "and on 'f'");
+        assert_eq!(b[(1, 1)].bg, Color::Reset);
+        assert_eq!(b[(2, 1)].fg, Color::Red);
+        assert!(has(&b, 3, 1, Modifier::UNDERLINED));
+    }
+
+    #[test]
+    fn soft_wrap_draws_the_bracket_match_whitespace_glyphs_and_extra_carets() {
+        let mut e = bare("text", "(a b)\tz\n");
+        e.set_soft_wrap(true);
+        e.show_whitespace(true);
+        e.set_whitespace_style(Style::default().fg(Color::Green));
+        e.set_bracket_style(Style::default().bg(Color::Magenta));
+        e.set_cursor_style(Some(Style::default().bg(Color::Yellow)));
+        e.set_cursor(0);
+        e.add_caret_at(3);
+        let b = draw(&e, 12, 2);
+        assert_eq!(row(&b, 0).trim_end(), "(a\u{b7}b)\u{2192}z");
+        // Whitespace glyphs use the whitespace style.
+        assert_eq!(b[(2, 0)].fg, Color::Green);
+        assert_eq!(b[(5, 0)].fg, Color::Green);
+        // The cursor was moved by add_caret_at, so the primary is at 3 and the
+        // other caret at 0; both draw as cursor blocks; the match of the
+        // primary's neighbour is highlighted.
+        assert_eq!(b[(3, 0)].bg, Color::Yellow);
+        assert_eq!(b[(0, 0)].bg, Color::Yellow);
+    }
+
+    #[test]
+    fn inlay_hints_are_inserted_dimmed_and_shift_what_follows() {
+        let mut e = bare("text", "ab");
+        e.set_whitespace_style(Style::default().fg(Color::Cyan));
+        e.set_inlay_hints(vec![(0, 1, ":T".to_string()), (0, 2, "!".to_string())]);
+        let b = draw(&e, 10, 1);
+        assert_eq!(row(&b, 0).trim_end(), "a:Tb!");
+        assert_eq!(b[(1, 0)].fg, Color::Cyan);
+        assert_eq!(b[(2, 0)].fg, Color::Cyan);
+        assert_eq!(b[(4, 0)].fg, Color::Cyan, "a hint at the line end");
+        assert_ne!(b[(3, 0)].fg, Color::Cyan, "the real glyph after the hint");
+        // A caret after the hint lands after its width; selections shift too.
+        e.set_cursor_style(Some(Style::default().bg(Color::Red)));
+        e.set_selection_range(2, 1);
+        e.set_selection_style(Style::default().bg(Color::Blue));
+        let b = draw(&e, 10, 1);
+        assert_eq!(
+            b[(3, 0)].bg,
+            Color::Red,
+            "cursor on 'b' shifted by the hint"
+        );
+        // Scrolled horizontally, hints are not drawn.
+        e.set_offset_x(1);
+        let b = draw(&e, 10, 1);
+        assert_eq!(row(&b, 0).trim_end(), "b");
+    }
+
+    #[test]
+    fn inlay_hints_shift_syntax_highlighting() {
+        let mut e = bare("rust", "let a = 1;");
+        e.set_syntax_theme(&[("keyword", "ff0000")]);
+        e.set_inlay_hints(vec![(0, 3, "XX".to_string())]);
+        let b = draw(&e, 20, 1);
+        // `let` stays red; the hint (inserted at column 3) is not.
+        assert_eq!(b[(0, 0)].fg, Color::Rgb(255, 0, 0));
+        assert_eq!(b[(2, 0)].fg, Color::Rgb(255, 0, 0));
+    }
+
+    #[test]
+    fn eol_notes_draw_dim_italic_after_the_line_and_truncate() {
+        let mut e = bare("text", "abc\ndef");
+        e.set_eol_note(Some((0, "blame here".to_string())));
+        let b = draw(&e, 20, 2);
+        assert_eq!(row(&b, 0).trim_end(), "abc  blame here");
+        assert!(has(&b, 5, 0, Modifier::ITALIC));
+        assert_eq!(row(&b, 1).trim_end(), "def", "only the noted line");
+        let b = draw(&e, 9, 2);
+        assert_eq!(row(&b, 0), "abc  blam");
+        // An empty note draws nothing, and a note for a missing line neither.
+        e.set_eol_note(Some((0, String::new())));
+        assert_eq!(row(&draw(&e, 20, 1), 0).trim_end(), "abc");
+        e.set_eol_note(Some((9, "x".to_string())));
+        assert_eq!(row(&draw(&e, 20, 1), 0).trim_end(), "abc");
+        // Not drawn when scrolled horizontally.
+        e.set_eol_note(Some((0, "note".to_string())));
+        e.set_offset_x(1);
+        assert_eq!(row(&draw(&e, 20, 1), 0).trim_end(), "bc");
+    }
+
+    #[test]
+    fn folded_lines_show_a_marker_and_an_ellipsis() {
+        let mut e = Editor::new("text", "head\nbody\nmore\ntail\n", Vec::new()).unwrap();
+        e.show_line_numbers(false);
+        e.set_fold_ranges(vec![(0, 2)]);
+        let b = draw(&e, 20, 3);
+        assert!(
+            row(&b, 0).trim_start().starts_with("\u{25be}head"),
+            "open: {:?}",
+            row(&b, 0)
+        );
+        assert!(e.fold(0));
+        let b = draw(&e, 20, 3);
+        assert!(
+            row(&b, 0).trim_start().starts_with("\u{25b8}head..."),
+            "{:?}",
+            row(&b, 0)
+        );
+        assert!(row(&b, 1).trim_start().starts_with("tail"));
+        // The ellipsis is not drawn when the line is scrolled sideways.
+        e.set_offset_x(1);
+        assert!(!row(&draw(&e, 20, 3), 0).contains("..."));
+    }
+
+    #[test]
+    fn rainbow_brackets_recolour_by_depth() {
+        let mut e = bare("text", "([{}])");
+        e.set_rainbow_brackets(true);
+        e.set_cursor(3); // keep the bracket-match highlight off the checks
+        let b = draw(&e, 10, 1);
+        let gold = Color::Rgb(0xff, 0xd7, 0x00);
+        let orchid = Color::Rgb(0xda, 0x70, 0xd6);
+        let blue = Color::Rgb(0x6a, 0x9e, 0xff);
+        assert_eq!(b[(0, 0)].fg, gold);
+        assert_eq!(b[(1, 0)].fg, orchid);
+        assert_eq!(b[(2, 0)].fg, blue);
+        assert_eq!(b[(3, 0)].fg, blue, "a closer takes its opener's colour");
+        assert_eq!(b[(4, 0)].fg, orchid);
+        assert_eq!(b[(5, 0)].fg, gold);
+        // Depth is seeded from the text above the first visible line.
+        let mut e = bare("text", "(\n(\n)\n)");
+        e.set_rainbow_brackets(true);
+        e.set_offset_y(1);
+        e.set_cursor(7);
+        let b = draw(&e, 10, 3);
+        assert_eq!(b[(0, 0)].fg, orchid, "second-level opener");
+        assert_eq!(b[(0, 1)].fg, orchid);
+        assert_eq!(b[(0, 2)].fg, gold);
+        // The depth palette wraps after six levels.
+        let mut e = bare("text", "((((((()");
+        e.set_rainbow_brackets(true);
+        e.set_cursor(0);
+        e.set_cursor(8);
+        let b = draw(&e, 10, 1);
+        assert_eq!(b[(6, 0)].fg, gold, "seventh level reuses the first colour");
+        // Horizontally scrolled: brackets left of the view are skipped.
+        e.set_offset_x(7);
+        let b = draw(&e, 10, 1);
+        assert_eq!(row(&b, 0).trim_end(), ")");
+    }
+
+    #[test]
+    fn indent_guides_mark_each_space_indent_level() {
+        let mut e = bare("rust", "        x\n    y\nz");
+        e.set_whitespace_style(Style::default().fg(Color::Cyan));
+        let b = draw(&e, 20, 3);
+        assert_eq!(b[(0, 0)].symbol(), "\u{2502}");
+        assert_eq!(b[(4, 0)].symbol(), "\u{2502}");
+        assert_eq!(b[(0, 1)].symbol(), "\u{2502}");
+        assert_ne!(b[(4, 1)].symbol(), "\u{2502}");
+        assert_eq!(b[(0, 0)].fg, Color::Cyan);
+        assert_ne!(b[(0, 2)].symbol(), "\u{2502}");
+        // Tab-indented buffers get no guides; a scroll hides the left ones.
+        let mut e = bare("go", "\t\tx");
+        e.set_whitespace_style(Style::default());
+        assert!(!row(&draw(&e, 10, 1), 0).contains('\u{2502}'));
+        let mut e = bare("rust", "        x");
+        e.set_offset_x(1);
+        let b = draw(&e, 10, 1);
+        assert_eq!(b[(3, 0)].symbol(), "\u{2502}", "the level at column 4");
+        // An indent unit that is empty draws no guides.
+        let mut e = bare("rust", "    x");
+        e.set_indent(Some(String::new()));
+        assert!(!row(&draw(&e, 10, 1), 0).contains('\u{2502}'));
+    }
+
+    #[test]
+    fn gutter_signs_follow_priority_and_relative_numbers() {
+        let mut e = Editor::new("text", "a\nb\nc\nd\ne\n", Vec::new()).unwrap();
+        e.set_debug_line(Some(0));
+        e.set_breakpoints(vec![0, 1]);
+        e.set_gutter_marks(vec![(2, "#00ff00")]);
+        let b = draw(&e, 20, 5);
+        let sign = |y: u16| b[(5, y)].symbol().to_string();
+        assert_eq!(sign(0), "\u{25b6}", "the stopped line beats a breakpoint");
+        assert_eq!(sign(1), "\u{25cf}");
+        assert_eq!(sign(2), "\u{258e}");
+        assert_eq!(b[(5, 0)].fg, Color::Yellow);
+        assert_eq!(b[(5, 1)].fg, Color::Red);
+        assert_eq!(b[(5, 2)].fg, Color::Rgb(0, 255, 0));
+        // Relative numbers: the cursor line keeps its absolute number.
+        e.set_relative_line_numbers(true);
+        e.set_cursor_line(2);
+        let b = draw(&e, 20, 5);
+        let num = |y: u16| {
+            row(&b, y)
+                .chars()
+                .take(5)
+                .collect::<String>()
+                .trim()
+                .to_string()
+        };
+        assert_eq!(
+            (num(0), num(1), num(2), num(3)),
+            ("2".into(), "1".into(), "3".into(), "1".into())
+        );
+        // A sign column past the right edge is not drawn.
+        let b = draw(&e, 5, 3);
+        assert_eq!(row(&b, 0).chars().count(), 5);
+    }
+
+    #[test]
+    fn stale_ranges_and_far_selections_never_panic() {
+        let mut e = bare("text", "abc");
+        e.set_marks(vec![(0, 99, "#ff0000"), (2, 1, "#ff0000")]);
+        e.set_spell_marks(vec![(0, 99)]);
+        e.set_word_marks(vec![(0, 99)]);
+        e.set_selection(Some(crate::selection::Selection { start: 1, end: 99 }));
+        e.set_semantic_tokens(vec![(0, 99, "keyword".into()), (2, 1, "keyword".into())]);
+        for wrap in [false, true] {
+            e.set_soft_wrap(wrap);
+            let b = draw(&e, 10, 2);
+            assert_eq!(row(&b, 0).trim_end(), "abc");
+        }
+    }
+
+    #[test]
+    fn highlight_range_clips_to_the_view_and_scrolls_with_offsets() {
+        let mut e = bare("text", "abcdefghijklmnopqrstuvwxyz");
+        e.set_selection_range(2, 24);
+        e.set_selection_style(Style::default().bg(Color::Blue));
+        e.set_offset_x(10);
+        let b = draw(&e, 8, 1);
+        // Columns 10..18 of the line are visible; the whole of them selected.
+        assert_eq!(row(&b, 0), "klmnopqr");
+        assert!((0..8).all(|x| b[(x, 0)].bg == Color::Blue));
+        // A caret scrolled out of view is not drawn.
+        e.set_cursor_style(Some(Style::default().bg(Color::Red)));
+        e.set_cursor(1);
+        let b = draw(&e, 8, 1);
+        assert!((0..8).all(|x| b[(x, 0)].bg != Color::Red));
+    }
+
+    #[test]
+    fn bracket_partner_is_highlighted_beside_the_cursor() {
+        let mut e = bare("text", "a(b)c");
+        e.set_bracket_style(Style::default().bg(Color::Magenta));
+        e.set_cursor(1);
+        let b = draw(&e, 10, 1);
+        assert_eq!(b[(3, 0)].bg, Color::Magenta);
+        assert_ne!(b[(1, 0)].bg, Color::Magenta);
+    }
+
+    #[test]
+    fn whitespace_mode_marks_tabs_spaces_and_line_ends() {
+        let mut e = bare("text", "a b\tc\nd\r\ne");
+        e.show_whitespace(true);
+        e.set_whitespace_style(Style::default().fg(Color::Green));
+        let b = draw(&e, 12, 3);
+        assert_eq!(row(&b, 0).trim_end(), "a\u{b7}b\u{2192}c\u{b6}");
+        assert_eq!(b[(1, 0)].fg, Color::Green);
+        assert_eq!(b[(3, 0)].fg, Color::Green);
+        assert_eq!(b[(5, 0)].symbol(), "\u{b6}");
+        assert_eq!(row(&b, 1).trim_end(), "d\u{240d}\u{b6}");
+        assert_eq!(row(&b, 2).trim_end(), "e", "no ¶ after the last line");
+    }
+
+    #[test]
+    fn every_layer_clips_at_the_right_edge_of_any_width() {
+        // Rendering with all layers on into views of every width must clip, not
+        // overflow: each narrow row is a prefix of the same row drawn wide.
+        let src = "    fn f(a: (u8, [u8; 2])) { // note\n\t\tx = \"hi\"; \u{4e2d}\u{6587}\n";
+        let build = || {
+            let mut e = Editor::new("rust", src, Vec::new()).unwrap();
+            e.set_syntax_theme(&[("keyword", "ff0000"), ("string", "00ff00")]);
+            e.show_whitespace(true);
+            e.set_rainbow_brackets(true);
+            e.set_eol_note(Some((0, "blame".to_string())));
+            e.set_marks(vec![(4, 8, "#ff0000")]);
+            e.set_word_marks(vec![(9, 10)]);
+            e.set_spell_marks(vec![(12, 15)]);
+            e.set_diagnostic_marks(vec![(16, 20, Color::Red)]);
+            e.set_selection_range(2, 40);
+            e.set_cursor_style(Some(Style::default().bg(Color::Yellow)));
+            e.set_cursor(6);
+            e.set_gutter_marks(vec![(0, "#00ff00")]);
+            e.set_breakpoints(vec![1]);
+            e.set_fold_ranges(vec![(0, 1)]);
+            e
+        };
+        let wide_ed = build();
+        let wide = draw(&wide_ed, 80, 3);
+        for w in 1..40_u16 {
+            let narrow = draw(&build(), w, 3);
+            for y in 0..2 {
+                // A two-column glyph that does not fit in the last cell is
+                // left out rather than half drawn, so compare all but it.
+                let keep = usize::from(w).saturating_sub(1);
+                let a: String = row(&narrow, y).chars().take(keep).collect();
+                let b: String = row(&wide, y).chars().take(keep).collect();
+                assert_eq!(a, b, "width {w}, row {y}");
+            }
+        }
+        // And with the first line folded and horizontal scroll applied.
+        let mut e = build();
+        assert!(e.fold(0));
+        e.set_offset_x(3);
+        for w in 1..30_u16 {
+            let b = draw(&e, w, 3);
+            assert_eq!(row(&b, 0).chars().count(), usize::from(w));
+        }
+    }
+
+    #[test]
+    fn zero_height_and_one_cell_areas_draw_nothing_and_do_not_panic() {
+        let mut e = Editor::new("text", "abc", Vec::new()).unwrap();
+        e.set_selection_range(0, 2);
+        for area in [
+            Rect::new(0, 0, 0, 0),
+            Rect::new(0, 0, 1, 0),
+            Rect::new(0, 0, 1, 1),
+        ] {
+            let mut buf = Buffer::empty(Rect::new(0, 0, 4, 2));
+            e.render(area, &mut buf);
+        }
+    }
+}

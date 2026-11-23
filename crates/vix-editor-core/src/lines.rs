@@ -658,4 +658,75 @@ mod tests {
         e.sort_lines();
         assert_eq!(content(&e), "a\nz\nkeep\n");
     }
+
+    #[test]
+    fn shuffle_lines_permutes_the_buffer_in_one_undo_step() {
+        let src = (0..30).fold(String::new(), |acc, i| acc + &format!("line {i:02}\n"));
+        let mut e = ed(&src, 0);
+        e.shuffle_lines();
+        let out = content(&e);
+        let mut got: Vec<&str> = out.lines().collect();
+        got.sort_unstable();
+        let mut want: Vec<&str> = src.lines().collect();
+        want.sort_unstable();
+        assert_eq!(got, want, "same lines, new order");
+        assert!(out.ends_with('\n'), "final newline kept");
+        assert_ne!(out, src, "30 lines staying in place is a 1-in-30! chance");
+        e.undo();
+        assert_eq!(content(&e), src);
+    }
+
+    #[test]
+    fn shuffle_with_a_zero_seed_still_moves_lines() {
+        // xorshift's all-zero fixed point is avoided by substituting a seed.
+        let lines: Vec<&str> = (0..20).map(|_| "x").collect();
+        let distinct = ["a", "b", "c", "d", "e", "f", "g", "h"];
+        let out = super::shuffle(&distinct, 0);
+        assert_ne!(out, distinct.to_vec());
+        assert_eq!(super::shuffle(&distinct, 0), out, "deterministic");
+        assert_eq!(super::shuffle(&lines, 0).len(), 20);
+        assert_eq!(super::shuffle(&[], 7), Vec::<String>::new());
+        assert_eq!(super::shuffle(&["only"], 7), vec!["only"]);
+    }
+
+    #[test]
+    fn sort_lines_with_a_one_line_selection_does_nothing() {
+        let mut e = ed("b\na\nc", 0);
+        e.set_selection_range(0, 1); // inside the first line only
+        e.sort_lines();
+        assert_eq!(content(&e), "b\na\nc");
+        e.undo();
+        assert_eq!(content(&e), "b\na\nc", "nothing was recorded");
+    }
+
+    #[test]
+    fn move_line_in_a_one_line_buffer_does_nothing() {
+        let mut e = ed("only", 2);
+        e.move_line_up();
+        e.move_line_down();
+        assert_eq!((content(&e).as_str(), e.get_cursor()), ("only", 2));
+    }
+
+    #[test]
+    fn range_transforms_on_an_empty_buffer_do_nothing() {
+        let mut e = ed("", 0);
+        e.reverse_lines();
+        e.sort_unique();
+        e.trim_trailing_whitespace();
+        e.remove_duplicate_lines();
+        e.shuffle_lines();
+        e.join_lines();
+        e.sort_lines();
+        assert_eq!(content(&e), "");
+    }
+
+    #[test]
+    fn a_selection_ending_at_a_line_start_excludes_that_line() {
+        // "b\na\n": selecting exactly the first line (0..2) must leave line 1
+        // untouched even though the selection ends where line 1 starts.
+        let mut e = ed("c\nb\na\n", 0);
+        e.set_selection_range(0, 4); // "c\nb\n" ends at the start of "a"
+        e.reverse_lines();
+        assert_eq!(content(&e), "b\nc\na\n");
+    }
 }

@@ -1784,3 +1784,650 @@ mod tests {
         assert_eq!(e.get_cursor(), before, "the cursor did not move");
     }
 }
+
+#[cfg(test)]
+mod state_tests {
+    //! Editor state accessors, decoration channels, folds, mouse mapping,
+    //! scrolling and batch edits.
+
+    use super::{CommentMark, Editor};
+    use crate::code::{Edit, EditBatch, EditKind, EditState};
+    use crate::selection::Selection;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::style::{Color, Style};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    fn ed(text: &str) -> Editor {
+        Editor::new("text", text, Vec::new()).unwrap()
+    }
+
+    #[test]
+    fn from_rope_matches_new_and_falls_back_to_text_for_unknown_language() {
+        let e = Editor::from_rope("text", ropey::Rope::from_str("abc"), Vec::new()).unwrap();
+        assert_eq!(e.get_content(), "abc");
+        let e = Editor::from_rope("no-such-language", ropey::Rope::from_str("abc"), Vec::new())
+            .unwrap();
+        assert_eq!(e.get_content(), "abc");
+        let e = Editor::new("no-such-language", "x", Vec::new()).unwrap();
+        assert_eq!(e.get_content(), "x");
+    }
+
+    #[test]
+    fn style_setters_take_effect_in_the_render() {
+        let mut e = ed("ab");
+        e.show_line_numbers(false);
+        e.set_left_code_padding(0);
+        e.set_text_style(Style::default().fg(Color::Rgb(1, 2, 3)));
+        e.set_cursor_style(Some(Style::default().bg(Color::Rgb(9, 9, 9))));
+        let area = Rect::new(0, 0, 10, 2);
+        let mut buf = ratatui_core::buffer::Buffer::empty(area);
+        ratatui_core::widgets::Widget::render(&e, area, &mut buf);
+        assert_eq!(buf[(1, 0)].fg, Color::Rgb(1, 2, 3));
+        assert_eq!(buf[(0, 0)].bg, Color::Rgb(9, 9, 9), "cursor cell");
+        e.set_cursor_style(None);
+        let mut buf = ratatui_core::buffer::Buffer::empty(area);
+        ratatui_core::widgets::Widget::render(&e, area, &mut buf);
+        assert_ne!(buf[(0, 0)].bg, Color::Rgb(9, 9, 9));
+        // Selection style paints selected cells.
+        e.set_selection_style(Style::default().bg(Color::Rgb(7, 7, 7)));
+        e.set_selection_range(0, 1);
+        let mut buf = ratatui_core::buffer::Buffer::empty(area);
+        ratatui_core::widgets::Widget::render(&e, area, &mut buf);
+        assert_eq!(buf[(0, 0)].bg, Color::Rgb(7, 7, 7));
+    }
+
+    #[test]
+    fn gutter_width_follows_line_numbers_and_padding() {
+        let mut e = ed("a\nb");
+        assert_eq!(e.gutter_width(), 5 + 2);
+        e.set_left_code_padding(4);
+        assert_eq!(e.gutter_width(), 9);
+        e.show_line_numbers(false);
+        assert_eq!(e.gutter_width(), 4);
+        assert!(e.toggle_line_numbers());
+        assert!(!e.toggle_line_numbers());
+        e.set_relative_line_numbers(true);
+        assert!(e.flags.contains(super::Flags::RELATIVE_LINE_NUMBERS));
+        // More than five digits of line numbers widen the gutter.
+        let big = ed(&"x\n".repeat(123_456));
+        assert_eq!(big.gutter_width(), 6 + 2);
+    }
+
+    #[test]
+    fn set_syntax_theme_replaces_theme_and_clears_the_cache() {
+        let mut e = Editor::new("rust", "fn main() {}", vec![("keyword", "ff0000")]).unwrap();
+        let first = e.highlight_interval(0, 12, &e.theme);
+        // The cached answer is returned for the same range.
+        assert_eq!(first, e.highlight_interval(0, 12, &e.theme));
+        e.set_syntax_theme(&[("keyword", "00ff00")]);
+        assert!(e.highlights_cache.borrow().is_empty());
+        let second = e.highlight_interval(0, 12, &e.theme);
+        assert_ne!(second.len(), 0);
+        assert_ne!(first, second, "new colours are used");
+        e.reset_highlight_cache();
+        assert!(e.highlights_cache.borrow().is_empty());
+    }
+
+    #[test]
+    fn set_cursor_clamps_to_the_buffer_and_selection_range_orders() {
+        let mut e = ed("ab\ncd");
+        e.set_cursor(99);
+        assert_eq!(e.get_cursor(), 5);
+        e.set_selection_range(4, 1);
+        assert_eq!(e.get_cursor(), 1);
+        assert_eq!(e.selection_span(), Some((1, 4)));
+        assert_eq!(e.get_selection_text().as_deref(), Some("b\nc"));
+        e.set_selection_range(2, 2);
+        assert_eq!(e.selection_span(), None);
+        assert_eq!(e.get_selection_text(), None);
+        e.set_selection(Some(Selection::new(1, 1)));
+        assert_eq!(e.selection_span(), None);
+        assert_eq!(e.get_selection_text(), None);
+        assert!(e.set_cursor_line(1));
+        assert_eq!((e.get_cursor(), e.cursor_line()), (3, 1));
+        assert!(!e.set_cursor_line(9));
+        assert_eq!(e.get_cursor(), 3);
+    }
+
+    #[test]
+    fn scrolling_is_bounded_by_the_buffer() {
+        let body = "x\n".repeat(20); // 21 lines
+        let mut e = ed(&body);
+        e.scroll_up();
+        assert_eq!(e.get_offset_y(), 0);
+        for _ in 0..50 {
+            e.scroll_down(5);
+        }
+        assert_eq!(e.get_offset_y(), 16);
+        assert_eq!(e.top_line(), 16);
+        e.scroll_up();
+        assert_eq!(e.get_offset_y(), 15);
+        e.set_offset_x(7);
+        assert_eq!(e.get_offset_x(), 7);
+        // With code lenses the bound is the last text row reaching the view.
+        let mut e = ed("a\nb\nc\nd\n");
+        e.set_code_lenses(vec![(0, "L".into())]);
+        e.scroll_down(2);
+        assert_eq!(e.get_offset_y(), 1);
+    }
+
+    #[test]
+    fn focus_scrolls_the_cursor_into_view() {
+        let area = Rect::new(0, 0, 30, 5);
+        let mut e = ed(&"line\n".repeat(30));
+        e.set_cursor(e.code_ref().line_to_char(20));
+        e.focus(&area);
+        assert_eq!(e.get_offset_y(), 16, "cursor on the bottom row");
+        e.set_cursor(0);
+        e.focus(&area);
+        assert_eq!(e.get_offset_y(), 0);
+        // Horizontal: a far-right cursor scrolls, and returning scrolls back.
+        let mut e = ed(&"x".repeat(100));
+        e.set_cursor(80);
+        e.focus(&area);
+        assert!(e.get_offset_x() > 0);
+        e.set_cursor(0);
+        e.focus(&area);
+        assert_eq!(e.get_offset_x(), 0);
+        // Folds / fillers / lenses: the cursor's text row ends up in view.
+        let mut e = ed(&"line\n".repeat(30));
+        e.set_code_lenses((0..30).map(|l| (l, "lens".to_string())).collect());
+        e.set_cursor(e.code_ref().line_to_char(4));
+        e.focus(&area);
+        let (_, y) = e.get_visible_cursor(&area).expect("cursor visible");
+        assert!(y < 5);
+        // Soft wrap: vertical only, offset_x forced to 0.
+        let mut e = ed(&"word ".repeat(60));
+        e.set_soft_wrap(true);
+        e.set_offset_x(5);
+        e.focus(&area);
+        assert_eq!(e.get_offset_x(), 0);
+        let mut e = ed(&"line\n".repeat(30));
+        e.set_soft_wrap(true);
+        e.set_cursor(e.code_ref().line_to_char(20));
+        e.focus(&area);
+        assert!(e.get_offset_y() > 0 && e.get_offset_y() <= 20);
+        e.set_cursor(0);
+        e.focus(&area);
+        assert_eq!(e.get_offset_y(), 0);
+    }
+
+    #[test]
+    fn mouse_down_and_drag_snap_by_character_word_and_line() {
+        let mut e = ed("hello world\nsecond line");
+        e.handle_mouse_down(7);
+        assert_eq!(e.selection_span(), None);
+        e.handle_mouse_drag(9);
+        assert_eq!(e.selection_span(), Some((7, 9)));
+        // A double click selects the word, and dragging snaps by words.
+        let mut e = ed("hello world again");
+        e.handle_mouse_down(1);
+        e.handle_mouse_down(1);
+        assert_eq!(e.selection_span(), Some((0, 5)));
+        e.handle_mouse_drag(8);
+        assert_eq!(e.selection_span(), Some((0, 11)));
+        e.handle_mouse_drag(1);
+        assert_eq!(e.selection_span(), Some((0, 5)));
+        let mut e = ed("hello world again");
+        e.handle_mouse_down(14);
+        e.handle_mouse_down(14);
+        e.handle_mouse_drag(2);
+        assert_eq!(e.selection_span(), Some((0, 17)));
+        // A triple click selects the line, and dragging snaps by lines.
+        let mut e = ed("one\ntwo\nthree");
+        e.handle_mouse_down(5);
+        e.handle_mouse_down(5);
+        e.handle_mouse_down(5);
+        assert_eq!(e.selection_span(), Some((4, 8)));
+        e.handle_mouse_drag(10);
+        assert_eq!(e.selection_span(), Some((4, 13)));
+        e.handle_mouse_drag(1);
+        assert_eq!(e.selection_span(), Some((0, 8)));
+        e.handle_mouse_drag(5);
+        assert_eq!(e.selection_span(), Some((4, 8)));
+    }
+
+    #[test]
+    fn cursor_from_mouse_maps_cells_to_offsets() {
+        let area = Rect::new(2, 1, 30, 5);
+        let mut e = ed("abc\n\u{4e2d}\u{6587}x\n\tz");
+        let g = u16::try_from(e.gutter_width()).unwrap();
+        let at = |e: &Editor, x: u16, y: u16| e.cursor_from_mouse(x, y, &area);
+        // Outside: above, below, left of the text.
+        assert_eq!(at(&e, 2 + g, 0), None);
+        assert_eq!(at(&e, 2 + g, 6), None);
+        assert_eq!(at(&e, 1 + g, 1), None);
+        assert_eq!(at(&e, 2 + g + 1, 1), Some(1));
+        // Past the end of a line clamps to the line end (before the newline).
+        assert_eq!(at(&e, 2 + g + 20, 1), Some(3));
+        // A double-width char occupies two cells.
+        assert_eq!(at(&e, 2 + g, 2), Some(4));
+        assert_eq!(at(&e, 2 + g + 2, 2), Some(5));
+        assert_eq!(at(&e, 2 + g + 4, 2), Some(6));
+        // A row past the last line.
+        assert_eq!(at(&e, 2 + g, 5), None);
+        // Horizontal scroll shifts the mapping.
+        e.set_offset_x(1);
+        assert_eq!(at(&e, 2 + g, 1), Some(1));
+    }
+
+    #[test]
+    fn cursor_from_mouse_in_soft_wrap_and_with_lens_rows() {
+        let area = Rect::new(0, 0, 12, 6);
+        let mut e = ed(&"abcdefghij".repeat(3));
+        e.set_soft_wrap(true);
+        let g = u16::try_from(e.gutter_width()).unwrap();
+        // 12 - 7 = 5 text columns per visual row.
+        assert_eq!(e.cursor_from_mouse(g, 0, &area), Some(0));
+        assert_eq!(e.cursor_from_mouse(g + 2, 1, &area), Some(7));
+        assert_eq!(e.cursor_from_mouse(g, 20, &area), None);
+        // The last visual row of the third segment.
+        assert_eq!(e.cursor_from_mouse(g, 5, &area), Some(25));
+        // A row past the wrapped text (the buffer has only six visual rows).
+        let tall = Rect::new(0, 0, 12, 9);
+        assert_eq!(e.cursor_from_mouse(g, 8, &tall), None);
+        // A lens row maps to the start of the line it annotates (wrapped mode).
+        let mut e = ed("abc\ndef");
+        e.set_soft_wrap(true);
+        e.set_code_lenses(vec![(1, "lens".into())]);
+        let g = u16::try_from(e.gutter_width()).unwrap();
+        assert_eq!(e.cursor_from_mouse(g + 1, 1, &area), Some(4));
+        // Tabs count as one cell when wrapped.
+        let mut e = ed("\t\tab");
+        e.set_soft_wrap(true);
+        let g = u16::try_from(e.gutter_width()).unwrap();
+        assert_eq!(e.cursor_from_mouse(g + 2, 0, &area), Some(2));
+    }
+
+    #[test]
+    fn selection_anchor_and_extend_selection() {
+        let mut e = ed("abcdef");
+        assert_eq!(e.selection_anchor(), 0);
+        e.set_cursor(2);
+        e.extend_selection(4);
+        assert_eq!(e.selection_span(), Some((2, 4)));
+        e.set_cursor(4);
+        assert_eq!(e.selection_anchor(), 2);
+        e.set_cursor(2);
+        assert_eq!(e.selection_anchor(), 4);
+        e.clear_selection();
+        assert_eq!(e.selection_span(), None);
+    }
+
+    #[test]
+    fn set_content_replaces_everything_as_one_undo_step_and_clamps_state() {
+        let mut e = ed("hello world");
+        e.set_cursor(8);
+        e.set_selection_range(2, 8);
+        e.add_caret_at(10);
+        e.set_content("hi");
+        assert_eq!(e.get_content(), "hi");
+        assert!(e.get_cursor() <= 2);
+        assert!(e.selection_span().is_none_or(|(_, b)| b <= 2));
+        assert!(e.caret_positions().iter().all(|&p| p <= 2));
+        e.undo();
+        assert_eq!(e.get_content(), "hello world");
+        e.redo();
+        assert_eq!(e.get_content(), "hi");
+    }
+
+    #[test]
+    fn apply_batch_applies_edits_and_records_state() {
+        let mut e = ed("abcdef");
+        let batch = EditBatch {
+            edits: vec![
+                Edit {
+                    kind: EditKind::Remove {
+                        offset: 1,
+                        text: "bc".into(),
+                    },
+                },
+                Edit {
+                    kind: EditKind::Insert {
+                        offset: 0,
+                        text: "XY".into(),
+                    },
+                },
+            ],
+            state_before: Some(EditState {
+                offset: 3,
+                selection: None,
+            }),
+            state_after: Some(EditState {
+                offset: 2,
+                selection: None,
+            }),
+        };
+        e.apply_batch(&batch);
+        assert_eq!(e.get_content(), "XYadef");
+        e.undo();
+        assert_eq!(e.get_content(), "abcdef");
+        assert_eq!(e.get_cursor(), 3);
+        e.redo();
+        assert_eq!(e.get_content(), "XYadef");
+        assert_eq!(e.get_cursor(), 2);
+        // Without state the batch still applies.
+        e.apply_batch(&EditBatch {
+            edits: vec![Edit {
+                kind: EditKind::Insert {
+                    offset: 0,
+                    text: "-".into(),
+                },
+            }],
+            state_before: None,
+            state_after: None,
+        });
+        assert_eq!(e.get_content(), "-XYadef");
+    }
+
+    #[test]
+    fn mark_channels_set_get_and_clear() {
+        let mut e = ed("hello");
+        assert!(!e.has_marks());
+        e.set_marks(vec![(0, 2, "#ff0000")]);
+        assert!(e.has_marks());
+        assert_eq!(e.marks(), Some(&vec![(0, 2, Color::Rgb(255, 0, 0))]));
+        assert_eq!(e.get_marks().map(Vec::len), Some(1));
+        e.remove_marks();
+        assert!(!e.has_marks());
+
+        assert!(e.spell_marks().is_none());
+        e.set_spell_marks(vec![(0, 1)]);
+        assert_eq!(e.spell_marks(), Some(&vec![(0, 1)]));
+        e.set_spell_marks(vec![]);
+        assert!(e.spell_marks().is_none());
+        e.set_spell_marks(vec![(1, 2)]);
+        e.clear_spell_marks();
+        assert!(e.spell_marks().is_none());
+
+        e.set_word_marks(vec![(0, 1)]);
+        assert_eq!(e.word_marks(), Some(&vec![(0, 1)]));
+        e.set_word_marks(vec![]);
+        assert!(e.word_marks().is_none());
+
+        e.set_diagnostic_marks(vec![(0, 1, Color::Red)]);
+        assert_eq!(e.diagnostic_marks().map(Vec::len), Some(1));
+        e.clear_diagnostic_marks();
+        assert!(e.diagnostic_marks().is_none());
+        e.set_diagnostic_marks(vec![]);
+        assert!(e.diagnostic_marks().is_none());
+
+        e.set_gutter_marks(vec![(2, "#00ff00")]);
+        assert_eq!(e.gutter_marks(), Some(&vec![(2, Color::Rgb(0, 255, 0))]));
+        e.clear_gutter_marks();
+        assert!(e.gutter_marks().is_none());
+        e.set_gutter_marks(vec![]);
+        assert!(e.gutter_marks().is_none());
+    }
+
+    #[test]
+    fn filler_rows_merge_sort_and_drive_display_rows() {
+        let mut e = ed("a\nb\nc\nd");
+        e.set_filler_rows(vec![(2, 1), (0, 0), (1, 2), (2, 3)]);
+        assert_eq!(e.filler_rows(), &[(1, 2), (2, 4)]);
+        assert_eq!(e.filler_before(0), 0);
+        assert_eq!(e.filler_before(1), 2);
+        assert_eq!(e.filler_before(2), 4);
+        assert_eq!(e.filler_before(3), 0);
+        // Line 3 sits after: line0 (1) + 2 fillers + line1 (1) + 4 fillers + line2 (1).
+        assert_eq!(e.display_row(3), 9);
+        assert_eq!(e.display_row(0), 0);
+        e.set_offset_y(2);
+        assert_eq!(e.display_row(1), 0, "above the top line");
+        // Hidden (folded) lines take no row.
+        e.set_offset_y(0);
+        e.set_fold_ranges(vec![(1, 2)]);
+        assert!(e.fold(1));
+        assert_eq!(e.display_row(3), 1 + 2 + 1);
+        // Soft wrap ignores fillers.
+        e.set_soft_wrap(true);
+        assert_eq!(e.filler_before(1), 0);
+        e.set_soft_wrap(false);
+        e.clear_filler_rows();
+        assert_eq!(e.filler_rows().len(), 0);
+        assert_eq!(e.filler_before(1), 0);
+    }
+
+    #[test]
+    fn comment_marks_are_sorted_with_open_winning() {
+        let mut e = ed("a\nb\nc");
+        e.set_comment_marks(vec![
+            (2, CommentMark::Resolved),
+            (0, CommentMark::Resolved),
+            (0, CommentMark::Open),
+        ]);
+        assert_eq!(e.comment_mark(0), Some(CommentMark::Open));
+        assert_eq!(e.comment_mark(1), None);
+        assert_eq!(e.comment_marks().len(), 2);
+    }
+
+    #[test]
+    fn folds_toggle_fold_unfold_and_move_the_cursor_out() {
+        let mut e = ed("a\n b\n c\nd\ne\n f\ng");
+        e.set_fold_ranges(vec![(0, 2), (4, 5), (3, 3)]);
+        assert_eq!(e.fold_marker(0), Some(false));
+        assert_eq!(e.fold_marker(3), None, "empty range is not foldable");
+        assert_eq!(e.fold_marker(6), None);
+        assert!(!e.has_folds());
+        e.set_cursor(e.code_ref().line_to_char(1));
+        assert!(e.toggle_fold(0));
+        assert_eq!(e.fold_marker(0), Some(true));
+        assert!(e.is_line_hidden(1) && e.is_line_hidden(2) && !e.is_line_hidden(3));
+        assert_eq!(e.cursor_line(), 0, "cursor leaves the hidden region");
+        assert!(e.toggle_fold(0), "toggling again unfolds");
+        assert!(!e.has_folds());
+        assert!(!e.toggle_fold(6), "no range starts there");
+        // `fold` picks the innermost range containing the line; never unfolds.
+        e.set_fold_ranges(vec![(0, 6), (1, 2)]);
+        assert!(e.fold(1));
+        assert!(e.folds.contains(&(1, 2)));
+        assert!(e.fold(1), "the enclosing range folds next");
+        assert!(!e.fold(1), "everything containing the line is folded");
+        assert!(!e.fold(99));
+        assert!(e.unfold(2), "innermost first");
+        assert_eq!(e.folds, vec![(0, 6)]);
+        assert!(e.unfold(2));
+        assert!(!e.unfold(2));
+        // fold_all / unfold_all.
+        e.set_fold_ranges(vec![(0, 2), (4, 5), (3, 3)]);
+        e.fold_all();
+        assert_eq!(e.folds, vec![(0, 2), (4, 5)]);
+        e.unfold_all();
+        assert!(!e.has_folds());
+        // Re-reporting ranges drops folds no longer offered.
+        e.fold_all();
+        e.set_fold_ranges(vec![(0, 2)]);
+        assert_eq!(e.folds, vec![(0, 2)]);
+        // Manual folds.
+        assert!(!e.toggle_manual_fold(3, 3));
+        e.unfold_all();
+        e.set_cursor(e.code_ref().line_to_char(5));
+        assert!(e.toggle_manual_fold(4, 6));
+        assert_eq!(e.cursor_line(), 4);
+        assert!(e.toggle_manual_fold(4, 6));
+        assert!(!e.has_folds());
+        // `fold` also moves a hidden cursor out.
+        e.set_fold_ranges(vec![(0, 2)]);
+        e.set_cursor(e.code_ref().line_to_char(2));
+        assert!(e.fold(2));
+        assert_eq!(e.cursor_line(), 0);
+    }
+
+    #[test]
+    fn small_accessors() {
+        let mut e = Editor::new("rust", "fn x() {}\r\nlet a;\r\n", Vec::new()).unwrap();
+        assert_eq!(e.language(), "rust");
+        assert_eq!(e.line_ending(), "CRLF");
+        assert_eq!(e.comment_prefix(), "//");
+        assert_eq!(e.char_text(3, 4), "x");
+        assert_eq!(e.word_at(3), Some((3, 4, "x".to_string())));
+        assert_eq!(e.word_at(5), None);
+        assert!(!e.has_inlay_hints());
+        e.set_inlay_hints(vec![(0, 1, "h".into())]);
+        assert!(e.has_inlay_hints());
+        let r0 = e.revision();
+        e.insert_str_action("z");
+        assert!(e.revision() > r0);
+        assert!(e.comment_string_ranges().iter().all(|r| r.0 <= r.1));
+        e.set_rainbow_brackets(true);
+        assert!(e.flags.contains(super::Flags::RAINBOW_BRACKETS));
+        e.set_eol_note(Some((0, "note".into())));
+        e.set_breakpoints(vec![1]);
+        e.set_debug_line(Some(0));
+        e.show_whitespace(true);
+        assert!(e.toggle_whitespace() ^ true);
+        assert!(e.toggle_soft_wrap());
+        assert!(e.soft_wrap_enabled());
+        assert!(!e.toggle_soft_wrap());
+        e.set_whitespace_style(Style::default());
+        e.set_bracket_style(Style::default());
+        e.set_indent(Some("\t".into()));
+        e.set_indent(None);
+        assert!(!e.parse_pending());
+        assert!(!e.poll_parse());
+        assert!(!e.switch_undo_branch());
+    }
+
+    #[test]
+    fn clipboard_falls_back_to_the_in_memory_copy() {
+        let _g = crate::editor_input::tests_support::CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut e = ed("");
+        e.copy_to_clipboard("round trip");
+        assert_eq!(e.get_clipboard().unwrap(), "round trip");
+        // paste_text: empty is a no-op; text replaces a selection; multi-caret
+        // routes to multi_paste.
+        let mut e = ed("abcd");
+        e.paste_text("");
+        assert_eq!(e.get_content(), "abcd");
+        e.set_selection_range(1, 3);
+        e.paste_text("XY");
+        assert_eq!(e.get_content(), "aXYd");
+        assert_eq!(e.get_cursor(), 3);
+        e.undo();
+        assert_eq!(e.get_content(), "abcd");
+        let mut e = ed("a\nb");
+        e.set_cursor(0);
+        e.add_caret_at(2);
+        e.paste_text("1\n2");
+        assert_eq!(e.get_content(), "1a\n2b");
+    }
+
+    #[test]
+    fn visible_cursor_is_none_when_scrolled_away() {
+        let area = Rect::new(0, 0, 30, 4);
+        let mut e = ed(&"line\n".repeat(20));
+        let g = u16::try_from(e.gutter_width()).unwrap();
+        assert_eq!(e.get_visible_cursor(&area), Some((g, 0)));
+        e.set_cursor(e.code_ref().line_to_char(10));
+        assert_eq!(e.get_visible_cursor(&area), None);
+        e.set_offset_y(9);
+        assert_eq!(e.get_visible_cursor(&area), Some((g, 1)));
+        // A horizontally scrolled cursor shifts left by the offset's width.
+        let mut e = ed("abcdef");
+        e.set_cursor(4);
+        e.set_offset_x(2);
+        assert_eq!(e.get_visible_cursor(&area), Some((g + 2, 0)));
+    }
+
+    #[test]
+    fn goto_undo_state_walks_the_history_tree() {
+        let mut e = ed("");
+        e.insert_str_action("a");
+        e.insert_str_action("b");
+        let tip = e.code_ref().history().current();
+        e.undo();
+        e.undo();
+        let root = e.code_ref().history().current();
+        assert!(e.goto_undo_state(tip));
+        assert_eq!(e.get_content(), "ab");
+        assert!(e.goto_undo_state(root));
+        assert_eq!(e.get_content(), "");
+        assert!(!e.goto_undo_state(9999), "not a live state");
+    }
+
+    #[test]
+    fn max_line_width_tracks_the_longest_line() {
+        let mut e = ed("ab\nabcde\nabc");
+        assert_eq!(e.max_line_width(), 5);
+        e.insert_str_action("zzzzzzzz");
+        assert_eq!(e.max_line_width(), 10);
+    }
+
+    #[test]
+    fn line_number_style_and_change_callback_take_effect() {
+        let mut e = ed("a\nb");
+        e.set_line_number_style(Style::default().fg(Color::Rgb(5, 6, 7)));
+        let area = Rect::new(0, 0, 12, 2);
+        let mut buf = ratatui_core::buffer::Buffer::empty(area);
+        ratatui_core::widgets::Widget::render(&e, area, &mut buf);
+        assert_eq!(buf[(4, 0)].symbol(), "1");
+        assert_eq!(buf[(4, 0)].fg, Color::Rgb(5, 6, 7));
+
+        let seen: Rc<RefCell<usize>> = Rc::default();
+        let sink = Rc::clone(&seen);
+        e.set_change_callback(Box::new(move |changes| {
+            *sink.borrow_mut() += changes.len();
+        }));
+        e.insert_str_action("zz");
+        assert_eq!(*seen.borrow(), 1, "one insert reported");
+    }
+
+    #[test]
+    fn fit_cursor_clamps_into_the_line_and_the_buffer() {
+        // The line length counts a `\r`, so the offset between the `\r` and the
+        // `\n` of a CRLF line is a valid cursor position.
+        let mut e = ed("ab\r\ncd");
+        e.set_cursor(3);
+        assert_eq!(e.get_cursor(), 3);
+        e.set_cursor(4);
+        assert_eq!(e.get_cursor(), 4, "the start of the next line");
+        e.set_cursor(99);
+        assert_eq!(e.get_cursor(), 6, "clamped to the buffer end");
+    }
+
+    #[test]
+    fn visible_cursor_is_none_past_the_right_edge() {
+        let area = Rect::new(0, 0, 12, 2);
+        let mut e = ed(&"x".repeat(50));
+        e.set_cursor(40);
+        assert_eq!(e.get_visible_cursor(&area), None);
+        // Focus scrolls it back into view.
+        e.focus(&area);
+        assert!(e.get_visible_cursor(&area).is_some());
+    }
+
+    #[test]
+    fn a_background_parse_is_polled_in_and_reported_once() {
+        let big = "fn f() { let x = 1; }\n".repeat(3000);
+        let mut e = Editor::new("rust", &big, Vec::new()).unwrap();
+        assert!(e.parse_pending());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut installed = false;
+        while std::time::Instant::now() < deadline {
+            if e.poll_parse() {
+                installed = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(installed, "the parse tree arrived");
+        assert!(!e.parse_pending());
+        assert!(!e.poll_parse(), "nothing further to install");
+    }
+
+    #[test]
+    fn click_below_the_last_line_and_triple_click_clamp() {
+        let area = Rect::new(0, 0, 30, 10);
+        let e = ed("ab");
+        let g = u16::try_from(e.gutter_width()).unwrap();
+        // The row after the last line is not part of the text.
+        assert_eq!(e.cursor_from_mouse(g, 1, &area), None);
+        // Clicking past the end of a line lands at its end, before the newline.
+        let e = ed("ab\ncd");
+        assert_eq!(e.cursor_from_mouse(g + 10, 0, &area), Some(2));
+        assert_eq!(e.cursor_from_mouse(g + 10, 1, &area), Some(5));
+    }
+}

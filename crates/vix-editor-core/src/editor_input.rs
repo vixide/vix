@@ -325,6 +325,13 @@ impl Editor {
 }
 
 #[cfg(test)]
+pub(crate) mod tests_support {
+    use std::sync::Mutex;
+    /// Serializes tests that use the process-global clipboard.
+    pub static CLIP: Mutex<()> = Mutex::new(());
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use vix_input::KeyModifiers;
@@ -387,5 +394,225 @@ mod tests {
         e.mouse(ev(MouseEventKind::Up(MouseButton::Left), 8, 30), &area)
             .unwrap();
         assert!(!e.autoscroll_tick(&area));
+    }
+
+    // ----- default key map ------------------------------------------------
+
+    use vix_input::KeyCode;
+
+    fn key(code: KeyCode, mods: KeyModifiers) -> KeyEvent {
+        KeyEvent::new(code, mods)
+    }
+
+    fn area() -> Rect {
+        Rect::new(0, 0, 40, 10)
+    }
+
+    fn ed(text: &str, cursor: usize) -> Editor {
+        let mut e = Editor::new("rust", text, Vec::new()).unwrap();
+        e.set_cursor(cursor);
+        e
+    }
+
+    fn press(e: &mut Editor, code: KeyCode, mods: KeyModifiers) {
+        e.input(key(code, mods), &area()).unwrap();
+    }
+
+    fn typed(e: &mut Editor, s: &str) {
+        for c in s.chars() {
+            press(e, KeyCode::Char(c), KeyModifiers::NONE);
+        }
+    }
+
+    fn content(e: &Editor) -> String {
+        e.code_ref().get_content()
+    }
+
+    #[test]
+    fn plain_keys_move_and_edit() {
+        let mut e = ed("ab\ncd", 0);
+        press(&mut e, KeyCode::Right, KeyModifiers::NONE);
+        assert_eq!(e.get_cursor(), 1);
+        press(&mut e, KeyCode::Down, KeyModifiers::NONE);
+        assert_eq!(e.get_cursor(), 4);
+        press(&mut e, KeyCode::Left, KeyModifiers::NONE);
+        assert_eq!(e.get_cursor(), 3);
+        press(&mut e, KeyCode::Up, KeyModifiers::NONE);
+        assert_eq!(e.get_cursor(), 0);
+        press(&mut e, KeyCode::Right, KeyModifiers::SHIFT);
+        assert_eq!(e.get_selection().unwrap().sorted(), (0, 1));
+        press(&mut e, KeyCode::Char('X'), KeyModifiers::SHIFT);
+        assert_eq!(content(&e), "Xb\ncd");
+        press(&mut e, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(content(&e), "X\nb\ncd");
+        press(&mut e, KeyCode::Backspace, KeyModifiers::NONE);
+        assert_eq!(content(&e), "Xb\ncd");
+        press(&mut e, KeyCode::Tab, KeyModifiers::NONE);
+        assert_eq!(content(&e), "    Xb\ncd");
+        press(&mut e, KeyCode::BackTab, KeyModifiers::NONE);
+        assert_eq!(content(&e), "Xb\ncd");
+        // Unbound keys are ignored.
+        press(&mut e, KeyCode::F(5), KeyModifiers::NONE);
+        assert_eq!(content(&e), "Xb\ncd");
+    }
+
+    #[test]
+    fn ctrl_chords_undo_redo_select_delete_duplicate() {
+        let mut e = ed("ab\ncd", 1);
+        typed(&mut e, "x");
+        assert_eq!(content(&e), "axb\ncd");
+        press(&mut e, KeyCode::Char('z'), KeyModifiers::CONTROL);
+        assert_eq!(content(&e), "ab\ncd");
+        press(
+            &mut e,
+            KeyCode::Char('Z'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        assert_eq!(content(&e), "axb\ncd");
+        press(
+            &mut e,
+            KeyCode::Char('d'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        assert_eq!(content(&e), "axb\naxb\ncd");
+        press(&mut e, KeyCode::Char('k'), KeyModifiers::CONTROL);
+        assert_eq!(content(&e), "axb\ncd");
+        press(&mut e, KeyCode::Char('a'), KeyModifiers::CONTROL);
+        assert_eq!(e.get_selection().unwrap().sorted(), (0, 6));
+        press(&mut e, KeyCode::Char('÷'), KeyModifiers::NONE);
+        assert!(content(&e).starts_with("//axb"));
+    }
+
+    #[test]
+    fn ctrl_clipboard_chords() {
+        let _g = crate::editor_input::tests_support::CLIP
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut e = ed("hello", 0);
+        e.set_selection_range(0, 5);
+        press(&mut e, KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert_eq!(content(&e), "hello");
+        press(&mut e, KeyCode::Char('x'), KeyModifiers::CONTROL);
+        assert_eq!(content(&e), "");
+        press(&mut e, KeyCode::Char('v'), KeyModifiers::CONTROL);
+        assert_eq!(content(&e), "hello");
+    }
+
+    #[test]
+    fn ctrl_d_adds_the_next_occurrence_and_multi_caret_keys_edit_all() {
+        let mut e = ed("foo foo foo", 0);
+        press(&mut e, KeyCode::Char('d'), KeyModifiers::CONTROL);
+        press(&mut e, KeyCode::Char('d'), KeyModifiers::CONTROL);
+        assert!(e.has_multi_carets());
+        // Typing replaces every selected occurrence.
+        typed(&mut e, "b");
+        assert!(content(&e).starts_with("b b"));
+        press(&mut e, KeyCode::Enter, KeyModifiers::NONE);
+        assert!(content(&e).contains('\n'));
+        press(&mut e, KeyCode::Backspace, KeyModifiers::NONE);
+        // Esc collapses back to one caret.
+        press(&mut e, KeyCode::Esc, KeyModifiers::NONE);
+        assert!(!e.has_multi_carets());
+    }
+
+    #[test]
+    fn multi_caret_motion_keys_move_every_caret() {
+        for (code, mods) in [
+            (KeyCode::Left, KeyModifiers::NONE),
+            (KeyCode::Right, KeyModifiers::NONE),
+            (KeyCode::Up, KeyModifiers::NONE),
+            (KeyCode::Down, KeyModifiers::NONE),
+            (KeyCode::Home, KeyModifiers::NONE),
+            (KeyCode::End, KeyModifiers::NONE),
+            (KeyCode::Left, KeyModifiers::CONTROL),
+            (KeyCode::Right, KeyModifiers::CONTROL),
+            (KeyCode::Right, KeyModifiers::SHIFT),
+        ] {
+            let mut e = ed("ab cd\nef gh\nij kl\nmn op", 3);
+            e.add_caret_at(15);
+            assert!(e.has_multi_carets());
+            let before = e.caret_positions();
+            press(&mut e, code, mods);
+            assert!(e.has_multi_carets(), "{code:?} kept both carets");
+            let after = e.caret_positions();
+            assert_ne!(before, after, "{code:?}/{mods:?} moved the carets");
+        }
+    }
+
+    #[test]
+    fn auto_pairing_inserts_steps_over_wraps_and_deletes_pairs() {
+        let mut e = ed("", 0);
+        e.set_auto_pair(true);
+        typed(&mut e, "(");
+        assert_eq!((content(&e).as_str(), e.get_cursor()), ("()", 1));
+        typed(&mut e, ")");
+        assert_eq!((content(&e).as_str(), e.get_cursor()), ("()", 2));
+        // Backspace inside an empty pair removes both, as one undo step.
+        e.set_cursor(1);
+        press(&mut e, KeyCode::Backspace, KeyModifiers::NONE);
+        assert_eq!((content(&e).as_str(), e.get_cursor()), ("", 0));
+        press(&mut e, KeyCode::Char('z'), KeyModifiers::CONTROL);
+        assert_eq!(content(&e), "()");
+        // Quotes pair at a boundary but not beside a word character.
+        let mut e = ed("", 0);
+        e.set_auto_pair(true);
+        typed(&mut e, "\"");
+        assert_eq!(content(&e), "\"\"");
+        let mut e = ed("a", 1);
+        e.set_auto_pair(true);
+        typed(&mut e, "'");
+        assert_eq!(content(&e), "a'");
+        let mut e = ed("a", 0);
+        e.set_auto_pair(true);
+        typed(&mut e, "'");
+        assert_eq!(content(&e), "'a");
+        // A selection is wrapped.
+        let mut e = ed("word", 0);
+        e.set_auto_pair(true);
+        e.set_selection_range(0, 4);
+        typed(&mut e, "[");
+        assert_eq!(content(&e), "[word]");
+        // A non-pair character is not consumed; Backspace beside text is plain.
+        let mut e = ed("ab", 1);
+        e.set_auto_pair(true);
+        press(&mut e, KeyCode::Backspace, KeyModifiers::NONE);
+        assert_eq!(content(&e), "b");
+        // A selection makes Backspace delete the selection, not a pair.
+        let mut e = ed("()", 1);
+        e.set_auto_pair(true);
+        e.set_selection_range(0, 1);
+        press(&mut e, KeyCode::Backspace, KeyModifiers::NONE);
+        assert_eq!(content(&e), ")");
+        // With auto-pair off an opener is inserted alone.
+        let mut e = ed("", 0);
+        e.set_auto_pair(false);
+        typed(&mut e, "(");
+        assert_eq!(content(&e), "(");
+    }
+
+    #[test]
+    fn wheel_scrolls_three_lines_per_notch() {
+        let a = Rect::new(0, 0, 40, 10);
+        let mut e = doc();
+        e.mouse(ev(MouseEventKind::ScrollDown, 1, 1), &a).unwrap();
+        assert_eq!(e.offset_y, WHEEL_LINES);
+        e.mouse(ev(MouseEventKind::ScrollUp, 1, 1), &a).unwrap();
+        assert_eq!(e.offset_y, 0);
+        // Other mouse events are ignored.
+        e.mouse(ev(MouseEventKind::Moved, 1, 1), &a).unwrap();
+        assert_eq!(e.offset_y, 0);
+    }
+
+    #[test]
+    fn click_places_the_cursor() {
+        let a = Rect::new(0, 0, 40, 10);
+        let mut e = doc();
+        let gutter = u16::try_from(e.get_line_number_width()).unwrap();
+        e.mouse(
+            ev(MouseEventKind::Down(MouseButton::Left), gutter + 2, 3),
+            &a,
+        )
+        .unwrap();
+        assert_eq!(e.get_cursor(), e.code_ref().line_to_char(3) + 2);
     }
 }
