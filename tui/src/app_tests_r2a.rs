@@ -1720,3 +1720,792 @@ fn widening_the_find_scope_hands_the_query_to_the_workspace_surfaces() {
     assert!(a.search.is_some());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ----- choosers: clipboard history, macros, encodings -----------------------
+
+fn chooser_click(app: &mut App, row: u16) -> MouseEvent {
+    app.layout.chooser = Rect::new(2, 2, 30, 10);
+    left_click(5, 2 + row)
+}
+
+#[test]
+fn clipboard_history_chooser_navigates_and_pastes() {
+    let mut a = app_with("");
+    a.run_action("edit.paste_from_history");
+    assert_eq!(a.status, t!("status.clipboard_empty").to_string());
+    a.record_clipboard(None);
+    a.record_clipboard(Some(String::new()));
+    a.record_clipboard(Some("one".to_string()));
+    a.record_clipboard(Some("two".to_string()));
+    a.record_clipboard(Some("one".to_string()));
+    assert_eq!(
+        a.clipboard_ring,
+        ["one", "two"],
+        "most recent first, deduplicated"
+    );
+    a.run_action("edit.paste_from_history");
+    assert!(a.chooser.clipboard().is_some());
+    a.on_key(key(KeyCode::Down));
+    assert_eq!(a.chooser.clipboard().unwrap().selected, 1);
+    a.on_key(key(KeyCode::Down));
+    assert_eq!(a.chooser.clipboard().unwrap().selected, 0, "wraps");
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.chooser.clipboard().unwrap().selected, 1);
+    a.on_key(key(KeyCode::Char('x')));
+    a.on_key(key(KeyCode::Enter));
+    assert!(a.chooser.is_none());
+    assert_eq!(active_text(&a), "two");
+    assert_eq!(
+        a.clipboard_ring[0], "two",
+        "pasted entry moves to the front"
+    );
+    // Esc closes; a click on a row pastes it.
+    a.run_action("edit.paste_from_history");
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.chooser.is_none());
+    a.run_action("edit.paste_from_history");
+    let m = chooser_click(&mut a, 1);
+    a.clipboard_mouse(m);
+    assert!(a.chooser.is_none());
+    assert_eq!(active_text(&a), "twoone");
+    // A click past the last entry does nothing.
+    a.run_action("edit.paste_from_history");
+    let m = chooser_click(&mut a, 8);
+    a.clipboard_mouse(m);
+    assert!(a.chooser.clipboard().is_some());
+}
+
+#[test]
+fn macro_chooser_plays_the_selected_macro() {
+    let mut a = app_with("");
+    let mk = |name: &str, text: &str| crate::macros::Macro {
+        name: name.to_string(),
+        keys: crate::macros::encode(
+            &text
+                .chars()
+                .map(|c| key(KeyCode::Char(c)))
+                .collect::<Vec<_>>(),
+        ),
+    };
+    let open = |a: &mut App| {
+        a.chooser.open_macros(MacroChooser {
+            macros: vec![mk("first", "ab"), mk("second", "xyz")],
+            selected: 0,
+        });
+    };
+    open(&mut a);
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.chooser.macros().unwrap().selected, 1);
+    a.on_key(key(KeyCode::Char('q'))); // ignored
+    a.on_key(key(KeyCode::Enter));
+    assert!(a.chooser.is_none());
+    assert_eq!(active_text(&a), "xyz");
+    assert_eq!(a.status, t!("status.macro_played").to_string());
+    open(&mut a);
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.chooser.is_none());
+    open(&mut a);
+    let m = chooser_click(&mut a, 0);
+    a.macro_mouse(m);
+    assert_eq!(active_text(&a), "xyzab");
+    open(&mut a);
+    let m = chooser_click(&mut a, 7);
+    a.macro_mouse(m);
+    assert!(
+        a.chooser.macros().is_some(),
+        "click past the list is ignored"
+    );
+}
+
+#[test]
+fn recording_and_replaying_a_macro_repeats_the_keystrokes() {
+    let mut a = app_with("");
+    let before = a.status.clone();
+    a.run_action("macro.play");
+    assert_eq!(a.status, before, "nothing recorded: playing is a no-op");
+    a.run_action("macro.save");
+    assert_eq!(a.status, t!("status.macro_empty").to_string());
+    a.run_action("macro.record");
+    assert_eq!(a.macro_state, MacroState::Recording);
+    assert_eq!(a.status, t!("status.macro_recording").to_string());
+    type_str(&mut a, "hi");
+    a.run_action("macro.play"); // refused while recording
+    a.run_action("macro.record");
+    assert_eq!(a.macro_state, MacroState::Idle);
+    assert_eq!(
+        a.status,
+        t!("status.macro_recorded", count = a.macro_keys.len()).to_string()
+    );
+    assert_eq!(active_text(&a), "hi");
+    a.run_action("macro.play");
+    assert_eq!(active_text(&a), "hihi");
+    a.run_action("macro.save");
+    assert!(prompt_kind(&a) == Some(PromptKind::SaveMacro));
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.prompt.is_none());
+    // A blank name never reaches the config file.
+    a.save_macro("   ");
+}
+
+#[test]
+fn encoding_chooser_reopens_a_latin1_file_and_saves_back_in_it() {
+    let dir = tmp("encoding");
+    let p = dir.join("cafe.txt");
+    std::fs::write(&p, b"caf\xe9\n").unwrap();
+    let mut a = app_in(&dir);
+    a.run_action("file.reopen_with_encoding");
+    assert_eq!(a.status, t!("status.encoding_no_file").to_string());
+    a.open_path(&p, false);
+    a.run_action("file.reopen_with_encoding");
+    assert!(a.chooser.encoding().is_some());
+    let idx = crate::encoding::CHOICES
+        .iter()
+        .position(|c| *c == "windows-1252")
+        .unwrap();
+    for _ in 0..idx {
+        a.on_key(key(KeyCode::Down));
+    }
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Char('?')));
+    a.on_key(key(KeyCode::Enter));
+    assert!(a.chooser.is_none());
+    assert_eq!(active_text(&a), "caf\u{e9}\n");
+    // Reopening with unsaved edits is refused.
+    type_text(&mut a, "!");
+    a.run_action("file.reopen_with_encoding");
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(a.status, t!("status.reopen_encoding_unsaved").to_string());
+    // Save As windows-1252 writes a single byte for é.
+    a.run_action("file.save_with_encoding");
+    for _ in 0..idx {
+        a.on_key(key(KeyCode::Down));
+    }
+    a.on_key(key(KeyCode::Enter));
+    let bytes = std::fs::read(&p).unwrap();
+    assert!(bytes.starts_with(b"caf\xe9"), "{bytes:?}");
+    // Esc and mouse paths.
+    a.run_action("file.save_with_encoding");
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.chooser.is_none());
+    a.run_action("file.reopen_with_encoding");
+    let m = chooser_click(&mut a, 0);
+    a.encoding_mouse(m);
+    assert!(a.chooser.is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn save_with_encoding_is_refused_on_a_read_only_buffer() {
+    let dir = tmp("encoding-ro");
+    let p = dir.join("ro.txt");
+    std::fs::write(&p, "x\n").unwrap();
+    let mut a = app_in(&dir);
+    a.open_path(&p, false);
+    a.run_action("view.read_only");
+    a.save_with_encoding(crate::encoding::TextEncoding::from_label("UTF-8").unwrap());
+    assert_eq!(a.status, t!("status.read_only_blocked").to_string());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- keybinding editor (navigation only: rebinding writes the user config) -----
+
+#[test]
+fn keybinding_editor_filters_scrolls_and_sorts() {
+    use vix_keybinding_editor_panel::Column;
+    let mut a = app();
+    a.run_action("keybindings.editor");
+    assert!(a.keybinding_editor.is_some());
+    a.layout.keybinding_editor_body = Rect::new(0, 2, 60, 5);
+    a.layout.keybinding_editor_headers = [Rect::new(0, 1, 20, 1), Rect::new(20, 1, 20, 1)];
+    let rows = a.keybinding_editor.as_ref().unwrap().len();
+    assert!(rows > 10, "built-in bindings are listed");
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    assert_eq!(a.keybinding_editor.as_ref().unwrap().selected, 2);
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.keybinding_editor.as_ref().unwrap().selected, 1);
+    a.on_key(key(KeyCode::PageDown));
+    assert_eq!(a.keybinding_editor.as_ref().unwrap().selected, 6);
+    a.on_key(key(KeyCode::PageUp));
+    assert_eq!(a.keybinding_editor.as_ref().unwrap().selected, 1);
+    // Typing filters; Backspace widens again.
+    type_str(&mut a, "zzzzqqqq");
+    assert_eq!(a.keybinding_editor.as_ref().unwrap().len(), 0);
+    for _ in 0..8 {
+        a.on_key(key(KeyCode::Backspace));
+    }
+    assert_eq!(a.keybinding_editor.as_ref().unwrap().len(), rows);
+    // Wheel and header clicks.
+    let wheel = |kind| MouseEvent {
+        kind,
+        column: 3,
+        row: 3,
+        modifiers: KeyModifiers::NONE,
+    };
+    let start = a.keybinding_editor.as_ref().unwrap().selected;
+    a.keybinding_editor_mouse(wheel(MouseEventKind::ScrollDown));
+    assert_eq!(a.keybinding_editor.as_ref().unwrap().selected, start + 3);
+    a.keybinding_editor_mouse(wheel(MouseEventKind::ScrollUp));
+    assert_eq!(a.keybinding_editor.as_ref().unwrap().selected, start);
+    let before = a.keybinding_editor.as_ref().unwrap().rows.clone();
+    a.keybinding_editor_mouse(left_click(2, 1));
+    a.keybinding_editor_mouse(left_click(25, 1));
+    a.keybinding_editor_mouse(left_click(50, 1));
+    let _ = (Column::Action, before);
+    // Enter starts a rebind prompt; an unparseable token is refused without
+    // touching the config file.
+    a.on_key(key(KeyCode::Enter));
+    assert!(prompt_kind(&a) == Some(PromptKind::RebindKey));
+    assert!(a.pending_rebind_action_id.is_some());
+    submit(&mut a, PromptKind::RebindKey, "not a key at all");
+    assert!(
+        a.messages
+            .items
+            .iter()
+            .any(|m| m.text == t!("msg.rebind_invalid_token", token = "not a key at all"))
+    );
+    // Delete on a built-in (non-resettable) row does nothing.
+    a.on_key(key(KeyCode::Delete));
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.keybinding_editor.is_none());
+    // Keys with no editor open are ignored.
+    a.keybinding_editor_key(key(KeyCode::Down));
+}
+
+// ----- spell checking (in-memory dictionary; nothing touches the user config) -----
+
+fn spelling_app(text: &str) -> App {
+    let mut a = app();
+    a.editor.new_tab_with_content_as(text, Some("x.rs"));
+    a.flags.insert(AppFlags::SPELLCHECK);
+    a.speller = Some(
+        crate::spellcheck::SpellChecker::from_strings(
+            "SET UTF-8\n",
+            "4\nhello\nworld\nhelp\nhold\n",
+        )
+        .unwrap(),
+    );
+    a.speller_locale = Some(rust_i18n::locale().to_string());
+    a
+}
+
+#[test]
+fn spellcheck_marks_misspelled_words_in_comments_only() {
+    let mut a = spelling_app("// helo world\nlet helo = 1;\n");
+    a.refresh_spellcheck();
+    let marks = a
+        .editor
+        .active_tab()
+        .unwrap()
+        .editor
+        .spell_marks()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(marks, vec![(3, 7)], "only the comment's helo is underlined");
+    // The per-frame hook does nothing until the buffer changes.
+    a.refresh_spellcheck_if_stale();
+    type_text(&mut a, "zzz ");
+    a.refresh_spellcheck_if_stale();
+    assert!(a.spell_key.is_some());
+    // Turning spell-checking off clears the marks.
+    a.speller = None;
+    a.flags.remove(AppFlags::SPELLCHECK);
+    a.refresh_spellcheck();
+    assert!(
+        a.editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .spell_marks()
+            .is_none_or(Vec::is_empty)
+    );
+}
+
+#[test]
+fn spell_suggest_popup_offers_corrections_and_applies_one() {
+    let mut a = spelling_app("// helo world\n");
+    set_cur(&mut a, 4);
+    a.run_action("spell.suggest");
+    let p = a.spell_suggest.as_ref().expect("popup");
+    assert_eq!(p.word, "helo");
+    assert_eq!(p.span, (3, 7));
+    assert!(p.suggestions.iter().any(|s| s == "hello"));
+    let n = p.suggestions.len();
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.spell_suggest.as_ref().unwrap().selected, 0);
+    for _ in 0..n + 2 {
+        a.on_key(key(KeyCode::Down));
+    }
+    assert_eq!(a.spell_suggest.as_ref().unwrap().selected, n - 1, "clamped");
+    a.spell_suggest.as_mut().unwrap().selected = a
+        .spell_suggest
+        .as_ref()
+        .unwrap()
+        .suggestions
+        .iter()
+        .position(|s| s == "hello")
+        .unwrap();
+    a.on_key(key(KeyCode::Enter));
+    assert!(a.spell_suggest.is_none());
+    assert_eq!(active_text(&a), "// hello world\n");
+}
+
+#[test]
+fn spell_suggest_click_applies_the_clicked_suggestion() {
+    let mut a = spelling_app("// helo world\n");
+    set_cur(&mut a, 4);
+    a.run_action("spell.suggest");
+    a.layout.spell_suggest = Rect::new(5, 5, 20, 6);
+    let idx = a
+        .spell_suggest
+        .as_ref()
+        .unwrap()
+        .suggestions
+        .iter()
+        .position(|s| s == "hello")
+        .unwrap();
+    // A click past the list is ignored; a click on the row applies it.
+    a.spell_suggest_mouse(left_click(6, 5 + 10));
+    assert!(a.spell_suggest.is_some());
+    a.spell_suggest_mouse(left_click(6, 5 + u16::try_from(idx).unwrap()));
+    assert_eq!(active_text(&a), "// hello world\n");
+}
+
+#[test]
+fn spell_suggest_ignore_word_and_esc() {
+    let mut a = spelling_app("// helo world\n");
+    set_cur(&mut a, 4);
+    a.run_action("spell.suggest");
+    a.on_key(key(KeyCode::Char('i')));
+    assert!(a.spell_suggest.is_none());
+    assert_eq!(
+        a.status,
+        t!("status.spell_ignored", word = "helo").to_string()
+    );
+    assert!(a.speller.as_ref().unwrap().check("helo"));
+    // Now the word is fine.
+    a.run_action("spell.suggest");
+    assert_eq!(a.status, t!("status.spell_ok").to_string());
+    // Off a word, the popup says so; Esc closes a popup.
+    set_cur(&mut a, 2);
+    a.run_action("spell.suggest");
+    assert_eq!(a.status, t!("status.spell_no_word").to_string());
+    set_cur(&mut a, 11);
+    a.run_action("spell.suggest");
+    a.spell_suggest = Some(SpellSuggest {
+        word: "x".to_string(),
+        span: (0, 1),
+        suggestions: vec![],
+        selected: 0,
+    });
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.spell_suggest.is_none());
+}
+
+#[test]
+fn spell_suggest_without_a_dictionary_says_it_is_unavailable() {
+    let mut a = app_with("// helo\n");
+    a.open_spell_suggest();
+    assert_eq!(a.status, t!("status.spell_unavailable").to_string());
+}
+
+// ----- welcome / help / html overlays ---------------------------------------------
+
+#[test]
+fn welcome_overlay_scrolls_and_closes_on_the_documented_keys() {
+    let mut a = app();
+    a.run_action("help.privacy");
+    a.layout.welcome = Rect::new(0, 0, 60, 3);
+    let len = a.welcome.as_ref().unwrap().len();
+    assert!(len > 3, "needs more lines than the viewport");
+    a.on_key(key(KeyCode::Down));
+    assert_eq!(a.welcome.as_ref().unwrap().scroll, 1);
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.welcome.as_ref().unwrap().scroll, 0);
+    a.on_key(key(KeyCode::PageDown));
+    assert_eq!(a.welcome.as_ref().unwrap().scroll, 3);
+    a.on_key(key(KeyCode::PageUp));
+    assert_eq!(a.welcome.as_ref().unwrap().scroll, 0);
+    a.on_key(key(KeyCode::Char(' ')));
+    assert_eq!(a.welcome.as_ref().unwrap().scroll, 3);
+    a.on_key(key(KeyCode::End));
+    let end = a.welcome.as_ref().unwrap().scroll;
+    assert_eq!(end, len - 3, "End shows the last page");
+    a.on_key(key(KeyCode::Home));
+    assert_eq!(a.welcome.as_ref().unwrap().scroll, 0);
+    a.on_key(key(KeyCode::Char('z')));
+    assert!(a.welcome.is_some());
+    for close in [
+        KeyCode::Esc,
+        KeyCode::Enter,
+        KeyCode::F(1),
+        KeyCode::Char('q'),
+    ] {
+        a.run_action("help.privacy");
+        a.on_key(key(close));
+        assert!(a.welcome.is_none(), "{close:?} closes");
+    }
+}
+
+#[test]
+fn welcome_overlay_wheel_scrolls() {
+    let mut a = app();
+    a.run_action("help.privacy");
+    a.layout.welcome = Rect::new(0, 0, 60, 3);
+    let wheel = |kind| MouseEvent {
+        kind,
+        column: 1,
+        row: 1,
+        modifiers: KeyModifiers::NONE,
+    };
+    a.on_mouse(wheel(MouseEventKind::ScrollDown));
+    assert!(a.welcome.as_ref().unwrap().scroll > 0);
+    a.on_mouse(wheel(MouseEventKind::ScrollUp));
+    assert_eq!(a.welcome.as_ref().unwrap().scroll, 0);
+}
+
+#[test]
+fn shortcut_help_overlay_scrolls_and_sorts_by_header() {
+    let mut a = app();
+    a.run_action("help.shortcuts");
+    assert!(a.help.is_some());
+    a.layout.help_headers = [Rect::new(0, 1, 20, 1), Rect::new(20, 1, 20, 1)];
+    let wheel = |kind| MouseEvent {
+        kind,
+        column: 3,
+        row: 5,
+        modifiers: KeyModifiers::NONE,
+    };
+    a.help_mouse(wheel(MouseEventKind::ScrollDown));
+    a.help_mouse(wheel(MouseEventKind::ScrollUp));
+    let first_before = a
+        .help
+        .as_ref()
+        .unwrap()
+        .rows
+        .first()
+        .map(|r| r.action.clone());
+    a.help_mouse(left_click(2, 1));
+    a.help_mouse(left_click(2, 1));
+    a.help_mouse(left_click(25, 1));
+    a.help_mouse(left_click(60, 1));
+    let first_after = a
+        .help
+        .as_ref()
+        .unwrap()
+        .rows
+        .first()
+        .map(|r| r.action.clone());
+    assert!(first_before.is_some() && first_after.is_some());
+}
+
+#[test]
+fn html_palette_inserts_glyph_name_or_code_by_clicked_column() {
+    let mut a = app_with("");
+    a.run_action("tools.html_chars");
+    assert!(a.html_panel.is_some());
+    a.layout.html_panel = Rect::new(0, 5, 70, 8);
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Enter));
+    let glyph = active_text(&a);
+    assert_eq!(
+        glyph.chars().count(),
+        1,
+        "Enter inserts the glyph: {glyph:?}"
+    );
+    assert!(a.html_panel.is_some(), "panel stays open");
+    assert_eq!(
+        a.status,
+        t!("status.html_inserted", name = glyph).to_string()
+    );
+    // Clicking the name column inserts the entity name.
+    a.html_mouse(left_click(10, 5));
+    let after_name = active_text(&a);
+    assert!(after_name.len() > glyph.len());
+    // Clicking the code column inserts the code.
+    a.html_mouse(left_click(40, 5));
+    assert!(active_text(&a).len() > after_name.len());
+    // A click outside the list does nothing.
+    let before = active_text(&a);
+    a.html_mouse(left_click(40, 0));
+    assert_eq!(active_text(&a), before);
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.html_panel.is_none());
+}
+
+// ----- context menu ---------------------------------------------------------------
+
+#[test]
+fn right_click_opens_the_context_menu_and_keys_skip_separators() {
+    let mut a = app_with("hello\n");
+    a.on_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Right),
+        column: 3,
+        row: 2,
+        modifiers: KeyModifiers::NONE,
+    });
+    let cm = a.context_menu.as_ref().expect("menu opens");
+    assert_eq!((cm.x, cm.y, cm.selected), (3, 2, 0));
+    // Down x3 skips the separator after Paste.
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Down));
+    assert_eq!(
+        CONTEXT_ITEMS[a.context_menu.as_ref().unwrap().selected].1,
+        "edit.select_all"
+    );
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.context_menu.as_ref().unwrap().selected, 0);
+    a.on_key(key(KeyCode::Up)); // wraps to the last row
+    assert_eq!(
+        a.context_menu.as_ref().unwrap().selected,
+        CONTEXT_ITEMS.len() - 1
+    );
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.context_menu.is_none());
+}
+
+#[test]
+fn context_menu_click_runs_the_row_and_outside_click_dismisses() {
+    let mut a = app_with("hello\n");
+    a.open_context_menu(3, 2);
+    a.layout.context_menu = Rect::new(3, 2, 20, 13);
+    // A click on a separator row is inert.
+    a.context_menu_mouse(left_click(5, 2 + 1 + 3));
+    assert!(a.context_menu.is_some());
+    // A click on "Select All" selects the whole buffer.
+    a.context_menu_mouse(left_click(5, 2 + 1 + 4));
+    assert!(a.context_menu.is_none());
+    assert_eq!(
+        a.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text()
+            .as_deref(),
+        Some("hello\n")
+    );
+    a.open_context_menu(3, 2);
+    a.context_menu_mouse(left_click(60, 20));
+    assert!(a.context_menu.is_none(), "outside click dismisses");
+    // Enter runs the highlighted item (Cut/Copy/Paste are harmless here).
+    a.open_context_menu(3, 2);
+    a.context_menu_key(key(KeyCode::Down));
+    a.context_menu_key(key(KeyCode::Enter));
+    assert!(a.context_menu.is_none());
+}
+
+// ----- jump mode, docks, scrollbars ---------------------------------------------------
+
+#[test]
+fn jump_mode_labels_visible_lines_and_jumps_on_a_typed_label() {
+    let body = "line\n".repeat(30);
+    let mut a = app_with(&body);
+    a.run_action("nav.jump");
+    let jm = a.jump.as_ref().expect("jump mode");
+    assert_eq!(jm.labels.len(), 24);
+    let (label, line) = jm.labels[5].clone();
+    // A non-character key cancels.
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.jump.is_none());
+    a.run_action("nav.jump");
+    for c in label.chars() {
+        a.on_key(key(KeyCode::Char(c)));
+    }
+    assert_eq!(a.editor.cursor_line(), line);
+    assert!(a.jump.is_none());
+    // A character that matches no label ends the mode.
+    a.run_action("nav.jump");
+    a.on_key(key(KeyCode::Char('~')));
+    assert!(a.jump.is_none());
+    // A zero-height editor never opens jump mode.
+    a.layout.editor = Rect::new(0, 0, 80, 0);
+    a.run_action("nav.jump");
+    assert!(a.jump.is_none());
+}
+
+#[test]
+fn horizontal_scrollbar_drag_sets_each_views_offset() {
+    let mut a = app_with(&"x".repeat(300));
+    a.layout.editor_hscrollbar = Rect::new(0, 23, 11, 1);
+    a.layout.explorer_hscrollbar = Rect::new(0, 23, 11, 1);
+    a.layout.messages_hscrollbar = Rect::new(0, 23, 11, 1);
+    a.layout.bottom_hscrollbar = Rect::new(0, 23, 11, 1);
+    a.editor_hmax = 100;
+    a.explorer_hmax = 50;
+    a.messages_hmax = 20;
+    a.bottom_hmax = 10;
+    a.hbar_drag(HBar::Explorer, 10);
+    assert_eq!(a.explorer_hscroll, 50);
+    a.hbar_drag(HBar::Messages, 5);
+    assert_eq!(a.messages_hscroll, 10);
+    a.hbar_drag(HBar::Bottom, 0);
+    assert_eq!(a.bottom_hscroll, 0);
+    a.hbar_drag(HBar::Editor, 10);
+    assert_eq!(a.editor.active_tab().unwrap().editor.get_offset_x(), 100);
+}
+
+#[test]
+fn bottom_dock_click_jumps_to_a_path_line_hit_and_wheel_scrolls() {
+    let dir = tmp("dock-click");
+    std::fs::write(dir.join("a.txt"), "1\n2\n3\n4\n").unwrap();
+    let mut a = app_in(&dir);
+    a.layout.bottom_dock = Rect::new(0, 10, 40, 6);
+    a.bottom_dock.push("a.txt:3:1: hit text");
+    a.bottom_dock.push("not a location");
+    // Row 11 is the first content line (row 10 is the border).
+    a.bottomdock_mouse(left_click(2, 11));
+    assert_eq!(a.focus, Focus::Editor);
+    assert_eq!(a.editor.cursor_line(), 2);
+    assert!(a.active_path().unwrap().ends_with("a.txt"));
+    // A line that is not a location only focuses the dock.
+    a.bottomdock_mouse(left_click(2, 12));
+    assert_eq!(a.focus, Focus::BottomDock);
+    // The border row does nothing; wheel scrolls.
+    a.bottomdock_open_at(10);
+    for i in 0..30 {
+        a.bottom_dock.push(format!("line {i}"));
+    }
+    let wheel = |kind| MouseEvent {
+        kind,
+        column: 2,
+        row: 12,
+        modifiers: KeyModifiers::NONE,
+    };
+    a.bottom_dock.scroll = 0;
+    a.bottomdock_mouse(wheel(MouseEventKind::ScrollDown));
+    assert_eq!(a.bottom_dock.scroll, 3);
+    a.bottomdock_mouse(wheel(MouseEventKind::ScrollUp));
+    assert_eq!(a.bottom_dock.scroll, 0);
+    // Clicking the scrollbar column jumps the scroll position.
+    a.settings.viewport.show_scrollbar = true;
+    a.bottomdock_mouse(left_click(39, 14));
+    assert!(a.bottom_dock.scroll > 0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ----- recent files / locations / file browser -------------------------------------
+
+#[test]
+fn recent_files_chooser_lists_existing_files_and_opens_one() {
+    let dir = tmp("recent");
+    std::fs::write(dir.join("a.txt"), "A").unwrap();
+    std::fs::write(dir.join("b.txt"), "B").unwrap();
+    let mut a = app_in(&dir);
+    a.run_action("file.open_recent");
+    assert_eq!(a.status, t!("status.no_recent").to_string());
+    a.settings.recent_files = vec![
+        dir.join("a.txt").to_string_lossy().into_owned(),
+        dir.join("gone.txt").to_string_lossy().into_owned(),
+        dir.join("b.txt").to_string_lossy().into_owned(),
+    ];
+    a.run_action("file.open_recent");
+    assert_eq!(
+        a.chooser.recent().unwrap().entries.len(),
+        2,
+        "missing file dropped"
+    );
+    a.on_key(key(KeyCode::Up));
+    assert_eq!(a.chooser.recent().unwrap().selected, 1, "wraps up");
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Char('x')));
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.chooser.is_none());
+    a.run_action("file.open_recent");
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Enter));
+    assert_eq!(active_text(&a), "B");
+    a.run_action("file.open_recent");
+    let m = chooser_click(&mut a, 1); // opening B moved it to the front
+    a.recent_mouse(m);
+    assert_eq!(active_text(&a), "A");
+    a.run_action("file.open_recent");
+    let m = chooser_click(&mut a, 9);
+    a.recent_mouse(m);
+    assert!(a.chooser.recent().is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn recent_locations_chooser_follows_the_jump_history() {
+    let dir = tmp("locations");
+    std::fs::write(dir.join("a.txt"), "1\n2\n3\n").unwrap();
+    std::fs::write(dir.join("b.txt"), "1\n2\n3\n").unwrap();
+    let mut a = app_in(&dir);
+    a.run_action("nav.recent_locations");
+    assert_eq!(a.status, t!("status.no_recent_locations").to_string());
+    a.open_path(&dir.join("a.txt"), false);
+    a.with_jump(|s| {
+        s.open_path(&dir.join("b.txt"), false);
+        let area = s.layout.editor;
+        s.editor.goto(3, None, area);
+    });
+    a.run_action("nav.recent_locations");
+    assert!(a.chooser.location().unwrap().entries.len() >= 2);
+    a.on_key(key(KeyCode::Down));
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Up));
+    a.on_key(key(KeyCode::Char('x')));
+    a.on_key(key(KeyCode::Esc));
+    assert!(a.chooser.is_none());
+    a.run_action("nav.recent_locations");
+    let last = a.chooser.location().unwrap().entries.len() - 1;
+    let m = chooser_click(&mut a, u16::try_from(last).unwrap());
+    a.location_mouse(m);
+    assert!(a.chooser.is_none());
+    assert!(a.active_path().unwrap().ends_with("a.txt"));
+    a.run_action("nav.recent_locations");
+    a.on_key(key(KeyCode::Enter));
+    assert!(a.chooser.is_none());
+    a.run_action("nav.recent_locations");
+    let m = chooser_click(&mut a, 9);
+    a.location_mouse(m);
+    assert!(a.chooser.location().is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn file_browser_wheel_and_click_navigate_and_open() {
+    let dir = tmp("browser");
+    std::fs::write(dir.join("a.txt"), "A").unwrap();
+    std::fs::write(dir.join("b.txt"), "B").unwrap();
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    let mut a = app_in(&dir);
+    a.run_action("file.open");
+    assert!(a.file_browser.is_some());
+    a.layout.file_browser = Rect::new(0, 5, 40, 10);
+    let wheel = |kind| MouseEvent {
+        kind,
+        column: 3,
+        row: 6,
+        modifiers: KeyModifiers::NONE,
+    };
+    let start = a.file_browser.as_ref().unwrap().selected;
+    a.file_browser_mouse(wheel(MouseEventKind::ScrollDown));
+    assert_eq!(a.file_browser.as_ref().unwrap().selected, start + 1);
+    a.file_browser_mouse(wheel(MouseEventKind::ScrollUp));
+    assert_eq!(a.file_browser.as_ref().unwrap().selected, start);
+    // A click outside the panel, and past its last row, does nothing.
+    a.file_browser_mouse(left_click(60, 0));
+    a.file_browser_mouse(left_click(3, 14));
+    assert!(a.file_browser.is_some());
+    // Find the row of a.txt and click it.
+    let fb = a.file_browser.as_ref().unwrap();
+    let row = fb
+        .matches()
+        .iter()
+        .position(|&i| fb.entries[i].name == "a.txt")
+        .expect("a.txt listed");
+    a.file_browser_mouse(left_click(3, 5 + u16::try_from(row).unwrap()));
+    assert!(a.file_browser.is_none());
+    assert_eq!(active_text(&a), "A");
+    let _ = std::fs::remove_dir_all(&dir);
+}

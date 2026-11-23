@@ -11537,8 +11537,12 @@ impl App {
                 }
             }
             KeyCode::End => {
+                // Past the last line, then clamped back so the last page is in view
+                // (`page_down(w.len())` would clamp against a viewport as tall as the
+                // whole text and never leave the top).
                 if let Some(w) = self.welcome.as_mut() {
-                    w.page_down(w.len());
+                    w.scroll = w.len();
+                    w.clamp(page);
                 }
             }
             KeyCode::Esc | KeyCode::Enter | KeyCode::F(1) | KeyCode::Char('q') => {
