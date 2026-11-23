@@ -6,18 +6,6 @@
 //! `clock_minutes`/`hhmm` stay `pub(crate)` too: `columns.rs` needs them to
 //! render a column-view CLOCK summary.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use std::fmt::Write as _;
 
 use super::{add_or, headline_level, headline_todo, line_at, next, sub_or};

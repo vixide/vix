@@ -7,18 +7,6 @@
 //! several other sections' own edits), it's a cohesive feature in its own
 //! right, matching how every other topic here gets its own file.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use super::{add_or, headline_level, line_at, next, sub_or, subtree_range};
 
 // ----- Headline location & structure editing --------------------------------

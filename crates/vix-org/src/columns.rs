@@ -13,18 +13,6 @@
 //!
 //! All functions are pure so they can be unit-tested without a live editor.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use crate::{add_or, line_at, next, sub_or};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;

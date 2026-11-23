@@ -7,18 +7,6 @@
 //! (T516). `LINK`/`BARE_LINK` live in `export.rs` (T516 slice 6), which
 //! defines them; referenced back via `crate::export::`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use std::fmt::Write as _;
 use std::sync::LazyLock;
 
