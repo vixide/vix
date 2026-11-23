@@ -232,17 +232,31 @@ fn register_buffer_fns(engine: &mut Engine, host: &Rc<RefCell<HostState>>) {
     }
     {
         let h = Rc::clone(host);
-        engine.register_fn("cursor_offset", move || {
-            i64::try_from(h.borrow().cursor_offset).unwrap_or(i64::MAX)
-        });
+        engine.register_fn(
+            "cursor_offset",
+            move || -> Result<i64, Box<rhai::EvalAltResult>> {
+                i64::try_from(h.borrow().cursor_offset)
+                    .map_err(|_| "cursor_offset: does not fit an integer".into())
+            },
+        );
     }
     let h = Rc::clone(host);
-    engine.register_fn("set_cursor_offset", move |n: i64| {
-        let mut s = h.borrow_mut();
-        let len = i64::try_from(s.buffer_text.chars().count()).unwrap_or(i64::MAX);
-        s.cursor_offset = n.clamp(0, len).try_into().unwrap_or(0);
-        s.cursor_offset_written = true;
-    });
+    engine.register_fn(
+        "set_cursor_offset",
+        move |n: i64| -> Result<(), Box<rhai::EvalAltResult>> {
+            let mut s = h.borrow_mut();
+            let len = s.buffer_text.chars().count();
+            // An offset outside the buffer is an error naming the figure and
+            // its range; it is never moved to the nearest end.
+            let offset = usize::try_from(n)
+                .ok()
+                .filter(|offset| *offset <= len)
+                .ok_or_else(|| format!("set_cursor_offset: {n} is not an offset in 0..={len}"))?;
+            s.cursor_offset = offset;
+            s.cursor_offset_written = true;
+            Ok(())
+        },
+    );
 }
 
 /// Register `prompt`/`message`/`error` (§ API v1, "Prompting for input" and

@@ -214,7 +214,7 @@ offsets, never bytes and never line/column pairs.
 | `set_selection_text(text)` | replace the selection, or insert at the cursor |
 | `current_line()` | the cursor's line (read-only) |
 | `cursor_offset()` | the cursor position |
-| `set_cursor_offset(n)` | move the cursor, clamped to the buffer |
+| `set_cursor_offset(n)` | move the cursor; an offset outside the buffer is an error |
 | `prompt(message, on_submit)` | ask for one line of text |
 | `message(text)`, `error(text)` | write to the message drawer |
 | `now()` | today's date, `YYYY-MM-DD` |

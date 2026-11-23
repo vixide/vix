@@ -156,7 +156,7 @@ asked for input.
 | `set_selection_text(text)` | replace the selection; with no selection, insert at the cursor |
 | `current_line() -> String` | the line the cursor is on (read-only — there's no `set_current_line`) |
 | `cursor_offset() -> int` | cursor position, as a character offset |
-| `set_cursor_offset(n)` | move the cursor to character offset `n`, clamped in range |
+| `set_cursor_offset(n)` | move the cursor to character offset `n`; an `n` outside `0..=len` is a script error, and the cursor stays put |
 
 Positions are **character offsets**, never bytes and never `(line, col)`.
 These primitives are the whole surface for v1: a script reads text,

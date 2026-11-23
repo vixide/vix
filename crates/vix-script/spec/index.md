@@ -211,7 +211,7 @@ fn on_uppercase() {
 | `set_selection_text(text)` | replace the selection; with no selection, insert at the cursor |
 | `current_line() -> String` | the line the cursor is on |
 | `cursor_offset() -> int` | cursor position, as a character offset |
-| `set_cursor_offset(n)` | move the cursor to character offset `n` (clamped in range) |
+| `set_cursor_offset(n)` | move the cursor to character offset `n`; `n` outside `0..=len` is a script error naming the figure and range, never moved to the nearest end |
 
 These are the whole surface for v1 — enough for a script to read text,
 transform it in Rhai, and write it back, which is what "run textops-style
@@ -568,4 +568,4 @@ The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thise
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The plugin spec parser and the locale-tag fallback use `split_at_checked`, `strip_prefix` and `rsplit_once` instead of slicing, and the content digest uses `u64::try_from` for lengths. **Raised, not changed:** the script API's `set_cursor_offset(n)` is documented (here, in the scripting guide and in a test) to clamp `n` to the buffer, which is a bound for an out-of-range input that `RCA-DECL-6` forbids. Changing it makes a script that passes an out-of-range offset fail, so it needs a decision before it is implemented.
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The plugin spec parser and the locale-tag fallback use `split_at_checked`, `strip_prefix` and `rsplit_once` instead of slicing, and the content digest uses `u64::try_from` for lengths. `set_cursor_offset(n)` no longer clamps `n` to the buffer (a bound for an out-of-range input, which `RCA-DECL-6` forbids): an offset outside `0..=len` raises a script error, `set_cursor_offset: <n> is not an offset in 0..=<len>`, and the cursor does not move. This is a behavior change, decided by the project owner, and `cursor_offset()` raises an error rather than returning a value if the offset does not fit an integer.
