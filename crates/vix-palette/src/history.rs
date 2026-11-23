@@ -4,6 +4,14 @@
 /// Most queries the history keeps.
 pub const HISTORY_CAP: usize = 50;
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// Accepted palette inputs, oldest first, plus where a recall is browsing.
 #[derive(Clone, Debug, Default)]
 pub struct QueryHistory {
@@ -35,8 +43,7 @@ impl QueryHistory {
         }
         self.entries.retain(|q| q != query);
         self.entries.push(query.to_string());
-        if self.entries.len() > HISTORY_CAP {
-            let extra = self.entries.len() - HISTORY_CAP;
+        if let Some(extra) = self.entries.len().checked_sub(HISTORY_CAP) {
             self.entries.drain(..extra);
         }
     }
@@ -60,8 +67,8 @@ impl QueryHistory {
     pub fn older(&mut self) -> Option<&str> {
         let next = match self.pos {
             None => self.entries.len().checked_sub(1)?,
-            Some(0) => 0,
-            Some(i) => i - 1,
+            // The oldest entry stays the oldest.
+            Some(i) => sub_or(i, 1, 0),
         };
         self.pos = Some(next);
         self.entries.get(next).map(String::as_str)
@@ -71,9 +78,9 @@ impl QueryHistory {
     /// the result is the empty input `""`. `None` when not browsing.
     pub fn newer(&mut self) -> Option<&str> {
         let i = self.pos?;
-        if i + 1 < self.entries.len() {
-            self.pos = Some(i + 1);
-            self.entries.get(i + 1).map(String::as_str)
+        if let Some(newer) = i.checked_add(1).filter(|n| *n < self.entries.len()) {
+            self.pos = Some(newer);
+            self.entries.get(newer).map(String::as_str)
         } else {
             self.pos = None;
             Some("")

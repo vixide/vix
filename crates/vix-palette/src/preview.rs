@@ -14,6 +14,20 @@ pub const PREVIEW_RADIUS: usize = 40;
 /// Longest a single preview line is kept, in characters.
 const LINE_CHARS: usize = 400;
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A window of a file around one target line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Preview {
@@ -46,10 +60,14 @@ impl Preview {
         }
         let len = self.lines.len();
         let center = self.target_index().unwrap_or(0);
-        let max_start = len.saturating_sub(height);
-        let start = center.saturating_sub(height / 2).min(max_start);
-        let end = (start + height).min(len);
-        (self.first_line + start, &self.lines[start..end])
+        let max_start = sub_or(len, height, 0);
+        let half = height.checked_div(2).unwrap_or(0);
+        let start = sub_or(center, half, 0).min(max_start);
+        let end = add_or(start, height, usize::MAX).min(len);
+        (
+            add_or(self.first_line, start, usize::MAX),
+            self.lines.get(start..end).unwrap_or(&[]),
+        )
     }
 }
 
@@ -82,11 +100,11 @@ pub fn preview_from_bytes(bytes: &[u8], line: usize, truncated: bool) -> Option<
     let target = line.max(1);
     let beyond = target > all.len() && truncated;
     let center = if beyond { 1 } else { target };
-    let first = center.saturating_sub(PREVIEW_RADIUS).max(1);
-    let last = (center + PREVIEW_RADIUS).min(all.len());
+    let first = sub_or(center, PREVIEW_RADIUS, 0).max(1);
+    let last = add_or(center, PREVIEW_RADIUS, usize::MAX).min(all.len());
     let lines = all
-        .get(first - 1..last)
-        .unwrap_or_default()
+        .get(sub_or(first, 1, 0)..last)
+        .unwrap_or(&[])
         .iter()
         .map(|l| clean(l))
         .collect();
@@ -103,10 +121,13 @@ pub fn preview_from_bytes(bytes: &[u8], line: usize, truncated: bool) -> Option<
 /// open buffer is never copied whole.
 #[must_use]
 pub fn preview_from_lines(total: usize, line: usize, get: impl Fn(usize) -> String) -> Preview {
+    // A line past the end shows the nearest line (the declared bound, PREVIEW-F1).
     let target = line.clamp(1, total.max(1));
-    let first = target.saturating_sub(PREVIEW_RADIUS).max(1);
-    let last = (target + PREVIEW_RADIUS).min(total);
-    let lines = (first..=last).map(|n| clean(&get(n - 1))).collect();
+    let first = sub_or(target, PREVIEW_RADIUS, 0).max(1);
+    let last = add_or(target, PREVIEW_RADIUS, usize::MAX).min(total);
+    let lines = (first..=last)
+        .map(|n| clean(&get(sub_or(n, 1, 0))))
+        .collect();
     Preview {
         first_line: first,
         lines,
