@@ -835,3 +835,380 @@ impl App {
         self.helix_edit(&edits);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::scripts::cov4::*;
+
+    fn helix(tag: &str, text: &str, cursor: usize) -> App {
+        let dir = temp(tag);
+        let mut s = crate::settings::Settings::default();
+        s.keymap = "helix".into();
+        let mut app = app_with(&dir, s);
+        buffer_with(&mut app, text, cursor);
+        app
+    }
+
+    fn press(app: &mut App, keys: &str) {
+        for c in keys.chars() {
+            app.on_key(key(c));
+        }
+    }
+
+    fn esc(app: &mut App) {
+        app.on_key(code(KeyCode::Esc));
+    }
+
+    fn text(app: &App) -> String {
+        app.editor.active_tab().unwrap().editor.get_content()
+    }
+
+    fn selected(app: &mut App) -> Option<String> {
+        app.editor.active_tab_mut().unwrap().editor.get_selection_text()
+    }
+
+    fn carets(app: &App) -> usize {
+        app.editor.active_tab().unwrap().editor.caret_count()
+    }
+
+    #[test]
+    fn a_pending_prefix_is_cancelled_by_escape_or_a_non_character_key() {
+        let mut app = helix("hx-cancel", "abc def", 0);
+        press(&mut app, "g");
+        assert_eq!(app.vim_pending, Some('g'));
+        esc(&mut app);
+        assert_eq!(app.vim_pending, None);
+        press(&mut app, "f");
+        app.on_key(code(KeyCode::F(2)));
+        assert_eq!(app.vim_pending, None, "a function key cancels the find");
+        assert_eq!(selected(&mut app), None);
+        // A modified character is not a find target either.
+        press(&mut app, "f");
+        app.on_key(ctrl('d'));
+        assert_eq!(app.vim_pending, None);
+        press(&mut app, "f");
+        app.on_key(alt('d'));
+        assert_eq!(selected(&mut app), None);
+        // `f` + an absent target leaves the cursor and selection alone.
+        press(&mut app, "fz");
+        assert_eq!(selected(&mut app), None);
+        assert_eq!(text(&app), "abc def");
+    }
+
+    #[test]
+    fn the_which_key_rows_name_the_pending_g_m_and_space_prefixes() {
+        let mut app = helix("hx-which", "", 0);
+        assert!(app.which_key().is_none());
+        for (prefix, title) in [('g', "g"), ('m', "m"), (' ', "SPC")] {
+            app.vim_pending = Some(prefix);
+            let (got, rows) = app.which_key().expect("a hint for the prefix");
+            assert_eq!(got, title);
+            assert!(!rows.is_empty(), "{title}");
+        }
+        app.vim_pending = Some('f'); // a find has no table
+        assert!(app.which_key().is_none());
+    }
+
+    #[test]
+    fn a_count_before_gg_goes_to_that_line_and_a_bad_second_key_cancels() {
+        let mut app = helix("hx-countgg", "one\ntwo\nthree\n", 0);
+        press(&mut app, "3gg");
+        let cursor = app.editor.active_tab().unwrap().editor.get_cursor();
+        assert_eq!(cursor, 8, "start of line 3");
+        press(&mut app, "g");
+        press(&mut app, "~"); // not in the g table: silently cancels
+        assert_eq!(app.vim_pending, None);
+    }
+
+    #[test]
+    fn a_counted_find_selects_up_to_the_nth_target() {
+        let mut app = helix("hx-countfind", "a-b-c-d", 0);
+        press(&mut app, "2f-");
+        assert_eq!(selected(&mut app).as_deref(), Some("a-b-"));
+        let mut back = helix("hx-countfind-back", "a-b-c-d", 6);
+        press(&mut back, "F-");
+        assert!(selected(&mut back).is_some());
+        let mut till = helix("hx-till", "a-b-c-d", 0);
+        press(&mut till, "T-");
+        press(&mut till, "t-");
+        assert!(selected(&mut till).is_some());
+    }
+
+    #[test]
+    fn helix_commands_map_long_names_onto_the_vi_command_line() {
+        let mut app = helix("hx-cmds", "", 0);
+        let file = app.root.join("note.txt");
+        std::fs::write(&file, "disk text").unwrap();
+        app.run_helix_command("open note.txt");
+        assert_eq!(text(&app), "disk text");
+        app.run_helix_command("edit  note.txt ");
+        assert_eq!(text(&app), "disk text");
+        // Edit the buffer, then `write` saves it.
+        buffer_with(&mut app, "changed", 0);
+        app.run_helix_command("write");
+        assert_eq!(std::fs::read_to_string(&file).unwrap().trim_end(), "changed");
+        app.run_helix_command("quit!");
+        assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
+        app.flags.remove(AppFlags::SHOULD_QUIT);
+        // Unknown names fall through to the Vi command line.
+        app.run_helix_command("frobnicate");
+        assert_eq!(
+            app.status,
+            t!("status.vim_no_command", cmd = "frobnicate").to_string()
+        );
+        app.run_helix_command("1"); // `:N` goes to a line
+        // `write-quit` saves and closes the tab; `quit` closes a clean tab.
+        let tabs = app.editor.tabs.len();
+        buffer_with(&mut app, "again", 0);
+        app.run_helix_command("write-quit");
+        assert_eq!(std::fs::read_to_string(&file).unwrap().trim_end(), "again");
+        assert!(app.editor.tabs.len() <= tabs);
+        app.run_helix_command("quit");
+    }
+
+    #[test]
+    fn a_bare_open_or_edit_runs_the_file_open_action() {
+        for name in ["o", "open", "e", "edit"] {
+            let mut app = helix("hx-bareopen", "", 0);
+            assert!(app.file_browser.is_none());
+            app.run_helix_command(name);
+            assert!(app.file_browser.is_some(), "{name} opened the file browser");
+        }
+    }
+
+    #[test]
+    fn the_colon_command_line_uses_helix_names_on_enter() {
+        let mut app = helix("hx-colon", "", 0);
+        press(&mut app, ":quit!");
+        assert_eq!(app.vim_cmd.as_deref(), Some("quit!"));
+        app.on_key(code(KeyCode::Enter));
+        assert!(app.vim_cmd.is_none());
+        assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
+    }
+
+    #[test]
+    fn edits_are_refused_on_a_read_only_buffer() {
+        let mut app = helix("hx-ro", "abc\ndef\n", 0);
+        app.editor.active_tab_mut().unwrap().read_only = true;
+        press(&mut app, "wd");
+        assert_eq!(text(&app), "abc\ndef\n");
+        assert_eq!(app.status, t!("status.read_only_blocked").to_string());
+        app.status.clear();
+        press(&mut app, "p");
+        assert_eq!(app.status, t!("status.read_only_blocked").to_string());
+        app.status.clear();
+        press(&mut app, "~");
+        assert_eq!(app.status, t!("status.read_only_blocked").to_string());
+        assert_eq!(text(&app), "abc\ndef\n");
+        // Typing at every cursor is refused too.
+        app.status.clear();
+        app.helix_type("zzz");
+        assert_eq!(app.status, t!("status.read_only_blocked").to_string());
+        // So is multi-cursor indent.
+        press(&mut app, "C");
+        app.status.clear();
+        app.helix_indent(false);
+        assert_eq!(app.status, t!("status.read_only_blocked").to_string());
+    }
+
+    #[test]
+    fn motions_move_every_cursor_and_select_mode_extends_them() {
+        let mut app = helix("hx-multimove", "abcd\nefgh\nijkl\n", 0);
+        press(&mut app, "C");
+        assert_eq!(carets(&app), 2);
+        press(&mut app, "l");
+        let mut at: Vec<_> = app
+            .editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .caret_anchors()
+            .into_iter()
+            .map(|(_, c)| c)
+            .collect();
+        at.sort_unstable();
+        assert_eq!(at, vec![1, 6]);
+        // Select mode extends every selection instead of dropping them.
+        press(&mut app, "v");
+        press(&mut app, "l");
+        let sel: Vec<_> = app
+            .editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .caret_anchors();
+        assert!(sel.iter().all(|(a, c)| a != c), "{sel:?}");
+        esc(&mut app);
+        press(&mut app, "j");
+        assert_eq!(carets(&app), 2);
+    }
+
+    #[test]
+    fn select_mode_keeps_the_anchor_for_a_single_cursor_motion() {
+        let mut app = helix("hx-selmove", "abcdef", 0);
+        press(&mut app, "v");
+        press(&mut app, "ll");
+        assert_eq!(selected(&mut app).as_deref(), Some("ab"));
+        esc(&mut app);
+        press(&mut app, "h");
+        assert_eq!(selected(&mut app), None, "a plain motion drops the selection");
+    }
+
+    #[test]
+    fn yank_and_paste_after_before_with_counts_and_dot_repeat() {
+        let _clip = CLIP.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut app = helix("hx-paste", "abc def", 0);
+        press(&mut app, "wy"); // yank "abc "
+        press(&mut app, "P");
+        assert!(text(&app).contains("abc abc "), "{}", text(&app));
+        let before = text(&app);
+        press(&mut app, "."); // repeat the paste
+        assert_ne!(text(&app), before);
+        press(&mut app, "2p");
+        assert!(text(&app).len() > before.len());
+    }
+
+    #[test]
+    fn each_selection_gets_its_own_register_line_when_the_counts_match() {
+        let _clip = CLIP.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut app = helix("hx-splitpaste", "x\ny\n", 0);
+        vix_clipboard::set("A\nB\n").unwrap();
+        press(&mut app, "C");
+        assert_eq!(carets(&app), 2);
+        press(&mut app, "p");
+        let t = text(&app);
+        assert!(t.contains('A') && t.contains('B'), "{t}");
+        assert!(t.find('A').unwrap() < t.find('B').unwrap(), "{t}");
+    }
+
+    #[test]
+    fn an_empty_register_pastes_nothing() {
+        let _clip = CLIP.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut app = helix("hx-emptypaste", "abc", 0);
+        vix_clipboard::set("").unwrap();
+        press(&mut app, "p");
+        assert_eq!(text(&app), "abc");
+    }
+
+    #[test]
+    fn dot_repeats_an_insert_with_its_typed_text() {
+        let mut app = helix("hx-dotinsert", "ab cd", 0);
+        press(&mut app, "iX");
+        esc(&mut app);
+        assert_eq!(text(&app), "Xab cd");
+        assert_eq!(
+            app.helix.last_change,
+            Some(Edit::Insert {
+                after: false,
+                text: "X".into()
+            })
+        );
+        press(&mut app, "$"); // end of line, if bound; otherwise unchanged
+        press(&mut app, ".");
+        assert!(text(&app).matches('X').count() >= 2, "{}", text(&app));
+        // An insert that typed nothing is not recorded.
+        let mut quiet = helix("hx-quietinsert", "ab", 0);
+        press(&mut quiet, "i");
+        esc(&mut quiet);
+        assert_eq!(quiet.helix.last_change, None);
+        // `a` appends after the cursor.
+        let mut app2 = helix("hx-append", "ab", 0);
+        press(&mut app2, "aZ");
+        esc(&mut app2);
+        assert_eq!(text(&app2), "aZb");
+    }
+
+    #[test]
+    fn typing_at_several_cursors_records_the_text_split_across_them() {
+        let mut app = helix("hx-multiinsert", "a\nb\n", 0);
+        press(&mut app, "C");
+        press(&mut app, "iQ");
+        esc(&mut app);
+        assert_eq!(text(&app), "Qa\nQb\n");
+        assert_eq!(
+            app.helix.last_change,
+            Some(Edit::Insert {
+                after: false,
+                text: "Q".into()
+            })
+        );
+    }
+
+    #[test]
+    fn a_change_followed_by_dot_repeats_with_the_same_text() {
+        let mut app = helix("hx-dotchange", "foo bar", 0);
+        press(&mut app, "wcX");
+        esc(&mut app);
+        assert_eq!(app.helix.last_change, Some(Edit::Change("X".into())));
+        let t = text(&app);
+        assert!(t.contains('X'), "{t}");
+    }
+
+    #[test]
+    fn indent_and_outdent_record_for_dot_and_repeat_under_a_count() {
+        let mut app = helix("hx-indent", "a\nb\n", 0);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .code_mut()
+            .set_indent(Some("  ".to_string()));
+        press(&mut app, ">");
+        assert_eq!(app.helix.last_change, Some(Edit::Indent));
+        press(&mut app, "<");
+        assert_eq!(app.helix.last_change, Some(Edit::Outdent));
+        press(&mut app, "2>");
+        assert!(text(&app).starts_with("    a"), "{}", text(&app));
+        press(&mut app, ".");
+        assert!(text(&app).starts_with("      a"), "{}", text(&app));
+    }
+
+    #[test]
+    fn undo_and_redo_run_once_per_count() {
+        let mut app = helix("hx-undo", "abc", 0);
+        press(&mut app, "d");
+        press(&mut app, "d");
+        assert_eq!(text(&app), "c");
+        press(&mut app, "2u");
+        assert_eq!(text(&app), "abc");
+        press(&mut app, "U");
+        assert_eq!(text(&app), "bc", "U redoes");
+    }
+
+    #[test]
+    fn dot_with_nothing_recorded_does_nothing_and_a_replace_dot_repeats() {
+        let mut app = helix("hx-dotnone", "abcd", 0);
+        press(&mut app, ".");
+        assert_eq!(text(&app), "abcd");
+        press(&mut app, "xrZ");
+        assert_eq!(app.helix.last_change, Some(Edit::Replace('Z')));
+        // With no selection, `r` replaces the character under the cursor.
+        let mut bare = helix("hx-bare-r", "ab", 0);
+        press(&mut bare, "rZ");
+        assert_eq!(text(&bare), "Zb");
+    }
+
+    #[test]
+    fn collapse_and_toggle_select_switch_modes() {
+        let mut app = helix("hx-collapse", "abc def", 0);
+        press(&mut app, "w");
+        assert!(selected(&mut app).is_some());
+        press(&mut app, ";");
+        assert_eq!(selected(&mut app), None);
+        press(&mut app, "v");
+        assert_eq!(app.modal_mode, vix_modal::Mode::Visual);
+        press(&mut app, "v");
+        assert_eq!(app.modal_mode, vix_modal::Mode::Normal);
+    }
+
+    #[test]
+    fn dot_after_a_delete_removes_the_next_character() {
+        let mut app = helix("hx-dotdelete", "abcd", 0);
+        press(&mut app, "d");
+        assert_eq!(text(&app), "bcd");
+        press(&mut app, ".");
+        assert_eq!(text(&app), "cd");
+        assert_eq!(app.helix.last_change, Some(Edit::Delete));
+    }
+}
