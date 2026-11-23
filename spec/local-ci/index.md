@@ -88,6 +88,12 @@ The landing bar is unchanged; these make the same checks wait less.
   is for the edit loop and for local landings backed by a full CI pass: it ends
   with `OK (scope changed, tier …): … NOT a full pass`, which the attestation
   does not accept. The default scope is `all`.
+- **nextest by default off macOS.** When `cargo-nextest` is installed the gate
+  runs the test suite with it on Linux (parallel across binaries, one process
+  per test, one retry reported as FLAKY; doctests still run with `cargo test
+  --doc`). On macOS it stays opt-in (`VIX_NEXTEST=1`) because every process
+  spawn is scanned by the OS and it measured about twice as slow; `VIX_NEXTEST=0`
+  forces `cargo test` anywhere. CI and `scripts/ci` already behaved this way.
 - **Test builds carry less debug information.** `[profile.test]` uses
   line-tables-only and no debug information for dependencies, as `[profile.dev]`
   already did; backtraces keep file and line for workspace code.

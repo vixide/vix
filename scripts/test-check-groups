@@ -109,6 +109,19 @@ run() { # NAME ENV... -- ARGS...   (output in $work/out.NAME, log in $work/log.N
 }
 
 mkdir -p "$work/main-target"
+# nextest is the default off macOS and opt-in on it; doctests always run.
+cat >"$work/bin/cargo-nextest" <<'E'
+#!/bin/sh
+exit 0
+E
+chmod +x "$work/bin/cargo-nextest"
+st=$(run nx_on VIX_NEXTEST=1 -- --tier push)
+[ "$st" = 0 ] || bad "nextest run exit $st"
+has "VIX_NEXTEST=1 runs nextest" "$work/log.nx_on" "^nextest target"
+has "doctests still run with cargo test" "$work/log.nx_on" "^test .*--doc"
+st=$(run nx_off VIX_NEXTEST=0 -- --tier push)
+[ "$st" = 0 ] || bad "cargo test run exit $st"
+hasnt "VIX_NEXTEST=0 skips nextest" "$work/log.nx_off" "^nextest"
 echo seeded >"$work/main-target/marker"
 
 # VIX_PRIVATE_TARGET=1 gives this worktree its own target, seeded from the old one.

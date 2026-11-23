@@ -251,12 +251,21 @@ fi
 step_end
 
 step_begin "cargo test"
-# T604: nextest (VIX_NEXTEST=1) is parallel across binaries and isolates each
-# test in its own process -- a win on Linux CI, but on macOS every one of the
+# T604: nextest runs each test in its own process, in parallel across all test
+# binaries. That is a clear win on Linux (spawning a process is cheap) and is
+# the default there when cargo-nextest is installed. On macOS every one of the
 # ~2000 process spawns is scanned by XProtect/syspolicyd and it measured ~2x
-# *slower* than `cargo test` (2117 s vs 1026 s), so it is opt-in here.
+# *slower* than `cargo test` (2117 s vs 1026 s), so there it is opt-in.
+# VIX_NEXTEST=1 forces it on, VIX_NEXTEST=0 forces `cargo test`; unset means
+# "on for Linux". Doctests always run with `cargo test --doc` (nextest has none).
+if [ -z "${VIX_NEXTEST:-}" ]; then
+	case "$(uname -s)" in
+	Darwin) VIX_NEXTEST=0 ;;
+	*) VIX_NEXTEST=1 ;;
+	esac
+fi
 if in_tier push; then
-	if [ "${VIX_NEXTEST:-0}" = 1 ] && command -v cargo-nextest >/dev/null 2>&1; then
+	if [ "$VIX_NEXTEST" = 1 ] && command -v cargo-nextest >/dev/null 2>&1; then
 		cargo nextest run --workspace
 		cargo test --workspace --doc # nextest does not run doctests
 	else
