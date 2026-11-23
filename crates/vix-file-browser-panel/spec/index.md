@@ -109,3 +109,7 @@ and the match count. The host renders rows as name, size (humanized via
 - `file.open` — open the file browser (File → Open…, `Ctrl O`).
 - `file.open_path` — the classic type-a-path prompt (also reachable from
   inside the browser with `Ctrl O`).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The glob matcher walks with `get` and a checked step; entry lookups use `get`; a pre-epoch timestamp that cannot be negated is `None`. **Declared (BROWSER-F1):** a fuzzy relevance past the top of the `i32` scale is the top of the scale. The display-only size conversion and the sort's indexes from `enumerate` carry `RCA-EXC-2` proofs.
