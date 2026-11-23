@@ -1299,7 +1299,7 @@ mod tests {
         tree.filter_key(None);
         tree.filter_key(None);
         tree.filter_key(None);
-        assert!(tree.filter.is_empty());
+        assert_eq!(tree.filter, "");
         tree.filter_key(None);
         for c in "zzz".chars() {
             tree.filter_key(Some(c));
@@ -1330,7 +1330,10 @@ mod tests {
             let pk = primary_key_sql(kind, "s", "o'brien");
             assert!(pk.contains("o''brien"), "{pk}");
             let ddl = ddl_sql(kind, "s", "o'brien");
-            assert!(ddl.contains("o''brien") || ddl.contains("`o'brien`"), "{ddl}");
+            assert!(
+                ddl.contains("o''brien") || ddl.contains("`o'brien`"),
+                "{ddl}"
+            );
         }
         assert!(primary_key_sql(Kind::Postgres, "s", "t").contains("indisprimary"));
         assert!(primary_key_sql(Kind::Mysql, "s", "t").contains("'PRIMARY'"));
@@ -1351,9 +1354,39 @@ mod tests {
             Detail::Stats,
         ];
         let needles = [
-            (Kind::Sqlite, ["table_info", "index_list", "foreign_key_list", "trigger", "sqlite_master", "row_count"]),
-            (Kind::Postgres, ["information_schema.columns", "pg_indexes", "FOREIGN KEY", "triggers", "table_constraints", "pg_class"]),
-            (Kind::Mysql, ["column_type", "statistics", "referenced_table_name", "triggers", "table_constraints", "table_rows"]),
+            (
+                Kind::Sqlite,
+                [
+                    "table_info",
+                    "index_list",
+                    "foreign_key_list",
+                    "trigger",
+                    "sqlite_master",
+                    "row_count",
+                ],
+            ),
+            (
+                Kind::Postgres,
+                [
+                    "information_schema.columns",
+                    "pg_indexes",
+                    "FOREIGN KEY",
+                    "triggers",
+                    "table_constraints",
+                    "pg_class",
+                ],
+            ),
+            (
+                Kind::Mysql,
+                [
+                    "column_type",
+                    "statistics",
+                    "referenced_table_name",
+                    "triggers",
+                    "table_constraints",
+                    "table_rows",
+                ],
+            ),
         ];
         for (kind, expected) in needles {
             for (detail, needle) in details.iter().zip(expected) {

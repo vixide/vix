@@ -412,7 +412,11 @@ mod tests {
         b.ask_input = "second".into();
         b.submit_ask();
         assert_eq!(b.message, Some(busy.clone()));
-        for f in [Browser::fix_error, Browser::explain_query, Browser::optimize_current] {
+        for f in [
+            Browser::fix_error,
+            Browser::explain_query,
+            Browser::optimize_current,
+        ] {
             b.message = None;
             f(&mut b);
             assert_eq!(b.message, Some(busy.clone()));
@@ -450,7 +454,11 @@ mod tests {
         let req = queued(&mut b);
         assert_eq!(req.reply, AiReply::Sql);
         assert!(req.context.contains("SELECT * FROM parent"));
-        assert!(req.context.contains("SCAN"), "the plan is included: {}", req.context);
+        assert!(
+            req.context.contains("SCAN"),
+            "the plan is included: {}",
+            req.context
+        );
     }
 
     #[test]
@@ -465,7 +473,7 @@ mod tests {
         assert!(!b.ai_busy());
         assert_eq!(b.query.text(), "SELECT * FROM parent");
         assert_eq!(b.focus, Pane::Results, "the EXPLAIN plan is shown");
-        assert!(!b.grid.rows.is_empty());
+        assert_ne!(b.grid.rows.len(), 0);
         assert!(!b.editable());
         assert_eq!(b.message, Some(t!("msg.db_ai_ready").to_string()));
     }

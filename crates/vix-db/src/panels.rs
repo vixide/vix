@@ -736,7 +736,7 @@ impl Browser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{ctrl, family, preview, press, select_table, typed, workbench};
+    use crate::test_support::{ctrl, family, press, preview, select_table, typed, workbench};
     use crate::{Pages, connect};
 
     fn scratch(name: &str) -> std::path::PathBuf {
@@ -776,7 +776,7 @@ mod tests {
         press(&mut b, KeyCode::Delete);
         press(&mut b, KeyCode::Delete);
         press(&mut b, KeyCode::Delete);
-        assert!(b.history.entries.is_empty());
+        assert_eq!(b.history.entries.len(), 0);
         assert_eq!(b.list_sel, 0);
         b.history.push("SELECT 9");
         press(&mut b, KeyCode::Enter);
@@ -814,7 +814,10 @@ mod tests {
         press(&mut b, KeyCode::Tab);
         press(&mut b, KeyCode::Enter);
         assert_eq!(b.view, View::Workbench);
-        assert_eq!(b.message, Some(t!("msg.db_saved_query", name = "one").to_string()));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_saved_query", name = "one").to_string())
+        );
         assert_eq!(b.saved.queries.len(), 1);
         assert!(b.take_dirty_saved().is_some());
         // Esc cancels naming.
@@ -828,7 +831,7 @@ mod tests {
         assert_eq!(b.query.text(), "SELECT 1;\nSELECT 1");
         b.open_saved();
         press(&mut b, KeyCode::Char('d'));
-        assert!(b.saved.queries.is_empty());
+        assert_eq!(b.saved.queries.len(), 0);
         assert!(b.take_dirty_saved().is_some());
         press(&mut b, KeyCode::Char('d'));
         assert_eq!(b.list_sel, 0);
@@ -961,7 +964,10 @@ mod tests {
         b.export_path = out.display().to_string();
         press(&mut b, KeyCode::Enter);
         let text = std::fs::read_to_string(&out).unwrap();
-        assert!(text.contains("INSERT INTO") && text.contains("parent"), "{text}");
+        assert!(
+            text.contains("INSERT INTO") && text.contains("parent"),
+            "{text}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -996,7 +1002,12 @@ mod tests {
         );
         assert!(b.tree.table_names().contains(&"people".to_string()));
         assert_eq!(
-            b.session.as_mut().unwrap().run("SELECT name FROM people ORDER BY age").unwrap().1,
+            b.session
+                .as_mut()
+                .unwrap()
+                .run("SELECT name FROM people ORDER BY age")
+                .unwrap()
+                .1,
             [["ann"], ["bob"]]
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -1035,7 +1046,11 @@ mod tests {
         b.open_import();
         b.import_path = csv.display().to_string();
         press(&mut b, KeyCode::Enter);
-        assert!(b.message.as_deref().unwrap().contains('t'), "{:?}", b.message);
+        assert!(
+            b.message.as_deref().unwrap().contains('t'),
+            "{:?}",
+            b.message
+        );
         assert_ne!(b.view, View::Workbench);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1062,7 +1077,11 @@ mod tests {
     fn a_sql_file_is_loaded_into_the_editor_and_run() {
         let dir = scratch("runfile");
         let file = dir.join("s.sql");
-        std::fs::write(&file, "CREATE TABLE r (a);\nINSERT INTO r VALUES (4);\nSELECT a FROM r;").unwrap();
+        std::fs::write(
+            &file,
+            "CREATE TABLE r (a);\nINSERT INTO r VALUES (4);\nSELECT a FROM r;",
+        )
+        .unwrap();
         let mut b = workbench(true, &[]);
         ctrl(&mut b, 'p');
         assert_eq!(b.view, View::Import);
@@ -1097,7 +1116,7 @@ mod tests {
         assert_eq!(b.tree.filter, "chi", "Enter keeps the filter");
         press(&mut b, KeyCode::Char('/'));
         press(&mut b, KeyCode::Esc);
-        assert!(b.tree.filter.is_empty());
+        assert_eq!(b.tree.filter, "");
         press(&mut b, KeyCode::Home);
         assert_eq!(b.tree.sel, 0);
         press(&mut b, KeyCode::Down);
@@ -1125,13 +1144,21 @@ mod tests {
             b.grid.set(Vec::new(), Vec::new());
             press(&mut b, KeyCode::Char(k));
             assert_eq!(b.focus, Pane::Results, "key {k}: {:?}", b.message);
-            assert!(b.grid_source.as_ref().is_some_and(|(sql, _)| sql.contains("child")));
+            assert!(
+                b.grid_source
+                    .as_ref()
+                    .is_some_and(|(sql, _)| sql.contains("child"))
+            );
             assert!(!b.editable());
         }
         select_table(&mut b, "child");
         b.focus = Pane::Tree;
         press(&mut b, KeyCode::Enter);
-        assert!(b.grid.headers.contains(&"name".to_string()), "{:?}", b.grid.headers);
+        assert!(
+            b.grid.headers.contains(&"name".to_string()),
+            "{:?}",
+            b.grid.headers
+        );
         // `m` marks, `e` exports, `r` refreshes, `A` copies for the assistant.
         b.focus = Pane::Tree;
         press(&mut b, KeyCode::Char('r'));
@@ -1145,7 +1172,10 @@ mod tests {
     fn the_editor_pane_edits_moves_and_drives_the_completion_popup() {
         let mut b = family(false);
         b.focus = Pane::Editor;
-        let pages = Pages { editor: 4, ..Pages::default() };
+        let pages = Pages {
+            editor: 4,
+            ..Pages::default()
+        };
         let send = |b: &mut Browser, code| {
             b.handle_key(crate::test_support::key(code), pages);
         };
@@ -1222,7 +1252,7 @@ mod tests {
         assert_eq!(b.grid.filter, "b");
         press(&mut b, KeyCode::Char('/'));
         press(&mut b, KeyCode::Esc);
-        assert!(b.grid.filter.is_empty());
+        assert_eq!(b.grid.filter, "");
         press(&mut b, KeyCode::Char('y'));
         assert_eq!(b.message, Some(t!("msg.db_copied").to_string()));
         b.message = None;
@@ -1230,7 +1260,7 @@ mod tests {
         assert_eq!(b.message, Some(t!("msg.db_copied").to_string()));
         press(&mut b, KeyCode::Char('v'));
         assert_eq!(b.view, View::Cell);
-        assert!(!b.cell_text.is_empty());
+        assert_ne!(b.cell_text, "");
         press(&mut b, KeyCode::Esc);
         press(&mut b, KeyCode::Char('A'));
         assert!(b.message.is_some());
@@ -1240,7 +1270,10 @@ mod tests {
     fn c_charts_a_label_and_number_result_or_says_it_cannot() {
         let mut b = workbench(
             false,
-            &["CREATE TABLE s (k TEXT, n INTEGER)", "INSERT INTO s VALUES ('a', 3), ('b', 9)"],
+            &[
+                "CREATE TABLE s (k TEXT, n INTEGER)",
+                "INSERT INTO s VALUES ('a', 3), ('b', 9)",
+            ],
         );
         b.focus = Pane::Results;
         b.grid.set(vec!["k".into()], vec![vec!["a".into()]]);

@@ -1550,7 +1550,10 @@ mod browser_tests {
         assert_eq!(b.message, Some(t!("msg.db_table_export_none").to_string()));
         select_table(&mut b, "child");
         b.toggle_export_mark();
-        assert_eq!(b.message, Some(t!("msg.db_tables_marked", count = 1).to_string()));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_tables_marked", count = 1).to_string())
+        );
         select_table(&mut b, "parent");
         press(&mut b, KeyCode::Char('m'));
         assert_eq!(b.export_marks.len(), 2);
@@ -1599,7 +1602,11 @@ mod browser_tests {
         assert_eq!(d.path, "vix-export.sql");
         press(&mut b, KeyCode::Right);
         let d = b.table_export.as_ref().unwrap();
-        assert_eq!((d.format, d.path.as_str()), (0, "vix-export"), "wraps forward");
+        assert_eq!(
+            (d.format, d.path.as_str()),
+            (0, "vix-export"),
+            "wraps forward"
+        );
         press(&mut b, KeyCode::Right);
         assert_eq!(b.table_export.as_ref().unwrap().format(), Format::Json);
         // ...and stays put once edited.
@@ -1615,7 +1622,11 @@ mod browser_tests {
         // Re-opening keeps the last format.
         b.view = View::Export;
         b.key_table_export(crate::test_support::key(KeyCode::Char('q')));
-        assert_eq!(b.view, View::Workbench, "no dialog: the export view just closes");
+        assert_eq!(
+            b.view,
+            View::Workbench,
+            "no dialog: the export view just closes"
+        );
     }
 
     #[test]
@@ -1624,7 +1635,10 @@ mod browser_tests {
         select_table(&mut b, "child");
         b.open_table_export();
         press(&mut b, KeyCode::Enter);
-        assert_eq!(b.message, Some(t!("msg.db_table_export_memory").to_string()));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_table_export_memory").to_string())
+        );
         b.conn.as_mut().unwrap().file = "/some/file.db".into();
         b.table_export.as_mut().unwrap().path = "  ".into();
         press(&mut b, KeyCode::Enter);
@@ -1657,7 +1671,10 @@ mod browser_tests {
         press(&mut b, KeyCode::Enter);
         assert!(b.table_export_running());
         assert_eq!(b.view, View::Workbench);
-        assert_eq!(b.message, Some(t!("msg.db_table_export_started", count = 2).to_string()));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_table_export_started", count = 2).to_string())
+        );
         // A second export while one runs is refused.
         b.open_table_export();
         press(&mut b, KeyCode::Enter);
@@ -1685,7 +1702,10 @@ mod browser_tests {
         let (mut b, dir) = file_workbench(
             "tx-csv",
             false,
-            &["CREATE TABLE p (id INTEGER PRIMARY KEY, n TEXT)", "INSERT INTO p VALUES (1, 'a')"],
+            &[
+                "CREATE TABLE p (id INTEGER PRIMARY KEY, n TEXT)",
+                "INSERT INTO p VALUES (1, 'a')",
+            ],
         );
         let out = dir.join("out");
         select_table(&mut b, "p");
@@ -1701,7 +1721,11 @@ mod browser_tests {
 
     #[test]
     fn an_export_that_cannot_start_reports_the_error() {
-        let (mut b, dir) = file_workbench("tx-bad", false, &["CREATE TABLE p (id INTEGER PRIMARY KEY)"]);
+        let (mut b, dir) = file_workbench(
+            "tx-bad",
+            false,
+            &["CREATE TABLE p (id INTEGER PRIMARY KEY)"],
+        );
         select_table(&mut b, "p");
         b.open_table_export();
         b.table_export.as_mut().unwrap().format = 3;
@@ -1734,22 +1758,44 @@ mod browser_tests {
         assert!(!b.table_export_running());
         let (tx, rx) = mpsc::channel();
         b.pending_export = Some(pending(rx));
-        tx.send(Event::Table { index: 0, name: "p".into() }).unwrap();
+        tx.send(Event::Table {
+            index: 0,
+            name: "p".into(),
+        })
+        .unwrap();
         tx.send(Event::Rows(12)).unwrap();
         b.poll_table_export();
         assert_eq!(
             b.message,
             Some(
-                t!("msg.db_table_export_progress", table = "p", index = 1, count = 2, rows = 12)
-                    .to_string()
+                t!(
+                    "msg.db_table_export_progress",
+                    table = "p",
+                    index = 1,
+                    count = 2,
+                    rows = 12
+                )
+                .to_string()
             )
         );
         assert!(b.table_export_running());
-        tx.send(Event::Done { rows: 5, cycle: true }).unwrap();
+        tx.send(Event::Done {
+            rows: 5,
+            cycle: true,
+        })
+        .unwrap();
         b.poll_table_export();
         assert_eq!(
             b.message,
-            Some(t!("msg.db_tables_exported_cycle", rows = 5, count = 2, path = "out.sql").to_string())
+            Some(
+                t!(
+                    "msg.db_tables_exported_cycle",
+                    rows = 5,
+                    count = 2,
+                    path = "out.sql"
+                )
+                .to_string()
+            )
         );
         assert!(!b.table_export_running());
         let (tx, rx) = mpsc::channel();
@@ -1768,7 +1814,11 @@ mod browser_tests {
         assert_eq!(
             b.message,
             Some(
-                t!("msg.db_table_export_failed", error = t!("msg.db_not_connected")).to_string()
+                t!(
+                    "msg.db_table_export_failed",
+                    error = t!("msg.db_not_connected")
+                )
+                .to_string()
             )
         );
     }

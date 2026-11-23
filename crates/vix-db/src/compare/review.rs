@@ -803,7 +803,12 @@ mod tests {
     }
 
     /// A `SQLite` file holding `ddl`, as a saved connection.
-    fn target_file(dir: &std::path::Path, name: &str, ddl: &[&str], writable: bool) -> connect::Connection {
+    fn target_file(
+        dir: &std::path::Path,
+        name: &str,
+        ddl: &[&str],
+        writable: bool,
+    ) -> connect::Connection {
         let path = dir.join(format!("{name}.db")).display().to_string();
         let mut s =
             session::Session::connect(&crate::catalog::sqlite_url(&path, "rwc"), &[]).unwrap();
@@ -835,12 +840,18 @@ mod tests {
     fn compare_pair(dir: &std::path::Path, target_writable: bool) -> Browser {
         let mut b = workbench(
             true,
-            &["CREATE TABLE a (id INTEGER)", "CREATE TABLE shared (x INTEGER)"],
+            &[
+                "CREATE TABLE a (id INTEGER)",
+                "CREATE TABLE shared (x INTEGER)",
+            ],
         );
         let target = target_file(
             dir,
             "other",
-            &["CREATE TABLE shared (x INTEGER)", "CREATE TABLE extra (y INTEGER)"],
+            &[
+                "CREATE TABLE shared (x INTEGER)",
+                "CREATE TABLE extra (y INTEGER)",
+            ],
             target_writable,
         );
         b.connections = vec![
@@ -861,7 +872,12 @@ mod tests {
         press(&mut b, KeyCode::Enter);
         assert_eq!(b.compare().unwrap().screen, Screen::Working);
         settle(&mut b);
-        assert_eq!(b.compare().unwrap().screen, Screen::Review, "{:?}", b.message);
+        assert_eq!(
+            b.compare().unwrap().screen,
+            Screen::Review,
+            "{:?}",
+            b.message
+        );
         b
     }
 
@@ -873,13 +889,25 @@ mod tests {
         assert!(b.compare().is_none());
         assert_eq!(
             b.message,
-            Some(t!("msg.db_compare_unsupported", kind = connect::Kind::Mysql.label()).to_string())
+            Some(
+                t!(
+                    "msg.db_compare_unsupported",
+                    kind = connect::Kind::Mysql.label()
+                )
+                .to_string()
+            )
         );
         b.conn.as_mut().unwrap().kind = connect::Kind::Sqlite;
         b.open_compare();
         assert_eq!(
             b.message,
-            Some(t!("msg.db_compare_no_target", kind = connect::Kind::Sqlite.label()).to_string())
+            Some(
+                t!(
+                    "msg.db_compare_no_target",
+                    kind = connect::Kind::Sqlite.label()
+                )
+                .to_string()
+            )
         );
         assert!(!b.compare_running());
     }
@@ -934,7 +962,10 @@ mod tests {
         press(&mut b, KeyCode::Enter);
         assert!(b.message.is_some());
         assert_eq!(b.compare().unwrap().screen, Screen::Pick);
-        assert!(b.log.entries.iter().any(|e| !e.ok), "the failed read is logged");
+        assert!(
+            b.log.entries.iter().any(|e| !e.ok),
+            "the failed read is logged"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -946,7 +977,11 @@ mod tests {
         press(&mut b, KeyCode::Enter);
         assert!(b.compare_running());
         press(&mut b, KeyCode::Char('x'));
-        assert_eq!(b.compare().unwrap().screen, Screen::Working, "other keys wait");
+        assert_eq!(
+            b.compare().unwrap().screen,
+            Screen::Working,
+            "other keys wait"
+        );
         press(&mut b, KeyCode::Esc);
         assert_eq!(b.compare().unwrap().screen, Screen::Pick);
         assert!(!b.compare_running());
@@ -981,7 +1016,7 @@ mod tests {
         assert_eq!(b.compare().unwrap().password, "pw");
         press(&mut b, KeyCode::Esc);
         assert_eq!(b.compare().unwrap().screen, Screen::Pick);
-        assert!(b.compare().unwrap().password.is_empty());
+        assert_eq!(b.compare().unwrap().password, "");
         b.compare.as_mut().unwrap().screen = Screen::Password;
         typed(&mut b, "pw");
         press(&mut b, KeyCode::Enter);
@@ -1000,7 +1035,10 @@ mod tests {
         assert_eq!(c.checked.iter().filter(|on| **on).count(), 1);
         assert_eq!(c.target_name(), "other");
         assert!(!c.target_write_enabled());
-        assert_eq!(c.target_environment(), Some(crate::environment::badge(connect::Environment::Local)));
+        assert_eq!(
+            c.target_environment(),
+            Some(crate::environment::badge(connect::Environment::Local))
+        );
         let first_checked = c.checked[0];
         // Cursor movement clamps at both ends; space toggles the change.
         press(&mut b, KeyCode::Up);
@@ -1023,7 +1061,10 @@ mod tests {
         assert_eq!(b.compare().unwrap().cursor, 0);
         let script = b.compare().unwrap().script();
         assert!(script.contains("CREATE TABLE"), "{script}");
-        assert!(!script.contains("DROP TABLE"), "the destructive change is unchecked");
+        assert!(
+            !script.contains("DROP TABLE"),
+            "the destructive change is unchecked"
+        );
         press(&mut b, KeyCode::Esc);
         assert!(b.compare().is_none());
         let _ = std::fs::remove_dir_all(&dir);
@@ -1054,7 +1095,11 @@ mod tests {
             assert_eq!(b.compare().unwrap().screen, Screen::Review);
         }
         press(&mut b, KeyCode::Enter);
-        assert_eq!(b.compare().unwrap().screen, Screen::Script, "Enter views it too");
+        assert_eq!(
+            b.compare().unwrap().screen,
+            Screen::Script,
+            "Enter views it too"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1098,7 +1143,10 @@ mod tests {
         assert!(b.compare().is_none());
         assert_eq!(b.focus, Pane::Editor);
         assert!(b.query.text().contains("CREATE TABLE"));
-        assert_eq!(b.message, Some(t!("msg.db_compare_opened", name = "other").to_string()));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_compare_opened", name = "other").to_string())
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1113,9 +1161,7 @@ mod tests {
         );
         assert_eq!(b.compare().unwrap().screen, Screen::Review);
         // Un-check everything: nothing to run.
-        for on in &mut b.compare.as_mut().unwrap().checked {
-            *on = false;
-        }
+        b.compare.as_mut().unwrap().checked.fill(false);
         press(&mut b, KeyCode::Char('r'));
         assert_eq!(b.message, Some(t!("msg.db_compare_nothing").to_string()));
         // The run gate holds even if the confirmation were reached anyway.
@@ -1173,7 +1219,8 @@ mod tests {
         let changes = b.compare().unwrap().changes.len();
         assert_eq!(changes, 1);
         let target = &b.connections[1].file;
-        let mut s = session::Session::connect(&crate::catalog::sqlite_url(target, "ro"), &[]).unwrap();
+        let mut s =
+            session::Session::connect(&crate::catalog::sqlite_url(target, "ro"), &[]).unwrap();
         let (_, rows) = s
             .run("SELECT name FROM sqlite_master WHERE name = 'a'")
             .unwrap();
@@ -1187,9 +1234,7 @@ mod tests {
         let mut b = at_review(&dir, true);
         // Choose the drop of `extra`, then take `extra` away behind its back so
         // the migration's DROP fails.
-        for on in &mut b.compare.as_mut().unwrap().checked {
-            *on = true;
-        }
+        b.compare.as_mut().unwrap().checked.fill(true);
         let target = b.connections[1].file.clone();
         let mut other =
             session::Session::connect(&crate::catalog::sqlite_url(&target, "rwc"), &[]).unwrap();
@@ -1208,7 +1253,10 @@ mod tests {
     fn keys_are_ignored_without_a_compare_and_polling_is_a_no_op() {
         let mut b = workbench(true, &[]);
         b.poll_compare();
-        assert_eq!(b.key_compare(crate::test_support::key(KeyCode::Enter), 5), Outcome::Consumed);
+        assert_eq!(
+            b.key_compare(crate::test_support::key(KeyCode::Enter), 5),
+            Outcome::Consumed
+        );
         b.confirm_compare_run();
         b.toggle_target_write();
         b.run_compare();

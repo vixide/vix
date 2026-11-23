@@ -1201,8 +1201,8 @@ mod tests {
 
     mod keys {
         use super::*;
-        use crate::test_support::{ctrl, press, typed, workbench};
         use crate::Pages;
+        use crate::test_support::{ctrl, press, typed, workbench};
 
         fn editor_with(b: &mut Browser, text: &str) {
             b.focus = Pane::Editor;
@@ -1225,7 +1225,10 @@ mod tests {
 
         #[test]
         fn f5_streams_the_statement_at_the_cursor_into_the_grid() {
-            let mut b = workbench(false, &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2)"]);
+            let mut b = workbench(
+                false,
+                &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2)"],
+            );
             editor_with(&mut b, "SELECT a FROM t ORDER BY a;");
             press(&mut b, KeyCode::F(5));
             assert!(b.query_running());
@@ -1236,9 +1239,18 @@ mod tests {
             assert_eq!(grid_of(&b), [["1"], ["2"]]);
             assert_eq!(b.focus, Pane::Results);
             assert_eq!(b.message, Some(t!("msg.db_rows", count = 2).to_string()));
-            assert!(b.history.entries.iter().any(|h| h.contains("SELECT a FROM t")));
+            assert!(
+                b.history
+                    .entries
+                    .iter()
+                    .any(|h| h.contains("SELECT a FROM t"))
+            );
             assert!(b.take_dirty_history().is_some());
-            assert_eq!(b.query.text(), "SELECT a FROM t ORDER BY a;", "the busy key typed nothing");
+            assert_eq!(
+                b.query.text(),
+                "SELECT a FROM t ORDER BY a;",
+                "the busy key typed nothing"
+            );
         }
 
         #[test]
@@ -1273,7 +1285,12 @@ mod tests {
             let (sql, error) = b.last_error.clone().unwrap();
             assert_eq!(sql, "SELECT * FROM missing");
             assert!(error.contains("missing"));
-            assert!(b.log.entries.iter().any(|e| !e.ok && e.sql.contains("missing")));
+            assert!(
+                b.log
+                    .entries
+                    .iter()
+                    .any(|e| !e.ok && e.sql.contains("missing"))
+            );
             // A later success clears it.
             editor_with(&mut b, "SELECT 1");
             press(&mut b, KeyCode::F(5));
@@ -1294,12 +1311,15 @@ mod tests {
             assert_eq!(b.message, Some(t!("msg.db_write_enabled").to_string()));
             press(&mut b, KeyCode::F(5));
             assert_eq!(b.view, View::Confirm);
-            assert_eq!(b.pending_summary().as_deref(), Some("INSERT INTO t VALUES (1)"));
+            assert_eq!(
+                b.pending_summary().as_deref(),
+                Some("INSERT INTO t VALUES (1)")
+            );
             assert_eq!(b.pending_statements(), ["INSERT INTO t VALUES (1)"]);
             press(&mut b, KeyCode::Char('n'));
             assert_eq!(b.view, View::Workbench);
             assert_eq!(b.pending_summary(), None);
-            assert!(b.pending_statements().is_empty());
+            assert_eq!(b.pending_statements().len(), 0);
             assert_eq!(count(&mut b, "t"), "0");
             press(&mut b, KeyCode::F(5));
             press(&mut b, KeyCode::Enter);
@@ -1360,7 +1380,10 @@ mod tests {
 
         #[test]
         fn named_parameters_are_prompted_and_substituted() {
-            let mut b = workbench(false, &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2)"]);
+            let mut b = workbench(
+                false,
+                &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2)"],
+            );
             editor_with(&mut b, "SELECT a FROM t WHERE a = :n");
             press(&mut b, KeyCode::F(5));
             assert_eq!(b.view, View::Params);
@@ -1393,7 +1416,10 @@ mod tests {
         #[test]
         fn execute_all_runs_every_statement_and_stops_at_the_first_error() {
             let mut b = workbench(true, &[]);
-            editor_with(&mut b, "CREATE TABLE t (a); INSERT INTO t VALUES (7); SELECT a FROM t");
+            editor_with(
+                &mut b,
+                "CREATE TABLE t (a); INSERT INTO t VALUES (7); SELECT a FROM t",
+            );
             press(&mut b, KeyCode::F(9));
             assert_eq!(b.view, View::Confirm);
             assert_eq!(b.pending_statements().len(), 3);
@@ -1404,7 +1430,11 @@ mod tests {
             assert_eq!(b.focus, Pane::Results);
             editor_with(&mut b, "SELECT 1; SELECT * FROM nope; SELECT 3");
             press(&mut b, KeyCode::F(9));
-            assert!(b.message.as_deref().unwrap().starts_with("2/3:"), "{:?}", b.message);
+            assert!(
+                b.message.as_deref().unwrap().starts_with("2/3:"),
+                "{:?}",
+                b.message
+            );
             assert!(b.last_error.is_some());
             assert_eq!(grid_of(&b), [["7"]], "the grid keeps the last good result");
         }
@@ -1418,7 +1448,11 @@ mod tests {
             editor_with(&mut b, "SELECT 1;\nSELECT 2");
             b.query = editor::Query::from_text("SELECT 1;\n\\connect other\nSELECT 2");
             press(&mut b, KeyCode::F(9));
-            assert!(b.message.as_deref().unwrap().contains('2'), "{:?}", b.message);
+            assert!(
+                b.message.as_deref().unwrap().contains('2'),
+                "{:?}",
+                b.message
+            );
             assert_eq!(b.view, View::Workbench);
             // A read-only script runs straight away.
             editor_with(&mut b, "SELECT 1; SELECT 2");
@@ -1432,7 +1466,7 @@ mod tests {
             editor_with(&mut b, "SELECT * FROM t");
             press(&mut b, KeyCode::F(6));
             drain(&mut b);
-            assert!(!b.grid.rows.is_empty());
+            assert_ne!(b.grid.rows.len(), 0);
             assert_eq!(b.message, Some(t!("msg.db_insight_scan").to_string()));
             assert!(b.plan_marks().is_none());
             // An indexed lookup is a plain plan.
@@ -1473,7 +1507,10 @@ mod tests {
             assert_eq!(b.view, View::Confirm);
             assert!(b.history_override.is_some());
             press(&mut b, KeyCode::Char('q'));
-            assert!(b.history_override.is_none(), "cancelling drops the template");
+            assert!(
+                b.history_override.is_none(),
+                "cancelling drops the template"
+            );
             assert_eq!(b.view, View::Workbench);
             press(&mut b, KeyCode::Char('z'));
         }
@@ -1518,7 +1555,8 @@ mod tests {
             assert_eq!(b.view, View::Connections);
             assert!(b.conn.is_none());
             // A dropped sender counts as a failure too; nothing pending is a no-op.
-            let (tx, rx) = std::sync::mpsc::channel::<Result<session::Session, session::SessionError>>();
+            let (tx, rx) =
+                std::sync::mpsc::channel::<Result<session::Session, session::SessionError>>();
             drop(tx);
             b.pending_reconnect = Some(PendingReconnect { rx, lost_tx: true });
             b.poll_reconnect();
@@ -1568,7 +1606,10 @@ mod tests {
             b.tx = TxState::Open;
             b.finish_stream_err(&cancelled, None);
             assert_eq!(b.tx, TxState::Aborted);
-            assert_eq!(b.message, Some(t!("msg.db_cancelled_tx_aborted").to_string()));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_cancelled_tx_aborted").to_string())
+            );
             assert!(b.last_error.is_none());
         }
 
@@ -1616,7 +1657,11 @@ mod tests {
             b.message = None;
             b.finish_stream(false);
             b.finish_stream_err(
-                &session::QueryError { message: "x".into(), kind: session::QueryErrorKind::Database, code: None },
+                &session::QueryError {
+                    message: "x".into(),
+                    kind: session::QueryErrorKind::Database,
+                    code: None,
+                },
                 None,
             );
             assert_eq!(b.message, None);
@@ -1625,7 +1670,10 @@ mod tests {
         #[test]
         fn a_postgres_plan_text_that_does_not_parse_is_left_alone() {
             let mut b = workbench(false, &[]);
-            b.grid.set(vec!["QUERY PLAN".into()], vec![vec!["Seq Scan on t".into()]]);
+            b.grid.set(
+                vec!["QUERY PLAN".into()],
+                vec![vec!["Seq Scan on t".into()]],
+            );
             assert!(b.show_plan_tree(connect::Kind::Postgres).is_none());
         }
 

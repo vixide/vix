@@ -463,7 +463,10 @@ mod tests {
             TunnelError::NotInstalled.to_string(),
             t!("msg.db_tunnel_ssh_missing")
         );
-        assert_eq!(TunnelError::Timeout.to_string(), t!("msg.db_tunnel_timeout"));
+        assert_eq!(
+            TunnelError::Timeout.to_string(),
+            t!("msg.db_tunnel_timeout")
+        );
         let spawn = TunnelError::Spawn(std::io::Error::other("boom"));
         assert_eq!(
             spawn.to_string(),
@@ -496,7 +499,10 @@ mod tests {
 
     #[test]
     fn a_hostile_field_is_refused_before_any_process_starts() {
-        for result in [open(&pg_via("-oProxyCommand=evil")), open_batch(&pg_via("-oProxyCommand=evil"))] {
+        for result in [
+            open(&pg_via("-oProxyCommand=evil")),
+            open_batch(&pg_via("-oProxyCommand=evil")),
+        ] {
             assert!(matches!(result, Err(TunnelError::InvalidField(_))));
         }
     }
@@ -530,11 +536,18 @@ mod tests {
             .unwrap();
         assert!(wait_ready(port, &mut alive), "the port accepts connections");
         // A tunnel dropped kills its child.
-        let tunnel = Tunnel { child: alive, local_port: port };
+        let tunnel = Tunnel {
+            child: alive,
+            local_port: port,
+        };
         let pid_alive = tunnel.child.id();
         drop(tunnel);
         assert!(
-            Command::new("kill").args(["-0", &pid_alive.to_string()]).stderr(Stdio::null()).status().is_ok_and(|s| !s.success()),
+            Command::new("kill")
+                .args(["-0", &pid_alive.to_string()])
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|s| !s.success()),
             "the child is gone"
         );
         // ssh exiting first ends the wait with failure, well before the timeout.

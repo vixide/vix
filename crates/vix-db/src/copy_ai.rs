@@ -347,8 +347,7 @@ mod tests {
     }
 
     mod browser {
-        use super::super::*;
-        use crate::test_support::{family, preview, press, select_table};
+        use crate::test_support::{family, press, preview, select_table};
         use crate::{Pane, View};
         use vix_input::KeyCode;
 
@@ -365,13 +364,19 @@ mod tests {
             let mut b = family(false);
             preview(&mut b, "parent");
             press(&mut b, KeyCode::Char('A'));
-            assert_eq!(b.message, Some(t!("msg.db_copied_ai", rows = 2).to_string()));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 2).to_string())
+            );
             // A filtered grid copies only what matches.
             press(&mut b, KeyCode::Char('/'));
             press(&mut b, KeyCode::Char('b'));
             press(&mut b, KeyCode::Enter);
             press(&mut b, KeyCode::Char('A'));
-            assert_eq!(b.message, Some(t!("msg.db_copied_ai", rows = 1).to_string()));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 1).to_string())
+            );
         }
 
         #[test]
@@ -380,7 +385,11 @@ mod tests {
             preview(&mut b, "child");
             assert_eq!(
                 b.result_column_types(),
-                [Some("INTEGER".into()), Some("INTEGER".into()), Some("TEXT".into())]
+                [
+                    Some("INTEGER".into()),
+                    Some("INTEGER".into()),
+                    Some("TEXT".into())
+                ]
             );
             b.grid_source = Some(("SELECT 1".into(), None));
             assert_eq!(b.result_column_types(), [None, None, None]);
@@ -400,7 +409,10 @@ mod tests {
             select_table(&mut b, "child");
             b.focus = Pane::Tree;
             press(&mut b, KeyCode::Char('A'));
-            assert_eq!(b.message, Some(t!("msg.db_copied_ai", rows = 2).to_string()));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 2).to_string())
+            );
             b.tree.sel = 0;
             press(&mut b, KeyCode::Char('A'));
             assert_eq!(b.message, Some(t!("msg.db_copy_ai_empty").to_string()));
@@ -416,9 +428,16 @@ mod tests {
             let mut b = family(false);
             select_table(&mut b, "parent");
             b.session.as_mut().unwrap().run("DROP TABLE child").unwrap();
-            b.session.as_mut().unwrap().run("DROP TABLE parent").unwrap();
+            b.session
+                .as_mut()
+                .unwrap()
+                .run("DROP TABLE parent")
+                .unwrap();
             b.copy_table_for_ai();
-            assert_eq!(b.message, Some(t!("msg.db_copied_ai", rows = 0).to_string()));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 0).to_string())
+            );
         }
     }
 }

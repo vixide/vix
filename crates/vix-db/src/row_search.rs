@@ -160,7 +160,7 @@ impl Browser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{family, preview, press, typed, workbench};
+    use crate::test_support::{family, press, preview, typed, workbench};
     use crate::{View, row_filter};
     use vix_input::KeyCode;
 
@@ -185,10 +185,16 @@ mod tests {
         b.focus = Pane::Results;
         press(&mut b, KeyCode::Char('F'));
         assert!(!b.row_filter_open());
-        assert_eq!(b.message, Some(t!("msg.db_filter_needs_preview").to_string()));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_filter_needs_preview").to_string())
+        );
         // Applying without a preview says the same.
         assert!(!b.run_row_filter(None));
-        assert_eq!(b.message, Some(t!("msg.db_filter_needs_preview").to_string()));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_filter_needs_preview").to_string())
+        );
     }
 
     #[test]
@@ -198,7 +204,10 @@ mod tests {
         b.grid.cur_col = 1;
         press(&mut b, KeyCode::Char('F'));
         assert_eq!((b.row_filter.column, b.row_filter.field), (1, 2));
-        assert_eq!(b.row_filter_clause(), Err(row_filter::FilterError::MissingValue));
+        assert_eq!(
+            b.row_filter_clause(),
+            Err(row_filter::FilterError::MissingValue)
+        );
     }
 
     #[test]
@@ -211,7 +220,11 @@ mod tests {
         assert_eq!(b.row_filter.op, 1, "Contains -> Equals");
         press(&mut b, KeyCode::Left);
         press(&mut b, KeyCode::Left);
-        assert_eq!(b.row_filter.op, row_filter::OPS.len() - 1, "wraps to the last");
+        assert_eq!(
+            b.row_filter.op,
+            row_filter::OPS.len() - 1,
+            "wraps to the last"
+        );
         press(&mut b, KeyCode::Right);
         assert_eq!(b.row_filter.op, 0);
         press(&mut b, KeyCode::BackTab);
@@ -229,7 +242,11 @@ mod tests {
         assert_eq!(b.row_filter.field, 2);
         press(&mut b, KeyCode::Right);
         press(&mut b, KeyCode::Left);
-        assert_eq!((b.row_filter.column, b.row_filter.op), (1, 1), "the value row ignores them");
+        assert_eq!(
+            (b.row_filter.column, b.row_filter.op),
+            (1, 1),
+            "the value row ignores them"
+        );
         press(&mut b, KeyCode::Tab);
         assert_eq!(b.row_filter.field, 0, "wraps");
         press(&mut b, KeyCode::PageUp);
@@ -266,7 +283,10 @@ mod tests {
         let mut b = family(true);
         open(&mut b, "parent");
         press(&mut b, KeyCode::Enter);
-        assert_eq!(b.message, Some(row_filter::FilterError::MissingValue.to_string()));
+        assert_eq!(
+            b.message,
+            Some(row_filter::FilterError::MissingValue.to_string())
+        );
         assert!(b.row_filter_open(), "the form stays open");
         assert_eq!(b.grid.rows.len(), 2);
     }
@@ -303,7 +323,12 @@ mod tests {
         assert_eq!(b.message, Some(t!("msg.db_filter_write").to_string()));
         assert_eq!(b.grid.rows.len(), 2);
         assert_eq!(
-            b.session.as_mut().unwrap().run("SELECT count(*) FROM parent").unwrap().1,
+            b.session
+                .as_mut()
+                .unwrap()
+                .run("SELECT count(*) FROM parent")
+                .unwrap()
+                .1,
             [["2"]]
         );
     }

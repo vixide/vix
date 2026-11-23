@@ -761,7 +761,7 @@ impl Browser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{family, key, preview, press, select_table, typed, workbench};
+    use crate::test_support::{family, key, press, preview, select_table, typed, workbench};
     use crate::{Pages, staging::ChangeKind};
 
     /// The family fixture with the foreign-key rows removed, so tests can
@@ -796,11 +796,14 @@ mod tests {
     fn a_table_without_a_primary_key_previews_read_only() {
         let mut b = workbench(
             true,
-            &["CREATE TABLE loose (a TEXT)", "INSERT INTO loose VALUES ('x')"],
+            &[
+                "CREATE TABLE loose (a TEXT)",
+                "INSERT INTO loose VALUES ('x')",
+            ],
         );
         preview(&mut b, "loose");
         assert!(!b.editable());
-        assert!(b.pk_cols.is_empty());
+        assert_eq!(b.pk_cols.len(), 0);
         for k in ['i', 'a', 'd'] {
             b.message = None;
             press(&mut b, KeyCode::Char(k));
@@ -816,14 +819,14 @@ mod tests {
         b.focus = Pane::Tree;
         press(&mut b, KeyCode::Char('p'));
         assert_eq!(b.focus, Pane::Tree);
-        assert!(b.grid.headers.is_empty());
+        assert_eq!(b.grid.headers.len(), 0);
         select_table(&mut b, "parent");
         b.conn = None;
         b.preview_selected();
         b.show_detail(catalog::Detail::Indexes);
         b.show_relations();
         b.show_ddl();
-        assert!(b.grid.headers.is_empty());
+        assert_eq!(b.grid.headers.len(), 0);
         assert_eq!(b.view, View::Workbench);
     }
 
@@ -842,10 +845,10 @@ mod tests {
             "{:?}",
             b.message
         );
-        assert!(b.grid.headers.is_empty());
+        assert_eq!(b.grid.headers.len(), 0);
         b.message = None;
         b.show_detail(catalog::Detail::Columns);
-        assert!(b.grid.headers.is_empty());
+        assert_eq!(b.grid.headers.len(), 0);
     }
 
     #[test]
@@ -907,7 +910,7 @@ mod tests {
         press(&mut b, KeyCode::Char('i'));
         assert_eq!(b.edit_input, "alpha");
         assert_eq!(b.edit_choice, None);
-        assert!(b.edit_choices().is_empty());
+        assert_eq!(b.edit_choices().len(), 0);
         press(&mut b, KeyCode::Up);
         press(&mut b, KeyCode::Down);
         press(&mut b, KeyCode::Tab);
@@ -979,7 +982,7 @@ mod tests {
     fn editing_with_an_empty_grid_does_nothing() {
         let mut b = workbench(true, &["CREATE TABLE e (id INTEGER PRIMARY KEY, v TEXT)"]);
         preview(&mut b, "e");
-        assert!(b.grid.rows.is_empty());
+        assert_eq!(b.grid.rows.len(), 0);
         press(&mut b, KeyCode::Char('i'));
         assert_eq!(b.view, View::Workbench);
         press(&mut b, KeyCode::Char('d'));
@@ -1110,7 +1113,10 @@ mod tests {
         press(&mut b, KeyCode::Char('i'));
         typed(&mut b, "x");
         press(&mut b, KeyCode::Enter);
-        query(&mut b, "UPDATE parent SET name = 'someone else' WHERE id = 1");
+        query(
+            &mut b,
+            "UPDATE parent SET name = 'someone else' WHERE id = 1",
+        );
         press(&mut b, KeyCode::Char('W'));
         assert_eq!(
             b.message,
@@ -1156,7 +1162,11 @@ mod tests {
         press(&mut b, KeyCode::Enter);
         press(&mut b, KeyCode::Char('W'));
         assert!(
-            b.message.as_deref().unwrap().to_lowercase().contains("unique"),
+            b.message
+                .as_deref()
+                .unwrap()
+                .to_lowercase()
+                .contains("unique"),
             "{:?}",
             b.message
         );
@@ -1241,7 +1251,7 @@ mod tests {
     #[test]
     fn the_cell_viewer_scrolls_pretty_prints_copies_and_closes() {
         let mut b = family(true);
-        b.cell_text = (0..30).map(|i| format!("line {i}\n")).collect();
+        b.cell_text = "line\n".repeat(30);
         b.view = View::Cell;
         press(&mut b, KeyCode::Char('j'));
         assert_eq!(b.view_scroll, 1);
@@ -1326,7 +1336,11 @@ mod tests {
         b.focus = Pane::Tree;
         press(&mut b, KeyCode::Char('D'));
         assert_eq!(b.view, View::Cell);
-        assert!(b.cell_text.contains("CREATE TABLE child"), "{}", b.cell_text);
+        assert!(
+            b.cell_text.contains("CREATE TABLE child"),
+            "{}",
+            b.cell_text
+        );
         b.view = View::Workbench;
         press(&mut b, KeyCode::Char('R'));
         assert_eq!(b.focus, Pane::Results);
