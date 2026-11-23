@@ -30,6 +30,12 @@ pub mod ghost;
 mod hierarchy;
 pub mod inline;
 mod pull;
+#[cfg(test)]
+mod rig_flow_tests;
+#[cfg(test)]
+mod rig_requests_tests;
+#[cfg(test)]
+mod rig_tests;
 
 pub use hierarchy::{HierarchyDirection, HierarchyItem};
 

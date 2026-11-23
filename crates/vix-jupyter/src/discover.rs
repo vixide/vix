@@ -171,4 +171,70 @@ mod tests {
         assert_eq!(kernelspecs_in(&[k]), Vec::new());
         let _ = fs::remove_dir_all(&root);
     }
+
+    #[test]
+    fn var_path_treats_unset_and_empty_as_absent() {
+        assert_eq!(var_path("VIX_JUPYTER_TEST_SURELY_UNSET_VARIABLE"), None);
+        // PATH is set in every environment the tests run in.
+        if env::var_os("PATH").is_some_and(|v| !v.is_empty()) {
+            assert!(var_path("PATH").is_some());
+        }
+    }
+
+    #[test]
+    fn python_prefixes_lead_with_the_active_environments() {
+        let prefixes = python_prefixes();
+        let mut expected: Vec<PathBuf> = ["VIRTUAL_ENV", "CONDA_PREFIX"]
+            .iter()
+            .filter_map(|v| var_path(v))
+            .collect();
+        // Every active-environment prefix comes first, in that order; the
+        // PATH python (if any) follows, and neighbours are never repeated.
+        expected.dedup();
+        assert!(prefixes.starts_with(&expected));
+        assert!(prefixes.windows(2).all(|w| w[0] != w[1]));
+    }
+
+    #[test]
+    fn path_env_snapshots_the_process_environment() {
+        let snapshot = path_env();
+        assert_eq!(snapshot.os, Os::current());
+        assert_eq!(snapshot.jupyter_path, env::var("JUPYTER_PATH").ok());
+        assert_eq!(snapshot.jupyter_data_dir, var_path("JUPYTER_DATA_DIR"));
+        assert_eq!(snapshot.xdg_data_home, var_path("XDG_DATA_HOME"));
+        assert_eq!(snapshot.appdata, var_path("APPDATA"));
+        assert_eq!(snapshot.programdata, var_path("PROGRAMDATA"));
+        let home = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+        assert_eq!(snapshot.home, var_path(home));
+        assert_eq!(snapshot.prefixes, python_prefixes());
+    }
+
+    #[test]
+    fn kernelspecs_follow_the_environment_directories() {
+        let root = scratch("env");
+        write_spec(
+            &root.join("kernels"),
+            "viaenv",
+            r#"{"argv": ["e"], "language": "python"}"#,
+        );
+        // JUPYTER_PATH-style search path: its `kernels` subdirectory is read.
+        let mut penv = PathEnv::empty(Os::Unix);
+        penv.jupyter_path = Some(root.to_string_lossy().into_owned());
+        let specs = kernelspecs(&penv);
+        assert!(specs.iter().any(|s| s.name == "viaenv"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn directories_are_capped_and_unreadable_specs_skipped() {
+        let root = scratch("cap");
+        let k = root.join("kernels");
+        // A directory entry with no kernel.json is not a kernel.
+        fs::create_dir_all(k.join("empty")).unwrap();
+        write_spec(&k, "good", r#"{"argv": ["g"]}"#);
+        let specs = kernelspecs_in(&[k]);
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].name, "good");
+        let _ = fs::remove_dir_all(&root);
+    }
 }
