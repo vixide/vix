@@ -1698,4 +1698,172 @@ mod tests {
             drain(&mut b);
         }
     }
+
+    mod more {
+        use super::*;
+        use crate::test_support::{family, press, workbench};
+
+        fn editor_with(b: &mut Browser, text: &str) {
+            b.focus = Pane::Editor;
+            b.query = editor::Query::from_text(text);
+        }
+
+        fn pending(kind: QueryKind) -> Pending {
+            Pending {
+                started: std::time::Instant::now(),
+                sql: "SELECT 1".into(),
+                history_sql: "SELECT 1".into(),
+                kind,
+                anchor: None,
+                cancel: None,
+            }
+        }
+
+        const ANALYZED: &str = r#"[{"Plan":{"Node Type":"Index Scan","Relation Name":"t","Total Cost":1.0,"Plan Rows":1,"Actual Total Time":0.5,"Actual Rows":1,"Actual Loops":1},"Planning Time":0.1,"Execution Time":0.9}]"#;
+        const PLAIN: &str = r#"[{"Plan":{"Node Type":"Index Scan","Relation Name":"t","Total Cost":1.0,"Plan Rows":1}}]"#;
+
+        #[test]
+        fn a_postgres_plan_is_shown_as_a_tree_with_its_timing() {
+            for (json, expected) in [
+                (
+                    ANALYZED,
+                    t!("msg.db_plan_timed", count = 1, ms = "0.900").to_string(),
+                ),
+                (PLAIN, t!("msg.db_plan", count = 1).to_string()),
+            ] {
+                let mut b = workbench(false, &[]);
+                b.pending_query = Some(pending(QueryKind::Explain(connect::Kind::Postgres)));
+                b.grid
+                    .set(vec!["QUERY PLAN".into()], vec![vec![json.into()]]);
+                b.finish_stream(false);
+                assert_eq!(b.message, Some(expected));
+                assert!(b.plan_marks().is_some());
+                assert!(b.grid.headers.len() > 1, "the grid now holds the tree");
+            }
+        }
+
+        #[test]
+        fn a_plain_explain_on_sqlite_reports_its_row_count() {
+            let mut b = workbench(false, &[]);
+            b.pending_query = Some(pending(QueryKind::Explain(connect::Kind::Sqlite)));
+            b.grid.set(
+                vec!["detail".into()],
+                vec![vec!["SEARCH t USING INDEX".into()]],
+            );
+            b.finish_stream(false);
+            assert_eq!(b.message, Some(t!("msg.db_rows", count = 1).to_string()));
+        }
+
+        #[test]
+        fn a_server_cancel_without_a_transaction_just_says_cancelled() {
+            let mut b = workbench(false, &[]);
+            let mut p = pending(QueryKind::Run);
+            p.cancel = Some(ServerCancel { rx: None });
+            b.pending_query = Some(p);
+            let cancelled = session::QueryError {
+                message: "canceled".into(),
+                kind: session::QueryErrorKind::Database,
+                code: Some("70100".into()),
+            };
+            b.finish_stream_err(&cancelled, None);
+            assert_eq!(b.message, Some(t!("msg.db_cancelled").to_string()));
+        }
+
+        #[test]
+        fn a_dropped_cancel_thread_falls_back_to_reconnecting() {
+            let mut b = workbench(false, &[]);
+            editor_with(&mut b, "SELECT 1");
+            press(&mut b, KeyCode::F(5));
+            let (tx, rx) = std::sync::mpsc::channel();
+            drop(tx);
+            b.pending_query.as_mut().unwrap().cancel = Some(ServerCancel { rx: Some(rx) });
+            assert!(b.poll_server_cancel());
+            assert!(b.reconnect_running());
+            drain(&mut b);
+        }
+
+        #[test]
+        fn nothing_pending_means_nothing_to_cancel_or_poll() {
+            let mut b = workbench(false, &[]);
+            b.poll_query();
+            assert!(!b.poll_server_cancel());
+            b.cancel_by_reconnect();
+            assert!(!b.reconnect_running());
+            b.pending_query = Some(pending(QueryKind::Run));
+            b.session = None;
+            b.cancel_by_reconnect();
+            assert!(!b.reconnect_running(), "no session to restart");
+        }
+
+        #[test]
+        fn a_dead_session_cannot_start_a_query_or_run_sql() {
+            let mut b = workbench(false, &[]);
+            b.session.as_mut().unwrap().cancel();
+            editor_with(&mut b, "SELECT 1");
+            // The worker has been told to stop; the first statement fails and
+            // later ones cannot even be sent.
+            press(&mut b, KeyCode::F(5));
+            drain(&mut b);
+            press(&mut b, KeyCode::F(5));
+            assert!(b.message.is_some());
+            assert!(b.exec_sql("SELECT 1").is_err());
+            b.session = None;
+            assert!(matches!(
+                b.exec_sql("SELECT 1"),
+                Err(session::SessionError::NotConnected)
+            ));
+            assert!(b.log.entries.iter().any(|e| !e.ok));
+            b.toggle_write_mode();
+            assert!(b.message.is_some());
+        }
+
+        #[test]
+        fn a_blank_editor_has_no_anchor() {
+            let mut b = workbench(false, &[]);
+            editor_with(&mut b, "   ");
+            assert_eq!(b.anchor_for("SELECT 1"), None);
+            editor_with(&mut b, "SELECT 1");
+            assert_eq!(b.anchor_for("SELECT 2"), None, "not verbatim in the editor");
+        }
+
+        #[test]
+        fn a_commit_confirmation_summarizes_and_lists_its_statements() {
+            let mut b = family(true);
+            b.pending_run = Some(PendingRun::Commit {
+                statements: vec![
+                    crate::staging::Statement {
+                        kind: crate::staging::ChangeKind::Modified,
+                        sql: "UPDATE t SET a = 1".into(),
+                        check: None,
+                    },
+                    crate::staging::Statement {
+                        kind: crate::staging::ChangeKind::Deleted,
+                        sql: "DELETE FROM t".into(),
+                        check: None,
+                    },
+                ],
+                schema: "main".into(),
+                table: "t".into(),
+                kind: connect::Kind::Sqlite,
+            });
+            assert_eq!(
+                b.pending_summary().as_deref(),
+                Some("2 × … UPDATE t SET a = 1")
+            );
+            assert_eq!(
+                b.pending_statements(),
+                ["UPDATE t SET a = 1", "DELETE FROM t"]
+            );
+            b.pending_run = Some(PendingRun::Import {
+                statements: vec!["CREATE TABLE x (a)".into()],
+                table: "x".into(),
+                rows: 0,
+            });
+            assert_eq!(
+                b.pending_summary().as_deref(),
+                Some("1 × … CREATE TABLE x (a)")
+            );
+            assert_eq!(b.pending_statements(), ["CREATE TABLE x (a)"]);
+        }
+    }
 }

@@ -142,7 +142,9 @@ pub(crate) fn with_theme<R>(json: &str, f: impl FnOnce() -> R) -> R {
             vix_theme::set_custom(None);
         }
     }
-    let _guard = THEME.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = THEME
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let _reset = Reset;
     vix_theme::set_custom(Some(
         serde_json::from_str::<vix_theme::CustomTheme>(json).expect("a valid theme"),
@@ -152,7 +154,9 @@ pub(crate) fn with_theme<R>(json: &str, f: impl FnOnce() -> R) -> R {
 
 /// Run `f` with no custom theme active, serialized against [`with_theme`].
 pub(crate) fn without_theme<R>(f: impl FnOnce() -> R) -> R {
-    let _guard = THEME.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = THEME
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     vix_theme::set_custom(None);
     f()
 }

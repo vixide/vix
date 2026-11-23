@@ -982,22 +982,33 @@ mod tests {
         let errors = [
             (ShareError::from(Refusal::Empty), None),
             (
-                ShareError::NeedsPassword { connection: "prod".into() },
+                ShareError::NeedsPassword {
+                    connection: "prod".into(),
+                },
                 Some("connection prod needs a password"),
             ),
             (
                 ShareError::Tunnel(tunnel::TunnelError::Timeout),
                 Some("SSH tunnel failed:"),
             ),
-            (ShareError::Connect("nope".into()), Some("cannot connect: nope")),
+            (
+                ShareError::Connect("nope".into()),
+                Some("cannot connect: nope"),
+            ),
             (ShareError::Query("syntax".into()), Some("syntax")),
             (ShareError::Timeout, Some("ran longer than")),
             (
-                ShareError::NoSuchTable { schema: String::new(), table: "t".into() },
+                ShareError::NoSuchTable {
+                    schema: String::new(),
+                    table: "t".into(),
+                },
                 Some("no table or view named t"),
             ),
             (
-                ShareError::NoSuchTable { schema: "s".into(), table: "t".into() },
+                ShareError::NoSuchTable {
+                    schema: "s".into(),
+                    table: "t".into(),
+                },
                 Some("no table or view named t in schema s"),
             ),
             (
@@ -1007,7 +1018,7 @@ mod tests {
         ];
         for (error, expected) in &errors {
             let text = error.to_string();
-            assert!(!text.is_empty());
+            assert_ne!(text, "");
             if let Some(expected) = expected {
                 assert!(text.contains(expected), "{text}");
             }

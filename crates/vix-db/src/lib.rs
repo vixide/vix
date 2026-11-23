@@ -1863,7 +1863,10 @@ mod tests {
         b.set_mcp_shared(&shared);
         assert!(b.is_mcp_shared("app"));
         assert!(!b.is_mcp_shared("off"), "false is the same as none");
-        assert!(b.take_dirty_mcp_shared().is_none(), "loading is not a change");
+        assert!(
+            b.take_dirty_mcp_shared().is_none(),
+            "loading is not a change"
+        );
         b.mcp_shared.insert("new".into());
         let changed = b.take_dirty_mcp_shared().unwrap();
         assert_eq!(changed.get("new"), Some(&true));
@@ -1880,7 +1883,10 @@ mod tests {
         assert_eq!(b.form.fields[3], "h");
         assert!(!b.form_password_held());
         let message = b.message.clone().unwrap();
-        assert!(message.starts_with(&t!("msg.db_dsn_filled").to_string()), "{message}");
+        assert!(
+            message.starts_with(&t!("msg.db_dsn_filled").to_string()),
+            "{message}"
+        );
         assert!(message.contains("application_name"), "{message}");
         // A SQLite file names itself by its stem; a bare host by the host.
         b.form = Form::default();
@@ -1890,7 +1896,10 @@ mod tests {
         assert!(b.paste("postgres://u:pw@hostonly"));
         assert_eq!(b.form.fields[0], "hostonly");
         assert!(b.form_password_held());
-        assert_eq!(b.message, Some(t!("msg.db_dsn_filled_password").to_string()));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_dsn_filled_password").to_string())
+        );
         // An existing name is kept.
         b.form = Form::default();
         b.form.fields[0] = "mine".into();
@@ -1926,9 +1935,19 @@ mod tests {
         test_support::ctrl(&mut b, 'd');
         assert_eq!(
             b.message,
-            Some(t!("msg.db_compare_no_target", kind = connect::Kind::Sqlite.label()).to_string())
+            Some(
+                t!(
+                    "msg.db_compare_no_target",
+                    kind = connect::Kind::Sqlite.label()
+                )
+                .to_string()
+            )
         );
         test_support::ctrl(&mut b, 'z');
-        assert_eq!(b.view, View::Workbench, "an unclaimed chord changes nothing");
+        assert_eq!(
+            b.view,
+            View::Workbench,
+            "an unclaimed chord changes nothing"
+        );
     }
 }

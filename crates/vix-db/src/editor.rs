@@ -942,7 +942,10 @@ mod tests {
     fn quotes_hide_semicolons_and_meta_commands() {
         assert_eq!(statement_spans("SELECT \"a;b\"; SELECT 'c;d'").len(), 2);
         assert_eq!(statement_spans("SELECT \"a\"\"; b\"").len(), 1);
-        assert!(meta_commands("SELECT \"\\x\"\n'\\y'").is_empty());
-        assert_eq!(meta_commands("\\dt\nSELECT 'a'\n\\q"), [(1, "\\dt".to_string()), (3, "\\q".to_string())]);
+        assert_eq!(meta_commands("SELECT \"\\x\"\n'\\y'"), []);
+        assert_eq!(
+            meta_commands("\\dt\nSELECT 'a'\n\\q"),
+            [(1, "\\dt".to_string()), (3, "\\q".to_string())]
+        );
     }
 }

@@ -1380,4 +1380,179 @@ mod tests {
         assert!(b.popup.is_none());
         b.handle_key(key(KeyCode::Char('q')), Pages::default());
     }
+
+    #[test]
+    fn functions_in_the_tree_are_never_previewed_or_reported_on() {
+        let mut b = family(true);
+        b.tree = catalog::Tree::from_objects(&[
+            ("main".into(), "child".into(), "table".into()),
+            ("main".into(), "fn1".into(), "function".into()),
+        ]);
+        b.tree.schemas[0].expanded = true;
+        *b.tree.schemas[0].folder_flag_mut(catalog::Folder::Functions) = true;
+        let at = (0..b.tree.rows().len())
+            .find(|&i| {
+                b.tree.sel = i;
+                b.tree
+                    .selected_object()
+                    .is_some_and(|(_, _, f)| f == catalog::Folder::Functions)
+            })
+            .unwrap();
+        b.tree.sel = at;
+        b.focus = Pane::Tree;
+        for k in ['p', 'i', 'D', 'R', 'A'] {
+            b.message = None;
+            press(&mut b, KeyCode::Char(k));
+            assert_eq!(b.grid.headers.len(), 0, "key {k}");
+            assert_eq!(b.view, View::Workbench, "key {k}");
+        }
+        // With nothing selected they do nothing at all.
+        b.tree.sel = 0;
+        for k in ['p', 'i', 'D', 'R'] {
+            press(&mut b, KeyCode::Char(k));
+        }
+        assert_eq!(b.grid.headers.len(), 0);
+    }
+
+    #[test]
+    fn a_failing_detail_report_shows_the_error() {
+        let mut b = family(true);
+        select_table(&mut b, "child");
+        b.session.as_mut().unwrap().run("DROP TABLE child").unwrap();
+        b.focus = Pane::Tree;
+        press(&mut b, KeyCode::Char('s'));
+        assert!(
+            b.message.as_deref().unwrap().contains("child"),
+            "{:?}",
+            b.message
+        );
+        assert_eq!(b.focus, Pane::Tree);
+    }
+
+    #[test]
+    fn following_a_key_to_an_implicit_parent_column_falls_back_to_rowid() {
+        let mut b = workbench(
+            true,
+            &[
+                "CREATE TABLE p (id INTEGER PRIMARY KEY, name TEXT)",
+                "CREATE TABLE c (id INTEGER PRIMARY KEY, p_id INTEGER REFERENCES p)",
+                "INSERT INTO p VALUES (1, 'one')",
+                "INSERT INTO c VALUES (5, 1)",
+            ],
+        );
+        preview(&mut b, "c");
+        b.grid.cur_col = 1;
+        press(&mut b, KeyCode::Char('f'));
+        assert_eq!(b.grid.rows, [["1", "one"]]);
+        assert!(
+            b.grid_source
+                .as_ref()
+                .is_some_and(|(sql, _)| sql.contains("rowid"))
+        );
+    }
+
+    #[test]
+    fn editing_without_a_connection_or_a_cell_does_nothing() {
+        let mut b = family(true);
+        preview(&mut b, "parent");
+        b.grid.cur_col = 99;
+        press(&mut b, KeyCode::Char('i'));
+        assert_eq!(b.view, View::Workbench, "no such cell");
+        b.conn = None;
+        b.follow_fk();
+        b.grid.cur_col = 0;
+        b.grid.set(vec![], vec![]);
+        b.expand_row();
+        assert_eq!(b.view, View::Workbench);
+    }
+
+    #[test]
+    fn a_commit_needs_an_editable_table_and_a_connection() {
+        let mut b = family(true);
+        preview(&mut b, "parent");
+        b.grid.cur_col = 1;
+        press(&mut b, KeyCode::Char('i'));
+        typed(&mut b, "x");
+        press(&mut b, KeyCode::Enter);
+        b.edit_table = None;
+        b.commit_edits();
+        assert!(b.has_staged_changes());
+        assert_eq!(
+            query(&mut b, "SELECT name FROM parent WHERE id = 1"),
+            [["alpha"]]
+        );
+    }
+
+    #[test]
+    fn a_commit_inside_an_open_transaction_reports_the_refused_begin() {
+        let mut b = orphaned();
+        preview(&mut b, "parent");
+        b.grid.cur_col = 1;
+        press(&mut b, KeyCode::Char('i'));
+        typed(&mut b, "x");
+        press(&mut b, KeyCode::Enter);
+        b.begin_tx();
+        press(&mut b, KeyCode::Char('W'));
+        assert!(
+            b.message.as_deref().unwrap().contains("transaction"),
+            "{:?}",
+            b.message
+        );
+        assert!(b.has_staged_changes());
+        b.rollback_tx();
+    }
+
+    #[test]
+    fn a_deferred_constraint_that_fails_at_commit_rolls_everything_back() {
+        let mut b = workbench(
+            true,
+            &[
+                "CREATE TABLE p (id INTEGER PRIMARY KEY)",
+                "CREATE TABLE c (id INTEGER PRIMARY KEY, p_id INTEGER \
+                 REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED)",
+                "INSERT INTO p VALUES (1)",
+                "INSERT INTO c VALUES (1, 1)",
+            ],
+        );
+        preview(&mut b, "c");
+        b.grid.cur_col = 1;
+        press(&mut b, KeyCode::Char('i'));
+        press(&mut b, KeyCode::Backspace);
+        typed(&mut b, "9");
+        press(&mut b, KeyCode::Enter);
+        press(&mut b, KeyCode::Char('W'));
+        assert!(
+            b.message
+                .as_deref()
+                .unwrap()
+                .to_lowercase()
+                .contains("foreign key"),
+            "{:?}",
+            b.message
+        );
+        assert_eq!(b.tx, TxState::None);
+        assert!(b.has_staged_changes());
+        assert_eq!(query(&mut b, "SELECT p_id FROM c"), [["1"]]);
+    }
+
+    #[test]
+    fn an_unusable_session_reports_when_a_transaction_cannot_start() {
+        let mut b = orphaned();
+        preview(&mut b, "parent");
+        b.grid.cur_col = 1;
+        press(&mut b, KeyCode::Char('i'));
+        typed(&mut b, "x");
+        press(&mut b, KeyCode::Enter);
+        b.session = None;
+        b.commit_edits();
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+    }
+
+    #[test]
+    fn the_completion_popup_needs_a_line_under_the_cursor() {
+        let mut b = family(true);
+        b.query.row = 5;
+        b.refresh_popup();
+        assert!(b.popup.is_none());
+    }
 }

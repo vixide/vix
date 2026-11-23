@@ -92,7 +92,8 @@ mod tests {
         assert!(!Environment::Staging.is_production());
     }
 
-    const THEME: &str = r#"{"name":"t","syntax":{"keyword":[1,2,3],"string":[4,5,6],"number":[7,8,9]}}"#;
+    const THEME: &str =
+        r#"{"name":"t","syntax":{"keyword":[1,2,3],"string":[4,5,6],"number":[7,8,9]}}"#;
 
     #[test]
     fn without_a_theme_only_local_is_dimmed() {

@@ -1284,10 +1284,14 @@ mod tests {
         assert_eq!(spawn.to_string(), "no thread");
         assert!(std::error::Error::source(&spawn).is_some());
         for e in [
-            SessionError::Connect { message: "refused".into() },
-            SessionError::Setup { message: "bad pragma".into() },
+            SessionError::Connect {
+                message: "refused".into(),
+            },
+            SessionError::Setup {
+                message: "bad pragma".into(),
+            },
         ] {
-            assert!(!e.to_string().is_empty());
+            assert_ne!(e.to_string(), "");
             assert!(std::error::Error::source(&e).is_none());
         }
         assert_eq!(
@@ -1341,7 +1345,10 @@ mod tests {
         let mut s = memory();
         assert!(s.poll().is_none(), "nothing sent, nothing to poll");
         assert_eq!(s.error_position(), None);
-        assert!(s.cancel_handle().is_none(), "SQLite cannot be cancelled on the server");
+        assert!(
+            s.cancel_handle().is_none(),
+            "SQLite cannot be cancelled on the server"
+        );
         assert_eq!(s.url(), "sqlite::memory:");
         s.cancel();
         // The worker abandons the next statement and exits.
@@ -1356,8 +1363,14 @@ mod tests {
         };
         assert!(matches!(chunk, Chunk::Err(_)), "worker gone: {chunk:?}");
         assert!(matches!(s.run("SELECT 1"), Err(SessionError::NotConnected)));
-        assert!(matches!(s.execute("SELECT 1"), Err(SessionError::NotConnected)));
-        assert!(matches!(s.send("SELECT 1"), Err(SessionError::NotConnected)));
+        assert!(matches!(
+            s.execute("SELECT 1"),
+            Err(SessionError::NotConnected)
+        ));
+        assert!(matches!(
+            s.send("SELECT 1"),
+            Err(SessionError::NotConnected)
+        ));
     }
 
     #[test]
@@ -1377,7 +1390,10 @@ mod tests {
         let mut s = memory();
         s.run("CREATE TABLE t (a)").unwrap();
         s.restart().unwrap();
-        assert!(s.run("SELECT * FROM t").is_err(), "a new in-memory database");
+        assert!(
+            s.run("SELECT * FROM t").is_err(),
+            "a new in-memory database"
+        );
         assert!(s.run("SELECT 1").is_ok());
     }
 
@@ -1392,7 +1408,7 @@ mod tests {
 
     #[test]
     fn large_results_stream_in_batches_and_stop_at_the_cap() {
-        let mut s = memory();
+        let s = memory();
         let n = MAX_ROWS + 10;
         s.send(&format!(
             "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < {n}) SELECT x FROM c"
@@ -1417,7 +1433,10 @@ mod tests {
     #[test]
     fn url_secrets_are_redacted_from_driver_messages() {
         let url = "postgres://joel:hunter2@db/app";
-        let msg = redact_url_secret("failed for postgres://joel:hunter2@db/app: bad hunter2", url);
+        let msg = redact_url_secret(
+            "failed for postgres://joel:hunter2@db/app: bad hunter2",
+            url,
+        );
         assert!(!msg.contains("hunter2"), "{msg}");
     }
 }

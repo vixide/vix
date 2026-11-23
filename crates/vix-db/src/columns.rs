@@ -693,10 +693,16 @@ mod tests {
     #[test]
     fn every_engine_has_column_and_check_queries() {
         let my = columns_sql(Kind::Mysql, "shop", "it's");
-        assert!(my.contains("information_schema.columns") && my.contains("'it''s'"), "{my}");
+        assert!(
+            my.contains("information_schema.columns") && my.contains("'it''s'"),
+            "{my}"
+        );
         assert!(my.contains("VIRTUAL GENERATED"));
         let pg = checks_sql(Kind::Postgres, "public", "t");
-        assert!(pg.contains("pg_get_constraintdef") && pg.contains("contype = 'c'"), "{pg}");
+        assert!(
+            pg.contains("pg_get_constraintdef") && pg.contains("contype = 'c'"),
+            "{pg}"
+        );
         let sqlite = checks_sql(Kind::Sqlite, "main", "t");
         assert!(sqlite.contains("sqlite_master"));
         let mysql = checks_sql(Kind::Mysql, "shop", "t");
@@ -710,7 +716,11 @@ mod tests {
     #[test]
     fn check_bodies_skips_a_check_that_is_not_followed_by_a_group() {
         assert_eq!(check_bodies("a CHECK b"), [] as [String; 0]);
-        assert_eq!(check_bodies("a CHECK (b > 0"), [] as [String; 0], "unbalanced");
+        assert_eq!(
+            check_bodies("a CHECK (b > 0"),
+            [] as [String; 0],
+            "unbalanced"
+        );
         assert_eq!(
             check_bodies("check (a > 0) CHECK (b < 1)"),
             ["a > 0", "b < 1"],
@@ -733,12 +743,22 @@ mod tests {
             parse_in_check("\"a\"\"b\" IN ('x')"),
             Some(("a\"b".to_string(), row(&["x"])))
         );
-        assert_eq!(parse_in_check("[size IN ('S')"), None, "an unclosed bracket");
+        assert_eq!(
+            parse_in_check("[size IN ('S')"),
+            None,
+            "an unclosed bracket"
+        );
         assert_eq!(parse_in_check("a IN ('S') #"), None, "a stray character");
-        assert_eq!(parse_in_check("a = ANY (ARRAY['x', 'y'])").map(|c| c.1), Some(row(&["x", "y"])));
+        assert_eq!(
+            parse_in_check("a = ANY (ARRAY['x', 'y'])").map(|c| c.1),
+            Some(row(&["x", "y"]))
+        );
         assert_eq!(parse_in_check("a = 1"), None);
         assert_eq!(parse_in_check("a = ANY (VALUES)"), None);
-        assert_eq!(parse_in_check("(a)::text[] = ANY (ARRAY['x'])").map(|c| c.0), Some("a".to_string()));
+        assert_eq!(
+            parse_in_check("(a)::text[] = ANY (ARRAY['x'])").map(|c| c.0),
+            Some("a".to_string())
+        );
         assert_eq!(parse_in_check("5 IN ('x')"), None);
         assert_eq!(parse_in_check(""), None);
         assert_eq!(parse_in_check("a"), None);

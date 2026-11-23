@@ -847,7 +847,7 @@ mod tests {
 
     #[test]
     fn sqlite_hidden_columns_composite_keys_and_view_dependencies() {
-        let mut s = Session::connect("sqlite::memory:", &[]).unwrap();
+        let mut live = Session::connect("sqlite::memory:", &[]).unwrap();
         for sql in [
             "CREATE TABLE p (a INTEGER, b INTEGER, c TEXT, PRIMARY KEY (a, b))",
             "CREATE TABLE c (x INTEGER, y INTEGER, g INTEGER GENERATED ALWAYS AS (x + 1) VIRTUAL, \
@@ -857,26 +857,48 @@ mod tests {
             "CREATE VIEW w AS SELECT * FROM v",
             "CREATE TRIGGER t AFTER INSERT ON c BEGIN SELECT 1; END",
         ] {
-            s.run(sql).unwrap();
+            live.run(sql).unwrap();
         }
-        let snap = read_session(&mut s, Kind::Sqlite, "main").unwrap();
-        let p = snap.table("p").unwrap();
-        let pk = p.primary_key.as_ref().unwrap();
+        let snap = read_session(&mut live, Kind::Sqlite, "main").unwrap();
+        let parent = snap.table("p").unwrap();
+        let pk = parent.primary_key.as_ref().unwrap();
         assert_eq!(pk.definition, "PRIMARY KEY (\"a\", \"b\")");
-        let c = snap.table("c").unwrap();
-        assert!(c.columns.iter().any(|col| col.name == "g" && col.generated));
-        assert_eq!(c.foreign_keys.len(), 1);
-        let fk = &c.foreign_keys[0];
+        let child = snap.table("c").unwrap();
+        assert!(
+            child
+                .columns
+                .iter()
+                .any(|col| col.name == "g" && col.generated)
+        );
+        assert_eq!(child.foreign_keys.len(), 1);
+        let fk = &child.foreign_keys[0];
         assert_eq!(fk.references, "p");
-        assert!(fk.definition.contains("(\"x\", \"y\") REFERENCES \"p\" (\"a\", \"b\")"), "{}", fk.definition);
+        assert!(
+            fk.definition
+                .contains("(\"x\", \"y\") REFERENCES \"p\" (\"a\", \"b\")"),
+            "{}",
+            fk.definition
+        );
         assert!(fk.definition.contains("ON DELETE CASCADE"));
         assert!(!fk.definition.contains("NO ACTION"));
-        assert!(c.indexes.iter().any(|i| i.name == "c_x" && i.unique));
-        let v = snap.view("v").unwrap();
-        assert!(v.depends_on.contains(&("c".to_string(), "x".to_string())));
-        assert!(v.depends_on.contains(&("p".to_string(), "c".to_string())));
-        let w = snap.view("w").unwrap();
-        assert!(w.depends_on.contains(&("v".to_string(), String::new())));
+        assert!(child.indexes.iter().any(|i| i.name == "c_x" && i.unique));
+        let view_v = snap.view("v").unwrap();
+        assert!(
+            view_v
+                .depends_on
+                .contains(&("c".to_string(), "x".to_string()))
+        );
+        assert!(
+            view_v
+                .depends_on
+                .contains(&("p".to_string(), "c".to_string()))
+        );
+        let view_w = snap.view("w").unwrap();
+        assert!(
+            view_w
+                .depends_on
+                .contains(&("v".to_string(), String::new()))
+        );
         assert_eq!(snap.triggers.len(), 1);
     }
 }
