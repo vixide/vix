@@ -775,4 +775,130 @@ mod tests {
                 .contains(&("orders".into(), "total".into()))
         );
     }
+
+    #[test]
+    fn read_errors_explain_and_chain() {
+        let unsupported = ReadError::Unsupported(Kind::Mysql);
+        assert_eq!(
+            unsupported.to_string(),
+            t!("msg.db_compare_unsupported", kind = Kind::Mysql.label())
+        );
+        assert!(std::error::Error::source(&unsupported).is_none());
+        let query = ReadError::from(SessionError::NotConnected);
+        assert_eq!(query.to_string(), t!("msg.db_not_connected"));
+        assert!(std::error::Error::source(&query).is_some());
+    }
+
+    #[test]
+    fn engines_and_default_schemas() {
+        assert!(supported(Kind::Postgres) && supported(Kind::Sqlite));
+        assert!(!supported(Kind::Mysql));
+        assert_eq!(default_schema(Kind::Sqlite), "main");
+        assert_eq!(default_schema(Kind::Postgres), "public");
+        assert_eq!(default_schema(Kind::Mysql), "public");
+        assert_eq!(lit("it's"), "'it''s'");
+    }
+
+    #[test]
+    fn reading_runs_every_catalog_query_in_order() {
+        let mut seen = Vec::new();
+        let snapshot = read(Kind::Postgres, "app", &mut |sql| {
+            seen.push(sql.to_string());
+            Ok(if seen.len() == 1 {
+                vec![row(&["1"])]
+            } else {
+                Vec::new()
+            })
+        })
+        .unwrap();
+        assert_eq!(seen, postgres_sql("app"));
+        assert!(!snapshot.missing);
+        assert_eq!(snapshot.schema, "app");
+        let mut seen = 0;
+        let sqlite = read(Kind::Sqlite, "main", &mut |_| {
+            seen += 1;
+            Ok(Vec::new())
+        })
+        .unwrap();
+        assert_eq!(seen, sqlite_sql().len());
+        assert_eq!(sqlite.kind, Kind::Sqlite);
+    }
+
+    #[test]
+    fn a_failing_catalog_query_stops_the_read_and_mysql_has_no_reader() {
+        for kind in [Kind::Postgres, Kind::Sqlite] {
+            let mut calls = 0;
+            let err = read(kind, "main", &mut |_| {
+                calls += 1;
+                Err(SessionError::NotConnected)
+            })
+            .unwrap_err();
+            assert!(matches!(err, ReadError::Query(_)));
+            assert_eq!(calls, 1, "the first failure stops the read");
+        }
+        let err = read(Kind::Mysql, "x", &mut |_| Ok(Vec::new())).unwrap_err();
+        assert!(matches!(err, ReadError::Unsupported(Kind::Mysql)));
+        let mut s = Session::connect("sqlite::memory:", &[]).unwrap();
+        assert!(matches!(
+            read_session(&mut s, Kind::Mysql, "x"),
+            Err(ReadError::Unsupported(_))
+        ));
+    }
+
+    #[test]
+    fn sqlite_hidden_columns_composite_keys_and_view_dependencies() {
+        let mut live = Session::connect("sqlite::memory:", &[]).unwrap();
+        for sql in [
+            "CREATE TABLE p (a INTEGER, b INTEGER, c TEXT, PRIMARY KEY (a, b))",
+            "CREATE TABLE c (x INTEGER, y INTEGER, g INTEGER GENERATED ALWAYS AS (x + 1) VIRTUAL, \
+             FOREIGN KEY (x, y) REFERENCES p (a, b) ON DELETE CASCADE ON UPDATE NO ACTION)",
+            "CREATE UNIQUE INDEX c_x ON c (x)",
+            "CREATE VIEW v AS SELECT x, c FROM c JOIN p",
+            "CREATE VIEW w AS SELECT * FROM v",
+            "CREATE TRIGGER t AFTER INSERT ON c BEGIN SELECT 1; END",
+        ] {
+            live.run(sql).unwrap();
+        }
+        let snap = read_session(&mut live, Kind::Sqlite, "main").unwrap();
+        let parent = snap.table("p").unwrap();
+        let pk = parent.primary_key.as_ref().unwrap();
+        assert_eq!(pk.definition, "PRIMARY KEY (\"a\", \"b\")");
+        let child = snap.table("c").unwrap();
+        assert!(
+            child
+                .columns
+                .iter()
+                .any(|col| col.name == "g" && col.generated)
+        );
+        assert_eq!(child.foreign_keys.len(), 1);
+        let fk = &child.foreign_keys[0];
+        assert_eq!(fk.references, "p");
+        assert!(
+            fk.definition
+                .contains("(\"x\", \"y\") REFERENCES \"p\" (\"a\", \"b\")"),
+            "{}",
+            fk.definition
+        );
+        assert!(fk.definition.contains("ON DELETE CASCADE"));
+        assert!(!fk.definition.contains("NO ACTION"));
+        assert!(child.indexes.iter().any(|i| i.name == "c_x" && i.unique));
+        let view_v = snap.view("v").unwrap();
+        assert!(
+            view_v
+                .depends_on
+                .contains(&("c".to_string(), "x".to_string()))
+        );
+        assert!(
+            view_v
+                .depends_on
+                .contains(&("p".to_string(), "c".to_string()))
+        );
+        let view_w = snap.view("w").unwrap();
+        assert!(
+            view_w
+                .depends_on
+                .contains(&("v".to_string(), String::new()))
+        );
+        assert_eq!(snap.triggers.len(), 1);
+    }
 }

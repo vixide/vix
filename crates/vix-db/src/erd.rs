@@ -177,4 +177,12 @@ mod tests {
         let out = mermaid(&[col("t", "c", "")], &[]);
         assert!(out.contains("        unknown c\n"), "{out}");
     }
+
+    #[test]
+    fn names_are_made_into_identifiers() {
+        assert_eq!(ident(""), "_");
+        assert_eq!(ident("9lives"), "_9lives");
+        assert_eq!(ident("a b-c"), "a_b_c");
+        assert_eq!(ident("ok_name"), "ok_name");
+    }
 }

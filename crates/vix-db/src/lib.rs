@@ -103,6 +103,9 @@ pub mod store;
 pub mod table_export;
 pub mod tunnel;
 
+#[cfg(test)]
+mod test_support;
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// What the host should do after [`Browser::handle_key`].
@@ -1819,5 +1822,132 @@ mod tests {
         assert_eq!(b.import_path.len(), 0);
         press(&mut b, KeyCode::Esc);
         assert_eq!(b.view, View::Workbench);
+    }
+
+    #[test]
+    fn the_param_prompt_names_the_placeholder_being_asked_for() {
+        let mut prompt = ParamPrompt {
+            names: vec!["a".into(), "b".into()],
+            ..ParamPrompt::default()
+        };
+        assert_eq!(prompt.current(), Some("a"));
+        prompt.values.push("1".into());
+        assert_eq!(prompt.current(), Some("b"));
+        prompt.values.push("2".into());
+        assert_eq!(prompt.current(), None);
+    }
+
+    #[test]
+    fn dirty_stores_are_handed_out_once() {
+        let mut b = browser();
+        assert!(b.take_dirty_history().is_none());
+        assert!(b.take_dirty_saved().is_none());
+        b.history.push("SELECT 1");
+        b.dirty.history = true;
+        assert_eq!(b.take_dirty_history().unwrap().entries, ["SELECT 1"]);
+        assert!(b.take_dirty_history().is_none());
+        b.saved.upsert("q", "SELECT 2");
+        b.dirty.saved = true;
+        assert_eq!(b.take_dirty_saved().unwrap().queries.len(), 1);
+        assert!(b.take_dirty_saved().is_none());
+        assert_eq!(b.query_elapsed_secs(), None);
+        assert!(!b.query_running());
+    }
+
+    #[test]
+    fn mcp_sharing_is_loaded_from_settings_and_reported_back_when_changed() {
+        let mut b = browser();
+        let mut shared = std::collections::BTreeMap::new();
+        shared.insert("app".to_string(), true);
+        shared.insert("off".to_string(), false);
+        b.set_mcp_shared(&shared);
+        assert!(b.is_mcp_shared("app"));
+        assert!(!b.is_mcp_shared("off"), "false is the same as none");
+        assert!(
+            b.take_dirty_mcp_shared().is_none(),
+            "loading is not a change"
+        );
+        b.mcp_shared.insert("new".into());
+        let changed = b.take_dirty_mcp_shared().unwrap();
+        assert_eq!(changed.get("new"), Some(&true));
+        assert!(b.take_dirty_mcp_shared().is_none());
+    }
+
+    #[test]
+    fn a_pasted_connection_string_names_the_connection_and_reports_ignored_options() {
+        let mut b = browser();
+        b.view = View::Form;
+        b.form = Form::default();
+        assert!(b.paste("postgres://u@h/d?application_name=x"));
+        assert_eq!(b.form.fields[0], "d", "named after the database");
+        assert_eq!(b.form.fields[3], "h");
+        assert!(!b.form_password_held());
+        let message = b.message.clone().unwrap();
+        assert!(
+            message.starts_with(&t!("msg.db_dsn_filled").to_string()),
+            "{message}"
+        );
+        assert!(message.contains("application_name"), "{message}");
+        // A SQLite file names itself by its stem; a bare host by the host.
+        b.form = Form::default();
+        assert!(b.paste("sqlite:///tmp/orders.db"));
+        assert_eq!(b.form.fields[0], "orders");
+        b.form = Form::default();
+        assert!(b.paste("postgres://u:pw@hostonly"));
+        assert_eq!(b.form.fields[0], "hostonly");
+        assert!(b.form_password_held());
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_dsn_filled_password").to_string())
+        );
+        // An existing name is kept.
+        b.form = Form::default();
+        b.form.fields[0] = "mine".into();
+        assert!(b.paste("postgres://u@h/d"));
+        assert_eq!(b.form.fields[0], "mine");
+        // Anything else is not a connection string.
+        assert!(!b.paste("just some text"));
+    }
+
+    #[test]
+    fn default_names_prefer_database_then_file_stem_then_host() {
+        assert_eq!(default_name("db", "/x/f.sqlite", "h"), "db");
+        assert_eq!(default_name("", "/x/f.sqlite", "h"), "f");
+        assert_eq!(default_name("", "", "h"), "h");
+        assert_eq!(default_name("", "..", "h"), "..");
+    }
+
+    #[test]
+    fn ctrl_chords_open_the_ai_helpers_and_schema_compare() {
+        let mut b = test_support::family(false);
+        b.focus = Pane::Editor;
+        for c in "select * from parent".chars() {
+            b.handle_key(key(KeyCode::Char(c)), Pages::default());
+        }
+        test_support::ctrl(&mut b, 'o');
+        assert!(b.ai_busy(), "optimize queues a request");
+        b.ai_failed();
+        test_support::ctrl(&mut b, 'k');
+        assert!(b.ai_busy(), "explain queues a request");
+        b.ai_failed();
+        test_support::ctrl(&mut b, 'f');
+        assert_eq!(b.message, Some(t!("msg.db_ai_no_error").to_string()));
+        test_support::ctrl(&mut b, 'd');
+        assert_eq!(
+            b.message,
+            Some(
+                t!(
+                    "msg.db_compare_no_target",
+                    kind = connect::Kind::Sqlite.label()
+                )
+                .to_string()
+            )
+        );
+        test_support::ctrl(&mut b, 'z');
+        assert_eq!(
+            b.view,
+            View::Workbench,
+            "an unclaimed chord changes nothing"
+        );
     }
 }

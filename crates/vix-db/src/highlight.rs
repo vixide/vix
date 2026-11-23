@@ -345,4 +345,26 @@ mod tests {
             KEYWORDS.len()
         );
     }
+
+    #[test]
+    fn styles_fall_back_to_the_documented_palette_without_a_theme() {
+        crate::test_support::without_theme(|| {
+            assert_eq!(style(Tok::Keyword).fg, Some(Color::Cyan));
+            assert_eq!(style(Tok::Str).fg, Some(Color::Green));
+            assert_eq!(style(Tok::Num).fg, Some(Color::Yellow));
+            assert_eq!(style(Tok::Comment).fg, Some(Color::DarkGray));
+            assert_eq!(style(Tok::Plain), vix_theme::base());
+        });
+    }
+
+    #[test]
+    fn a_theme_overrides_the_syntax_colors_it_sets() {
+        let json = r#"{"name":"t","syntax":{"keyword":[1,2,3],"string":[4,5,6],"number":[7,8,9],"comment":[10,11,12]}}"#;
+        crate::test_support::with_theme(json, || {
+            assert_eq!(style(Tok::Keyword).fg, Some(Color::Rgb(1, 2, 3)));
+            assert_eq!(style(Tok::Str).fg, Some(Color::Rgb(4, 5, 6)));
+            assert_eq!(style(Tok::Num).fg, Some(Color::Rgb(7, 8, 9)));
+            assert_eq!(style(Tok::Comment).fg, Some(Color::Rgb(10, 11, 12)));
+        });
+    }
 }

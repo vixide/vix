@@ -458,4 +458,18 @@ mod tests {
         );
         assert!(OPS.iter().all(|op| !op.label().is_empty()));
     }
+
+    #[test]
+    fn filter_errors_have_distinct_messages_and_wildcards_are_escaped() {
+        let all = [
+            FilterError::MissingValue,
+            FilterError::BadRange,
+            FilterError::EmptyList,
+            FilterError::UnclosedQuote,
+        ];
+        let texts: std::collections::BTreeSet<String> =
+            all.iter().map(ToString::to_string).collect();
+        assert_eq!(texts.len(), 4);
+        assert_eq!(like_pattern("50%_!"), "%50!%!_!!%");
+    }
 }

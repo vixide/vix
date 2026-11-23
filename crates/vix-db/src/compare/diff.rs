@@ -1569,4 +1569,793 @@ pub(crate) mod tests {
             .collect();
         assert_eq!(markers, ['+', '-', '~']);
     }
+
+    fn lite() -> Snapshot {
+        Snapshot::new(Kind::Sqlite, "main")
+    }
+
+    fn one_table(mut snap: Snapshot, t: Table) -> Snapshot {
+        snap.tables.push(t);
+        snap
+    }
+
+    fn enum_of(name: &str, values: &[&str]) -> EnumType {
+        EnumType {
+            name: name.into(),
+            values: values.iter().map(|v| (*v).to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn labels_markers_and_notes() {
+        let mut c = Change::new(Object::Column, Action::Added, "users", "email");
+        assert_eq!(c.label(), "users.email");
+        c.table.clear();
+        assert_eq!(c.label(), "email");
+        assert!(!c.is_manual(), "no statements is not manual");
+        c.push(Phase::AlterColumn, "-- by hand");
+        assert!(c.is_manual());
+        c.push(Phase::AlterColumn, "ALTER TABLE x");
+        assert!(!c.is_manual());
+        assert_eq!(Action::Added.marker(), '+');
+        assert_eq!(Action::Removed.marker(), '-');
+        assert_eq!(Action::Changed.marker(), '~');
+        for (object, suffix) in [
+            (Object::Schema, "schema"),
+            (Object::Table, "table"),
+            (Object::Column, "column"),
+            (Object::PrimaryKey, "primary_key"),
+            (Object::Unique, "unique"),
+            (Object::Check, "check"),
+            (Object::Index, "index"),
+            (Object::ForeignKey, "foreign_key"),
+            (Object::View, "view"),
+            (Object::Routine, "routine"),
+            (Object::Trigger, "trigger"),
+            (Object::Enum, "enum"),
+            (Object::Sequence, "sequence"),
+        ] {
+            assert_eq!(object.label_key(), format!("ui.db_compare_obj_{suffix}"));
+        }
+    }
+
+    #[test]
+    fn enum_types_are_created_dropped_and_extended_in_place() {
+        let mut source = pg();
+        let mut target = pg();
+        source.enums = vec![
+            enum_of("mood", &["sad", "ok", "happy"]),
+            enum_of("fresh", &["a"]),
+        ];
+        target.enums = vec![enum_of("mood", &["ok", "happy"]), enum_of("gone", &["x"])];
+        let changes = diff(&source, &target);
+        let fresh = find(&changes, Object::Enum, "fresh");
+        assert_eq!(fresh.action, Action::Added);
+        assert_eq!(
+            sqls(fresh),
+            ["CREATE TYPE \"public\".\"fresh\" AS ENUM ('a')"]
+        );
+        let gone = find(&changes, Object::Enum, "gone");
+        assert_eq!(sqls(gone), ["DROP TYPE \"public\".\"gone\""]);
+        let mood = find(&changes, Object::Enum, "mood");
+        assert_eq!(mood.action, Action::Changed);
+        assert_eq!(
+            sqls(mood),
+            ["ALTER TYPE \"public\".\"mood\" ADD VALUE 'sad' BEFORE 'ok'"]
+        );
+        // A value in the middle goes AFTER its predecessor.
+        source.enums = vec![enum_of("mood", &["ok", "meh", "happy"])];
+        target.enums = vec![enum_of("mood", &["ok", "happy"])];
+        let changes = diff(&source, &target);
+        assert_eq!(
+            sqls(find(&changes, Object::Enum, "mood")),
+            ["ALTER TYPE \"public\".\"mood\" ADD VALUE 'meh' AFTER 'ok'"]
+        );
+        // Removing or reordering values cannot be done in place.
+        source.enums = vec![enum_of("mood", &["happy", "ok"])];
+        let changes = diff(&source, &target);
+        let mood = find(&changes, Object::Enum, "mood");
+        assert!(mood.destructive && mood.is_manual());
+        assert!(mood.statements[0].sql.contains("recreate the type by hand"));
+    }
+
+    fn seq(name: &str, start: &str, cycle: bool) -> Sequence {
+        Sequence {
+            name: name.into(),
+            data_type: "bigint".into(),
+            start: start.into(),
+            increment: "1".into(),
+            cycle,
+            ..Sequence::default()
+        }
+    }
+
+    #[test]
+    fn sequences_are_created_dropped_and_altered() {
+        let mut source = pg();
+        let mut target = pg();
+        source.sequences = vec![seq("new_seq", "1", false), seq("both", "10", true)];
+        target.sequences = vec![seq("old_seq", "1", false), seq("both", "1", true)];
+        let changes = diff(&source, &target);
+        assert_eq!(
+            sqls(find(&changes, Object::Sequence, "new_seq")),
+            [
+                "CREATE SEQUENCE \"public\".\"new_seq\" AS bigint INCREMENT BY 1 START WITH 1 NO CYCLE"
+            ]
+        );
+        assert_eq!(
+            sqls(find(&changes, Object::Sequence, "old_seq")),
+            ["DROP SEQUENCE IF EXISTS \"public\".\"old_seq\""]
+        );
+        let both = find(&changes, Object::Sequence, "both");
+        assert_eq!(both.action, Action::Changed);
+        assert!(sqls(both)[0].starts_with("ALTER SEQUENCE \"public\".\"both\""));
+        assert!(sqls(both)[0].contains("START WITH 10 CYCLE"));
+    }
+
+    #[test]
+    fn removed_tables_are_destructive_and_summarized() {
+        let target = one_table(pg(), table("old", vec![col("id", "integer", false)]));
+        let changes = diff(&pg(), &target);
+        let c = find(&changes, Object::Table, "old");
+        assert!(c.destructive);
+        assert_eq!(c.touches, [("old".to_string(), String::new())]);
+        assert_eq!(c.target, "(\"id\" integer NOT NULL)");
+        assert_eq!(sqls(c), ["DROP TABLE \"public\".\"old\""]);
+        // SQLite keeps its own CREATE text for the summary.
+        let mut t = table("old", vec![col("id", "integer", false)]);
+        t.create_sql = "CREATE TABLE old (id INTEGER)".into();
+        let changes = diff(&lite(), &one_table(lite(), t));
+        assert_eq!(
+            find(&changes, Object::Table, "old").target,
+            "CREATE TABLE old (id INTEGER)"
+        );
+    }
+
+    #[test]
+    fn a_new_table_carries_constraints_comments_and_indexes() {
+        let mut t = table(
+            "items",
+            vec![
+                Column {
+                    name: "id".into(),
+                    data_type: "integer".into(),
+                    identity: "always".into(),
+                    ..Column::default()
+                },
+                Column {
+                    name: "slug".into(),
+                    data_type: "text".into(),
+                    default: "'x'".into(),
+                    comment: "the slug".into(),
+                    ..Column::default()
+                },
+                Column {
+                    name: "total".into(),
+                    data_type: "integer".into(),
+                    generated: true,
+                    default: "1 + 1".into(),
+                    nullable: true,
+                    identity: "default".into(),
+                    ..Column::default()
+                },
+            ],
+        );
+        t.uniques.push(Constraint {
+            name: "items_slug_key".into(),
+            definition: "UNIQUE (slug)".into(),
+            references: String::new(),
+        });
+        t.checks.push(Constraint {
+            name: "items_total_check".into(),
+            definition: "CHECK (total > 0)".into(),
+            references: String::new(),
+        });
+        t.comment = "all the items".into();
+        t.indexes.push(Index {
+            name: "items_slug_idx".into(),
+            definition: "CREATE INDEX items_slug_idx ON public.items (slug);".into(),
+            unique: false,
+        });
+        let changes = diff(&one_table(pg(), t), &pg());
+        let c = find(&changes, Object::Table, "items");
+        let statements = sqls(c);
+        assert!(statements[0].contains("\"id\" integer GENERATED ALWAYS AS IDENTITY NOT NULL"));
+        assert!(statements[0].contains("\"slug\" text DEFAULT 'x' NOT NULL"));
+        assert!(
+            statements[0]
+                .contains("GENERATED ALWAYS AS (1 + 1) STORED GENERATED BY DEFAULT AS IDENTITY")
+        );
+        assert!(
+            statements
+                .iter()
+                .any(|s| s.contains("ADD CONSTRAINT \"items_slug_key\" UNIQUE (slug)"))
+        );
+        assert!(
+            statements
+                .iter()
+                .any(|s| s.contains("ADD CONSTRAINT \"items_total_check\" CHECK"))
+        );
+        assert!(statements.contains(&"COMMENT ON TABLE \"public\".\"items\" IS 'all the items'"));
+        assert!(
+            statements.contains(&"COMMENT ON COLUMN \"public\".\"items\".\"slug\" IS 'the slug'")
+        );
+        assert!(statements.contains(&"CREATE INDEX items_slug_idx ON public.items (slug)"));
+    }
+
+    #[test]
+    fn a_new_sqlite_table_uses_its_own_create_statement() {
+        let mut t = table("t", vec![col("id", "integer", false)]);
+        t.create_sql = "CREATE TABLE t (id INTEGER PRIMARY KEY);".into();
+        t.indexes.push(Index {
+            name: "t_idx".into(),
+            definition: "CREATE INDEX t_idx ON t (id)".into(),
+            unique: false,
+        });
+        let changes = diff(&one_table(lite(), t), &lite());
+        let c = find(&changes, Object::Table, "t");
+        assert_eq!(
+            sqls(c),
+            [
+                "CREATE TABLE t (id INTEGER PRIMARY KEY)",
+                "CREATE INDEX t_idx ON t (id)"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_column_added_not_null_without_a_default_is_risky_and_commented() {
+        let mut source = pg();
+        source.tables.push(table(
+            "users",
+            vec![
+                col("id", "integer", false),
+                Column {
+                    comment: "who".into(),
+                    ..col("name", "text", false)
+                },
+                Column {
+                    default: "'n/a'".into(),
+                    ..col("nick", "text", false)
+                },
+            ],
+        ));
+        let target = one_table(pg(), table("users", vec![col("id", "integer", false)]));
+        let changes = diff(&source, &target);
+        let name = find(&changes, Object::Column, "name");
+        assert!(name.risky);
+        assert_eq!(
+            sqls(name),
+            [
+                "ALTER TABLE \"public\".\"users\" ADD COLUMN \"name\" text NOT NULL",
+                "COMMENT ON COLUMN \"public\".\"users\".\"name\" IS 'who'"
+            ]
+        );
+        assert!(
+            !find(&changes, Object::Column, "nick").risky,
+            "it has a default"
+        );
+    }
+
+    fn altered(source: Column, target: Column) -> Change {
+        let src = one_table(pg(), table("t", vec![source]));
+        let tgt = one_table(pg(), table("t", vec![target]));
+        diff(&src, &tgt).into_iter().next().expect("one change")
+    }
+
+    #[test]
+    fn retyping_a_column_drops_and_restores_its_default() {
+        let c = altered(
+            Column {
+                default: "'1'".into(),
+                ..col("v", "bigint", true)
+            },
+            Column {
+                default: "0".into(),
+                ..col("v", "integer", true)
+            },
+        );
+        assert!(c.risky);
+        assert_eq!(
+            sqls(&c),
+            [
+                "ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" DROP DEFAULT",
+                "ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" TYPE bigint USING \"v\"::bigint",
+                "ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" SET DEFAULT '1'",
+            ]
+        );
+        assert_eq!(c.touches, [("t".to_string(), "v".to_string())]);
+        // Retyping to a column with no default leaves it dropped.
+        let c = altered(
+            col("v", "bigint", true),
+            Column {
+                default: "0".into(),
+                ..col("v", "integer", true)
+            },
+        );
+        assert_eq!(sqls(&c).len(), 2);
+        // Changing only the default, in both directions.
+        let c = altered(
+            col("v", "integer", true),
+            Column {
+                default: "0".into(),
+                ..col("v", "integer", true)
+            },
+        );
+        assert_eq!(
+            sqls(&c),
+            ["ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" DROP DEFAULT"]
+        );
+        let c = altered(
+            Column {
+                default: "5".into(),
+                ..col("v", "integer", true)
+            },
+            col("v", "integer", true),
+        );
+        assert_eq!(
+            sqls(&c),
+            ["ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" SET DEFAULT 5"]
+        );
+    }
+
+    #[test]
+    fn nullability_identity_and_comment_changes() {
+        let c = altered(col("v", "integer", true), col("v", "integer", false));
+        assert_eq!(
+            sqls(&c),
+            ["ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" DROP NOT NULL"]
+        );
+        assert!(!c.risky);
+        let c = altered(col("v", "integer", false), col("v", "integer", true));
+        assert_eq!(
+            sqls(&c),
+            ["ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" SET NOT NULL"]
+        );
+        assert!(c.risky);
+        let with = |identity: &str| Column {
+            identity: identity.into(),
+            ..col("v", "integer", true)
+        };
+        assert_eq!(
+            sqls(&altered(with(""), with("always")))[0],
+            "ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" DROP IDENTITY IF EXISTS"
+        );
+        assert_eq!(
+            sqls(&altered(with("always"), with("")))[0],
+            "ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" ADD GENERATED ALWAYS AS IDENTITY"
+        );
+        assert_eq!(
+            sqls(&altered(with("default"), with("always")))[0],
+            "ALTER TABLE \"public\".\"t\" ALTER COLUMN \"v\" SET GENERATED BY DEFAULT"
+        );
+        let c = altered(
+            Column {
+                comment: "now".into(),
+                ..col("v", "integer", true)
+            },
+            col("v", "integer", true),
+        );
+        assert_eq!(
+            sqls(&c),
+            ["COMMENT ON COLUMN \"public\".\"t\".\"v\" IS 'now'"]
+        );
+    }
+
+    #[test]
+    fn changing_a_generation_expression_drops_and_re_adds_the_column() {
+        let generated = |expr: &str, comment: &str| Column {
+            generated: true,
+            default: expr.into(),
+            comment: comment.into(),
+            ..col("g", "integer", true)
+        };
+        let c = altered(generated("a * 3", "why"), generated("a * 2", ""));
+        assert!(c.destructive);
+        assert_eq!(c.touches, [("t".to_string(), "g".to_string())]);
+        let statements = sqls(&c);
+        assert!(statements[0].ends_with("DROP COLUMN \"g\""));
+        assert!(
+            statements[1].contains("ADD COLUMN \"g\" integer GENERATED ALWAYS AS (a * 3) STORED")
+        );
+        assert!(statements[2].contains("IS 'why'"));
+    }
+
+    #[test]
+    fn table_comments_and_constraint_changes_on_postgres() {
+        let mut s = table("t", vec![col("id", "integer", false)]);
+        let mut t = s.clone();
+        s.comment = "new".into();
+        t.comment = "old".into();
+        let key = |name: &str, def: &str| Constraint {
+            name: name.into(),
+            definition: def.into(),
+            references: String::new(),
+        };
+        s.uniques = vec![key("u_new", "UNIQUE (a)"), key("u_both", "UNIQUE (b, c)")];
+        t.uniques = vec![key("u_old", "UNIQUE (z)"), key("u_both", "UNIQUE (b)")];
+        s.checks = vec![key("c1", "CHECK (a > 0)")];
+        s.primary_key = Some(key("t_pkey", "PRIMARY KEY (id, x)"));
+        let changes = diff(&one_table(pg(), s), &one_table(pg(), t));
+        let comment = changes
+            .iter()
+            .find(|c| c.object == Object::Table)
+            .expect("comment change");
+        assert_eq!(
+            sqls(comment),
+            ["COMMENT ON TABLE \"public\".\"t\" IS 'new'"]
+        );
+        let added = find(&changes, Object::Unique, "u_new");
+        assert!(added.risky);
+        assert_eq!(added.statements[0].phase, Phase::AddConstraint);
+        let removed = find(&changes, Object::Unique, "u_old");
+        assert!(!removed.risky);
+        assert_eq!(removed.statements[0].phase, Phase::DropConstraint);
+        let altered_key = find(&changes, Object::Unique, "u_both");
+        assert_eq!(altered_key.action, Action::Changed);
+        assert!(
+            sqls(altered_key)[0].contains("DROP CONSTRAINT")
+                && sqls(altered_key)[1].contains("ADD CONSTRAINT")
+        );
+        assert!(
+            changes
+                .iter()
+                .any(|c| c.object == Object::Check && c.name == "c1")
+        );
+        let pk = find(&changes, Object::PrimaryKey, "t_pkey");
+        assert_eq!(pk.action, Action::Changed);
+        assert!(pk.risky);
+        // Clearing a comment writes NULL.
+        let mut s = table("t", vec![col("id", "integer", false)]);
+        let mut t = s.clone();
+        t.comment = "old".into();
+        s.comment.clear();
+        let changes = diff(&one_table(pg(), s), &one_table(pg(), t));
+        assert_eq!(
+            sqls(&changes[0]),
+            ["COMMENT ON TABLE \"public\".\"t\" IS NULL"]
+        );
+    }
+
+    #[test]
+    fn foreign_keys_and_indexes_change_by_name() {
+        let fk = |name: &str, def: &str| Constraint {
+            name: name.into(),
+            definition: def.into(),
+            references: "p".into(),
+        };
+        let ix = |name: &str, def: &str, unique: bool| Index {
+            name: name.into(),
+            definition: def.into(),
+            unique,
+        };
+        let mut s = table("t", vec![col("id", "integer", false)]);
+        let mut t = s.clone();
+        s.foreign_keys = vec![fk("fk_new", "FOREIGN KEY (a) REFERENCES p(id)")];
+        t.foreign_keys = vec![fk("fk_old", "FOREIGN KEY (b) REFERENCES p(id)")];
+        s.indexes = vec![
+            ix("ix_new", "CREATE UNIQUE INDEX ix_new ON t (a)", true),
+            ix("ix_both", "CREATE INDEX ix_both ON t (a, b)", false),
+        ];
+        t.indexes = vec![
+            ix("ix_old", "CREATE INDEX ix_old ON t (z)", false),
+            ix("ix_both", "CREATE INDEX ix_both ON t (a)", false),
+        ];
+        let changes = diff(&one_table(pg(), s), &one_table(pg(), t));
+        let fk_new = find(&changes, Object::ForeignKey, "fk_new");
+        assert_eq!(fk_new.statements[0].phase, Phase::AddForeignKey);
+        let fk_old = find(&changes, Object::ForeignKey, "fk_old");
+        assert_eq!(fk_old.statements[0].phase, Phase::DropForeignKey);
+        let ix_new = find(&changes, Object::Index, "ix_new");
+        assert!(ix_new.risky, "a unique index can fail on existing rows");
+        let ix_old = find(&changes, Object::Index, "ix_old");
+        assert_eq!(sqls(ix_old), ["DROP INDEX \"public\".\"ix_old\""]);
+        let ix_both = find(&changes, Object::Index, "ix_both");
+        assert_eq!(ix_both.statements.len(), 2);
+        assert!(!ix_both.risky);
+    }
+
+    #[test]
+    fn sqlite_changes_that_need_a_table_rebuild_become_notes() {
+        let mut s = table(
+            "t",
+            vec![
+                col("id", "integer", false),
+                Column {
+                    generated: true,
+                    default: "id * 2".into(),
+                    ..col("g", "integer", true)
+                },
+                col("changed", "text", true),
+                Column {
+                    comment: "only a comment".into(),
+                    ..col("note", "text", true)
+                },
+            ],
+        );
+        let mut t = table(
+            "t",
+            vec![
+                col("id", "integer", false),
+                col("changed", "integer", true),
+                col("note", "text", true),
+            ],
+        );
+        s.foreign_keys.push(Constraint {
+            name: "fk".into(),
+            definition: "FOREIGN KEY (id) REFERENCES p(id)".into(),
+            references: "p".into(),
+        });
+        t.primary_key = None;
+        s.comment = "ignored on sqlite".into();
+        let changes = diff(&one_table(lite(), s), &one_table(lite(), t));
+        let generated = find(&changes, Object::Column, "g");
+        assert!(generated.is_manual());
+        assert!(
+            generated.statements[0]
+                .sql
+                .contains("rebuild the table by hand")
+        );
+        let retyped = find(&changes, Object::Column, "changed");
+        assert!(retyped.risky && retyped.is_manual());
+        assert!(
+            !changes.iter().any(|c| c.name == "note"),
+            "a comment-only change is invisible on SQLite"
+        );
+        assert!(!changes.iter().any(|c| c.object == Object::Table));
+        let fk = find(&changes, Object::ForeignKey, "fk");
+        assert!(fk.is_manual());
+        assert!(fk.statements[0].sql.contains("a foreign key"));
+        let pk = find(&changes, Object::PrimaryKey, "t_pkey");
+        assert!(pk.statements[0].sql.contains("the primary key"));
+    }
+
+    fn view(name: &str, body: &str) -> View {
+        View {
+            name: name.into(),
+            definition: body.into(),
+            ..View::default()
+        }
+    }
+
+    #[test]
+    fn views_are_created_dropped_and_rebuilt() {
+        let mut source = pg();
+        let mut target = pg();
+        source.views = vec![
+            View {
+                comment: "c".into(),
+                ..view("v_new", "SELECT 1;")
+            },
+            View {
+                materialized: true,
+                ..view("v_mat", "SELECT 2")
+            },
+            view("v_body", "SELECT 3"),
+            View {
+                comment: "fresh".into(),
+                ..view("v_comment", "SELECT 4")
+            },
+            view("v_same", "SELECT  5 ;"),
+        ];
+        target.views = vec![
+            view("v_old", "SELECT 0"),
+            view("v_mat", "SELECT 2"),
+            View {
+                comment: "x".into(),
+                ..view("v_body", "SELECT 33")
+            },
+            view("v_comment", "SELECT 4"),
+            view("v_same", "SELECT 5"),
+        ];
+        let changes = diff(&source, &target);
+        let v_new = find(&changes, Object::View, "v_new");
+        assert_eq!(
+            sqls(v_new),
+            [
+                "CREATE VIEW \"public\".\"v_new\" AS\nSELECT 1",
+                "COMMENT ON VIEW \"public\".\"v_new\" IS 'c'"
+            ]
+        );
+        assert_eq!(
+            sqls(find(&changes, Object::View, "v_old")),
+            ["DROP VIEW \"public\".\"v_old\""]
+        );
+        let mat = find(&changes, Object::View, "v_mat");
+        assert_eq!(
+            sqls(mat),
+            [
+                "DROP VIEW \"public\".\"v_mat\"",
+                "CREATE MATERIALIZED VIEW \"public\".\"v_mat\" AS\nSELECT 2"
+            ]
+        );
+        let body = find(&changes, Object::View, "v_body");
+        assert_eq!(
+            body.statements.len(),
+            3,
+            "drop, create, and clear the old comment"
+        );
+        assert_eq!(
+            body.statements[2].sql,
+            "COMMENT ON VIEW \"public\".\"v_body\" IS NULL"
+        );
+        let only_comment = find(&changes, Object::View, "v_comment");
+        assert_eq!(
+            sqls(only_comment),
+            ["COMMENT ON VIEW \"public\".\"v_comment\" IS 'fresh'"]
+        );
+        assert!(!changes.iter().any(|c| c.name == "v_same"));
+        // A rebuilt materialized view and a dropped one name their kind.
+        target.views = vec![View {
+            materialized: true,
+            ..view("m", "SELECT 1")
+        }];
+        source.views.clear();
+        let dropped = diff(&source, &target);
+        assert_eq!(
+            sqls(find(&dropped, Object::View, "m")),
+            ["DROP MATERIALIZED VIEW \"public\".\"m\""]
+        );
+        assert_eq!(
+            view_comment(
+                &view_sql(&pg()),
+                &View {
+                    materialized: true,
+                    ..view("m", "x")
+                }
+            ),
+            "COMMENT ON MATERIALIZED VIEW \"public\".\"m\" IS NULL"
+        );
+    }
+
+    #[test]
+    fn sqlite_views_use_their_own_statement() {
+        let source = {
+            let mut s = lite();
+            s.views = vec![view("v", "CREATE VIEW v AS SELECT 1;")];
+            s
+        };
+        let changes = diff(&source, &lite());
+        assert_eq!(
+            sqls(find(&changes, Object::View, "v")),
+            ["CREATE VIEW v AS SELECT 1"]
+        );
+    }
+
+    fn routine(name: &str, args: &str, procedure: bool, body: &str) -> Routine {
+        Routine {
+            name: name.into(),
+            arguments: args.into(),
+            procedure,
+            definition: body.into(),
+        }
+    }
+
+    #[test]
+    fn routines_are_matched_by_signature() {
+        let mut source = pg();
+        let mut target = pg();
+        source.routines = vec![
+            routine(
+                "f",
+                "integer",
+                false,
+                "CREATE OR REPLACE FUNCTION f(integer) AS $$ 1 $$;",
+            ),
+            routine("g", "", false, "CREATE OR REPLACE FUNCTION g() AS $$ 2 $$"),
+            routine("same", "", false, "CREATE FUNCTION same()"),
+        ];
+        target.routines = vec![
+            routine("g", "", false, "CREATE OR REPLACE FUNCTION g() AS $$ 1 $$"),
+            routine("p", "text", true, "CREATE PROCEDURE p(text)"),
+            routine("same", "", false, "CREATE  FUNCTION same();"),
+        ];
+        let changes = diff(&source, &target);
+        let f = find(&changes, Object::Routine, "f(integer)");
+        assert_eq!(
+            sqls(f),
+            ["CREATE OR REPLACE FUNCTION f(integer) AS $$ 1 $$"]
+        );
+        let g = find(&changes, Object::Routine, "g()");
+        assert_eq!(g.action, Action::Changed);
+        let p = find(&changes, Object::Routine, "p(text)");
+        assert_eq!(sqls(p), ["DROP PROCEDURE \"public\".\"p\"(text)"]);
+        assert!(!changes.iter().any(|c| c.name == "same()"));
+        target.routines = vec![routine("fn", "", false, "x")];
+        source.routines.clear();
+        let changes = diff(&source, &target);
+        assert_eq!(
+            sqls(find(&changes, Object::Routine, "fn()")),
+            ["DROP FUNCTION \"public\".\"fn\"()"]
+        );
+    }
+
+    fn trigger(table: &str, name: &str, body: &str) -> Trigger {
+        Trigger {
+            table: table.into(),
+            name: name.into(),
+            definition: body.into(),
+        }
+    }
+
+    #[test]
+    fn triggers_follow_their_tables() {
+        let mut source = pg();
+        let mut target = pg();
+        let users = table("users", vec![col("id", "integer", false)]);
+        source.tables.push(users.clone());
+        target.tables.push(users);
+        target
+            .tables
+            .push(table("gone", vec![col("id", "integer", false)]));
+        source.triggers = vec![
+            trigger(
+                "users",
+                "t_new",
+                "CREATE TRIGGER t_new AFTER INSERT ON users;",
+            ),
+            trigger(
+                "users",
+                "t_chg",
+                "CREATE TRIGGER t_chg AFTER UPDATE ON users",
+            ),
+        ];
+        target.triggers = vec![
+            trigger(
+                "users",
+                "t_old",
+                "CREATE TRIGGER t_old AFTER DELETE ON users",
+            ),
+            trigger(
+                "users",
+                "t_chg",
+                "CREATE TRIGGER t_chg AFTER INSERT ON users",
+            ),
+            trigger(
+                "gone",
+                "t_gone",
+                "CREATE TRIGGER t_gone AFTER INSERT ON gone",
+            ),
+        ];
+        let changes = diff(&source, &target);
+        let new = find(&changes, Object::Trigger, "t_new");
+        assert_eq!(sqls(new), ["CREATE TRIGGER t_new AFTER INSERT ON users"]);
+        assert_eq!(new.label(), "users.t_new");
+        let old = find(&changes, Object::Trigger, "t_old");
+        assert_eq!(
+            sqls(old),
+            ["DROP TRIGGER \"t_old\" ON \"public\".\"users\""]
+        );
+        let chg = find(&changes, Object::Trigger, "t_chg");
+        assert_eq!(chg.statements.len(), 2);
+        assert!(
+            !changes.iter().any(|c| c.name == "t_gone"),
+            "a dropped table takes its triggers with it"
+        );
+        // SQLite names the trigger alone.
+        let mut lsrc = lite();
+        let mut ltgt = lite();
+        lsrc.tables
+            .push(table("users", vec![col("id", "integer", false)]));
+        ltgt.tables = lsrc.tables.clone();
+        ltgt.triggers = vec![trigger("users", "t", "CREATE TRIGGER t ...")];
+        let changes = diff(&lsrc, &ltgt);
+        assert_eq!(
+            sqls(find(&changes, Object::Trigger, "t")),
+            ["DROP TRIGGER \"t\""]
+        );
+    }
+
+    #[test]
+    fn a_missing_postgres_schema_is_created_first() {
+        let mut source = pg();
+        source
+            .tables
+            .push(table("a", vec![col("id", "integer", false)]));
+        let mut target = pg();
+        target.missing = true;
+        let changes = diff(&source, &target);
+        assert_eq!(changes[0].object, Object::Schema);
+        assert!(sqls(&changes[0])[0].starts_with("CREATE SCHEMA"));
+    }
 }

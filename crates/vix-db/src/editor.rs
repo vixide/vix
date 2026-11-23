@@ -898,4 +898,54 @@ mod tests {
         q.arrow(-1, 0); // wraps back to line 1 end
         assert_eq!((q.row, q.col), (0, 2));
     }
+
+    #[test]
+    fn backspace_and_delete_join_lines_and_stop_at_the_buffer_ends() {
+        let mut q = Query::from_text("ab\ncd");
+        q.backspace();
+        assert_eq!(q.text(), "ab\ncd", "nothing before the first character");
+        q.delete();
+        assert_eq!(q.text(), "b\ncd");
+        q.arrow(1, 1);
+        q.home_end(true);
+        q.backspace();
+        assert_eq!(q.text(), "bcd", "column 0 joins with the line above");
+        q.home_end(false);
+        q.delete();
+        assert_eq!(q.text(), "bcd", "nothing after the last character");
+        let mut q = Query::from_text("ab\ncd");
+        q.home_end(false);
+        q.delete();
+        assert_eq!(q.text(), "abcd", "end of line joins the next line");
+    }
+
+    #[test]
+    fn the_scroll_follows_the_cursor() {
+        let mut q = Query::from_text(&"x\n".repeat(20));
+        q.page(false, 8);
+        assert_eq!(q.row, 8);
+        q.ensure_visible(5);
+        assert_eq!(q.scroll, 4);
+        q.page(true, 100);
+        q.ensure_visible(5);
+        assert_eq!(q.scroll, 0);
+    }
+
+    #[test]
+    fn replacing_a_statement_needs_one_under_the_cursor() {
+        let mut q = Query::from_text("   ");
+        q.replace_statement_at_cursor("SELECT 1");
+        assert_eq!(q.text(), "   ", "no statement, no change");
+    }
+
+    #[test]
+    fn quotes_hide_semicolons_and_meta_commands() {
+        assert_eq!(statement_spans("SELECT \"a;b\"; SELECT 'c;d'").len(), 2);
+        assert_eq!(statement_spans("SELECT \"a\"\"; b\"").len(), 1);
+        assert_eq!(meta_commands("SELECT \"\\x\"\n'\\y'"), []);
+        assert_eq!(
+            meta_commands("\\dt\nSELECT 'a'\n\\q"),
+            [(1, "\\dt".to_string()), (3, "\\q".to_string())]
+        );
+    }
 }

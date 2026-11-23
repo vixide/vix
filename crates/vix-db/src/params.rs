@@ -232,4 +232,35 @@ mod tests {
         );
         assert_eq!(substitute("WHERE a = :missing", &[]), "WHERE a = :missing");
     }
+
+    #[test]
+    fn names_skip_quoted_and_commented_text_and_stop_at_name_characters() {
+        assert_eq!(
+            names("SELECT 'it''s :no', :a /* :hidden */, :b_2 -- :gone"),
+            ["a", "b_2"]
+        );
+        assert_eq!(names("SELECT '' || :x"), ["x"]);
+        assert!(
+            names("a ::: b : c").is_empty(),
+            "a bare colon names nothing"
+        );
+        assert_eq!(names("/* unterminated :x"), Vec::<String>::new());
+        assert_eq!(names("'unterminated :x"), Vec::<String>::new());
+        assert_eq!(names(":"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn substitution_leaves_strings_comments_casts_and_unknown_names_alone() {
+        let values = [("id".to_string(), "7".to_string())];
+        assert_eq!(
+            substitute(
+                "SELECT 'it''s :id', :id::int /* :id */ -- :id\n, :other, :",
+                &values
+            ),
+            "SELECT 'it''s :id', 7::int /* :id */ -- :id\n, :other, :"
+        );
+        assert_eq!(substitute("a ::int b", &values), "a ::int b");
+        assert_eq!(substitute("'open :id", &values), "'open :id");
+        assert_eq!(substitute("/* open :id", &values), "/* open :id");
+    }
 }

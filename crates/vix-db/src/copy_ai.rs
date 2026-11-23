@@ -345,4 +345,99 @@ mod tests {
         assert!(out.contains(&format!("| {} |", ROW_CAP - 1)));
         assert!(!out.contains(&format!("| {ROW_CAP} |")), "rows are capped");
     }
+
+    mod browser {
+        use crate::test_support::{family, press, preview, select_table};
+        use crate::{Pane, View};
+        use vix_input::KeyCode;
+
+        #[test]
+        fn a_with_no_results_says_there_is_nothing_to_copy() {
+            let mut b = family(false);
+            b.focus = Pane::Results;
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(b.message, Some(t!("msg.db_copy_ai_empty").to_string()));
+        }
+
+        #[test]
+        fn a_copies_the_visible_result_rows_for_an_assistant() {
+            let mut b = family(false);
+            preview(&mut b, "parent");
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 2).to_string())
+            );
+            // A filtered grid copies only what matches.
+            press(&mut b, KeyCode::Char('/'));
+            press(&mut b, KeyCode::Char('b'));
+            press(&mut b, KeyCode::Enter);
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 1).to_string())
+            );
+        }
+
+        #[test]
+        fn column_types_come_from_the_previewed_table_only() {
+            let mut b = family(false);
+            preview(&mut b, "child");
+            assert_eq!(
+                b.result_column_types(),
+                [
+                    Some("INTEGER".into()),
+                    Some("INTEGER".into()),
+                    Some("TEXT".into())
+                ]
+            );
+            b.grid_source = Some(("SELECT 1".into(), None));
+            assert_eq!(b.result_column_types(), [None, None, None]);
+            b.grid_source = Some(("x".into(), Some(("main".into(), "nope".into()))));
+            assert_eq!(
+                b.result_column_types(),
+                [None, None, None],
+                "a table without a report has no types"
+            );
+            b.conn = None;
+            assert_eq!(b.result_column_types(), [None, None, None]);
+        }
+
+        #[test]
+        fn a_in_the_tree_copies_the_table_structure() {
+            let mut b = family(false);
+            select_table(&mut b, "child");
+            b.focus = Pane::Tree;
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 2).to_string())
+            );
+            b.tree.sel = 0;
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(b.message, Some(t!("msg.db_copy_ai_empty").to_string()));
+            select_table(&mut b, "child");
+            b.conn = None;
+            b.copy_table_for_ai();
+            assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+            assert_eq!(b.view, View::Workbench);
+        }
+
+        #[test]
+        fn a_table_whose_reports_fail_still_copies_with_dashes() {
+            let mut b = family(false);
+            select_table(&mut b, "parent");
+            b.session.as_mut().unwrap().run("DROP TABLE child").unwrap();
+            b.session
+                .as_mut()
+                .unwrap()
+                .run("DROP TABLE parent")
+                .unwrap();
+            b.copy_table_for_ai();
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 0).to_string())
+            );
+        }
+    }
 }

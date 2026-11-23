@@ -503,4 +503,17 @@ mod tests {
         ));
         assert!(!mentions_table("SELECT * FROM my_orders", "orders"));
     }
+
+    #[test]
+    fn every_relation_kind_has_its_own_label() {
+        assert_eq!(RelationKind::Outgoing.label_key(), "ui.db_rel_outgoing");
+        assert_eq!(RelationKind::Incoming.label_key(), "ui.db_rel_incoming");
+        assert_eq!(RelationKind::View.label_key(), "ui.db_rel_view");
+    }
+
+    #[test]
+    fn view_rows_without_enough_cells_are_dropped() {
+        let rows = vec![vec!["main".to_string()]];
+        assert_eq!(view_relations(&rows, "main", "t", false), Vec::new());
+    }
 }

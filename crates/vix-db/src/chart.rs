@@ -155,4 +155,11 @@ mod tests {
         assert_eq!(truncate("abcdefghij", 5), "abcd…");
         assert_eq!(truncate("short", 10), "short");
     }
+
+    #[test]
+    fn whole_numbers_drop_the_fraction_and_others_keep_it() {
+        assert_eq!(trim_number(3.0), "3");
+        assert_eq!(trim_number(2.5), "2.5");
+        assert_eq!(trim_number(-0.25), "-0.25");
+    }
 }
