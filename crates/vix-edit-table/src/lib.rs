@@ -15,11 +15,47 @@
 //! renders the grid, syncs the visible scroll window, and acts on the
 //! returned outcome.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::cmp::Ordering;
 
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use vix_convert_tabular::{parse_csv, parse_tsv, write_csv, write_tsv};
+
+/// The row and column of the cell at row-major index `idx` in a grid `cols` wide.
+fn cell_at(idx: usize, cols: usize) -> Option<(usize, usize)> {
+    Some((idx.checked_div(cols)?, idx.checked_rem(cols)?))
+}
+
+/// The index of the last of `len` items; with none, 0.
+fn last_index(len: usize) -> usize {
+    sub_or(len, 1, 0)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// What the host should do after the grid handled a key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -220,18 +256,24 @@ impl Grid {
         if self.row >= 1 {
             if self.row < self.row_scroll {
                 self.row_scroll = self.row;
-            } else if self.row >= self.row_scroll + height {
-                self.row_scroll = self.row + 1 - height;
+            } else if self.row >= add_or(self.row_scroll, height, usize::MAX) {
+                // The row just fits at the bottom of the window.
+                self.row_scroll = sub_or(add_or(self.row, 1, usize::MAX), height, 0);
             }
         }
-        let max_scroll = count.saturating_sub(height).max(1);
-        self.row_scroll = self.row_scroll.clamp(1, max_scroll);
+        // The body starts at row 1 and never scrolls past the last full window.
+        let max_scroll = sub_or(count, height, 0).max(1);
+        self.row_scroll = match self.row_scroll {
+            at if at < 1 => 1,
+            at if at > max_scroll => max_scroll,
+            at => at,
+        };
     }
 
     /// Set the horizontal scroll so the selected column is visible. The renderer
     /// computes `first_visible` from the variable column widths and the viewport.
     pub fn set_col_scroll(&mut self, first_visible: usize) {
-        self.col_scroll = first_visible.min(self.col.min(self.col_count().saturating_sub(1)));
+        self.col_scroll = first_visible.min(self.col.min(last_index(self.col_count())));
     }
 
     /// Interpret a key event, mutating the grid, and report what the host should
@@ -304,14 +346,15 @@ impl Grid {
             KeyCode::Down | KeyCode::Char('j') => self.move_down(),
             KeyCode::Left | KeyCode::Char('h') => self.move_left(),
             KeyCode::Right | KeyCode::Char('l') => self.move_right(),
-            KeyCode::PageUp => self.row = self.row.saturating_sub(page.max(1)),
+            KeyCode::PageUp => self.row = sub_or(self.row, page.max(1), 0),
             KeyCode::PageDown => {
-                self.row = (self.row + page.max(1)).min(self.row_count().saturating_sub(1));
+                self.row =
+                    add_or(self.row, page.max(1), usize::MAX).min(last_index(self.row_count()));
             }
             KeyCode::Home => self.col = 0,
-            KeyCode::End => self.col = self.col_count().saturating_sub(1),
+            KeyCode::End => self.col = last_index(self.col_count()),
             KeyCode::Char('g') => self.row = 0,
-            KeyCode::Char('G') => self.row = self.row_count().saturating_sub(1),
+            KeyCode::Char('G') => self.row = last_index(self.row_count()),
             KeyCode::Enter | KeyCode::F(2) => self.begin_edit(),
             KeyCode::Delete => self.clear_cell(),
             KeyCode::Char('s') => self.sort(true),
@@ -333,9 +376,9 @@ impl Grid {
     fn structural_key(&mut self, code: KeyCode) {
         match code {
             KeyCode::Up => self.insert_row(self.row),
-            KeyCode::Down => self.insert_row(self.row + 1),
+            KeyCode::Down => self.insert_row(add_or(self.row, 1, usize::MAX)),
             KeyCode::Left => self.insert_col(self.col),
-            KeyCode::Right => self.insert_col(self.col + 1),
+            KeyCode::Right => self.insert_col(add_or(self.col, 1, usize::MAX)),
             KeyCode::Delete => self.delete_row(),
             KeyCode::Backspace => self.delete_col(),
             _ => {}
@@ -346,25 +389,27 @@ impl Grid {
 
     /// Move the cursor up one row, stopping at the top.
     fn move_up(&mut self) {
-        self.row = self.row.saturating_sub(1);
+        self.row = sub_or(self.row, 1, 0);
     }
 
     /// Move the cursor down one row, stopping at the bottom.
     fn move_down(&mut self) {
-        if self.row + 1 < self.row_count() {
-            self.row += 1;
+        let next = add_or(self.row, 1, usize::MAX);
+        if next < self.row_count() {
+            self.row = next;
         }
     }
 
     /// Move the cursor left one column, stopping at the first.
     fn move_left(&mut self) {
-        self.col = self.col.saturating_sub(1);
+        self.col = sub_or(self.col, 1, 0);
     }
 
     /// Move the cursor right one column, stopping at the last.
     fn move_right(&mut self) {
-        if self.col + 1 < self.col_count() {
-            self.col += 1;
+        let next = add_or(self.col, 1, usize::MAX);
+        if next < self.col_count() {
+            self.col = next;
         }
     }
 
@@ -429,7 +474,7 @@ impl Grid {
         }
         self.push_undo();
         self.rows.remove(self.row);
-        self.row = self.row.min(self.row_count().saturating_sub(1));
+        self.row = self.row.min(last_index(self.row_count()));
         self.dirty = true;
     }
 
@@ -456,7 +501,7 @@ impl Grid {
                 row.remove(c);
             }
         }
-        self.col = self.col.min(self.col_count().saturating_sub(1));
+        self.col = self.col.min(last_index(self.col_count()));
         self.dirty = true;
     }
 
@@ -493,14 +538,23 @@ impl Grid {
         }
         let needle = self.last_query.to_lowercase();
         let cols = self.col_count();
-        let total = self.row_count() * cols;
-        if total == 0 {
+        let Some(total) = self.row_count().checked_mul(cols).filter(|t| *t > 0) else {
             return;
-        }
-        let start = from_row * cols + from_col;
+        };
+        let Some(start) = from_row
+            .checked_mul(cols)
+            .and_then(|n| n.checked_add(from_col))
+        else {
+            return;
+        };
         for step in 1..=total {
-            let idx = (start + step) % total;
-            let (r, c) = (idx / cols, idx % cols);
+            let Some((r, c)) = start
+                .checked_add(step)
+                .and_then(|n| n.checked_rem(total))
+                .and_then(|idx| cell_at(idx, cols))
+            else {
+                return;
+            };
             if self.cell(r, c).to_lowercase().contains(&needle) {
                 self.row = r;
                 self.col = c;
@@ -533,8 +587,8 @@ impl Grid {
     fn restore(&mut self, snap: Snapshot) -> Snapshot {
         let prior = self.snapshot();
         self.rows = snap.rows;
-        self.row = snap.row.min(self.row_count().saturating_sub(1));
-        self.col = snap.col.min(self.col_count().saturating_sub(1));
+        self.row = snap.row.min(last_index(self.row_count()));
+        self.col = snap.col.min(last_index(self.col_count()));
         self.dirty = true;
         prior
     }
