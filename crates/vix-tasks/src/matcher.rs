@@ -312,11 +312,8 @@ fn clip(line: &str) -> &str {
     if line.len() <= MAX_LINE {
         return line;
     }
-    let mut end = MAX_LINE;
-    while !line.is_char_boundary(end) {
-        end -= 1;
-    }
-    &line[..end]
+    line.get(..line.floor_char_boundary(MAX_LINE))
+        .unwrap_or(line)
 }
 
 /// Group `i` of `caps` parsed as a number.
@@ -924,13 +921,18 @@ impl ProblemList {
         if n == 0 {
             return None;
         }
+        let last = n.checked_sub(1)?;
         let (index, wrapped) = match (self.current, forward) {
             (None, true) => (0, false),
-            (None, false) => (n - 1, false),
-            (Some(i), true) if i + 1 >= n => (0, true),
-            (Some(i), true) => (i + 1, false),
-            (Some(0), false) => (n - 1, true),
-            (Some(i), false) => (i.min(n) - 1, false),
+            (None, false) => (last, false),
+            (Some(i), true) => match i.checked_add(1).filter(|next| *next < n) {
+                Some(next) => (next, false),
+                None => (0, true),
+            },
+            (Some(i), false) => match i.min(n).checked_sub(1) {
+                Some(previous) => (previous, false),
+                None => (last, true),
+            },
         };
         self.current = Some(index);
         Some(Step { index, wrapped })

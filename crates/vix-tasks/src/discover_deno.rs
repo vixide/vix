@@ -36,17 +36,18 @@ pub fn discover_deno_tasks(deno_json: &str) -> Vec<NamedTask> {
 /// inside a quoted string that is *not* preceded by `:` (e.g. a Windows
 /// path fragment) would still be incorrectly treated as a comment start.
 fn strip_line_comments(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
+    let mut out = String::new();
     for line in input.lines() {
         let bytes = line.as_bytes();
-        let mut cut = None;
-        for i in 0..bytes.len().saturating_sub(1) {
-            if bytes[i] == b'/' && bytes[i + 1] == b'/' && !(i > 0 && bytes[i - 1] == b':') {
-                cut = Some(i);
-                break;
-            }
-        }
-        out.push_str(cut.map_or(line, |c| &line[..c]));
+        // The first `//` that is not the `//` of a `://` URL scheme.
+        let cut = bytes
+            .windows(2)
+            .enumerate()
+            .find(|(i, pair)| {
+                *pair == b"//" && i.checked_sub(1).and_then(|p| bytes.get(p)) != Some(&b':')
+            })
+            .map(|(i, _)| i);
+        out.push_str(cut.and_then(|c| line.get(..c)).unwrap_or(line));
         out.push('\n');
     }
     out

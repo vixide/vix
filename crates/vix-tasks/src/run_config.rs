@@ -251,9 +251,14 @@ fn expand(
 /// The runnable [`Step`] for one configuration; a config without a `command`
 /// (a pure grouping of `before` entries) becomes an empty command.
 fn step_of(c: &RunConfig) -> Step {
+    // No command is the empty command.
+    let mut command = String::new();
+    if let Some(given) = &c.command {
+        command.clone_from(given);
+    }
     Step {
         name: c.name.clone(),
-        command: c.command.clone().unwrap_or_default(),
+        command,
         cwd: c.cwd.clone(),
         env: c.env.clone(),
     }
@@ -321,7 +326,7 @@ impl Plan {
             .map(|stage| {
                 let cmds: Vec<String> = stage.iter().map(|s| s.shell_command(shell)).collect();
                 match (shell, cmds.len()) {
-                    (_, 1) => cmds.into_iter().next().unwrap_or_default(),
+                    (_, 1) => cmds.concat(),
                     (Shell::Posix, _) => {
                         let jobs: Vec<String> = cmds.iter().map(|c| format!("( {c} ) &")).collect();
                         format!("{{ {} wait; }}", jobs.join(" "))

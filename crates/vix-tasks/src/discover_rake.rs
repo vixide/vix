@@ -28,6 +28,20 @@ static NAMESPACE_OPEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"^namespace\s*\(?\s*[:'"]([A-Za-z0-9_.\-]+)['"]?\s+do\b"#).unwrap()
 });
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Find Rake task definitions across `rakefiles` (`[(filename, content),
 /// ...]` — the host collects `Rakefile` plus any `.rake` files it finds,
 /// e.g. under `rakelib/`/`tasks/`/`lib/tasks/`). Command is
@@ -66,14 +80,14 @@ fn discover_rake_tasks_in_file(content: &str, use_bundler: bool) -> Vec<NamedTas
         let line = raw_line.trim();
 
         if let Some(caps) = NAMESPACE_OPEN.captures(line) {
-            do_depth += 1;
+            do_depth = add_or(do_depth, 1, usize::MAX);
             namespace_stack.push((caps[1].to_string(), do_depth));
             continue;
         }
         if let Some(caps) = TASK_DEF.captures(line) {
             record_task(&caps[1], &namespace_stack, use_bundler, &mut out);
             if ends_with_block_open(line) {
-                do_depth += 1;
+                do_depth = add_or(do_depth, 1, usize::MAX);
             }
             continue;
         }
@@ -84,11 +98,12 @@ fn discover_rake_tasks_in_file(content: &str, use_bundler: bool) -> Vec<NamedTas
             {
                 namespace_stack.pop();
             }
-            do_depth = do_depth.saturating_sub(1);
+            // A stray `end` with nothing open leaves the depth at 0.
+            do_depth = sub_or(do_depth, 1, 0);
             continue;
         }
         if ends_with_block_open(line) {
-            do_depth += 1;
+            do_depth = add_or(do_depth, 1, usize::MAX);
         }
     }
     out

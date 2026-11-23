@@ -67,6 +67,18 @@
 //!   [`history::push_history`]'s history list) but does not implement the UI
 //!   or persistence around them.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::Path;
 
 use serde::Deserialize;
