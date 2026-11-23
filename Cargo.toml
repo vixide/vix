@@ -401,7 +401,13 @@ strip = false
 # tier or splitting the test binary per crate (also on tasks.md's list, tried
 # only if this alone isn't enough).
 [profile.test]
-debug = 1
+debug = "line-tables-only"
+
+# Dependencies keep no debug information in tests either (as in `[profile.dev]`):
+# it is most of what the linker reads for ~150 test binaries, and a panic inside
+# a dependency still names its function, only the line inside it is lost.
+[profile.test.package."*"]
+debug = false
 
 # `vix-i18n`'s `i18n!` macro (T148(b), locales/*.yml at ~100% core-locale
 # coverage) expands to one function that sequentially `.insert()`s every

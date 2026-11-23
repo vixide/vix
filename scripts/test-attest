@@ -96,7 +96,7 @@ expect_msg "not clean"
 git checkout -q file
 
 expect_pass "a passing gate is attested" scripts/attest
-grep -qx -- "--tier full" "$STUB_LOG" && ok "attest ran the full tier" || bad "attest ran the full tier"
+grep -qx -- "--tier full --scope all" "$STUB_LOG" && ok "attest ran the full tier and the full scope" || bad "attest ran the full tier and the full scope"
 expect_pass "verify passes for HEAD" scripts/attest --verify
 expect_pass "verify passes by revision" scripts/attest --verify main
 

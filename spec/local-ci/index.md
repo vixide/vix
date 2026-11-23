@@ -61,6 +61,41 @@ so they cannot be mistaken for one. A signed attestation (T761) must accept
 only `full`.
 
 
+## Faster gate (concurrent groups, scoping, caches)
+
+The landing bar is unchanged; these make the same checks wait less.
+
+- **Concurrent groups.** After the build, clippy and tests, the independent slow
+  steps run at the same time: the feature combinations, headless examples and
+  generated reference docs (one group, in the main target), `cargo doc` (its own
+  target, `<target>.par-doc`, cloned copy-on-write from the main one on first
+  use and kept warm after), and semver. Each group's output is captured and
+  printed under a `==> group <name>` header when it ends; any failing group
+  fails the run after the others have finished. `VIX_PARALLEL=0` runs them one
+  after another in the main target, exactly the old order.
+- **Private target directory.** `VIX_PRIVATE_TARGET=1` gates in
+  `${XDG_CACHE_HOME:-~/.cache}/vix-target/<worktree name>`, seeded as a clone of
+  the directory it replaces. Two gates on one target queue on cargo's build
+  lock, which cost whole hours in practice; this removes the wait.
+- **Semver baselines are cached.** Published releases never change, so
+  `cargo semver-checks` runs in a persistent target
+  (`VIX_SEMVER_TARGET`, default `${XDG_CACHE_HOME:-~/.cache}/vix/semver-target`)
+  and builds each baseline once.
+- **`--scope changed`** (or `VIX_SCOPE=changed`) limits `cargo doc` and semver to
+  the crates changed since the merge base with `main` plus every workspace crate
+  that depends on them (the dependency closure), because a crate's doc warnings
+  and public API can only change through itself or something it re-exports. It
+  is for the edit loop and for local landings backed by a full CI pass: it ends
+  with `OK (scope changed, tier …): … NOT a full pass`, which the attestation
+  does not accept. The default scope is `all`.
+- **Test builds carry less debug information.** `[profile.test]` uses
+  line-tables-only and no debug information for dependencies, as `[profile.dev]`
+  already did; backtraces keep file and line for workspace code.
+
+`scripts/test-check-groups` (no network, no build; part of the `push` tier)
+proves the group targets, the failure propagation, the sequential mode, the
+scope narrowing and the private target with a stub `cargo`.
+
 ## Principles
 
 1. **One gate, one definition.** A tier of `scripts/check`, never a second
