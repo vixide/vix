@@ -11,6 +11,18 @@
 //! normally resolves keys itself and calls the actions directly; this is the
 //! standalone/default path. See `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::actions::{
     Copy, Cut, Delete, DeleteLine, Duplicate, Indent, InsertNewline, InsertText, MoveDown,
     MoveLeft, MoveRight, MoveUp, Paste, Redo, SelectAll, ToggleComment, UnIndent, Undo,
@@ -24,6 +36,20 @@ use vix_input::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind}
 
 /// Lines one mouse-wheel notch scrolls the editor.
 pub const WHEEL_LINES: usize = 3;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 impl Editor {
     /// Handle a key event, then scroll to keep the cursor visible.
@@ -193,8 +219,10 @@ impl Editor {
         let code = self.code_mut();
         code.tx();
         code.set_state_before(cursor, None);
-        code.remove(cursor - 1, cursor + 1);
-        let newc = cursor - 1;
+        // `prev` was read from the char before the cursor, so the cursor is at least 1.
+        let before = sub_or(cursor, 1, 0);
+        code.remove(before, add_or(cursor, 1, usize::MAX));
+        let newc = before;
         code.set_state_after(newc, None);
         code.commit();
         self.set_cursor(newc);
@@ -222,7 +250,7 @@ impl Editor {
             }
             MouseEventKind::ScrollDown => {
                 for _ in 0..WHEEL_LINES {
-                    self.scroll_down(area.height as usize);
+                    self.scroll_down(usize::from(area.height));
                 }
             }
             MouseEventKind::Down(MouseButton::Left) => {
@@ -258,7 +286,7 @@ impl Editor {
             self.scroll_up();
         }
         if row >= last {
-            self.scroll_down(area.height as usize);
+            self.scroll_down(usize::from(area.height));
         }
         let gutter = u16::try_from(self.get_line_number_width()).unwrap_or(u16::MAX);
         // `max` then `min`, not `clamp`: a view narrower than its gutter (or no

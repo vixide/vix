@@ -14,6 +14,18 @@
 //! cursor never lands on it. Drawing happens from the line renderers in
 //! [`crate::render`]. See `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::code::{RopeGraphemes, grapheme_width_and_chars_len};
 use crate::editor::Editor;
 use ratatui_core::buffer::Buffer;
@@ -23,6 +35,20 @@ use unicode_width::UnicodeWidthChar;
 /// Columns left blank between a line's content and its virtual text, and
 /// between two virtual texts on one line.
 const GAP: usize = 2;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Which producer a set of end-of-line virtual text belongs to. Layers are
 /// drawn in declaration order, left to right.
@@ -106,10 +132,10 @@ pub fn truncate_to_width(text: &str, avail: usize) -> String {
     let mut used = 0;
     for c in clean {
         let w = c.width().unwrap_or(0);
-        if used + w > avail - 1 {
+        if add_or(used, w, usize::MAX) > sub_or(avail, 1, 0) {
             break;
         }
-        used += w;
+        used = add_or(used, w, usize::MAX);
         out.push(c);
     }
     out.push('\u{2026}');
@@ -131,7 +157,11 @@ impl Editor {
             (Ok(i), true) => {
                 self.eol_texts.remove(i);
             }
-            (Ok(i), false) => self.eol_texts[i].1 = texts,
+            (Ok(i), false) => {
+                if let Some(slot) = self.eol_texts.get_mut(i) {
+                    slot.1 = texts;
+                }
+            }
             (Err(_), true) => {}
             (Err(i), false) => self.eol_texts.insert(i, (layer, texts)),
         }
@@ -166,10 +196,13 @@ impl Editor {
         // yields width 0 instead of an out-of-range slice.
         let start = code.line_to_char(line_idx);
         let len = code.line_len(line_idx);
-        let slice = code.char_slice(start + from_col.min(len), start + len);
+        let slice = code.char_slice(
+            add_or(start, from_col.min(len), usize::MAX),
+            add_or(start, len, usize::MAX),
+        );
         RopeGraphemes::new(&slice)
             .map(|g| grapheme_width_and_chars_len(g).0)
-            .sum()
+            .fold(0, |total, w| add_or(total, w, usize::MAX))
     }
 
     /// Draw every layer's virtual text for `line_idx`, starting [`GAP`] columns
@@ -191,13 +224,13 @@ impl Editor {
             .flat_map(|(_, t)| t.iter())
             .filter(|t| t.line == line_idx);
         for t in texts {
-            x += GAP;
+            x = add_or(x, GAP, usize::MAX);
             // Out of room: later texts on this line start even further right,
             // so stop rather than skip.
             if x >= right {
                 return;
             }
-            let shown = truncate_to_width(&t.text, right - x);
+            let shown = truncate_to_width(&t.text, sub_or(right, x, 0));
             if shown.is_empty() {
                 // Nothing drawable (e.g. all control chars): the gap is kept
                 // but no column is consumed by text.
@@ -213,7 +246,11 @@ impl Editor {
                 return;
             };
             buf.set_string(x16, draw_y, &shown, style);
-            x += unicode_width::UnicodeWidthStr::width(shown.as_str());
+            x = add_or(
+                x,
+                unicode_width::UnicodeWidthStr::width(shown.as_str()),
+                usize::MAX,
+            );
         }
     }
 }

@@ -24,10 +24,36 @@
 //! the local selection and the local cursor. The CRDT and transport are not
 //! here: see the Cowork crates and `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub use crate::code::Splice;
 use crate::editor::Editor;
 use crate::selection::Selection;
 use ratatui_core::style::{Color, Style};
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Another participant's caret, and optionally their selection, as character
 /// offsets in this buffer.
@@ -71,7 +97,7 @@ pub fn transform_offset(mut pos: usize, edits: &[Splice]) -> usize {
             let end = e.offset.saturating_add(e.delete);
             if pos >= end {
                 // Wholly after the deleted range: shift left.
-                pos -= e.delete;
+                pos = sub_or(pos, e.delete, 0);
             } else if pos > e.offset {
                 pos = e.offset;
             }
@@ -79,7 +105,7 @@ pub fn transform_offset(mut pos: usize, edits: &[Splice]) -> usize {
         // Offsets are in chars, not bytes.
         let n = e.insert.chars().count();
         if n > 0 && e.offset < pos {
-            pos += n;
+            pos = add_or(pos, n, usize::MAX);
         }
     }
     pos
@@ -93,7 +119,13 @@ fn text_on(bg: Color) -> Color {
     match bg {
         Color::Rgb(r, g, b) => {
             // Rec. 601 luma in integer math: no float casts needed.
-            let luma = (u32::from(r) * 299 + u32::from(g) * 587 + u32::from(b) * 114) / 1000;
+            // 299 + 587 + 114 = 1000, so the weighted sum is at most 255000.
+            let weighted = u32::from(r)
+                .checked_mul(299)
+                .zip(u32::from(g).checked_mul(587))
+                .zip(u32::from(b).checked_mul(114))
+                .and_then(|((a, b), c)| a.checked_add(b)?.checked_add(c));
+            let luma = weighted.map_or(0, |w| w.div_euclid(1000));
             if luma > 140 {
                 Color::Black
             } else {

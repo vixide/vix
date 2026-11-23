@@ -437,3 +437,7 @@ Implemented in `crates/vix-editor-core/src/virtual_text.rs` (`VirtualTextLayer`,
 `Editor::set_eol_texts` / `clear_eol_texts` / `eol_texts`, `draw_eol_texts`), called from
 `draw_eol_note` in `crates/vix-editor-core/src/render.rs` and the soft-wrap
 `render_visual_row` in `crates/vix-editor-core/src/wrap.rs`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). **Conversion in progress, module by module** (each converted module denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` outside tests): `utils`, `remote`, `editor_input` and `virtual_text` are done. They use `checked_*` through small helpers; remote offset transforms and the eol text layout stop at the top of `usize`.

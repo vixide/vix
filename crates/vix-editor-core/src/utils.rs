@@ -4,6 +4,24 @@
 //! Tree-sitter grammar keys used by [`crate::code`]. See
 //! `crates/vix-editor-core/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Return the language name inferred from a filename's extension, or `"unknown"`.
 ///
 /// Only the final extension is consulted (case-sensitive); the names returned
@@ -158,11 +176,11 @@ pub fn count_indent_units(
     'outer: loop {
         for &ch in &indent_chars {
             match chars.next() {
-                Some(c) if c == ch => col += 1,
+                Some(c) if c == ch => col = add_or(col, 1, usize::MAX),
                 _ => break 'outer,
             }
         }
-        count += 1;
+        count = add_or(count, 1, usize::MAX);
         if let Some(max) = max_col
             && col >= max
         {
@@ -203,10 +221,10 @@ pub fn calculate_end_position(start_row: usize, start_col: usize, text: &str) ->
 
     for ch in text.chars() {
         if ch == '\n' {
-            end_row += 1;
+            end_row = add_or(end_row, 1, usize::MAX);
             end_col = 0;
         } else {
-            end_col += 1;
+            end_col = add_or(end_col, 1, usize::MAX);
         }
     }
 
