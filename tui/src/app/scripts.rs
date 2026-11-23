@@ -20,6 +20,10 @@
     )
 )]
 
+#[cfg(test)]
+#[path = "tests_cov4.rs"]
+pub(crate) mod cov4;
+
 use crate::app::chooser::ChooserSlot;
 use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
@@ -544,5 +548,397 @@ impl App {
             }
         }
         scored
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cov4::*;
+    use super::*;
+    use ratatui::layout::Rect;
+    use vix_script::plugins::{LockEntry, Lockfile, PluginState};
+
+    /// An app whose global scripts directory and `plugins.lock` live in a
+    /// fresh temp dir; returns it with the scripts dir and lock path.
+    fn scripted(tag: &str) -> (App, std::path::PathBuf, std::path::PathBuf) {
+        let dir = temp(tag);
+        let scripts = dir.join("config/scripts");
+        let lock = dir.join("config/plugins.lock");
+        std::fs::create_dir_all(&scripts).unwrap();
+        let app = app_at(&dir).with_plugin_paths(&scripts, &lock);
+        (app, scripts, lock)
+    }
+
+    fn write_script(scripts: &std::path::Path, stem: &str, body: &str) {
+        std::fs::write(scripts.join(format!("{stem}.rhai")), body).unwrap();
+    }
+
+    fn entry(name: &str) -> LockEntry {
+        LockEntry {
+            name: name.into(),
+            url: format!("https://example.invalid/{name}.git"),
+            rev: None,
+            commit: "0123456789abcdef0123456789abcdef01234567".into(),
+            trusted: None,
+        }
+    }
+
+    /// Lay out plugin `name` with one script command and add it to the lock.
+    fn plugin(scripts: &std::path::Path, lock: &std::path::Path, names: &[&str]) {
+        let mut plugins = Vec::new();
+        for name in names {
+            std::fs::create_dir_all(scripts.join(name)).unwrap();
+            std::fs::write(
+                scripts.join(name).join("p.rhai"),
+                format!(
+                    "register_command(\"go\", \"Go {name}\", \"on_go\");\nfn on_go() {{ set_buffer_text(\"{name}\"); }}"
+                ),
+            )
+            .unwrap();
+            plugins.push(entry(name));
+        }
+        Lockfile { plugins }.save(lock).unwrap();
+    }
+
+    #[test]
+    fn global_scripts_load_and_report_their_commands_and_bindings() {
+        let (mut app, scripts, _lock) = scripted("scr-load");
+        write_script(
+            &scripts,
+            "greet",
+            r#"register_command("hi", "Say Hi", "on_hi");
+               bind_key("C-c", "hi");
+               fn on_hi() { set_buffer_text("hi"); }"#,
+        );
+        write_script(&scripts, "broken", "fn (");
+        app.load_scripts();
+        assert_eq!(app.script_command_count(), 1);
+        assert_eq!(app.script_binding_stem("C-c"), Some("greet".to_string()));
+        assert_eq!(app.script_binding_stem("C-d"), None);
+        let reqs = app.script_key_requests();
+        assert_eq!(reqs.len(), 1);
+        assert_eq!(reqs[0].key_token, "C-c");
+        assert_eq!(reqs[0].action_id, "script:greet:hi");
+        let err = last_message(&app).expect("the broken script is reported");
+        assert!(err.contains("broken"), "{err}");
+    }
+
+    #[test]
+    fn reload_reports_the_command_count_and_drops_deleted_scripts() {
+        let (mut app, scripts, _lock) = scripted("scr-reload");
+        write_script(&scripts, "a", r#"register_command("x", "X", "h"); fn h() {}"#);
+        app.reload_scripts();
+        assert_eq!(
+            last_message(&app),
+            Some(t!("msg.scripts_reloaded", count = 1).to_string())
+        );
+        std::fs::remove_file(scripts.join("a.rhai")).unwrap();
+        app.reload_scripts();
+        assert_eq!(app.script_command_count(), 0);
+        assert_eq!(
+            last_message(&app),
+            Some(t!("msg.scripts_reloaded", count = 0).to_string())
+        );
+        // Relocalizing with no scripts loaded does nothing; with one, reloads.
+        app.relocalize_scripts();
+        write_script(&scripts, "b", r#"register_command("x", "X", "h"); fn h() {}"#);
+        app.relocalize_scripts();
+        assert_eq!(app.script_command_count(), 0, "nothing was loaded to redo");
+        app.load_scripts();
+        write_script(&scripts, "c", r#"register_command("y", "Y", "h"); fn h() {}"#);
+        app.relocalize_scripts();
+        assert_eq!(app.script_command_count(), 2);
+    }
+
+    #[test]
+    fn project_script_count_counts_the_workspace_scripts() {
+        let (app, _scripts, _lock) = scripted("scr-count");
+        assert_eq!(app.project_script_count(), 0);
+        let dir = app.root.join(".vix/scripts");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("one.rhai"), "").unwrap();
+        std::fs::write(dir.join("two.rhai"), "").unwrap();
+        std::fs::write(dir.join("notes.txt"), "").unwrap();
+        assert_eq!(app.project_script_count(), 2);
+    }
+
+    #[test]
+    fn script_chooser_lists_navigates_wraps_runs_and_closes() {
+        let (mut app, scripts, _lock) = scripted("scr-chooser");
+        app.run_action("script.run");
+        assert_eq!(app.status, t!("status.no_scripts").to_string());
+        write_script(
+            &scripts,
+            "s",
+            r#"register_command("a", "Alpha", "ha");
+               register_command("b", "Beta", "hb");
+               fn ha() { set_buffer_text("alpha"); }
+               fn hb() { set_buffer_text("beta"); }"#,
+        );
+        app.load_scripts();
+        app.run_action("script.run");
+        assert_eq!(app.chooser.script().unwrap().commands.len(), 2);
+        app.on_key(code(KeyCode::Up)); // wraps to the last
+        assert_eq!(app.chooser.script().unwrap().selected, 1);
+        app.on_key(code(KeyCode::Down)); // wraps to the first
+        assert_eq!(app.chooser.script().unwrap().selected, 0);
+        app.on_key(code(KeyCode::Tab)); // ignored
+        assert!(app.chooser.script().is_some());
+        app.on_key(code(KeyCode::Down));
+        app.on_key(code(KeyCode::Enter));
+        assert!(app.chooser.script().is_none(), "running closes the chooser");
+        assert_eq!(content(&mut app), "beta");
+
+        app.run_action("script.run");
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.chooser.script().is_none());
+        // A click on a row runs that command; outside the list does nothing.
+        app.run_action("script.run");
+        app.layout.chooser = Rect::new(10, 5, 40, 6);
+        app.on_mouse(click(1, 1));
+        assert!(app.chooser.script().is_some());
+        app.on_mouse(click(12, 5));
+        assert_eq!(content(&mut app), "alpha");
+        // Out-of-range row inside the box selects nothing.
+        app.run_action("script.run");
+        app.on_mouse(click(12, 10));
+        assert!(app.chooser.script().is_some());
+        // Running with the chooser already gone is a no-op.
+        app.chooser = None;
+        app.run_selected_script_command();
+    }
+
+    #[test]
+    fn palette_script_commands_run_and_stale_ids_are_reported() {
+        let (mut app, scripts, _lock) = scripted("scr-palette");
+        write_script(
+            &scripts,
+            "s",
+            r#"register_command("up", "Make Upper", "h");
+               fn h() { set_buffer_text(buffer_text().to_upper()); }"#,
+        );
+        app.load_scripts();
+        buffer_with(&mut app, "abc", 0);
+        app.run_script_command("script:s:up");
+        assert_eq!(content(&mut app), "ABC");
+        for stale in ["script:gone:up", "script:s:nope", "script:s"] {
+            app.run_script_command(stale);
+            assert_eq!(
+                last_message(&app),
+                Some(t!("msg.script_command_unavailable", action = stale).to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn palette_entries_filter_by_query_and_rank_recent_commands_first() {
+        let (mut app, scripts, _lock) = scripted("scr-entries");
+        write_script(
+            &scripts,
+            "s",
+            r#"register_command("a", "Alpha Thing", "h");
+               register_command("b", "Beta Thing", "h");
+               fn h() {}"#,
+        );
+        app.load_scripts();
+        let all = app.script_palette_entries("");
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].2.label, "> Alpha Thing");
+        assert!(matches!(
+            &all[0].2.action,
+            PAction::RunCommand(id) if id == "script:s:a"
+        ));
+        assert!(all[0].0 > all[1].0, "earlier registration ranks higher");
+        app.command_recents = vec!["script:s:b".to_string()];
+        let recent = app.script_palette_entries("");
+        assert!(recent[1].0 > recent[0].0, "the recent one now ranks higher");
+        let filtered = app.script_palette_entries("beta");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].2.label, "> Beta Thing");
+        let boosted = app.script_palette_entries("thing");
+        assert_eq!(boosted.len(), 2);
+        assert!(app.script_palette_entries("zzzz").is_empty());
+    }
+
+    #[test]
+    fn handlers_edit_the_selection_move_the_cursor_and_post_messages() {
+        let (mut app, scripts, _lock) = scripted("scr-host");
+        write_script(
+            &scripts,
+            "s",
+            r#"register_command("sel", "Sel", "on_sel");
+               register_command("cur", "Cur", "on_cur");
+               register_command("msg", "Msg", "on_msg");
+               register_command("bad", "Bad", "on_bad");
+               fn on_sel() { set_selection_text(selection_text().to_upper() + current_line()); }
+               fn on_cur() { set_cursor_offset(2); }
+               fn on_msg() { message("note"); error("oops"); }
+               fn on_bad() { set_buffer_text("partial"); throw "kaboom"; }"#,
+        );
+        app.load_scripts();
+        buffer_with(&mut app, "hello world", 0);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(0, 5);
+        app.run_script_command("script:s:sel");
+        assert_eq!(content(&mut app), "HELLOhello world world");
+
+        buffer_with(&mut app, "abcdef", 5);
+        app.run_script_command("script:s:cur");
+        assert_eq!(app.editor.active_tab_mut().unwrap().editor.get_cursor(), 2);
+        assert_eq!(content(&mut app), "abcdef");
+
+        let before = app.messages.items.len();
+        app.run_script_command("script:s:msg");
+        let texts: Vec<_> = app.messages.items[before..]
+            .iter()
+            .map(|m| m.text.clone())
+            .collect();
+        assert_eq!(texts, vec!["note".to_string(), "oops".to_string()]);
+
+        app.run_script_command("script:s:bad");
+        assert_eq!(content(&mut app), "partial", "effects before the error apply");
+        assert!(last_message(&app).unwrap().contains("kaboom"));
+    }
+
+    #[test]
+    fn a_read_only_buffer_blocks_script_edits_but_not_cursor_moves() {
+        let (mut app, scripts, _lock) = scripted("scr-ro");
+        write_script(
+            &scripts,
+            "s",
+            r#"register_command("w", "W", "on_w");
+               register_command("c", "C", "on_c");
+               fn on_w() { set_buffer_text("changed"); }
+               fn on_c() { set_cursor_offset(1); }"#,
+        );
+        app.load_scripts();
+        buffer_with(&mut app, "stay", 3);
+        app.editor.active_tab_mut().unwrap().read_only = true;
+        app.run_script_command("script:s:w");
+        assert_eq!(content(&mut app), "stay");
+        assert_eq!(
+            last_message(&app),
+            Some(t!("status.read_only_blocked").to_string())
+        );
+        app.run_script_command("script:s:c");
+        assert_eq!(app.editor.active_tab_mut().unwrap().editor.get_cursor(), 1);
+    }
+
+    #[test]
+    fn a_script_prompt_collects_text_and_calls_the_answer_handler() {
+        let (mut app, scripts, _lock) = scripted("scr-prompt");
+        write_script(
+            &scripts,
+            "s",
+            r#"register_command("ask", "Ask", "on_ask");
+               fn on_ask() { prompt("Name?", "on_answer"); }
+               fn on_answer(a) { set_buffer_text("hi " + a); }"#,
+        );
+        app.load_scripts();
+        app.run_script_command("script:s:ask");
+        let p = app.prompt.as_ref().expect("prompt opened");
+        assert!(matches!(p.kind, PromptKind::Script));
+        assert_eq!(p.title, "Name?");
+        assert!(app.pending_script_prompt.is_some());
+        app.accept_script_prompt("Ada");
+        assert_eq!(content(&mut app), "hi Ada");
+        assert!(app.pending_script_prompt.is_none());
+        // With nothing pending, an answer is ignored.
+        app.accept_script_prompt("late");
+        assert_eq!(content(&mut app), "hi Ada");
+    }
+
+    #[test]
+    fn invoking_a_handler_for_an_unknown_script_does_nothing() {
+        let (mut app, _scripts, _lock) = scripted("scr-badidx");
+        buffer_with(&mut app, "same", 0);
+        app.invoke_script_handler(7, "h", Vec::new());
+        assert_eq!(content(&mut app), "same");
+    }
+
+    #[test]
+    fn plugin_chooser_with_no_plugins_says_so_and_a_corrupt_lock_reports() {
+        let (mut app, scripts, lock) = scripted("scr-plug-none");
+        app.open_plugin_chooser();
+        assert_eq!(app.status, t!("status.no_plugins").to_string());
+        assert!(app.chooser.plugin().is_none());
+        std::fs::write(&lock, "not [valid").unwrap();
+        app.open_plugin_chooser();
+        assert!(last_message(&app).unwrap().starts_with(
+            t!("msg.plugin_failed", error = "").to_string().trim_end()
+        ));
+        // Loading scripts with a corrupt lock reports it too and still loads
+        // the global scripts.
+        write_script(&scripts, "g", r#"register_command("x", "X", "h"); fn h() {}"#);
+        let before = app.messages.items.len();
+        app.load_scripts();
+        assert!(app.messages.items.len() > before);
+        assert_eq!(app.script_command_count(), 1);
+    }
+
+    #[test]
+    fn plugin_chooser_navigation_wraps_and_toggles_by_key_and_click() {
+        let (mut app, scripts, lock) = scripted("scr-plug-nav");
+        plugin(&scripts, &lock, &["alpha", "beta"]);
+        app.open_plugin_chooser();
+        assert_eq!(app.chooser.plugin().unwrap().rows.len(), 2);
+        app.on_key(code(KeyCode::Up));
+        assert_eq!(app.chooser.plugin().unwrap().selected, 1);
+        app.on_key(code(KeyCode::Down));
+        assert_eq!(app.chooser.plugin().unwrap().selected, 0);
+        app.on_key(code(KeyCode::Tab)); // ignored
+        assert!(app.chooser.plugin().is_some());
+
+        app.on_key(code(KeyCode::Enter)); // enable alpha
+        assert_eq!(app.status, t!("status.plugin_enabled", name = "alpha").to_string());
+        assert_eq!(app.chooser.plugin().unwrap().rows[0].state, PluginState::Enabled);
+        assert_eq!(app.script_command_count(), 1, "the plugin's script loaded");
+
+        app.layout.chooser = Rect::new(0, 0, 40, 5);
+        app.on_mouse(click(2, 1)); // enable beta
+        assert_eq!(app.chooser.plugin().unwrap().selected, 1);
+        assert_eq!(app.chooser.plugin().unwrap().rows[1].state, PluginState::Enabled);
+        assert_eq!(app.script_command_count(), 2);
+        app.on_mouse(click(2, 0)); // disable alpha again
+        assert_eq!(
+            app.status,
+            t!("status.plugin_disabled", name = "alpha").to_string()
+        );
+        assert_eq!(app.script_command_count(), 1);
+        app.on_mouse(click(2, 4)); // below the rows: nothing happens
+        assert_eq!(app.chooser.plugin().unwrap().selected, 0);
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.chooser.plugin().is_none());
+    }
+
+    #[test]
+    fn a_missing_plugin_cannot_be_enabled_and_a_changed_one_is_trusted_again() {
+        let (mut app, scripts, lock) = scripted("scr-plug-state");
+        plugin(&scripts, &lock, &["alpha", "ghost"]);
+        std::fs::remove_dir_all(scripts.join("ghost")).unwrap();
+        app.open_plugin_chooser();
+        assert_eq!(app.chooser.plugin().unwrap().rows[1].state, PluginState::Missing);
+        app.on_key(code(KeyCode::Down));
+        let before = app.messages.items.len();
+        app.on_key(code(KeyCode::Enter));
+        assert!(app.messages.items.len() > before);
+        assert!(last_message(&app).unwrap().contains("ghost"));
+        assert_eq!(app.chooser.plugin().unwrap().selected, 1, "selection kept");
+
+        // Enable alpha, then change its files: it reads as Changed and Enter
+        // trusts the new files.
+        app.on_key(code(KeyCode::Up));
+        app.on_key(code(KeyCode::Enter));
+        std::fs::write(scripts.join("alpha/p.rhai"), "// edited\n").unwrap();
+        app.open_plugin_chooser();
+        assert_eq!(app.chooser.plugin().unwrap().rows[0].state, PluginState::Changed);
+        app.on_key(code(KeyCode::Enter));
+        assert_eq!(app.chooser.plugin().unwrap().rows[0].state, PluginState::Enabled);
+        // Without any selectable row the toggle quietly does nothing.
+        app.chooser = None;
+        app.toggle_selected_plugin();
     }
 }
