@@ -24,6 +24,18 @@
 //! - [`image`] — base64 `image/png` and `image/jpeg` decoding with size
 //!   caps checked before any pixel is decoded.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod ansi;
 pub mod babel;
 pub mod cell;

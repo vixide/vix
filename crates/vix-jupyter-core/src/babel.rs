@@ -70,15 +70,18 @@ fn pairs(args: &str) -> Vec<(String, Vec<String>)> {
     let mut rest = args.trim();
     while !rest.is_empty() {
         if let Some(quoted) = rest.strip_prefix('"')
-            && let Some(close) = quoted.find('"')
+            && let Some((word, after)) = quoted.split_once('"')
         {
-            words.push(quoted[..close].to_owned());
-            rest = quoted[close + 1..].trim_start();
+            words.push(word.to_owned());
+            rest = after.trim_start();
             continue;
         }
-        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-        words.push(rest[..end].to_owned());
-        rest = rest[end..].trim_start();
+        let (word, after) = rest
+            .find(char::is_whitespace)
+            .and_then(|end| rest.split_at_checked(end))
+            .unwrap_or((rest, ""));
+        words.push(word.to_owned());
+        rest = after.trim_start();
     }
     let mut out: Vec<(String, Vec<String>)> = Vec::new();
     for word in words {
@@ -101,7 +104,7 @@ impl Header {
         let Some(rest) = trimmed
             .get(..BEGIN.len())
             .filter(|p| p.eq_ignore_ascii_case(BEGIN))
-            .map(|_| &trimmed[BEGIN.len()..])
+            .and_then(|_| trimmed.get(BEGIN.len()..))
             .filter(|r| r.is_empty() || r.starts_with(char::is_whitespace))
         else {
             return header;
@@ -111,7 +114,9 @@ impl Header {
         let args = if rest.starts_with(':') {
             rest
         } else {
-            rest.find(char::is_whitespace).map_or("", |i| &rest[i..])
+            rest.find(char::is_whitespace)
+                .and_then(|i| rest.get(i..))
+                .unwrap_or("")
         };
         for (key, values) in pairs(args) {
             match key.as_str() {

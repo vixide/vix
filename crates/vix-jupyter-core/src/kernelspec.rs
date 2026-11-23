@@ -132,7 +132,7 @@ impl KernelSpec {
         let raw: RawSpec = serde_json::from_str(json).map_err(|_| SpecError::Malformed)?;
         if raw.argv.is_empty()
             || raw.argv.len() > MAX_ARGV
-            || raw.argv[0].is_empty()
+            || raw.argv.first().is_none_or(String::is_empty)
             || raw.argv.iter().any(|a| a.contains('\0'))
         {
             return Err(SpecError::BadArgv);
