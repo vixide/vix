@@ -19,6 +19,48 @@
 //! conservative lexical scan, not a SQL parser. Owning spec:
 //! `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+/// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners
+/// stop at the end before reading it).
+fn ch(chars: &[char], i: usize) -> char {
+    chars.get(i).copied().unwrap_or('\0')
+}
+
+/// The chars between `from` and `to`; empty for a range that is not inside `chars`.
+fn span(chars: &[char], from: usize, to: usize) -> &[char] {
+    chars.get(from..to).unwrap_or(&[])
+}
+
+/// `from + step`; an index past the top of `usize` is past any text.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// The query editor: lines of SQL plus cursor and scroll state.
 ///
 /// Invariant: `lines` is never empty and `row`/`col` always address a valid
@@ -86,52 +128,60 @@ impl Query {
     /// specially here; use [`Query::newline`] to split lines.
     pub fn insert_char(&mut self, c: char) {
         let col = self.byte_col();
-        self.lines[self.row].insert(col, c);
-        self.col += 1;
+        if let Some(line) = self.lines.get_mut(self.row) {
+            line.insert(col, c);
+            self.col = ahead(self.col, 1);
+        }
     }
 
     /// Replace the chars from `start` to the cursor on the current line with
     /// `text` (autocomplete acceptance), leaving the cursor after it.
     pub fn replace_prefix(&mut self, start: usize, text: &str) {
-        let line = &self.lines[self.row];
-        let head: String = line.chars().take(start).collect();
-        let tail: String = line.chars().skip(self.col).collect();
-        self.lines[self.row] = format!("{head}{text}{tail}");
-        self.col = start + text.chars().count();
+        let head: String = self.line().chars().take(start).collect();
+        let tail: String = self.line().chars().skip(self.col).collect();
+        if let Some(line) = self.lines.get_mut(self.row) {
+            *line = format!("{head}{text}{tail}");
+            self.col = ahead(start, text.chars().count());
+        }
     }
 
     /// Split the current line at the cursor.
     pub fn newline(&mut self) {
         let col = self.byte_col();
-        let rest = self.lines[self.row].split_off(col);
-        self.lines.insert(self.row + 1, rest);
-        self.row += 1;
+        let Some(line) = self.lines.get_mut(self.row) else {
+            return;
+        };
+        let rest = line.split_off(col);
+        let below = ahead(self.row, 1).min(self.lines.len());
+        self.lines.insert(below, rest);
+        self.row = below;
         self.col = 0;
     }
 
     /// Delete the char before the cursor (joining lines at column 0).
     pub fn backspace(&mut self) {
         if self.col > 0 {
-            self.col -= 1;
-            let col = self.byte_col();
-            self.lines[self.row].remove(col);
-        } else if self.row > 0 {
+            self.col = sub_or(self.col, 1, 0);
+            self.remove_char_at_cursor();
+        } else if self.row > 0 && self.row < self.lines.len() {
             let line = self.lines.remove(self.row);
-            self.row -= 1;
-            self.col = self.lines[self.row].chars().count();
-            self.lines[self.row].push_str(&line);
+            self.row = sub_or(self.row, 1, 0);
+            self.col = self.line_chars();
+            if let Some(above) = self.lines.get_mut(self.row) {
+                above.push_str(&line);
+            }
         }
     }
 
     /// Delete the char under the cursor (joining lines at end of line).
     pub fn delete(&mut self) {
-        let len = self.lines[self.row].chars().count();
-        if self.col < len {
-            let col = self.byte_col();
-            self.lines[self.row].remove(col);
-        } else if self.row + 1 < self.lines.len() {
-            let next = self.lines.remove(self.row + 1);
-            self.lines[self.row].push_str(&next);
+        if self.col < self.line_chars() {
+            self.remove_char_at_cursor();
+        } else if ahead(self.row, 1) < self.lines.len() {
+            let next = self.lines.remove(ahead(self.row, 1));
+            if let Some(line) = self.lines.get_mut(self.row) {
+                line.push_str(&next);
+            }
         }
     }
 
@@ -142,36 +192,32 @@ impl Query {
     /// line's end); vertical moves keep the column, clamped to the new line.
     pub fn arrow(&mut self, dx: isize, dy: isize) {
         if dy < 0 {
-            self.row = self.row.saturating_sub(dy.unsigned_abs());
+            self.row = sub_or(self.row, dy.unsigned_abs(), 0);
         } else {
-            self.row = (self.row + dy.unsigned_abs()).min(self.lines.len() - 1);
+            self.row = ahead(self.row, dy.unsigned_abs()).min(self.last_row());
         }
         if dx < 0 {
             if self.col == 0 && self.row > 0 && dy == 0 {
-                self.row -= 1;
-                self.col = self.lines[self.row].chars().count();
+                self.row = sub_or(self.row, 1, 0);
+                self.col = self.line_chars();
             } else {
-                self.col = self.col.saturating_sub(dx.unsigned_abs());
+                self.col = sub_or(self.col, dx.unsigned_abs(), 0);
             }
         } else if dx > 0 {
-            let len = self.lines[self.row].chars().count();
-            if self.col >= len && self.row + 1 < self.lines.len() && dy == 0 {
-                self.row += 1;
+            let len = self.line_chars();
+            if self.col >= len && ahead(self.row, 1) < self.lines.len() && dy == 0 {
+                self.row = ahead(self.row, 1);
                 self.col = 0;
             } else {
-                self.col = (self.col + dx.unsigned_abs()).min(len);
+                self.col = ahead(self.col, dx.unsigned_abs()).min(len);
             }
         }
-        self.col = self.col.min(self.lines[self.row].chars().count());
+        self.col = self.col.min(self.line_chars());
     }
 
     /// Move the cursor to the start (`home`) or end of the current line.
     pub fn home_end(&mut self, home: bool) {
-        self.col = if home {
-            0
-        } else {
-            self.lines[self.row].chars().count()
-        };
+        self.col = if home { 0 } else { self.line_chars() };
     }
 
     /// Move the cursor a page up or down.
@@ -181,7 +227,7 @@ impl Query {
         } else {
             vix_list_state::page_down(self.row, n, self.lines.len())
         };
-        self.col = self.col.min(self.lines[self.row].chars().count());
+        self.col = self.col.min(self.line_chars());
     }
 
     /// Keep the cursor within a window of `height` visible lines.
@@ -194,11 +240,13 @@ impl Query {
     /// line contributes its char count plus one for the joining newline).
     #[must_use]
     pub fn cursor_offset(&self) -> usize {
-        self.lines[..self.row]
+        let before = self
+            .lines
+            .get(..self.row)
+            .unwrap_or(&[])
             .iter()
-            .map(|l| l.chars().count() + 1)
-            .sum::<usize>()
-            + self.col
+            .fold(0, |sum, l| ahead(sum, ahead(l.chars().count(), 1)));
+        ahead(before, self.col)
     }
 
     /// Move the cursor to char offset `offset` of [`Query::text`], clamped
@@ -213,10 +261,10 @@ impl Query {
                 self.col = left;
                 return;
             }
-            left -= len + 1;
+            left = sub_or(left, ahead(len, 1), 0);
         }
-        self.row = self.lines.len() - 1;
-        self.col = self.lines[self.row].chars().count();
+        self.row = self.last_row();
+        self.col = self.line_chars();
     }
 
     /// The char offset in [`Query::text`] where the statement under the
@@ -226,13 +274,14 @@ impl Query {
     pub fn statement_offset_at_cursor(&self) -> Option<usize> {
         let text = self.text();
         let (start, end) = self.span_at_cursor()?;
+        let width = sub_or(end, start, 0);
         let lead = text
             .chars()
             .skip(start)
-            .take(end - start)
+            .take(width)
             .take_while(|c| c.is_whitespace())
             .count();
-        (lead < end - start).then_some(start + lead)
+        (lead < width).then_some(ahead(start, lead))
     }
 
     /// The statement under the cursor (or the one just before it), trimmed.
@@ -254,7 +303,11 @@ impl Query {
     pub fn statement_at_cursor(&self) -> Option<String> {
         let text = self.text();
         let (start, end) = self.span_at_cursor()?;
-        let stmt: String = text.chars().skip(start).take(end - start).collect();
+        let stmt: String = text
+            .chars()
+            .skip(start)
+            .take(sub_or(end, start, 0))
+            .collect();
         let stmt = stmt.trim().to_string();
         (!stmt.is_empty()).then_some(stmt)
     }
@@ -272,7 +325,7 @@ impl Query {
         let text = self.text();
         let head: String = text.chars().take(start).collect();
         let tail: String = text.chars().skip(end).collect();
-        let row = head.split('\n').count() - 1;
+        let row = sub_or(head.split('\n').count(), 1, 0);
         self.lines = format!("{head}{new}{tail}")
             .split('\n')
             .map(str::to_string)
@@ -280,8 +333,8 @@ impl Query {
         if self.lines.is_empty() {
             self.lines.push(String::new());
         }
-        self.row = row.min(self.lines.len() - 1);
-        self.col = self.col.min(self.lines[self.row].chars().count());
+        self.row = row.min(self.last_row());
+        self.col = self.col.min(self.line_chars());
     }
 
     /// The char-offset span of the statement containing (or preceding) the
@@ -304,10 +357,36 @@ impl Query {
 
     /// The cursor's byte offset within the current line.
     fn byte_col(&self) -> usize {
-        let line = &self.lines[self.row];
+        let line = self.line();
         line.char_indices()
             .nth(self.col)
             .map_or(line.len(), |(i, _)| i)
+    }
+
+    /// The current line (empty when the cursor row is outside the buffer).
+    fn line(&self) -> &str {
+        self.lines.get(self.row).map_or("", String::as_str)
+    }
+
+    /// The char count of the current line.
+    fn line_chars(&self) -> usize {
+        self.line().chars().count()
+    }
+
+    /// The index of the last line (the buffer always holds at least one).
+    fn last_row(&self) -> usize {
+        sub_or(self.lines.len(), 1, 0)
+    }
+
+    /// Remove the char at the cursor; nothing when the cursor is at or past
+    /// the end of its line.
+    fn remove_char_at_cursor(&mut self) {
+        let col = self.byte_col();
+        if let Some(line) = self.lines.get_mut(self.row)
+            && col < line.len()
+        {
+            line.remove(col);
+        }
     }
 }
 
@@ -338,13 +417,13 @@ pub fn statement_spans(text: &str) -> Vec<(usize, usize)> {
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0;
     while i < chars.len() {
-        let c = chars[i];
+        let c = ch(&chars, i);
         if line_c {
             line_c = c != '\n';
         } else if block_c {
-            if c == '*' && chars.get(i + 1) == Some(&'/') {
+            if c == '*' && chars.get(ahead(i, 1)) == Some(&'/') {
                 block_c = false;
-                i += 1;
+                i = ahead(i, 1);
             }
         } else if single {
             single = c != '\'';
@@ -354,16 +433,16 @@ pub fn statement_spans(text: &str) -> Vec<(usize, usize)> {
             match c {
                 '\'' => single = true,
                 '"' => double = true,
-                '-' if chars.get(i + 1) == Some(&'-') => line_c = true,
-                '/' if chars.get(i + 1) == Some(&'*') => block_c = true,
+                '-' if chars.get(ahead(i, 1)) == Some(&'-') => line_c = true,
+                '/' if chars.get(ahead(i, 1)) == Some(&'*') => block_c = true,
                 ';' => {
                     push_span(&mut out, &chars, start, i);
-                    start = i + 1;
+                    start = ahead(i, 1);
                 }
                 _ => {}
             }
         }
-        i += 1;
+        i = ahead(i, 1);
     }
     push_span(&mut out, &chars, start, chars.len());
     out
@@ -372,7 +451,7 @@ pub fn statement_spans(text: &str) -> Vec<(usize, usize)> {
 /// Record the char-offset span `[start, end)` if it holds any non-whitespace
 /// (so blank segments between consecutive `;` never become statements).
 fn push_span(out: &mut Vec<(usize, usize)>, chars: &[char], start: usize, end: usize) {
-    if chars[start..end].iter().any(|c| !c.is_whitespace()) {
+    if span(chars, start, end).iter().any(|c| !c.is_whitespace()) {
         out.push((start, end));
     }
 }
@@ -408,25 +487,25 @@ pub fn meta_commands(text: &str) -> Vec<(usize, String)> {
     let mut at_line_start = true;
     let mut i = 0;
     while i < chars.len() {
-        let c = chars[i];
+        let c = ch(&chars, i);
         if c == '\n' {
-            line += 1;
+            line = ahead(line, 1);
             at_line_start = true;
             line_c = false;
-            i += 1;
+            i = ahead(i, 1);
             continue;
         }
         let in_code = !single && !double && !line_c && block_depth == 0 && dollar.is_none();
         if at_line_start && !c.is_whitespace() {
             at_line_start = false;
             if in_code && c == '\\' {
-                let end = (i + 1..chars.len())
-                    .find(|&j| chars[j].is_whitespace())
+                let end = (ahead(i, 1)..chars.len())
+                    .find(|&j| ch(&chars, j).is_whitespace())
                     .unwrap_or(chars.len());
-                out.push((line, chars[i..end].iter().collect()));
+                out.push((line, span(&chars, i, end).iter().collect()));
                 // The rest of the line belongs to the command.
-                while i < chars.len() && chars[i] != '\n' {
-                    i += 1;
+                while i < chars.len() && ch(&chars, i) != '\n' {
+                    i = ahead(i, 1);
                 }
                 continue;
             }
@@ -434,22 +513,22 @@ pub fn meta_commands(text: &str) -> Vec<(usize, String)> {
         if line_c {
             // Skips to the newline handled above.
         } else if block_depth > 0 {
-            if c == '*' && chars.get(i + 1) == Some(&'/') {
-                block_depth -= 1;
-                i += 1;
-            } else if c == '/' && chars.get(i + 1) == Some(&'*') {
-                block_depth += 1;
-                i += 1;
+            if c == '*' && chars.get(ahead(i, 1)) == Some(&'/') {
+                block_depth = sub_or(block_depth, 1, 0);
+                i = ahead(i, 1);
+            } else if c == '/' && chars.get(ahead(i, 1)) == Some(&'*') {
+                block_depth = ahead(block_depth, 1);
+                i = ahead(i, 1);
             }
         } else if let Some(tag) = &dollar {
             if c == '$'
-                && chars[i..]
+                && span(&chars, i, chars.len())
                     .iter()
                     .take(tag.chars().count())
                     .copied()
                     .eq(tag.chars())
             {
-                i += tag.chars().count();
+                i = ahead(i, tag.chars().count());
                 dollar = None;
                 continue;
             }
@@ -461,14 +540,14 @@ pub fn meta_commands(text: &str) -> Vec<(usize, String)> {
             match c {
                 '\'' => single = true,
                 '"' => double = true,
-                '-' if chars.get(i + 1) == Some(&'-') => line_c = true,
-                '/' if chars.get(i + 1) == Some(&'*') => {
+                '-' if chars.get(ahead(i, 1)) == Some(&'-') => line_c = true,
+                '/' if chars.get(ahead(i, 1)) == Some(&'*') => {
                     block_depth = 1;
-                    i += 1;
+                    i = ahead(i, 1);
                 }
                 '$' => {
-                    if let Some(tag) = dollar_tag(&chars[i..]) {
-                        i += tag.chars().count();
+                    if let Some(tag) = dollar_tag(span(&chars, i, chars.len())) {
+                        i = ahead(i, tag.chars().count());
                         dollar = Some(tag);
                         continue;
                     }
@@ -476,7 +555,7 @@ pub fn meta_commands(text: &str) -> Vec<(usize, String)> {
                 _ => {}
             }
         }
-        i += 1;
+        i = ahead(i, 1);
     }
     out
 }
@@ -485,11 +564,11 @@ pub fn meta_commands(text: &str) -> Vec<(usize, String)> {
 /// A tag is letters, digits and `_`, not starting with a digit — so a
 /// positional parameter like `$1` is not a quote.
 fn dollar_tag(chars: &[char]) -> Option<String> {
-    let close = chars.iter().skip(1).position(|&c| c == '$')? + 1;
-    let tag = &chars[1..close];
+    let close = ahead(chars.iter().skip(1).position(|&c| c == '$')?, 1);
+    let tag = chars.get(1..close)?;
     let valid = tag.first().is_none_or(|c| !c.is_ascii_digit())
         && tag.iter().all(|c| c.is_alphanumeric() || *c == '_');
-    valid.then(|| chars[..=close].iter().collect())
+    valid.then(|| chars.get(..=close).unwrap_or(&[]).iter().collect())
 }
 
 /// Keywords that make a statement a write / DDL (confirmation required).
@@ -586,13 +665,13 @@ pub(crate) fn has_keyword(sql: &str, keywords: &[&str]) -> bool {
     let (mut single, mut double, mut line_c, mut block_c) = (false, false, false, false);
     let mut i = 0;
     while i < chars.len() {
-        let c = chars[i];
+        let c = ch(&chars, i);
         if line_c {
             line_c = c != '\n';
         } else if block_c {
-            if c == '*' && chars.get(i + 1) == Some(&'/') {
+            if c == '*' && chars.get(ahead(i, 1)) == Some(&'/') {
                 block_c = false;
-                i += 1;
+                i = ahead(i, 1);
             }
         } else if single {
             single = c != '\'';
@@ -602,16 +681,18 @@ pub(crate) fn has_keyword(sql: &str, keywords: &[&str]) -> bool {
             match c {
                 '\'' => single = true,
                 '"' => double = true,
-                '-' if chars.get(i + 1) == Some(&'-') => line_c = true,
-                '/' if chars.get(i + 1) == Some(&'*') => block_c = true,
+                '-' if chars.get(ahead(i, 1)) == Some(&'-') => line_c = true,
+                '/' if chars.get(ahead(i, 1)) == Some(&'*') => block_c = true,
                 c if c.is_ascii_alphabetic() || c == '_' => {
                     // Consume a whole identifier so `updated_at` is one word
                     // (not the keyword `update`), then skip the trailing `i += 1`.
                     let start = i;
-                    while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
-                        i += 1;
+                    while i < chars.len()
+                        && (ch(&chars, i).is_ascii_alphanumeric() || ch(&chars, i) == '_')
+                    {
+                        i = ahead(i, 1);
                     }
-                    let word: String = chars[start..i].iter().collect();
+                    let word: String = span(&chars, start, i).iter().collect();
                     if keywords.contains(&word.to_ascii_lowercase().as_str()) {
                         return true;
                     }
@@ -620,7 +701,7 @@ pub(crate) fn has_keyword(sql: &str, keywords: &[&str]) -> bool {
                 _ => {}
             }
         }
-        i += 1;
+        i = ahead(i, 1);
     }
     false
 }
