@@ -92,3 +92,40 @@ pub(crate) fn preview(b: &mut Browser, name: &str) {
     press(b, KeyCode::Char('p'));
     assert_eq!(b.focus, Pane::Results, "{:?}", b.message);
 }
+
+/// A workbench connected, through the real background connect, to a `SQLite`
+/// file in a fresh scratch directory that holds `ddl`. Returns the browser
+/// and the directory (the caller removes it).
+pub(crate) fn file_workbench(
+    name: &str,
+    writable: bool,
+    ddl: &[&str],
+) -> (Browser, std::path::PathBuf) {
+    let dir = std::env::temp_dir().join(format!("vix-wb-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("db.sqlite").display().to_string();
+    let mut seed =
+        session::Session::connect(&catalog::sqlite_url(&file, "rwc"), &[]).expect("seed db");
+    for sql in ddl {
+        seed.run(sql).expect("fixture statement");
+    }
+    drop(seed);
+    let mut b = Browser::new(vec![connect::Connection {
+        name: "file".into(),
+        kind: connect::Kind::Sqlite,
+        file,
+        writable,
+        ..connect::Connection::default()
+    }]);
+    b.view = View::Connections;
+    press(&mut b, KeyCode::Enter);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while b.connect_running() {
+        b.poll_connect();
+        assert!(std::time::Instant::now() < deadline, "connect stalled");
+        std::thread::yield_now();
+    }
+    assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+    (b, dir)
+}

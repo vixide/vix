@@ -1527,3 +1527,249 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+#[cfg(test)]
+mod browser_tests {
+    use super::*;
+    use crate::test_support::{family, file_workbench, press, select_table, typed};
+
+    fn settle(b: &mut Browser) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while b.table_export_running() {
+            b.poll_table_export();
+            assert!(std::time::Instant::now() < deadline, "export stalled");
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn marking_toggles_tables_and_refuses_other_rows() {
+        let mut b = family(false);
+        b.tree.sel = 0;
+        b.toggle_export_mark();
+        assert_eq!(b.message, Some(t!("msg.db_table_export_none").to_string()));
+        select_table(&mut b, "child");
+        b.toggle_export_mark();
+        assert_eq!(b.message, Some(t!("msg.db_tables_marked", count = 1).to_string()));
+        select_table(&mut b, "parent");
+        press(&mut b, KeyCode::Char('m'));
+        assert_eq!(b.export_marks.len(), 2);
+        b.toggle_export_mark();
+        assert_eq!(b.export_marks.len(), 1);
+    }
+
+    #[test]
+    fn the_dialog_opens_on_marks_or_the_cursor_table() {
+        let mut b = Browser::new(Vec::new());
+        b.open_table_export();
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        let mut b = family(false);
+        b.tree.sel = 0;
+        b.open_table_export();
+        assert_eq!(b.message, Some(t!("msg.db_table_export_none").to_string()));
+        select_table(&mut b, "child");
+        press(&mut b, KeyCode::Char('e'));
+        assert_eq!(b.view, View::Export);
+        let d = b.table_export.as_ref().unwrap();
+        assert_eq!(d.tables, [("main".to_string(), "child".to_string())]);
+        assert!(!d.single_file(), "CSV is the default: a directory");
+        assert_eq!(d.path, "vix-export");
+        // With marks, the marked tables win.
+        b.table_export = None;
+        select_table(&mut b, "parent");
+        b.toggle_export_mark();
+        select_table(&mut b, "child");
+        b.open_table_export();
+        assert_eq!(
+            b.table_export.as_ref().unwrap().tables,
+            [("main".to_string(), "parent".to_string())]
+        );
+    }
+
+    #[test]
+    fn dialog_keys_change_format_and_path() {
+        let mut b = family(false);
+        select_table(&mut b, "child");
+        b.open_table_export();
+        // The path follows the format while it is still the default...
+        press(&mut b, KeyCode::Left);
+        let d = b.table_export.as_ref().unwrap();
+        assert_eq!(d.format, TABLE_FORMATS.len() - 1, "wraps back to SQL");
+        assert!(d.single_file());
+        assert_eq!(d.path, "vix-export.sql");
+        press(&mut b, KeyCode::Right);
+        let d = b.table_export.as_ref().unwrap();
+        assert_eq!((d.format, d.path.as_str()), (0, "vix-export"), "wraps forward");
+        press(&mut b, KeyCode::Right);
+        assert_eq!(b.table_export.as_ref().unwrap().format(), Format::Json);
+        // ...and stays put once edited.
+        typed(&mut b, "x");
+        press(&mut b, KeyCode::Backspace);
+        typed(&mut b, "y");
+        press(&mut b, KeyCode::Tab);
+        press(&mut b, KeyCode::Right);
+        assert_eq!(b.table_export.as_ref().unwrap().path, "vix-exporty");
+        press(&mut b, KeyCode::Esc);
+        assert!(b.table_export.is_none());
+        assert_eq!(b.view, View::Workbench);
+        // Re-opening keeps the last format.
+        b.view = View::Export;
+        b.key_table_export(crate::test_support::key(KeyCode::Char('q')));
+        assert_eq!(b.view, View::Workbench, "no dialog: the export view just closes");
+    }
+
+    #[test]
+    fn starting_an_export_checks_the_database_and_the_path() {
+        let mut b = family(false);
+        select_table(&mut b, "child");
+        b.open_table_export();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_table_export_memory").to_string()));
+        b.conn.as_mut().unwrap().file = "/some/file.db".into();
+        b.table_export.as_mut().unwrap().path = "  ".into();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_name_required").to_string()));
+        b.session = None;
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+    }
+
+    #[test]
+    fn a_sql_export_runs_in_the_background_and_reports_completion() {
+        let (mut b, dir) = file_workbench(
+            "tx-sql",
+            false,
+            &[
+                "CREATE TABLE p (id INTEGER PRIMARY KEY)",
+                "CREATE TABLE c (id INTEGER PRIMARY KEY, p INTEGER REFERENCES p(id))",
+                "INSERT INTO p VALUES (1)",
+                "INSERT INTO c VALUES (1, 1), (2, 1)",
+            ],
+        );
+        let dump = dir.join("dump.sql");
+        select_table(&mut b, "c");
+        b.toggle_export_mark();
+        select_table(&mut b, "p");
+        b.toggle_export_mark();
+        b.open_table_export();
+        b.table_export.as_mut().unwrap().format = 3;
+        b.table_export.as_mut().unwrap().path = dump.display().to_string();
+        press(&mut b, KeyCode::Enter);
+        assert!(b.table_export_running());
+        assert_eq!(b.view, View::Workbench);
+        assert_eq!(b.message, Some(t!("msg.db_table_export_started", count = 2).to_string()));
+        // A second export while one runs is refused.
+        b.open_table_export();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_table_export_busy").to_string()));
+        settle(&mut b);
+        assert_eq!(
+            b.message,
+            Some(
+                t!(
+                    "msg.db_tables_exported",
+                    rows = 3,
+                    count = 2,
+                    path = dump.display().to_string()
+                )
+                .to_string()
+            )
+        );
+        let text = std::fs::read_to_string(&dump).unwrap();
+        assert!(text.contains("INSERT INTO"), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_csv_export_writes_one_file_per_table() {
+        let (mut b, dir) = file_workbench(
+            "tx-csv",
+            false,
+            &["CREATE TABLE p (id INTEGER PRIMARY KEY, n TEXT)", "INSERT INTO p VALUES (1, 'a')"],
+        );
+        let out = dir.join("out");
+        select_table(&mut b, "p");
+        b.open_table_export();
+        press(&mut b, KeyCode::Right);
+        b.table_export.as_mut().unwrap().path = out.display().to_string();
+        press(&mut b, KeyCode::Enter);
+        settle(&mut b);
+        let files: Vec<_> = std::fs::read_dir(&out).unwrap().flatten().collect();
+        assert_eq!(files.len(), 1, "{:?}", b.message);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_export_that_cannot_start_reports_the_error() {
+        let (mut b, dir) = file_workbench("tx-bad", false, &["CREATE TABLE p (id INTEGER PRIMARY KEY)"]);
+        select_table(&mut b, "p");
+        b.open_table_export();
+        b.table_export.as_mut().unwrap().format = 3;
+        b.table_export.as_mut().unwrap().path = dir.join("no/such/dir/x.sql").display().to_string();
+        press(&mut b, KeyCode::Enter);
+        settle(&mut b);
+        assert!(
+            b.message.as_deref().unwrap().contains("such file")
+                || b.message.as_deref().unwrap().contains("directory"),
+            "{:?}",
+            b.message
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn pending(rx: mpsc::Receiver<Event>) -> Pending {
+        Pending {
+            rx,
+            dest: "out.sql".into(),
+            total: 2,
+            current: (String::new(), 0),
+            rows: 0,
+        }
+    }
+
+    #[test]
+    fn progress_failure_cycle_and_a_vanished_worker_are_reported() {
+        let mut b = family(false);
+        b.poll_table_export();
+        assert!(!b.table_export_running());
+        let (tx, rx) = mpsc::channel();
+        b.pending_export = Some(pending(rx));
+        tx.send(Event::Table { index: 0, name: "p".into() }).unwrap();
+        tx.send(Event::Rows(12)).unwrap();
+        b.poll_table_export();
+        assert_eq!(
+            b.message,
+            Some(
+                t!("msg.db_table_export_progress", table = "p", index = 1, count = 2, rows = 12)
+                    .to_string()
+            )
+        );
+        assert!(b.table_export_running());
+        tx.send(Event::Done { rows: 5, cycle: true }).unwrap();
+        b.poll_table_export();
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_tables_exported_cycle", rows = 5, count = 2, path = "out.sql").to_string())
+        );
+        assert!(!b.table_export_running());
+        let (tx, rx) = mpsc::channel();
+        b.pending_export = Some(pending(rx));
+        tx.send(Event::Failed("disk full".into())).unwrap();
+        b.poll_table_export();
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_table_export_failed", error = "disk full").to_string())
+        );
+        let (tx, rx) = mpsc::channel();
+        b.pending_export = Some(pending(rx));
+        drop(tx);
+        b.poll_table_export();
+        assert!(!b.table_export_running());
+        assert_eq!(
+            b.message,
+            Some(
+                t!("msg.db_table_export_failed", error = t!("msg.db_not_connected")).to_string()
+            )
+        );
+    }
+}
