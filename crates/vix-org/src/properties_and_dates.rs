@@ -157,7 +157,7 @@ fn parse_ymd(s: &str) -> Option<(i64, i64, i64)> {
 /// Delegates to `vix-civil-date` (Run H, T520) — this crate,
 /// `vix-file-information-panel`, and `vix-git` used to each hand-roll an
 /// independent copy of the same algorithm.
-fn civil_from_days(z: i64) -> (i64, i64, i64) {
+fn civil_from_days(z: i64) -> Option<(i64, i64, i64)> {
     vix_civil_date::civil_from_days(z)
 }
 
@@ -179,7 +179,7 @@ fn weekday_name(days: i64) -> &'static str {
 #[must_use]
 pub fn timestamp_for(date: &str, active: bool) -> Option<String> {
     let (y, m, d) = parse_ymd(date)?;
-    let dow = weekday_name(days_from_civil(y, m, d));
+    let dow = weekday_name(days_from_civil(y, m, d)?);
     Some(if active {
         format!("<{date} {dow}>")
     } else {
@@ -232,8 +232,8 @@ pub fn shift_timestamp_at(text: &str, cursor: usize, delta_days: i64) -> Option<
         })
         .or_else(|| (matches.len() == 1).then(|| &matches[0]))?;
     let (y, mo, d) = parse_ymd(m.as_str().get(..10)?)?;
-    let days = days_from_civil(y, mo, d) + delta_days;
-    let (ny, nm, nd) = civil_from_days(days);
+    let days = days_from_civil(y, mo, d)?.checked_add(delta_days)?;
+    let (ny, nm, nd) = civil_from_days(days)?;
     let mut new_date = format!("{ny:04}-{nm:02}-{nd:02}");
     if m.as_str().len() > 10 {
         let _ = write!(new_date, " {}", weekday_name(days));

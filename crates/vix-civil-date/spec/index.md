@@ -31,3 +31,7 @@ public formatting functions unchanged. `vix-org` additionally uses
 `days_from_civil` for its own reverse direction (schedule/deadline shifting,
 weekday computation, and timestamp-to-minutes arithmetic) — that half was
 never duplicated elsewhere, so it moved here rather than staying behind.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). **Changed:** `civil_from_days` and `days_from_civil` return `Option<i64>`-shaped results. A `month` outside 1 to 12 or a `day` outside 1 to 31 used to produce a number that named no real date; it is now `None`, as is any year or day count too large for the arithmetic (it used to overflow). A day the month does not have (31 in June) is still accepted and rolls into the next month, so callers keep validating real dates. The derivation's intermediate values carry `RCA-EXC-2` proofs from the bracketed ranges.

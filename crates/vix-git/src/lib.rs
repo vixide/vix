@@ -510,7 +510,7 @@ fn parse_tz_offset(tz: &str) -> Option<i32> {
 /// independent copy of the same day-count-to-calendar-date algorithm.
 fn epoch_to_date(secs: i64, tz_offset: i32) -> Option<String> {
     let days = secs.checked_add(i64::from(tz_offset))?.div_euclid(86_400);
-    let (y, m, d) = vix_civil_date::civil_from_days(days);
+    let (y, m, d) = vix_civil_date::civil_from_days(days)?;
     Some(format!("{y:04}-{m:02}-{d:02}"))
 }
 

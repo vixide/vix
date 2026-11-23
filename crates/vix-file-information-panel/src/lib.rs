@@ -219,7 +219,9 @@ pub fn format_unix_time(secs: i64) -> String {
         .and_then(|rest| rest.checked_div(60))
         .unwrap_or(0);
     let second = rem.checked_rem(60).unwrap_or(0);
-    let (year, month, day) = vix_civil_date::civil_from_days(days);
+    // A day count from i64 seconds always fits; the epoch date is the declared
+    // answer if it ever did not.
+    let (year, month, day) = vix_civil_date::civil_from_days(days).unwrap_or((1970, 1, 1));
     format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC")
 }
 

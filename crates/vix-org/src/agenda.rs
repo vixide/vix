@@ -444,7 +444,7 @@ pub(crate) fn clock_start(line: &str) -> Option<String> {
 
 /// Days since 1970-01-01 for a civil date. Delegates to `vix-civil-date`
 /// (Run H, T520) — see [`civil_from_days`]'s doc comment.
-pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> Option<i64> {
     vix_civil_date::days_from_civil(y, m, d)
 }
 
@@ -458,7 +458,7 @@ fn timestamp_minutes(ts: &str) -> Option<i64> {
     let (h, mi) = ts.rsplit(' ').next()?.split_once(':')?;
     let h: i64 = h.trim().parse().ok()?;
     let mi: i64 = mi.trim().parse().ok()?;
-    Some(days_from_civil(y, m, d) * 1440 + h * 60 + mi)
+    Some(days_from_civil(y, m, d)? * 1440 + h * 60 + mi)
 }
 
 /// Close the most recent open `CLOCK:` entry in `text` with end timestamp `now`,

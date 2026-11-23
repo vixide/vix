@@ -379,7 +379,7 @@ pub fn server_time_millis(value: &str) -> Option<i64> {
         }
         Some(_) => return None,
     };
-    let days = vix_civil_date::days_from_civil(year, month, day);
+    let days = vix_civil_date::days_from_civil(year, month, day)?;
     // A date whose millisecond count does not fit is not a valid server time.
     days.checked_mul(24)?
         .checked_add(hour)?
