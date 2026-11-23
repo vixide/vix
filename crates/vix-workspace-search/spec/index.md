@@ -160,3 +160,7 @@ not something `parse_result_line` tries to work around.
 
 - Streaming results for very large workspaces (current scan is synchronous;
   see `docs/performance/index.md` for the existing benchmark numbers).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Result-line parsing and line rewriting use `strip_suffix`, `strip_prefix`, `get` and `split_inclusive` instead of slicing. **Declared (SEARCH-F1):** selection stops at the first and last hit; a rewritten line with nothing past the clip has an empty tail. A line number of 0 or past the file is reported as drifted, as before.
