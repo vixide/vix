@@ -978,3 +978,243 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn expand_with(text: &str, base_dir: Option<&Path>) -> Result<String, VarError> {
+        let named = HashMap::new();
+        let ctx = Context {
+            vars: &[],
+            named: &named,
+            base_dir,
+            now_ms: 1_700_000_000_000,
+            local_offset_min: 60,
+        };
+        expand(text, &ctx)
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("vix-rest-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn every_variable_error_names_the_variable() {
+        let cases = [
+            (VarError::Unknown("x".into()), "unknown variable {{x}}"),
+            (
+                VarError::NotSent("login".into()),
+                "request `login` has not been sent yet",
+            ),
+            (
+                VarError::BadReference("a.b".into()),
+                "cannot resolve {{a.b}}",
+            ),
+            (
+                VarError::BadArguments("$guid x".into()),
+                "bad arguments for {{$guid x}}",
+            ),
+            (
+                VarError::TooDeep("v".into()),
+                "variable {{v}} nests too deeply",
+            ),
+            (
+                VarError::AzureCliMissing,
+                "the Azure CLI (az) is not installed",
+            ),
+            (
+                VarError::AzureTokenFailed,
+                "the Azure CLI could not get a token",
+            ),
+            (VarError::Unterminated, "unterminated {{ in request"),
+        ];
+        for (err, text) in cases {
+            assert_eq!(err.to_string(), text);
+        }
+    }
+
+    #[test]
+    fn datetime_formats_offsets_and_bad_arguments() {
+        assert_eq!(
+            expand_with("{{$datetime iso8601}}", None).unwrap(),
+            "2023-11-14T22:13:20.000Z"
+        );
+        assert_eq!(
+            expand_with("{{$datetime rfc1123 1 h}}", None).unwrap(),
+            "Tue, 14 Nov 2023 23:13:20 GMT"
+        );
+        assert_eq!(
+            expand_with("{{$timestamp 2 d}}", None).unwrap(),
+            "1700172800"
+        );
+        // Every unit is accepted: ms s m h d w.
+        for (unit, secs) in [
+            ("ms", 0),
+            ("s", 1),
+            ("m", 60),
+            ("h", 3600),
+            ("d", 86_400),
+            ("w", 604_800),
+        ] {
+            let got = expand_with(&format!("{{{{$timestamp 1 {unit}}}}}"), None).unwrap();
+            assert_eq!(got, (1_700_000_000 + secs).to_string(), "{unit}");
+        }
+        assert!(matches!(
+            expand_with("{{$datetime yaml}}", None),
+            Err(VarError::BadArguments(_))
+        ));
+        assert!(matches!(
+            expand_with("{{$localDatetime yaml}}", None),
+            Err(VarError::BadArguments(_))
+        ));
+        assert!(matches!(
+            expand_with("{{$timestamp 1 fortnight}}", None),
+            Err(VarError::BadArguments(_))
+        ));
+        assert!(matches!(
+            expand_with("{{$timestamp 1}}", None),
+            Err(VarError::BadArguments(_))
+        ));
+        assert!(matches!(
+            expand_with("{{$datetime}}", None),
+            Err(VarError::BadArguments(_))
+        ));
+        let local = expand_with("{{$localDatetime iso8601}}", None).unwrap();
+        assert!(local.ends_with("+01:00"), "{local}");
+        assert!(expand_with("{{$localDatetime rfc1123}}", None).is_ok());
+    }
+
+    #[test]
+    fn random_int_requires_an_ordered_range() {
+        let n: i64 = expand_with("{{$randomInt 5 10}}", None)
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((5..10).contains(&n));
+        for bad in [
+            "{{$randomInt 5}}",
+            "{{$randomInt 10 5}}",
+            "{{$randomInt a b}}",
+        ] {
+            assert!(matches!(
+                expand_with(bad, None),
+                Err(VarError::BadArguments(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn aad_token_arguments_are_validated_before_the_cli_runs() {
+        assert!(matches!(
+            expand_with("{{$aadToken --resource}}", None),
+            Err(VarError::BadArguments(_))
+        ));
+    }
+
+    #[test]
+    fn dotenv_reads_quoted_and_exported_keys_next_to_the_http_file() {
+        let dir = scratch("dotenv");
+        std::fs::write(
+            dir.join(".env"),
+            "# comment\nPLAIN=one\nexport EXPORTED=\"two words\"\nSINGLE='three'\n",
+        )
+        .unwrap();
+        let get = |name: &str| expand_with(&format!("{{{{$dotenv {name}}}}}"), Some(&dir));
+        assert_eq!(get("PLAIN").unwrap(), "one");
+        assert_eq!(get("EXPORTED").unwrap(), "two words");
+        assert_eq!(get("SINGLE").unwrap(), "three");
+        assert!(matches!(get("ABSENT"), Err(VarError::BadReference(_))));
+        // Without a base directory the variable cannot be read at all.
+        assert!(matches!(
+            expand_with("{{$dotenv PLAIN}}", None),
+            Err(VarError::BadArguments(_))
+        ));
+        // A directory with no .env file is an unresolvable reference.
+        let empty = scratch("dotenv-empty");
+        assert!(matches!(
+            expand_with("{{$dotenv PLAIN}}", Some(&empty)),
+            Err(VarError::BadReference(_))
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&empty);
+    }
+
+    #[test]
+    fn body_file_errors_describe_and_chain_their_cause() {
+        use std::error::Error as _;
+        let outside = BodyFileError::Outside {
+            path: "../x".into(),
+        };
+        assert!(outside.to_string().contains("../x"));
+        assert!(outside.source().is_none());
+        let dir = scratch("bodyfile");
+        let mut req = Request {
+            method: "POST".into(),
+            url: "https://e.com".into(),
+            headers: Vec::new(),
+            body: "< missing.json".into(),
+        };
+        let err = load_body_file(&mut req, &dir).unwrap_err();
+        assert!(matches!(err, BodyFileError::Read { .. }));
+        assert!(err.to_string().contains("missing.json"));
+        assert!(err.source().is_some());
+        // A real file is read in; `..` and absolute paths are refused.
+        std::fs::write(dir.join("b.json"), "{\"a\":1}").unwrap();
+        req.body = "< b.json".into();
+        load_body_file(&mut req, &dir).unwrap();
+        assert_eq!(req.body, "{\"a\":1}");
+        for escape in ["< ../b.json", "< /etc/passwd"] {
+            req.body = escape.into();
+            assert!(
+                matches!(
+                    load_body_file(&mut req, &dir),
+                    Err(BodyFileError::Outside { .. })
+                ),
+                "{escape:?}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn basic_auth_is_encoded_from_colon_or_space_forms_only() {
+        let header = |value: &str| {
+            let mut req = Request {
+                method: "GET".into(),
+                url: "https://e.com".into(),
+                headers: vec![
+                    ("X-Other".into(), "Basic a:b".into()),
+                    ("authorization".into(), value.into()),
+                ],
+                body: String::new(),
+            };
+            encode_basic_auth(&mut req);
+            assert_eq!(req.headers[0].1, "Basic a:b", "other headers untouched");
+            req.headers[1].1.clone()
+        };
+        // base64("user:pass")
+        assert_eq!(header("Basic user:pass"), "Basic dXNlcjpwYXNz");
+        assert_eq!(header("Basic user  pass"), "Basic dXNlcjpwYXNz");
+        // Already encoded (no colon, no space) and non-Basic schemes are kept.
+        assert_eq!(header("Basic dXNlcjpwYXNz"), "Basic dXNlcjpwYXNz");
+        assert_eq!(header("Bearer abc"), "Bearer abc");
+    }
+
+    #[test]
+    fn curl_includes_a_quoted_body() {
+        let req = Request {
+            method: "POST".into(),
+            url: "https://e.com/x".into(),
+            headers: Vec::new(),
+            body: "it's {\"a\":1}".into(),
+        };
+        assert_eq!(
+            to_curl(&req),
+            "curl -X POST 'https://e.com/x' \\\n  --data-raw 'it'\\''s {\"a\":1}'"
+        );
+    }
+}

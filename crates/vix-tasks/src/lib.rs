@@ -234,3 +234,61 @@ mod tests {
         assert_eq!(parse("not = valid = toml"), []);
     }
 }
+
+#[cfg(test)]
+mod load_tests {
+    use super::*;
+
+    /// A fresh empty directory unique to `name` in this process.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("vix-tasks-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    const GOOD: &str = "[[task]]\nname = \"build\"\ncommand = \"make\"\n";
+
+    #[test]
+    fn root_file_wins_over_the_dot_vix_one() {
+        let dir = scratch("both");
+        std::fs::create_dir_all(dir.join(".vix")).unwrap();
+        std::fs::write(dir.join("tasks.toml"), GOOD).unwrap();
+        std::fs::write(
+            dir.join(".vix").join("tasks.toml"),
+            "[[task]]\nname = \"other\"\ncommand = \"x\"\n",
+        )
+        .unwrap();
+        let tasks = load(&dir);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].name, "build");
+        assert_eq!(tasks[0].command, "make");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dot_vix_file_is_the_fallback_and_broken_files_are_skipped() {
+        let dir = scratch("fallback");
+        std::fs::create_dir_all(dir.join(".vix")).unwrap();
+        // Unparseable root file, then one whose tasks are all blank: both skipped.
+        std::fs::write(dir.join("tasks.toml"), "not = [valid").unwrap();
+        assert_eq!(load(&dir), []);
+        std::fs::write(
+            dir.join("tasks.toml"),
+            "[[task]]\nname = \" \"\ncommand = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join(".vix").join("tasks.toml"), GOOD).unwrap();
+        let tasks = load(&dir);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].name, "build");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn no_files_means_no_tasks() {
+        let dir = scratch("none");
+        assert_eq!(load(&dir), []);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

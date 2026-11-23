@@ -665,3 +665,63 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn names(ext: &str, text: &str, hint: TestFrameworkHint) -> Vec<(usize, String)> {
+        let lines: Vec<&str> = text.lines().collect();
+        tests_in_file(ext, "t", &lines, hint)
+            .into_iter()
+            .map(|(l, m)| (l, m.name))
+            .collect()
+    }
+
+    #[test]
+    fn tests_in_file_covers_every_supported_language() {
+        let u = TestFrameworkHint::Unknown;
+        assert_eq!(
+            names("go", "func helper() {}\nfunc TestA(t *testing.T) {}\n", u),
+            [(1, "TestA".to_string())]
+        );
+        assert_eq!(
+            names(
+                "ts",
+                "describe('suite', () => {\n  it('works', () => {})\n})\n",
+                u
+            ),
+            [(0, "suite".to_string()), (1, "works".to_string())]
+        );
+        assert_eq!(
+            names("jsx", "test(\"x\", () => {})\n", u),
+            [(0, "x".to_string())]
+        );
+        assert_eq!(
+            names(
+                "rb",
+                "describe 'thing' do\n  it 'does' do\n",
+                TestFrameworkHint::RubyRspec
+            ),
+            [(0, "thing".to_string()), (1, "does".to_string())]
+        );
+        assert_eq!(
+            names("rb", "def test_a\nend\n", TestFrameworkHint::RubyMinitest),
+            [(0, "test_a".to_string())]
+        );
+        assert_eq!(
+            names("exs", "  test \"adds up\" do\n  end\n", u),
+            [(0, "adds up".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_rust_test_attribute_without_a_following_fn_is_skipped() {
+        let found = names(
+            "rs",
+            "#[test]\n// no function follows\n",
+            TestFrameworkHint::Unknown,
+        );
+        assert_eq!(found, []);
+    }
+}

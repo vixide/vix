@@ -76,7 +76,14 @@ pub fn set_priority(text: &str, line: usize, priority: Option<char>) -> Option<S
         Some(p) => format!("[#{p}] {bare}"),
         None => bare.to_string(),
     };
-    let rewritten = format!("{prefix}{keyword}{new_body}");
+    // A bare `TODO`/`DONE` has no trailing space of its own to separate it from
+    // a cookie that is now the whole body.
+    let gap = if !keyword.is_empty() && !keyword.ends_with(' ') && !new_body.is_empty() {
+        " "
+    } else {
+        ""
+    };
+    let rewritten = format!("{prefix}{keyword}{gap}{new_body}");
     *lines.get_mut(line)? = rewritten;
     Some(lines.join("\n"))
 }

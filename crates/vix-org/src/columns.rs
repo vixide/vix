@@ -720,7 +720,8 @@ fn format_printf_float(fmt: &str, value: f64) -> String {
 /// `+` / `+;FORMAT` / `$`: the sum of numeric children, optionally printf-formatted.
 /// Unlike min/max/mean, an all-non-numeric set sums to `0` rather than blank.
 fn sum_numeric(values: &[&str], fmt: Option<&str>) -> String {
-    let sum: f64 = numeric_values(values).iter().sum();
+    // `0.0 +` turns the empty sum's negative zero into a plain `0`.
+    let sum: f64 = 0.0 + numeric_values(values).iter().sum::<f64>();
     fmt.map_or_else(|| format_plain_number(sum), |f| format_printf_float(f, sum))
 }
 
@@ -2270,5 +2271,342 @@ Child text <2030-01-01 Tue>.
             "the older quoted form still reads"
         );
         assert!(render_begin_line(&two).contains(r#":exclude-tags ("a" "b")"#));
+    }
+}
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn numeric_summaries_sum_reduce_and_ignore_non_numbers() {
+        assert_eq!(apply_summary("+", &["1", "2.5", "x", " 3 "]), "6.5");
+        assert_eq!(apply_summary("+", &[]), "0");
+        assert_eq!(apply_summary("+;%.2f", &["1", "2"]), "3.00");
+        assert_eq!(apply_summary("+;weird", &["1", "2"]), "3");
+        assert_eq!(apply_summary("$", &["1.005", "2"]), "3.00");
+        assert_eq!(apply_summary("min", &["4", "2", "9", "n/a"]), "2");
+        assert_eq!(apply_summary("max", &["4", "2", "9", "n/a"]), "9");
+        assert_eq!(apply_summary("mean", &["2", "4"]), "3");
+        // Nothing numeric: the cell stays empty rather than showing 0.
+        assert_eq!(apply_summary("min", &["x"]), "");
+        assert_eq!(apply_summary("max", &[]), "");
+        assert_eq!(apply_summary("mean", &["x"]), "");
+        assert_eq!(apply_summary("no-such-summary", &["1"]), "");
+    }
+
+    #[test]
+    fn checkbox_summaries_report_all_fraction_and_percent() {
+        assert_eq!(apply_summary("X", &["[X]", "[X]"]), "[X]");
+        assert_eq!(apply_summary("X", &["[X]", "[ ]"]), "[ ]");
+        assert_eq!(apply_summary("X", &[]), "");
+        assert_eq!(apply_summary("X/", &["[X]", "[ ]", "[X]"]), "[2/3]");
+        assert_eq!(apply_summary("X%", &["[X]", "[ ]", "[X]"]), "[66%]");
+        assert_eq!(apply_summary("X%", &[]), "[0%]");
+    }
+
+    #[test]
+    fn duration_summaries_accept_clock_numbers_and_unit_words() {
+        assert_eq!(apply_summary(":", &["0:30", "1:00"]), "1h 30min");
+        assert_eq!(apply_summary(":", &["45"]), "45min");
+        assert_eq!(apply_summary(":", &["1h 30min", "2 hours"]), "3h 30min");
+        assert_eq!(apply_summary(":", &["1d"]), "24h 0min");
+        assert_eq!(apply_summary(":", &["1w"]), "168h 0min");
+        assert_eq!(apply_summary(":", &["30 mins"]), "30min");
+        assert_eq!(apply_summary(":min", &["0:30", "2:00"]), "30min");
+        assert_eq!(apply_summary(":max", &["0:30", "2:00"]), "2h 0min");
+        assert_eq!(apply_summary(":mean", &["0:30", "1:30"]), "1h 0min");
+        // Unparseable values are skipped; nothing parseable leaves the cell empty.
+        assert_eq!(
+            apply_summary(":", &["1:00", "soon", "5x", "h", ""]),
+            "1h 0min"
+        );
+        assert_eq!(apply_summary(":", &["soon"]), "");
+        assert_eq!(apply_summary(":max", &[]), "");
+        // A sum that overflows is not shown.
+        let big = i64::MAX.to_string();
+        assert_eq!(apply_summary(":", &[&big, &big]), "");
+        assert_eq!(apply_summary(":mean", &[&big, &big]), "");
+        assert_eq!(apply_summary(":", &["-0:30"]), "30min");
+    }
+
+    #[test]
+    fn age_summaries_format_every_magnitude() {
+        for (value, shown) in [
+            ("30", "30s"),
+            ("90", "1m"),
+            ("7200", "2h"),
+            ("3660", "1h 1m"),
+            ("172800", "2d"),
+            ("90000", "1d 1h"),
+            ("2 days", "2d"),
+            ("1h 30m", "1h 30m"),
+            ("-90", "-1m"),
+        ] {
+            assert_eq!(apply_summary("@max", &[value]), shown, "{value}");
+        }
+        assert_eq!(apply_summary("@min", &["60", "3600"]), "1m");
+        assert_eq!(apply_summary("@mean", &["60", "180"]), "2m");
+        assert_eq!(apply_summary("@max", &["", "nonsense"]), "");
+        assert_eq!(apply_summary("@max", &[]), "");
+        let big = i64::MAX.to_string();
+        assert_eq!(apply_summary("@mean", &[&big, &big]), "");
+        // A float that cannot be an integer number of seconds is skipped.
+        assert_eq!(apply_summary("@max", &["1e30"]), "");
+    }
+
+    #[test]
+    fn estimate_ranges_combine_their_variances() {
+        assert_eq!(
+            apply_summary("est+", &["1-3", "2-4", "bad", "x-y"]),
+            "3.6-6.4"
+        );
+        assert_eq!(apply_summary("est+", &["bad"]), "");
+        assert_eq!(apply_summary("est+", &[]), "");
+    }
+
+    #[test]
+    fn column_spec_parsing_and_resolution_corners() {
+        assert_eq!(parse_columns_spec("no tokens at all"), None);
+        // A file-level :COLUMNS: property inside a drawer before any headline.
+        let text =
+            ":PROPERTIES:\n:COLUMNS: %ITEM %Owner\n:Owner_ALL: ana bob\nbare line\n:END:\n* H";
+        let spec = resolve_columns_spec(text, 5);
+        let names: Vec<&str> = spec.columns.iter().map(|c| c.property.as_str()).collect();
+        assert_eq!(names, ["ITEM", "Owner"]);
+        assert_eq!(
+            spec.allowed_values.get("Owner"),
+            Some(&vec!["ana".to_string(), "bob".to_string()])
+        );
+        // An unusable :COLUMNS: value falls through to the built-in default.
+        let junk = ":PROPERTIES:\n:COLUMNS: nothing\n:END:\n* H";
+        let spec = resolve_columns_spec(junk, 3);
+        assert_eq!(spec.columns.len(), 4);
+        assert_eq!(spec.columns[0].property, "ITEM");
+        // A heading's own :COLUMNS: wins over the file's, with its own _ALL values.
+        let own =
+            "#+COLUMNS: %ITEM\n* H\n:PROPERTIES:\n:COLUMNS: %TODO %Size\n:Size_ALL: s m l\n:END:";
+        let spec = resolve_columns_spec(own, 1);
+        assert_eq!(spec.columns.len(), 2);
+        assert_eq!(spec.allowed_values["Size"], ["s", "m", "l"]);
+        // `_ALL` lines with no property name are ignored.
+        let all = parse_all_values(&[":_ALL: x y", ":Real_ALL: a \"b c\"", "plain"]);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all["Real"], ["a", "b c"]);
+    }
+
+    fn table(text: &str, line: usize, columns: &str, file: Option<&str>) -> Vec<Vec<String>> {
+        let spec = parse_columns_spec(columns).unwrap();
+        let (rows, _) = build_column_table(text, line, &spec, (2026, 1, 15), file);
+        rows.into_iter().map(|r| r.values).collect()
+    }
+
+    #[test]
+    fn special_columns_resolve_category_tags_and_planning() {
+        let text = "#+CATEGORY: Proj\n* TODO [#A] Top :a:b:\nSCHEDULED: <2026-01-10 Sat> DEADLINE: <2026-02-01 Sun>\n** Child :c:d:\nCLOSED: [2026-01-12 Mon]\n*** Leaf\n** Open\nSCHEDULED: <broken";
+        let rows = table(
+            text,
+            1,
+            "%ITEM %TODO %PRIORITY %TAGS %ALLTAGS %CATEGORY %SCHEDULED %DEADLINE %CLOSED %FILE",
+            Some("dir/notes.org"),
+        );
+        assert_eq!(rows[0][0], "Top");
+        assert_eq!(rows[0][1], "TODO");
+        assert_eq!(rows[0][2], "[#A]");
+        assert_eq!(rows[0][3], ":a:b:");
+        assert_eq!(rows[0][5], "Proj");
+        assert_eq!(rows[0][6], "<2026-01-10 Sat>");
+        assert_eq!(rows[0][7], "<2026-02-01 Sun>");
+        assert_eq!(rows[1][3], ":c:d:");
+        assert_eq!(rows[1][4], ":c:d:a:b:");
+        assert_eq!(rows[1][8], "[2026-01-12 Mon]");
+        // A leaf's ALLTAGS inherits; an untagged top has none.
+        assert_eq!(rows[2][4], ":c:d:a:b:");
+        // Planning keywords with a missing or unterminated timestamp are blank.
+        assert_eq!(rows[3][6], "");
+    }
+
+    #[test]
+    fn category_falls_back_to_the_file_name_and_blank_keyword_is_ignored() {
+        let text = "#+CATEGORY:   \n* H";
+        let rows = table(text, 1, "%CATEGORY", Some("a/b/work.notes.org"));
+        assert_eq!(rows[0][0], "work.notes");
+        let rows = table(text, 1, "%CATEGORY", None);
+        assert_eq!(rows[0][0], "");
+        // A heading's own CATEGORY property beats the keyword and is inherited.
+        let own = "#+CATEGORY: File\n* P\n:PROPERTIES:\n:CATEGORY: Mine\n:END:\n** C";
+        let rows = table(own, 1, "%CATEGORY", None);
+        assert_eq!(rows[0][0], "Mine");
+        assert_eq!(rows[1][0], "Mine");
+    }
+
+    #[test]
+    fn timestamps_and_clock_sums_come_from_the_entry_body() {
+        let text = "* H\nmeeting <2026-01-15 Thu 10:00> and [2026-01-14 Wed 09:00]\nCLOCK: [2026-01-15 Thu 09:00]--[2026-01-15 Thu 10:30] =>  1:30\nCLOCK: [2026-01-14 Wed 09:00]--[2026-01-14 Wed 09:45] =>  0:45\n* Empty\nno stamps";
+        let rows = table(
+            text,
+            0,
+            "%TIMESTAMP %TIMESTAMP_IA %CLOCKSUM %CLOCKSUM_T",
+            None,
+        );
+        assert_eq!(rows[0][0], "<2026-01-15 Thu 10:00>");
+        assert_eq!(rows[0][1], "[2026-01-14 Wed 09:00]");
+        assert!(
+            rows[0][2].contains("2:15") || rows[0][2].contains("2h"),
+            "{:?}",
+            rows[0]
+        );
+        assert!(
+            rows[0][3].contains("1:30") || rows[0][3].contains("1h"),
+            "{:?}",
+            rows[0]
+        );
+        let bare = table("* Empty\nno stamps", 0, "%TIMESTAMP %CLOCKSUM", None);
+        assert_eq!(bare[0], ["", "0:00"]);
+        // A stamp that is never closed is not a timestamp.
+        let open = table("* H\nsee <2026-01-15", 0, "%TIMESTAMP", None);
+        assert_eq!(open[0][0], "");
+    }
+    fn edit(text: &str, row: usize, columns: &str, col: usize, value: &str) -> Option<String> {
+        let spec = parse_columns_spec(columns).unwrap();
+        apply_column_edit(text, row, &spec, col, value)
+    }
+
+    #[test]
+    fn editing_cells_rewrites_the_matching_part_of_the_headline() {
+        let text = "* TODO [#B] Title :old:\n** Child";
+        assert_eq!(
+            edit(text, 0, "%ITEM", 0, "New").as_deref(),
+            Some("* TODO [#B] New :old:\n** Child")
+        );
+        assert_eq!(
+            edit(text, 0, "%TODO", 0, "DONE").as_deref(),
+            Some("* DONE [#B] Title :old:\n** Child")
+        );
+        // An empty keyword clears it; a keyword on a keyword-less headline adds it.
+        assert_eq!(
+            edit(text, 0, "%TODO", 0, "").as_deref(),
+            Some("* [#B] Title :old:\n** Child")
+        );
+        assert_eq!(
+            edit("* Bare", 0, "%TODO", 0, "NEXT").as_deref(),
+            Some("* NEXT Bare")
+        );
+        assert_eq!(edit("* TODO", 0, "%TODO", 0, "").as_deref(), Some("* "));
+        assert_eq!(
+            edit("* DONE", 0, "%TODO", 0, "TODO").as_deref(),
+            Some("* TODO")
+        );
+        assert_eq!(
+            edit(text, 0, "%PRIORITY", 0, "[#A]").as_deref(),
+            Some("* TODO [#A] Title :old:\n** Child")
+        );
+        assert_eq!(
+            edit(text, 0, "%PRIORITY", 0, "").as_deref(),
+            Some("* TODO Title :old:\n** Child")
+        );
+        assert!(
+            edit(text, 0, "%TAGS", 0, ":new:")
+                .unwrap()
+                .contains(":new:")
+        );
+        let planned = edit("* H", 0, "%DEADLINE", 0, "2026-03-04").unwrap();
+        assert!(planned.contains("DEADLINE: 2026-03-04"), "{planned}");
+        let cat = edit("* H", 0, "%CATEGORY", 0, "Work").unwrap();
+        assert!(cat.contains(":CATEGORY: Work"), "{cat}");
+        let custom = edit("* H", 0, "%Owner", 0, "ana").unwrap();
+        assert!(custom.contains(":Owner: ana"), "{custom}");
+        // Read-only columns, bad indexes and non-headlines refuse to edit.
+        for ro in ["%ALLTAGS", "%FILE", "%TIMESTAMP", "%CLOCKSUM", "%BLOCKED"] {
+            assert_eq!(edit(text, 0, ro, 0, "x"), None, "{ro}");
+        }
+        assert_eq!(edit(text, 0, "%ITEM", 5, "x"), None);
+        assert_eq!(edit("plain", 0, "%ITEM", 0, "x"), None);
+        assert_eq!(edit(text, 9, "%ITEM", 0, "x"), None);
+    }
+
+    #[test]
+    fn editing_a_child_updates_the_summaries_of_its_parents() {
+        let text = "* P\n** a\n:PROPERTIES:\n:Cost: 1\n:END:\n** b\n:PROPERTIES:\n:Cost: 2\n:END:";
+        let out = edit(text, 5, "%ITEM %Cost{+}", 1, "10").unwrap();
+        assert!(out.contains(":Cost: 11"), "{out}");
+    }
+
+    #[test]
+    fn dblock_parameters_round_trip_through_the_begin_line() {
+        let line = "#+BEGIN: columnview :hlines 1 :vlines t :maxlevel 2 :skip-empty-rows t :indent t :link t :id global :exclude-tags \"a b\" :format \"%ITEM %TODO\" :unknown thing";
+        let p = parse_dblock_params(line).unwrap();
+        assert_eq!(p.id, "global");
+        assert_eq!(p.hlines.as_deref(), Some("1"));
+        assert_eq!(p.maxlevel, Some(2));
+        assert!(p.flags.contains(DblockFlags::VLINES));
+        assert!(p.flags.contains(DblockFlags::INDENT));
+        assert!(p.flags.contains(DblockFlags::LINK));
+        assert!(p.flags.contains(DblockFlags::SKIP_EMPTY_ROWS));
+        assert_eq!(p.format.as_deref(), Some("%ITEM %TODO"));
+        let rendered = render_begin_line(&p);
+        assert_eq!(
+            parse_dblock_params(&rendered).as_ref(),
+            Some(&p),
+            "{rendered}"
+        );
+        assert!(rendered.contains(":vlines t") && rendered.contains(":link t"));
+        assert_eq!(parse_dblock_params("#+BEGIN: other").map(|p| p.id), None);
+        assert_eq!(
+            parse_dblock_params("#+BEGIN: columnview").unwrap().id,
+            "local"
+        );
+        // A switch given a value other than `t` stays off.
+        let off =
+            parse_dblock_params("#+BEGIN: columnview :vlines nil :indent nil :link nil").unwrap();
+        assert!(off.flags.is_empty());
+    }
+
+    #[test]
+    fn dblock_rendering_honours_scope_level_links_and_hlines() {
+        let text = "* P\n** a\n*** deep\n** b\n#+BEGIN: columnview :id local :maxlevel 2 :link t :indent t :hlines t :format \"%ITEM\"\n#+END:";
+        let params = parse_dblock_params("#+BEGIN: columnview :id local :maxlevel 2 :link t :indent t :hlines t :format \"%ITEM\"").unwrap();
+        let out = render_columnview_dblock(text, 4, &params, (2026, 1, 1), None);
+        assert!(out.contains("[[*"), "{out}");
+        assert!(!out.contains("deep"), "{out}");
+        assert!(out.contains("|---|"), "{out}");
+        // An unknown label matches no entry, so the table is empty.
+        let none = parse_dblock_params("#+BEGIN: columnview :id nowhere").unwrap();
+        let out = render_columnview_dblock(text, 4, &none, (2026, 1, 1), None);
+        assert!(!out.contains("deep"));
+        // A label finds the subtree whose :ID: carries it.
+        let id_text = "* One\n* Two\n:PROPERTIES:\n:ID: sel\n:END:\n** Inner\n#+BEGIN: columnview :id sel :format \"%ITEM\"\n#+END:";
+        let sel = parse_dblock_params("#+BEGIN: columnview :id sel :format \"%ITEM\"").unwrap();
+        let out = render_columnview_dblock(id_text, 6, &sel, (2026, 1, 1), None);
+        assert!(out.contains("Inner") && !out.contains("One"), "{out}");
+        // `file:` and `global` scopes cover the whole buffer.
+        let file =
+            parse_dblock_params("#+BEGIN: columnview :id file:x.org :format \"%ITEM\"").unwrap();
+        let out = render_columnview_dblock(id_text, 6, &file, (2026, 1, 1), None);
+        assert!(out.contains("One") && out.contains("Two"), "{out}");
+    }
+
+    #[test]
+    fn updating_dblocks_needs_a_begin_and_a_matching_end() {
+        let ok = "* H\n#+BEGIN: columnview :id local :format \"%ITEM\"\nstale\n#+END:\nafter";
+        let updated = update_columnview_dblock(ok, 1, (2026, 1, 1), None).unwrap();
+        assert!(
+            !updated.contains("stale") && updated.contains("after"),
+            "{updated}"
+        );
+        assert_eq!(update_columnview_dblock(ok, 0, (2026, 1, 1), None), None);
+        assert_eq!(update_columnview_dblock(ok, 99, (2026, 1, 1), None), None);
+        // A headline before the END means the block is unterminated.
+        let open = "* H\n#+BEGIN: columnview :id local\n* Next\n#+END:";
+        assert_eq!(update_columnview_dblock(open, 1, (2026, 1, 1), None), None);
+        // update_all leaves an unterminated block alone and refreshes the rest.
+        let two = format!("{open}\n{ok}");
+        let all = update_all_columnview_dblocks(&two, (2026, 1, 1), None);
+        assert!(!all.contains("stale"), "{all}");
+        assert!(all.contains("#+BEGIN: columnview :id local\n* Next"));
+        assert_eq!(
+            update_all_columnview_dblocks("no blocks", (2026, 1, 1), None),
+            "no blocks"
+        );
     }
 }

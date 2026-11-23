@@ -233,3 +233,61 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("vix-http-env-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn errors_name_the_file_and_the_problem() {
+        let read = EnvError::Read("denied".into()).to_string();
+        assert!(read.contains(ENV_FILE) && read.contains("denied"));
+        let json = EnvError::Json("eof".into()).to_string();
+        assert!(json.contains("not valid JSON") && json.contains("eof"));
+        let shape = EnvError::NotAnObject("prod".into()).to_string();
+        assert!(shape.contains("`prod`") && shape.contains("must be an object"));
+    }
+
+    #[test]
+    fn load_distinguishes_missing_valid_and_unreadable_files() {
+        let root = scratch("load");
+        assert!(load(&root).unwrap().is_none());
+        std::fs::create_dir_all(root.join(".vix")).unwrap();
+        std::fs::write(root.join(ENV_FILE), r#"{"dev": {"host": "h"}}"#).unwrap();
+        assert_eq!(load(&root).unwrap().unwrap().names(), ["dev"]);
+        std::fs::write(root.join(ENV_FILE), "{").unwrap();
+        assert!(matches!(load(&root), Err(EnvError::Json(_))));
+        // A directory where the file should be is a read error, not "missing".
+        std::fs::remove_file(root.join(ENV_FILE)).unwrap();
+        std::fs::create_dir_all(root.join(ENV_FILE)).unwrap();
+        assert!(matches!(load(&root), Err(EnvError::Read(_))));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_active_environment_is_remembered_and_forgotten() {
+        let root = scratch("active");
+        assert_eq!(read_active(&root), None);
+        write_active(&root, Some("prod")).unwrap();
+        assert_eq!(read_active(&root).as_deref(), Some("prod"));
+        // Forgetting twice is fine.
+        write_active(&root, None).unwrap();
+        write_active(&root, None).unwrap();
+        assert_eq!(read_active(&root), None);
+        // A blank remembered name counts as none.
+        write_active(&root, Some("  \n")).unwrap();
+        assert_eq!(read_active(&root), None);
+        // Removing a path that cannot be removed (a non-empty directory) is an error.
+        std::fs::remove_file(root.join(ACTIVE_FILE)).unwrap();
+        std::fs::create_dir_all(root.join(ACTIVE_FILE).join("x")).unwrap();
+        assert!(write_active(&root, None).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}

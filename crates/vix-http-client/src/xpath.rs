@@ -312,3 +312,19 @@ mod tests {
         assert_eq!(query(xml, "//u[@href='x/y']").as_deref(), Some("hit"));
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    const XML: &str = r#"<root><items><item id="a">one</item><item id="b">two</item></items><token>t0k</token></root>"#;
+
+    #[test]
+    fn descendant_attribute_and_current_node_steps() {
+        // `//@id` looks at every descendant element and yields the first value.
+        assert_eq!(query(XML, "//@id").as_deref(), Some("a"));
+        // `.` selects the context node itself, whose text is the whole subtree.
+        assert_eq!(query(XML, "/root/token/.").as_deref(), Some("t0k"));
+        assert_eq!(query(XML, "//@missing"), None);
+    }
+}

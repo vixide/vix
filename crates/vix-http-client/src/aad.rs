@@ -179,3 +179,41 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn errors_have_distinct_messages() {
+        let msgs = [
+            AadError::CliMissing.to_string(),
+            AadError::BadArgument.to_string(),
+            AadError::Failed.to_string(),
+        ];
+        assert!(msgs[0].contains("not installed"));
+        assert!(msgs[1].contains("$aadToken"));
+        assert_ne!(msgs[0], msgs[2]);
+    }
+
+    #[test]
+    fn options_and_odd_characters_are_rejected_as_arguments() {
+        for bad in ["--resource", "a b", "x;y", "", "tenantid:-x"] {
+            assert_eq!(build_args(&[bad]), Err(AadError::BadArgument), "{bad:?}");
+        }
+        assert!(build_args(&["api://abc-123/.default"]).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_cli_that_prints_nothing_or_cannot_run_is_a_failure() {
+        // `true` succeeds but prints no token.
+        assert_eq!(token_with("true", &[]), Err(AadError::Failed));
+        // A directory is not an executable: a spawn error that is not "not found".
+        assert_eq!(token_with("/", &[]), Err(AadError::Failed));
+        assert_eq!(
+            token_with("/definitely/missing/az", &[]),
+            Err(AadError::CliMissing)
+        );
+    }
+}

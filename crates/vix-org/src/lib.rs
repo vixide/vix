@@ -28,6 +28,8 @@ pub use columns::{
     update_all_columnview_dblocks, update_columnview_dblock,
 };
 
+#[cfg(test)]
+mod cov_tests;
 mod headline_nav;
 use headline_nav::{governing, relevel};
 pub use headline_nav::{

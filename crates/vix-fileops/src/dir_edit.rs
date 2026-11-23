@@ -492,3 +492,24 @@ mod tests {
         assert!(plan.is_empty(), "{plan:?}");
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn diff_errors_name_the_offending_id_name_and_line() {
+        let dup = DiffError::DuplicateId { id: 3, line: 7 }.to_string();
+        assert_eq!(dup, "duplicate id 3 on line 7");
+        let unknown = DiffError::UnknownId { id: 9, line: 2 }.to_string();
+        assert_eq!(unknown, "unknown id 9 on line 2");
+        let invalid = DiffError::InvalidName {
+            name: "a/b".into(),
+            line: 4,
+        }
+        .to_string();
+        assert_eq!(invalid, "invalid name \"a/b\" on line 4");
+        let clash = DiffError::DuplicateName { name: "x".into() }.to_string();
+        assert_eq!(clash, "duplicate name \"x\"");
+    }
+}

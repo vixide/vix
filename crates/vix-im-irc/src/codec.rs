@@ -501,3 +501,68 @@ mod tests {
         assert_eq!(server_time_millis("garbage"), None);
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn prefix_display_round_trips_each_shape() {
+        for text in ["ana!a@host", "ana@host", "ana!a", "irc.example"] {
+            assert_eq!(Prefix::parse(text).to_string(), text);
+        }
+    }
+
+    #[test]
+    fn error_messages_are_distinct_and_nonempty() {
+        let all = [
+            ParseError::NoCommand.to_string(),
+            EncodeError::ForbiddenChar.to_string(),
+            EncodeError::BadCommand.to_string(),
+            EncodeError::BadMiddleParam.to_string(),
+        ];
+        for (i, a) in all.iter().enumerate() {
+            assert_ne!(a, "");
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(a, b);
+            }
+        }
+    }
+
+    #[test]
+    fn escape_drops_nul_and_escapes_breaks() {
+        assert_eq!(escape_tag_value("a\0b\r\nc"), "ab\\r\\nc");
+    }
+
+    #[test]
+    fn to_wire_rejects_bad_tag_prefix_and_command() {
+        let mut l = Line::new("PING", &["x"]);
+        l.tags.push(Tag {
+            key: "a b".into(),
+            value: None,
+        });
+        assert_eq!(l.to_wire(), Err(EncodeError::ForbiddenChar));
+
+        let mut l = Line::new("PING", &["x"]);
+        l.prefix = Some(Prefix::parse("bad nick"));
+        assert_eq!(l.to_wire(), Err(EncodeError::ForbiddenChar));
+
+        let mut l = Line::new("PING", &["x"]);
+        l.prefix = Some(Prefix::parse("ana!a@h"));
+        assert_eq!(l.to_wire().unwrap(), ":ana!a@h PING x");
+
+        let l = Line::new("PI\nNG", &[]);
+        assert_eq!(l.to_wire(), Err(EncodeError::ForbiddenChar));
+        let l = Line::new("", &[]);
+        assert_eq!(l.to_wire(), Err(EncodeError::BadCommand));
+        let l = Line::new("A B", &[]);
+        assert_eq!(l.to_wire(), Err(EncodeError::BadCommand));
+    }
+
+    #[test]
+    fn server_time_rejects_non_digit_fraction() {
+        assert_eq!(server_time_millis("2024-01-02T03:04:05.xyzZ"), None);
+        assert_eq!(server_time_millis("2024-01-02T03:04:05.Z"), None);
+        assert_eq!(server_time_millis("1970-01-01T00:00:00.5Z"), Some(500));
+    }
+}
