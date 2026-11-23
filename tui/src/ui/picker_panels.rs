@@ -73,11 +73,11 @@ pub(super) fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
         let mut spans = Vec::with_capacity(COLS);
         for col in 0..COLS {
             let idx = row.times(COLS).plus(col);
-            if idx >= GLYPHS.len() {
-                spans.push(Span::raw(" ".repeat(NERD_CELL_W as usize)));
+            let Some(glyph) = GLYPHS.get(idx) else {
+                spans.push(Span::raw(" ".repeat(usize::from(NERD_CELL_W))));
                 continue;
-            }
-            let cell = format!(" {}  ", GLYPHS[idx].ch);
+            };
+            let cell = format!(" {}  ", glyph.ch);
             if idx == p.selected {
                 spans.push(Span::styled(cell, theme::selected()));
             } else {
@@ -150,7 +150,7 @@ pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(header), chunk(&chunks, 0));
 
     // Sync the scroll window to the highlighted row, then render that window.
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.info.ascii_panel_mut() {
         p.ensure_visible(view_h);
     }
@@ -279,7 +279,7 @@ pub(super) fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let header = Line::from(Span::styled(t!("ui.x11_header").to_string(), theme::dim()));
     frame.render_widget(Paragraph::new(header), chunk(&chunks, 0));
 
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.x11_panel.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -287,7 +287,10 @@ pub(super) fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for c in &colors[p.scroll..p.scroll.plus(view_h).min(total)] {
+    for c in colors
+        .get(p.scroll..p.scroll.plus(view_h).min(total))
+        .unwrap_or(&[])
+    {
         let swatch = Span::styled("██", Style::default().fg(Color::Rgb(c.r, c.g, c.b)));
         let text = format!(" {:7} {}", c.hex, c.name);
         let idx = p.scroll.plus(lines.len());
@@ -368,7 +371,7 @@ pub(super) fn draw_theme_editor(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(p) = app.theme_editor.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -482,7 +485,7 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
     };
     frame.render_widget(Paragraph::new(filter), chunk(&chunks, 0));
 
-    let view_h = chunk(&chunks, 1).height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.info.media_type_panel_mut() {
         p.ensure_visible(view_h);
     }
@@ -492,8 +495,8 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
     let filtered = p.matches();
     let total = filtered.len();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for (row, &idx) in filtered.iter().enumerate().skip(p.scroll).take(view_h) {
-        let m = &table[idx];
+    let shown = filtered.iter().enumerate().skip(p.scroll).take(view_h);
+    for (row, m) in shown.filter_map(|(row, &idx)| Some((row, table.get(idx)?))) {
         let tag = if m.is_text() { "txt" } else { "bin" };
         let text = format!(
             " {:30} {:8} {tag}  {}",
@@ -553,7 +556,9 @@ fn todo_tree_row_text(p: &crate::todo_tree::Panel, row: &crate::todo_tree::Row) 
             collapsed,
         } => format!("{} {label} ({count})", if *collapsed { '▸' } else { '▾' }),
         Row::Item(i) => {
-            let it = &p.items[*i];
+            let Some(it) = p.items.get(*i) else {
+                return String::new();
+            };
             match p.group_by {
                 GroupBy::Tag => format!("    {}:{}  {}", it.file, it.line, it.text),
                 GroupBy::File => format!("    {:>5}  {}", it.line, it.text),
@@ -603,7 +608,7 @@ pub(super) fn draw_todo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunk(&chunks, 0).height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(p) = app.todo_tree.as_mut() {
         p.ensure_visible(view_h);
     }

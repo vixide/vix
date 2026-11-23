@@ -142,7 +142,9 @@ fn render_dropdown(
     let offset = dropdown_scroll(selected, inner_h, items.len());
     let end = offset.plus(inner_h).min(items.len());
     let text_w = usize::from(inner.width);
-    let rows: Vec<Line> = items[offset..end]
+    let rows: Vec<Line> = items
+        .get(offset..end)
+        .unwrap_or(&[])
         .iter()
         .enumerate()
         .map(|(vis, it)| {
@@ -191,7 +193,10 @@ fn render_dropdown(
 pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
     let Some(i) = app.menu.open else { return };
     let area = app.layout.menu_dropdown;
-    render_dropdown(frame, area, app.menu.defs()[i].items, app.menu.item);
+    let Some(def) = app.menu.defs().get(i) else {
+        return;
+    };
+    render_dropdown(frame, area, def.items, app.menu.item);
 
     // An open submenu is drawn to the right of its parent item. It may be open
     // with nothing highlighted yet (`app.menu.sub == None`).
@@ -247,7 +252,7 @@ pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
 /// Absolute screen row of dropdown item `idx` in dropdown `rect`, accounting for
 /// scroll given the current `selected` highlight and item count `len`.
 fn menu_row_y(rect: Rect, idx: usize, selected: Option<usize>, len: usize) -> u16 {
-    let inner_h = rect.height.minus(2) as usize;
+    let inner_h = usize::from(rect.height.minus(2));
     let offset = dropdown_scroll(selected, inner_h, len);
     rect.y
         .plus(1)
@@ -281,7 +286,7 @@ fn menu_tooltip_target(app: &App) -> Option<(String, Rect, u16)> {
             .map(|h| (h, rect, menu_row_y(rect, idx, app.menu.sub, items.len())));
     }
     if let Some(idx) = app.menu.item {
-        let items = app.menu.defs()[mi].items;
+        let items = app.menu.defs().get(mi)?.items;
         let rect = app.layout.menu_dropdown;
         return items
             .get(idx)
@@ -289,7 +294,7 @@ fn menu_tooltip_target(app: &App) -> Option<(String, Rect, u16)> {
             .map(|h| (h, rect, menu_row_y(rect, idx, app.menu.item, items.len())));
     }
     let rect = app.layout.menu_dropdown;
-    app.menu.defs()[mi].help().map(|h| (h, rect, rect.y))
+    app.menu.defs().get(mi)?.help().map(|h| (h, rect, rect.y))
 }
 
 /// Draw a help tooltip for the deepest currently-highlighted menu entry, placed
@@ -310,7 +315,7 @@ fn draw_menu_tooltip(app: &App, frame: &mut Frame) {
         .unwrap_or(u16::MAX)
         .clamp(12, 44)
         .min(fa.width);
-    let inner_w = width.minus(2).max(1) as usize;
+    let inner_w = usize::from(width.minus(2).max(1));
     let rows = text.chars().count().div_ceil(inner_w).max(1);
     let height = u16::try_from(rows)
         .unwrap_or(u16::MAX)

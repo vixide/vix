@@ -217,7 +217,7 @@ fn draw_db_form(app: &mut App, frame: &mut Frame, area: Rect) {
         } else if i == crate::db::FORM_ENVIRONMENT {
             crate::db::environment::badge(b.form_environment)
         } else {
-            b.form.fields[i].clone()
+            b.form.fields.get(i).cloned().unwrap_or_default()
         };
         let value_style = if i == crate::db::FORM_ENVIRONMENT {
             crate::db::environment::style(b.form_environment)
@@ -693,8 +693,12 @@ fn draw_db_workbench(app: &mut App, frame: &mut Frame, area: Rect) {
     let tree_body = Block::default()
         .borders(Borders::ALL)
         .inner(chunk(&cols, 0));
-    let editor_body = Block::default().borders(Borders::ALL).inner(right[0]);
-    let results_area = Block::default().borders(Borders::ALL).inner(right[1]);
+    let editor_body = Block::default()
+        .borders(Borders::ALL)
+        .inner(chunk(&right, 0));
+    let results_area = Block::default()
+        .borders(Borders::ALL)
+        .inner(chunk(&right, 1));
     // The results grid keeps its first row for the headers.
     let results_body = Rect {
         y: results_area.y.plus(1),
@@ -710,8 +714,8 @@ fn draw_db_workbench(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.db_editor = editor_body;
     app.layout.db_results = results_body;
     draw_db_tree(app, frame, chunk(&cols, 0));
-    draw_db_editor(app, frame, right[0]);
-    draw_db_results(app, frame, right[1]);
+    draw_db_editor(app, frame, chunk(&right, 0));
+    draw_db_results(app, frame, chunk(&right, 1));
 }
 
 /// The workbench's schema tree pane.
@@ -970,16 +974,15 @@ fn draw_db_results(app: &App, frame: &mut Frame, area: Rect) {
                 Some((col, false)) if col == c => "\u{25bc}",
                 _ => "",
             };
-            let text = format!("{marker}{}", b.grid.headers[c]);
+            let name = b.grid.headers.get(c).map_or("", String::as_str);
+            let text = format!("{marker}{name}");
+            let w = widths.get(c).copied().unwrap_or(1);
             let style = if c == b.grid.cur_col && focused {
                 theme::selected()
             } else {
                 theme::title(false)
             };
-            Span::styled(
-                format!("{:w$} ", trunc(&text, widths[c]), w = widths[c]),
-                style,
-            )
+            Span::styled(format!("{:w$} ", trunc(&text, w), w = w), style)
         })
         .collect();
     lines.push(Line::from(header));
@@ -1029,9 +1032,15 @@ fn db_result_rows(
                 .iter()
                 .map(|&c| {
                     let staged = b.staged_value(ri, c);
-                    let text =
-                        staged.unwrap_or_else(|| b.grid.rows[ri].get(c).map_or("", String::as_str));
-                    let cell = format!("{:w$} ", trunc(text, widths[c]), w = widths[c]);
+                    let text = staged.unwrap_or_else(|| {
+                        b.grid
+                            .rows
+                            .get(ri)
+                            .and_then(|r| r.get(c))
+                            .map_or("", String::as_str)
+                    });
+                    let w = widths.get(c).copied().unwrap_or(1);
+                    let cell = format!("{:w$} ", trunc(text, w), w = w);
                     let style = match change {
                         ChangeKind::Deleted => base.patch(deleted),
                         ChangeKind::Inserted => base.patch(inserted),
@@ -1045,8 +1054,14 @@ fn db_result_rows(
         } else {
             let mut out = String::new();
             for &c in cols {
-                let text = b.grid.rows[ri].get(c).map_or("", String::as_str);
-                let _ = write!(out, "{:w$} ", trunc(text, widths[c]), w = widths[c]);
+                let text = b
+                    .grid
+                    .rows
+                    .get(ri)
+                    .and_then(|r| r.get(c))
+                    .map_or("", String::as_str);
+                let w = widths.get(c).copied().unwrap_or(1);
+                let _ = write!(out, "{:w$} ", trunc(text, w), w = w);
             }
             let mark = marks.and_then(|m| m.get(ri)).copied().unwrap_or_default();
             let line = if selected {

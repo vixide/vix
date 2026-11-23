@@ -633,10 +633,12 @@ impl App {
         };
         let split = vix_modal::helix::split_selections(&clip, ranges.len());
         let mut order: Vec<usize> = (0..ranges.len()).collect();
-        order.sort_by_key(|&i| ranges[i]);
+        order.sort_by_key(|&i| ranges.get(i).copied());
         let mut rank = vec![0; ranges.len()];
         for (r, &i) in order.iter().enumerate() {
-            rank[i] = r;
+            if let Some(slot) = rank.get_mut(i) {
+                *slot = r;
+            }
         }
         let edits: Vec<_> = ranges
             .iter()
@@ -644,7 +646,8 @@ impl App {
             .map(|(i, &(start, end))| {
                 let piece = split
                     .as_ref()
-                    .map_or(clip.as_str(), |p| p[rank[i]].as_str());
+                    .and_then(|p| p.get(rank.get(i).copied().unwrap_or(0)))
+                    .map_or(clip.as_str(), String::as_str);
                 let piece = piece.repeat(count.max(1));
                 let plan = vix_modal::helix::paste(&text, start, end, &piece, before);
                 SelectionEdit::new(plan.at, plan.at, &plan.text)

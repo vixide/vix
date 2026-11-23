@@ -287,7 +287,9 @@ impl App {
                 .unsigned_abs(),
         )
         .unwrap_or(0);
-        let path = paths[seed.modulo(paths.len())].clone();
+        let Some(path) = paths.get(seed.modulo(paths.len())).cloned() else {
+            return;
+        };
         self.open_path(&path, false);
     }
 
@@ -423,9 +425,12 @@ impl App {
             self.status = t!("status.org_not_headline").to_string();
             return;
         };
-        let depth = crate::org::headline_level(lines[start]).unwrap_or(1);
+        let Some(heading_line) = lines.get(start) else {
+            return;
+        };
+        let depth = crate::org::headline_level(heading_line).unwrap_or(1);
         // The heading text becomes the new node's title (drop stars + TODO keyword).
-        let mut heading = lines[start][depth..].trim().to_string();
+        let mut heading = heading_line.get(depth..).unwrap_or("").trim().to_string();
         for kw in ["TODO ", "DONE "] {
             if let Some(rest) = heading.strip_prefix(kw) {
                 heading = rest.to_string();
@@ -433,7 +438,9 @@ impl App {
         }
         // Body = the subtree's lines after the heading, each promoted by `depth-1`
         // leading stars so nested headlines stay relative to a top-level file.
-        let body: String = lines[start.plus(1)..end]
+        let body: String = lines
+            .get(start.plus(1)..end)
+            .unwrap_or(&[])
             .iter()
             .map(|l| {
                 crate::org::headline_level(l).map_or_else(
@@ -442,7 +449,7 @@ impl App {
                         format!(
                             "{} {}",
                             "*".repeat(lvl.minus(depth.minus(1)).max(1)),
-                            l[lvl..].trim_start()
+                            l.get(lvl..).unwrap_or("").trim_start()
                         )
                     },
                 )
@@ -462,14 +469,14 @@ impl App {
         }
         // Replace the subtree in the current buffer with a link to the new node.
         let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
-        kept.extend_from_slice(&lines[..start]);
+        kept.extend_from_slice(lines.get(..start).unwrap_or(&[]));
         let placeholder = format!(
             "{} {}",
             "*".repeat(depth),
             crate::roam::node_link(&id, &heading)
         );
         kept.push(&placeholder);
-        kept.extend_from_slice(&lines[end..]);
+        kept.extend_from_slice(lines.get(end..).unwrap_or(&[]));
         let remaining = kept.join("\n");
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&remaining);
