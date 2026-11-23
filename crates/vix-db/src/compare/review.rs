@@ -1263,4 +1263,206 @@ mod tests {
         b.open_compare_script();
         assert!(b.compare().is_none());
     }
+
+    fn memory_session() -> session::Session {
+        session::Session::connect("sqlite::memory:", &[]).unwrap()
+    }
+
+    fn with_pending(b: &mut Browser, work: Work, password: &str) {
+        let (tx, rx) = mpsc::channel();
+        tx.send(work).unwrap();
+        let c = b.compare.as_mut().unwrap();
+        c.pending = Some(Pending {
+            rx,
+            started: Instant::now(),
+            running: false,
+            password: password.into(),
+        });
+        c.screen = Screen::Working;
+    }
+
+    #[test]
+    fn a_commit_that_fails_rolls_back_and_reports() {
+        let mut s = memory_session();
+        let err = run_migration(
+            &mut s,
+            &[
+                "CREATE TABLE p (id INTEGER PRIMARY KEY)".to_string(),
+                "CREATE TABLE c (p INTEGER REFERENCES p(id) DEFERRABLE INITIALLY DEFERRED)".to_string(),
+                "INSERT INTO c VALUES (9)".to_string(),
+            ],
+        )
+        .unwrap_err();
+        assert!(err.to_lowercase().contains("foreign key"), "{err}");
+        let (_, rows) = s.run("SELECT count(*) FROM sqlite_master WHERE name = 'c'").unwrap();
+        assert_eq!(rows, [["0"]], "everything was rolled back");
+        // A BEGIN the server refuses is reported too.
+        s.run("BEGIN").unwrap();
+        assert!(run_migration(&mut s, &["SELECT 1".to_string()]).is_err());
+    }
+
+    #[test]
+    fn postgres_compares_start_on_the_selected_objects_schema_or_public() {
+        let dir = scratch("pgschema");
+        let mut b = compare_pair(&dir, true);
+        b.conn.as_mut().unwrap().kind = connect::Kind::Postgres;
+        b.connections[1].kind = connect::Kind::Postgres;
+        b.connections[0].kind = connect::Kind::Postgres;
+        b.tree.sel = 0;
+        b.open_compare();
+        assert_eq!(b.compare().unwrap().schema, "public");
+        press(&mut b, KeyCode::Esc);
+        crate::test_support::select_table(&mut b, "a");
+        b.open_compare();
+        assert_eq!(b.compare().unwrap().schema, "main", "the selected object's schema");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn opening_waits_for_a_running_query() {
+        let dir = scratch("busy");
+        let mut b = compare_pair(&dir, true);
+        b.query = editor::Query::from_text("SELECT 1");
+        b.focus = Pane::Editor;
+        press(&mut b, KeyCode::F(5));
+        assert!(b.query_running());
+        b.open_compare();
+        assert!(b.compare().is_none());
+        while b.query_running() {
+            b.poll_query();
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn compare_keys_with_nothing_open_do_nothing() {
+        let mut b = workbench(true, &[]);
+        let k = crate::test_support::key;
+        b.key_compare_pick(k(KeyCode::Enter));
+        b.key_compare_password(k(KeyCode::Enter));
+        b.key_compare_review(k(KeyCode::Enter), 3);
+        b.key_compare_save(k(KeyCode::Enter));
+        b.start_compare(None);
+        assert!(b.compare().is_none());
+        assert!(!b.compare_running());
+        // A compare with no usable target or without a connection stays put.
+        let dir = scratch("nokind");
+        let mut b = compare_pair(&dir, true);
+        b.open_compare();
+        b.compare.as_mut().unwrap().candidates = vec![9];
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::Pick);
+        b.conn = None;
+        b.start_compare(None);
+        assert_eq!(b.compare().unwrap().screen, Screen::Pick);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn background_work_that_needs_a_password_or_fails_returns_to_the_right_screen() {
+        let dir = scratch("work");
+        let mut b = compare_pair(&dir, true);
+        b.open_compare();
+        b.compare.as_mut().unwrap().password = "stale".into();
+        with_pending(&mut b, Work::NeedsPassword, "");
+        b.poll_compare();
+        assert_eq!(b.compare().unwrap().screen, Screen::Password);
+        assert_eq!(b.compare().unwrap().password, "", "the prompt starts empty");
+        with_pending(&mut b, Work::Failed("nope".into()), "");
+        b.poll_compare();
+        assert_eq!(b.compare().unwrap().screen, Screen::Pick);
+        assert_eq!(b.message.as_deref(), Some("nope"));
+        with_pending(
+            &mut b,
+            Work::Connected {
+                session: memory_session(),
+                tunnel: None,
+                snapshot: Err("cannot read".into()),
+            },
+            "",
+        );
+        b.poll_compare();
+        assert_eq!(b.compare().unwrap().screen, Screen::Pick);
+        assert_eq!(b.message.as_deref(), Some("cannot read"));
+        // A worker that vanished counts as a lost connection.
+        let (tx, rx) = mpsc::channel::<Work>();
+        drop(tx);
+        b.compare.as_mut().unwrap().pending = Some(Pending {
+            rx,
+            started: Instant::now(),
+            running: false,
+            password: String::new(),
+        });
+        b.poll_compare();
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        // Still-running work is left alone.
+        let (_tx, rx) = mpsc::channel::<Work>();
+        b.compare.as_mut().unwrap().pending = Some(Pending {
+            rx,
+            started: Instant::now(),
+            running: false,
+            password: String::new(),
+        });
+        b.poll_compare();
+        assert!(b.compare_running());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_finished_run_that_failed_keeps_the_old_changes_and_says_why() {
+        let dir = scratch("ranfail");
+        let mut b = at_review(&dir, true);
+        let before = b.compare().unwrap().changes.len();
+        with_pending(
+            &mut b,
+            Work::Ran {
+                session: memory_session(),
+                result: Err("statement 1 failed".into()),
+                snapshot: None,
+            },
+            "",
+        );
+        b.poll_compare();
+        assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        assert_eq!(b.message.as_deref(), Some("statement 1 failed"));
+        assert_eq!(b.compare().unwrap().changes.len(), before);
+        // A success whose re-read failed still reports it applied.
+        with_pending(
+            &mut b,
+            Work::Ran {
+                session: memory_session(),
+                result: Ok(2),
+                snapshot: Some(Err("reread failed".into())),
+            },
+            "",
+        );
+        b.poll_compare();
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_compare_applied", count = 2, name = "other").to_string())
+        );
+        assert_eq!(b.compare().unwrap().changes.len(), before);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_toggling_and_running_need_a_target_session() {
+        let dir = scratch("nosess");
+        let mut b = at_review(&dir, true);
+        b.compare.as_mut().unwrap().session = None;
+        press(&mut b, KeyCode::F(8));
+        assert!(b.compare().unwrap().target_write_enabled(), "unchanged");
+        b.compare.as_mut().unwrap().screen = Screen::Confirm;
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::Review, "nothing to run on");
+        // A dead target session reports the toggle's error.
+        let mut dead = memory_session();
+        dead.cancel();
+        let _ = dead.run("SELECT 1");
+        b.compare.as_mut().unwrap().session = Some(dead);
+        press(&mut b, KeyCode::F(8));
+        assert!(b.message.is_some());
+        assert!(b.compare().unwrap().target_write_enabled(), "the mode did not change");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

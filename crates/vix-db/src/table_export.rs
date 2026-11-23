@@ -1343,7 +1343,7 @@ mod tests {
     }
 
     /// Seed a SQLite file, returning its path and connection URL.
-    fn seeded(name: &str, statements: &[&str]) -> (PathBuf, PathBuf) {
+    pub(super) fn seeded(name: &str, statements: &[&str]) -> (PathBuf, PathBuf) {
         let dir = std::env::temp_dir().join(format!("vix-tx-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -1531,6 +1531,7 @@ mod tests {
 #[cfg(test)]
 mod browser_tests {
     use super::*;
+    use super::tests::seeded;
     use crate::test_support::{family, file_workbench, press, select_table, typed};
 
     fn settle(b: &mut Browser) {
@@ -1821,5 +1822,89 @@ mod browser_tests {
                 .to_string()
             )
         );
+    }
+
+    #[test]
+    fn booleans_read_as_text_and_json() {
+        assert_eq!(Value::Bool(true).text(), "true");
+        assert_eq!(Value::Bool(false).json(), serde_json::Value::from(false));
+        assert_eq!(Value::Null.text(), "");
+        assert_eq!(Value::Bytes(b"hi".to_vec()).json(), serde_json::Value::from("hi"));
+    }
+
+    #[test]
+    fn sequences_are_reset_per_engine_and_odd_rows_are_skipped() {
+        let mysql = sequences_sql(Kind::Mysql, "app", "o'k");
+        assert!(mysql.contains("AUTO_INCREMENT") && mysql.contains("'o''k'"), "{mysql}");
+        let rows = |cells: &[&str]| vec![cells.iter().map(|c| (*c).to_string()).collect::<Vec<_>>()];
+        assert_eq!(
+            sequence_reset_sql(Kind::Mysql, "app", "users", &rows(&["42"])),
+            ["ALTER TABLE `users` AUTO_INCREMENT = 42;"]
+        );
+        assert_eq!(sequence_reset_sql(Kind::Mysql, "app", "users", &rows(&["NULL"])), [] as [String; 0]);
+        assert_eq!(sequence_reset_sql(Kind::Sqlite, "main", "t", &rows(&["x"])), [] as [String; 0]);
+        assert_eq!(sequence_reset_sql(Kind::Postgres, "public", "t", &rows(&["id"])), [] as [String; 0]);
+        assert_eq!(sequence_reset_sql(Kind::Postgres, "public", "t", &rows(&["id", ""])), [] as [String; 0]);
+        let pg = sequence_reset_sql(Kind::Postgres, "public", "t", &rows(&["id", "public.t_id_seq"]));
+        assert_eq!(pg.len(), 1);
+        assert!(pg[0].contains("setval('public.t_id_seq'"), "{}", pg[0]);
+    }
+
+    #[test]
+    fn export_errors_explain_themselves() {
+        assert_eq!(ExportError::Db("locked".into()).to_string(), "locked");
+        assert_eq!(
+            ExportError::NoColumns("t".into()).to_string(),
+            t!("msg.db_table_export_no_columns", table = "t")
+        );
+        assert_eq!(ExportError::Cancelled.to_string(), t!("msg.db_cancelled"));
+        let io = ExportError::from(std::io::Error::other("disk full"));
+        assert_eq!(io.to_string(), "disk full");
+    }
+
+    #[test]
+    fn an_unwritable_destination_fails_the_export_and_leaves_no_part_file() {
+        let (dir, file) = seeded("badpath", &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1)"]);
+        let job = Job {
+            kind: Kind::Sqlite,
+            url: format!("sqlite:{}?mode=rwc", file.display()),
+            setup: vec![],
+            tables: vec![("main".to_string(), "t".to_string())],
+            format: Format::Sql,
+            dest: dir.join("no/such/dir/out.sql"),
+        };
+        let rx = spawn(job).unwrap();
+        let outcome = loop {
+            match rx.recv().unwrap() {
+                Event::Failed(e) => break e,
+                Event::Done { .. } => panic!("must not succeed"),
+                _ => {}
+            }
+        };
+        assert!(!outcome.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_table_that_does_not_exist_reports_no_columns() {
+        let (dir, file) = seeded("nocols", &["CREATE TABLE t (a INTEGER)"]);
+        let job = Job {
+            kind: Kind::Sqlite,
+            url: format!("sqlite:{}?mode=rwc", file.display()),
+            setup: vec![],
+            tables: vec![("main".to_string(), "ghost".to_string())],
+            format: Format::Csv,
+            dest: dir.join("out"),
+        };
+        let rx = spawn(job).unwrap();
+        let message = loop {
+            match rx.recv().unwrap() {
+                Event::Failed(e) => break e,
+                Event::Done { .. } => panic!("must not succeed"),
+                _ => {}
+            }
+        };
+        assert_eq!(message, t!("msg.db_table_export_no_columns", table = "ghost"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
