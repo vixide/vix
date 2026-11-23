@@ -938,4 +938,507 @@ mod tests {
             ["source.organizeImports"]
         );
     }
+
+    // ----- App-level behavior ----------------------------------------------
+
+    use crate::settings::Settings;
+    use ratatui::layout::Rect;
+    use vix_input::KeyModifiers;
+
+    fn app_in(tag: &str) -> (App, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("vix-r2c-idep-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = Rect::new(0, 0, 80, 24);
+        app.local_history_root = Some(dir.join(".history-store"));
+        (app, dir)
+    }
+
+    fn open(app: &mut App, dir: &Path, name: &str, content: &str) -> PathBuf {
+        let file = dir.join(name);
+        std::fs::write(&file, content).unwrap();
+        app.open_initial(&file);
+        app.editor.active_tab().unwrap().path.clone().unwrap()
+    }
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn last_error(app: &App) -> String {
+        app.messages.items.last().map(|m| m.text.clone()).unwrap_or_default()
+    }
+
+    fn list(purpose: ChoicePurpose, rows: &[&str]) -> ChoiceList {
+        ChoiceList {
+            panel: vix_choice_list::Panel::new(
+                "title".to_string(),
+                "hint".to_string(),
+                rows.iter().map(ToString::to_string).collect(),
+            ),
+            purpose,
+        }
+    }
+
+    #[test]
+    fn the_overlay_keys_move_the_selection_and_esc_closes_it() {
+        let (mut app, dir) = app_in("keys");
+        // With nothing open, keys and clicks are ignored.
+        app.choice_list_key(key(KeyCode::Down));
+        app.choice_list_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 1,
+            row: 1,
+            modifiers: KeyModifiers::NONE,
+        });
+        app.activate_choice(ChoiceAction::Primary);
+        assert!(app.choice_list.is_none());
+
+        let rows = ["a", "b", "c", "d"];
+        app.choice_list = Some(list(ChoicePurpose::RunConfig { names: Vec::new() }, &rows));
+        app.layout.choice_list = Rect::new(2, 2, 30, 4);
+        app.choice_list_key(key(KeyCode::Down));
+        assert_eq!(app.choice_list.as_ref().unwrap().panel.selected, 1);
+        app.choice_list_key(key(KeyCode::PageDown));
+        let after_page = app.choice_list.as_ref().unwrap().panel.selected;
+        assert!(after_page > 1);
+        app.choice_list_key(key(KeyCode::PageUp));
+        app.choice_list_key(key(KeyCode::Up));
+        app.choice_list_key(key(KeyCode::Char('z')));
+        assert!(app.choice_list.is_some());
+        // A non-click mouse event and a click outside the rows do nothing.
+        app.choice_list_mouse(MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: 3,
+            row: 3,
+            modifiers: KeyModifiers::NONE,
+        });
+        app.choice_list_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 90,
+            row: 30,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert!(app.choice_list.is_some());
+        app.choice_list_key(key(KeyCode::Esc));
+        assert!(app.choice_list.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn enter_on_a_peek_row_opens_the_file_at_its_line() {
+        let (mut app, dir) = app_in("peekopen");
+        open(&mut app, &dir, "a.txt", "x\n");
+        let target = dir.join("def.txt");
+        std::fs::write(&target, "l1\nl2\nl3\nl4\n").unwrap();
+        app.choice_list = Some(list(
+            ChoicePurpose::Peek {
+                path: target.clone(),
+                line: 3,
+            },
+            &["row"],
+        ));
+        app.choice_list_key(key(KeyCode::Enter));
+        assert!(app.choice_list.is_none());
+        assert_eq!(app.editor.cursor_1based().0, 3);
+        assert_eq!(app.focus, Focus::Editor);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_click_on_a_color_presentation_row_applies_its_edit() {
+        let (mut app, dir) = app_in("color");
+        let file = open(&mut app, &dir, "a.css", "color: red;\n");
+        let rev = app.editor.active_tab().unwrap().editor.revision();
+        app.lsp_synced.insert(file.clone(), rev);
+        let range = crate::lsp_core::Range {
+            start: crate::lsp_core::Position { line: 0, character: 7 },
+            end: crate::lsp_core::Position { line: 0, character: 10 },
+        };
+        app.choice_list = Some(list(
+            ChoicePurpose::ColorPresentation {
+                path: file,
+                edits: vec![vec![(range, "#f00".to_string())], vec![(range, "blue".to_string())]],
+            },
+            &["#f00", "blue"],
+        ));
+        app.layout.choice_list = Rect::new(0, 5, 30, 2);
+        app.choice_list_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 2,
+            row: 6,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(app.editor.active_tab().unwrap().text(), "color: blue;\n");
+        assert_eq!(app.status, t!("status.color_applied").to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_recent_remote_row_zero_opens_the_name_prompt() {
+        let (mut app, dir) = app_in("recentremote");
+        app.choice_list = Some(list(
+            ChoicePurpose::RecentRemote {
+                pickers: Vec::new(),
+                names: vec!["ssh://u@h".to_string()],
+            },
+            &["new", "ssh://u@h"],
+        ));
+        app.choice_list_key(key(KeyCode::Enter));
+        assert!(app.prompt.is_some());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn non_primary_keys_do_nothing_for_run_configs_and_filters() {
+        let (mut app, dir) = app_in("nonprimary");
+        app.choice_list = Some(list(
+            ChoicePurpose::RunConfig {
+                names: vec!["build".to_string()],
+            },
+            &["build"],
+        ));
+        let before = app.status.clone();
+        app.choice_list_key(key(KeyCode::Char('o')));
+        assert!(app.choice_list.is_none());
+        assert_eq!(app.status, before, "no run was started");
+        app.choice_list = Some(list(
+            ChoicePurpose::ExceptionFilters {
+                ids: vec!["raised".to_string()],
+            },
+            &["raised"],
+        ));
+        app.choice_list_key(key(KeyCode::Char('r')));
+        assert!(app.choice_list.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn local_history_label_and_listing_need_a_file_and_a_store() {
+        let (mut app, dir) = app_in("lhlabel");
+        // A scratch buffer with no path cannot be labelled.
+        app.editor.active_tab_mut().unwrap().path = None;
+        app.local_history_label("v1");
+        assert_eq!(app.status, t!("status.local_history_no_file").to_string());
+        let file = open(&mut app, &dir, "a.txt", "one\n");
+        app.local_history_label("v1");
+        assert_eq!(
+            app.status,
+            t!("status.local_history_labelled", label = "v1").to_string()
+        );
+        app.run_action("file.local_history");
+        let c = app.choice_list.as_ref().unwrap();
+        assert!(matches!(c.purpose, ChoicePurpose::LocalHistory { .. }));
+        assert!(c.panel.rows.iter().any(|r| r.contains("v1")));
+        let _ = file;
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn restoring_from_a_missing_snapshot_reports_an_error() {
+        let (mut app, dir) = app_in("lhmissing");
+        let file = open(&mut app, &dir, "a.txt", "one\n");
+        app.local_history_act(&file, 12345, (0, 1), ChoiceAction::Primary);
+        assert!(!last_error(&app).is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_snapshot_for_another_file_is_stale_and_identical_text_is_the_same() {
+        let (mut app, dir) = app_in("lhstale");
+        let file = open(&mut app, &dir, "a.txt", "one\ntwo\n");
+        app.local_history_label("snap");
+        let store = app.local_history_store().unwrap();
+        let id = store.list(&file).first().unwrap().id;
+        // Primary on identical text opens a "same" diff tab.
+        app.local_history_act(&file, id, (0, 1), ChoiceAction::Primary);
+        let body = app.editor.active_tab().unwrap().text();
+        assert_eq!(body, t!("status.local_history_same").to_string());
+        // Restoring when another file is active is stale.
+        let other = open(&mut app, &dir, "b.txt", "other\n");
+        app.local_history_act(&file, id, (0, 1), ChoiceAction::RestoreFile);
+        assert_eq!(app.status, t!("status.local_history_stale").to_string());
+        let _ = other;
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn restoring_the_same_text_or_an_out_of_range_revert_reports_nothing_to_do() {
+        let (mut app, dir) = app_in("lhrange");
+        let file = open(&mut app, &dir, "a.txt", "one\ntwo\n");
+        app.restore_snapshot(&file, "one\ntwo\n", None);
+        assert_eq!(app.status, t!("status.local_history_same").to_string());
+        app.restore_snapshot(&file, "one\ntwo\n", Some((50, 60)));
+        // A range past the end leaves the text unchanged, so it is "the same".
+        assert_eq!(app.status, t!("status.local_history_same").to_string());
+        assert_eq!(app.editor.active_tab().unwrap().text(), "one\ntwo\n");
+        // A real range restore replaces just those lines and dirties the tab.
+        app.restore_snapshot(&file, "ONE\ntwo\n", Some((0, 1)));
+        assert_eq!(app.editor.active_tab().unwrap().text(), "ONE\ntwo\n");
+        assert!(app.editor.active_tab().unwrap().dirty);
+        assert_eq!(app.status, t!("status.local_history_restored").to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn search_everywhere_adds_a_goto_line_row_for_a_number() {
+        let (mut app, dir) = app_in("everywhere");
+        open(&mut app, &dir, "notes.txt", "x\n");
+        app.build_file_index();
+        assert!(app.everywhere_entries("  ").len() <= 12);
+        let entries = app.everywhere_entries("42");
+        let goto = entries.last().unwrap();
+        assert_eq!(goto.label, ": 42");
+        assert!(matches!(goto.action, PAction::GotoLine(42)));
+        let entries = app.everywhere_entries("notes");
+        assert!(entries.iter().any(|e| e.label.contains("notes.txt")));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn action(title: &str, edits: Vec<crate::lsp::FileEdits>) -> crate::lsp::CodeAction {
+        (title.to_string(), edits)
+    }
+
+    #[test]
+    fn code_action_replies_route_by_intent() {
+        let (mut app, dir) = app_in("actions");
+        let file = open(&mut app, &dir, "a.rs", "use b;\nuse a;\n");
+        // Refactor with nothing offered says so; the menu keeps an empty list.
+        app.code_action_intent = CodeActionIntent::Refactor;
+        app.on_code_actions(Vec::new());
+        assert_eq!(app.status, t!("status.refactor_none").to_string());
+        assert!(app.code_actions.is_none());
+        app.code_action_intent = CodeActionIntent::Menu;
+        app.on_code_actions(vec![action("Fix it", Vec::new())]);
+        let menu = app.code_actions.take().unwrap();
+        assert!(!menu.refactor);
+        app.code_action_intent = CodeActionIntent::Refactor;
+        app.on_code_actions(vec![action("Extract", Vec::new())]);
+        assert!(app.code_actions.take().unwrap().refactor);
+
+        // Organize imports: none, command-only, then an inline edit.
+        app.code_action_intent = CodeActionIntent::Organize;
+        app.on_code_actions(Vec::new());
+        assert_eq!(app.status, t!("status.organize_none").to_string());
+        app.code_action_intent = CodeActionIntent::Organize;
+        app.on_code_actions(vec![action("cmd", Vec::new())]);
+        assert_eq!(app.status, t!("status.organize_command_only").to_string());
+        let range = crate::lsp_core::Range {
+            start: crate::lsp_core::Position { line: 0, character: 0 },
+            end: crate::lsp_core::Position { line: 0, character: 6 },
+        };
+        app.code_action_intent = CodeActionIntent::Cleanup;
+        app.on_code_actions(vec![action(
+            "sort",
+            vec![(file, vec![(range, "use c;".to_string())])],
+        )]);
+        assert_eq!(app.status, t!("status.organize_done").to_string());
+        assert!(app.editor.active_tab().unwrap().text().starts_with("use c;"));
+        assert_eq!(app.code_action_intent, CodeActionIntent::Menu);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn previewing_a_code_action_shows_a_diff_in_a_read_only_tab() {
+        let (mut app, dir) = app_in("preview");
+        let file = open(&mut app, &dir, "a.rs", "let x = 1;\n");
+        let closed = dir.join("closed.rs");
+        std::fs::write(&closed, "let y = 2;\n").unwrap();
+        // Nothing selected: ignored.
+        app.preview_selected_code_action();
+        let range = crate::lsp_core::Range {
+            start: crate::lsp_core::Position { line: 0, character: 4 },
+            end: crate::lsp_core::Position { line: 0, character: 5 },
+        };
+        app.code_actions = Some(crate::app::CodeActionMenu {
+            actions: vec![action("No edit", Vec::new())],
+            selected: 0,
+            refactor: false,
+        });
+        app.preview_selected_code_action();
+        assert_eq!(
+            app.status,
+            t!("status.code_action_no_edit", title = "No edit").to_string()
+        );
+        app.code_actions = Some(crate::app::CodeActionMenu {
+            actions: vec![action(
+                "Rename",
+                vec![
+                    (file, vec![(range, "renamed".to_string())]),
+                    (closed.clone(), vec![(range, "other".to_string())]),
+                ],
+            )],
+            selected: 0,
+            refactor: true,
+        });
+        app.preview_selected_code_action();
+        assert!(app.code_actions.is_none());
+        let body = app.editor.active_tab().unwrap().text();
+        assert!(body.contains("+let renamed = 1;"));
+        assert!(body.contains("+let other = 2;"));
+        assert!(body.contains(&format!("--- {}", closed.display())));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn cleanup_code_tidies_whitespace_and_respects_read_only() {
+        let (mut app, dir) = app_in("cleanup");
+        open(&mut app, &dir, "a.txt", "keep   \ntrail  \n\n\n");
+        app.run_action("edit.cleanup_code");
+        assert_eq!(app.editor.active_tab().unwrap().text(), "keep\ntrail\n");
+        assert!(app.editor.active_tab().unwrap().dirty);
+        assert!(app.status.contains('4') || !app.status.is_empty());
+        // Already clean: nothing changes, the summary is still reported.
+        app.run_action("edit.cleanup_code");
+        assert_eq!(app.editor.active_tab().unwrap().text(), "keep\ntrail\n");
+        app.editor.active_tab_mut().unwrap().read_only = true;
+        app.run_action("edit.cleanup_code");
+        assert_eq!(app.status, t!("status.read_only_blocked").to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn refactor_and_organize_need_a_language_server() {
+        let (mut app, dir) = app_in("needlsp");
+        open(&mut app, &dir, "a.txt", "x\n");
+        app.run_action("lsp.refactor");
+        assert_eq!(app.status, t!("status.lsp_inactive").to_string());
+        app.status.clear();
+        app.run_action("lsp.organize_imports");
+        assert_eq!(app.status, t!("status.lsp_inactive").to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn run_configurations_list_start_a_template_and_report_errors() {
+        let (mut app, dir) = app_in("runcfg");
+        open(&mut app, &dir, "a.txt", "x\n");
+        app.run_action("project.run_config");
+        assert_eq!(app.status, t!("status.run_config_none").to_string());
+        // The edit action writes the starter file and opens it.
+        app.run_action("project.run_config_edit");
+        let path = dir.join(".vix").join("run.toml");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), RUN_CONFIG_TEMPLATE);
+        assert!(app.editor.active_tab().unwrap().path.as_ref().unwrap().ends_with("run.toml"));
+        // A second edit keeps the file as it is.
+        std::fs::write(&path, format!("{RUN_CONFIG_TEMPLATE}\n# mine\n")).unwrap();
+        app.run_action("project.run_config_edit");
+        assert!(std::fs::read_to_string(&path).unwrap().contains("# mine"));
+        // Listing shows each configuration with its command or compound.
+        app.run_action("project.run_config");
+        let c = app.choice_list.take().unwrap();
+        assert!(c.panel.rows.iter().any(|r| r.contains("build  -  make")));
+        assert!(c.panel.rows.iter().any(|r| r.contains("run  -  make run")));
+        // Compounds are listed by their members.
+        std::fs::write(
+            &path,
+            "[[config]]\nname = \"a\"\ncommand = \"true\"\n\n[[config]]\nname = \"both\"\ncompound = [\"a\"]\n",
+        )
+        .unwrap();
+        app.run_action("project.run_config");
+        let c = app.choice_list.take().unwrap();
+        assert!(c.panel.rows.iter().any(|r| r.contains("both  -  a")));
+        // Bad TOML is reported, not listed; an unknown name is not found.
+        std::fs::write(&path, "[[config\n").unwrap();
+        app.run_action("project.run_config");
+        assert!(app.choice_list.is_none());
+        assert!(!last_error(&app).is_empty());
+        app.messages.items.clear();
+        app.run_config_named("anything");
+        assert!(!last_error(&app).is_empty());
+        std::fs::write(&path, "[[config]]\nname = \"a\"\ncommand = \"true\"\n").unwrap();
+        app.messages.items.clear();
+        app.run_config_named("missing");
+        assert!(!last_error(&app).is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn every_run_config_error_has_its_own_message() {
+        use crate::tasks::run_config::RunConfigError as E;
+        let (mut app, dir) = app_in("cfgerr");
+        let errors = [
+            E::Parse("bad".to_string()),
+            E::Duplicate("dup".to_string()),
+            E::Invalid("inv".to_string()),
+            E::Unknown {
+                config: "c".to_string(),
+                name: "n".to_string(),
+            },
+            E::Cycle("cyc".to_string()),
+            E::NotFound("nf".to_string()),
+        ];
+        let mut seen = std::collections::HashSet::new();
+        for e in &errors {
+            app.report_run_config_error(e);
+            assert!(seen.insert(last_error(&app)), "each variant words its own message");
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn peek_definition_falls_back_to_a_workspace_search() {
+        let (mut app, dir) = app_in("peek");
+        std::fs::write(dir.join("lib.rs"), "fn alpha() {}\nfn target_fn() {}\n").unwrap();
+        open(&mut app, &dir, "main.rs", "target_fn();\n");
+        app.run_action("nav.peek_definition");
+        let c = app.choice_list.as_ref().expect("a peek opened");
+        assert!(matches!(c.purpose, ChoicePurpose::Peek { line: 2, .. }));
+        assert!(c.panel.rows.iter().any(|r| r.starts_with('>') && r.contains("target_fn")));
+        app.choice_list = None;
+        // A symbol with no definition warns; no symbol at all warns too.
+        app.editor.active_tab_mut().unwrap().editor.set_content("nosuchsym();\n");
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(2);
+        app.run_action("nav.peek_definition");
+        assert!(app.choice_list.is_none());
+        assert!(last_error(&app).contains("nosuchsym"));
+        app.editor.active_tab_mut().unwrap().editor.set_content("   \n");
+        app.run_action("nav.peek_definition");
+        assert!(app.choice_list.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_pending_peek_consumes_the_server_reply_once() {
+        let (mut app, dir) = app_in("finishpeek");
+        let target = dir.join("def.rs");
+        std::fs::write(&target, "a\nb\nc\n").unwrap();
+        assert!(!app.finish_peek(&target, 1), "no peek was pending");
+        app.peek_pending = true;
+        assert!(app.finish_peek(&target, 1));
+        assert!(matches!(
+            app.choice_list.as_ref().unwrap().purpose,
+            ChoicePurpose::Peek { line: 2, .. }
+        ));
+        assert!(!app.finish_peek(&target, 1), "the flag is cleared");
+        app.choice_list = None;
+        app.show_peek(&dir.join("gone.rs"), 1);
+        assert_eq!(app.status, t!("status.peek_unreadable").to_string());
+        assert!(app.choice_list.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn postfix_completion_needs_a_known_language_and_a_template() {
+        let (mut app, dir) = app_in("postfix");
+        open(&mut app, &dir, "a.zzz", "x.if");
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(4);
+        assert!(!app.expand_postfix(), "unknown extension has no templates");
+        open(&mut app, &dir, "a.rs", "nothing here");
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(12);
+        assert!(!app.expand_postfix(), "no postfix key before the cursor");
+        open(&mut app, &dir, "b.rs", "flag.if");
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(7);
+        assert!(app.expand_postfix());
+        assert!(app.editor.active_tab().unwrap().text().contains("if flag"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn times_render_as_local_date_and_clock() {
+        let s = format_time_ms(0);
+        assert_eq!(s.len(), "1970-01-01 00:00:00".len());
+        assert!(s.contains(':') && s.contains('-'));
+        assert_eq!(format_time_ms(u64::MAX), "");
+    }
 }
