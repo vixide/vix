@@ -694,4 +694,298 @@ mod tests {
         assert!(e.statement(1).starts_with("UPDATE t SET"));
         assert!(e.is_dirty());
     }
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn press(e: &mut Editor, code: KeyCode) -> Outcome {
+        e.handle_key(key(code), 3)
+    }
+
+    fn ctrl(e: &mut Editor, c: char) -> Outcome {
+        e.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL), 3)
+    }
+
+    fn texts(e: &Editor) -> Vec<&str> {
+        (0..e.len()).map(|i| e.statement(i)).collect()
+    }
+
+    #[test]
+    fn accessors_on_fresh_editor() {
+        let e = Editor::from_text("select  a,\n   b  from t; delete from t");
+        assert_eq!(e.len(), 2);
+        assert!(!e.is_empty());
+        assert_eq!(e.sel(), 0);
+        assert_eq!(e.scroll(), 0);
+        assert!(!e.is_dirty());
+        assert_eq!(e.preview(0), "select a, b from t");
+        assert_eq!(e.kind(1), "DELETE");
+        // Out-of-range index degrades to empty.
+        assert_eq!(e.statement(9), "");
+        assert_eq!(e.preview(9), "");
+        assert_eq!(e.kind(9), "EMPTY");
+        let empty = Editor::from_text("  ;; ");
+        assert!(empty.is_empty());
+        assert_eq!(empty.to_text(), "");
+    }
+
+    #[test]
+    fn kind_labels_cover_every_keyword() {
+        let e = Editor::from_text(
+            "update t set a=1; alter table t; drop table t; with x as (select 1) select 1; \
+             grant all on t to u; truncate t; begin; commit; vacuum",
+        );
+        let kinds: Vec<&str> = (0..e.len()).map(|i| e.kind(i)).collect();
+        assert_eq!(
+            kinds,
+            [
+                "UPDATE", "ALTER", "DROP", "WITH", "GRANT", "TRUNCATE", "BEGIN", "COMMIT", "SQL"
+            ]
+        );
+    }
+
+    #[test]
+    fn mark_saved_clears_dirty() {
+        let mut e = Editor::from_text("a; b");
+        press(&mut e, KeyCode::Char('d'));
+        assert!(e.is_dirty());
+        e.mark_saved();
+        assert!(!e.is_dirty());
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_to_selection() {
+        let mut e = Editor::from_text("a;b;c;d;e;f");
+        press(&mut e, KeyCode::End);
+        e.ensure_visible(2);
+        assert_eq!(e.sel(), 5);
+        assert_eq!(e.scroll(), 4);
+        press(&mut e, KeyCode::Home);
+        e.ensure_visible(2);
+        assert_eq!(e.scroll(), 0);
+    }
+
+    #[test]
+    fn navigation_keys_clamp() {
+        let mut e = Editor::from_text("a;b;c;d;e");
+        press(&mut e, KeyCode::Up);
+        assert_eq!(e.sel(), 0);
+        press(&mut e, KeyCode::Char('j'));
+        press(&mut e, KeyCode::Down);
+        assert_eq!(e.sel(), 2);
+        press(&mut e, KeyCode::Char('k'));
+        assert_eq!(e.sel(), 1);
+        // page size 3
+        press(&mut e, KeyCode::PageDown);
+        assert_eq!(e.sel(), 4);
+        press(&mut e, KeyCode::PageDown);
+        assert_eq!(e.sel(), 4);
+        press(&mut e, KeyCode::PageUp);
+        assert_eq!(e.sel(), 1);
+        press(&mut e, KeyCode::PageUp);
+        assert_eq!(e.sel(), 0);
+        // A zero page still moves one row.
+        e.handle_key(key(KeyCode::PageDown), 0);
+        assert_eq!(e.sel(), 1);
+        press(&mut e, KeyCode::End);
+        assert_eq!(e.sel(), 4);
+        press(&mut e, KeyCode::Home);
+        assert_eq!(e.sel(), 0);
+        assert!(!e.is_dirty(), "navigation never dirties");
+    }
+
+    #[test]
+    fn navigation_on_empty_list_is_safe() {
+        let mut e = Editor::from_text("");
+        for code in [
+            KeyCode::Down,
+            KeyCode::PageDown,
+            KeyCode::End,
+            KeyCode::Up,
+            KeyCode::Home,
+        ] {
+            assert_eq!(press(&mut e, code), Outcome::Consumed);
+            assert_eq!(e.sel(), 0);
+        }
+        for code in [
+            KeyCode::Char('d'),
+            KeyCode::Char('f'),
+            KeyCode::Char('F'),
+            KeyCode::Char('J'),
+            KeyCode::Char('K'),
+            KeyCode::Char('u'),
+        ] {
+            press(&mut e, code);
+        }
+        ctrl(&mut e, 'r');
+        assert!(e.is_empty());
+        assert!(!e.is_dirty());
+    }
+
+    #[test]
+    fn outcomes_for_save_close_and_unknown() {
+        let mut e = Editor::from_text("a");
+        assert_eq!(ctrl(&mut e, 's'), Outcome::Save);
+        assert_eq!(press(&mut e, KeyCode::Esc), Outcome::Close);
+        assert_eq!(press(&mut e, KeyCode::Char('q')), Outcome::Close);
+        assert_eq!(press(&mut e, KeyCode::Char('z')), Outcome::Consumed);
+        // Plain `s` (no Ctrl) and plain `r` do nothing.
+        assert_eq!(press(&mut e, KeyCode::Char('s')), Outcome::Consumed);
+        assert_eq!(press(&mut e, KeyCode::Char('r')), Outcome::Consumed);
+        assert!(!e.is_dirty());
+    }
+
+    #[test]
+    fn reorder_with_alt_arrows_and_kk() {
+        let mut e = Editor::from_text("a;b;c");
+        let alt = |c| KeyEvent::new(c, KeyModifiers::ALT);
+        e.handle_key(alt(KeyCode::Down), 3);
+        assert_eq!(texts(&e), ["b", "a", "c"]);
+        assert_eq!(e.sel(), 1);
+        e.handle_key(alt(KeyCode::Down), 3);
+        assert_eq!(texts(&e), ["b", "c", "a"]);
+        // At the bottom: no-op, not even an undo entry.
+        e.handle_key(alt(KeyCode::Down), 3);
+        assert_eq!(texts(&e), ["b", "c", "a"]);
+        press(&mut e, KeyCode::Char('K'));
+        assert_eq!(texts(&e), ["b", "a", "c"]);
+        e.handle_key(alt(KeyCode::Up), 3);
+        assert_eq!(texts(&e), ["a", "b", "c"]);
+        assert_eq!(e.sel(), 0);
+        // At the top: no-op.
+        press(&mut e, KeyCode::Char('K'));
+        assert_eq!(texts(&e), ["a", "b", "c"]);
+        assert_eq!(e.sel(), 0);
+    }
+
+    #[test]
+    fn reorder_single_statement_is_noop() {
+        let mut e = Editor::from_text("only");
+        press(&mut e, KeyCode::Char('J'));
+        press(&mut e, KeyCode::Char('K'));
+        assert_eq!(texts(&e), ["only"]);
+        assert!(!e.is_dirty());
+        press(&mut e, KeyCode::Char('u'));
+        assert!(!e.is_dirty(), "no-op reorder pushed no undo entry");
+    }
+
+    #[test]
+    fn delete_last_moves_selection_up_and_delete_key_works() {
+        let mut e = Editor::from_text("a;b;c");
+        press(&mut e, KeyCode::End);
+        press(&mut e, KeyCode::Delete);
+        assert_eq!(texts(&e), ["a", "b"]);
+        assert_eq!(e.sel(), 1);
+        press(&mut e, KeyCode::Char('d'));
+        press(&mut e, KeyCode::Char('d'));
+        assert!(e.is_empty());
+        assert_eq!(e.sel(), 0);
+        assert!(e.is_dirty());
+    }
+
+    #[test]
+    fn format_selected_only_touches_selection() {
+        let mut e = Editor::from_text("select 1; select 2");
+        press(&mut e, KeyCode::Down);
+        press(&mut e, KeyCode::Char('f'));
+        assert_eq!(texts(&e), ["select 1", "SELECT 2"]);
+        assert!(e.is_dirty());
+        press(&mut e, KeyCode::Char('u'));
+        assert_eq!(texts(&e), ["select 1", "select 2"]);
+    }
+
+    #[test]
+    fn undo_redo_cycle_restores_selection() {
+        let mut e = Editor::from_text("a;b;c");
+        press(&mut e, KeyCode::End);
+        press(&mut e, KeyCode::Char('d'));
+        assert_eq!((e.len(), e.sel()), (2, 1));
+        press(&mut e, KeyCode::Char('u'));
+        assert_eq!((e.len(), e.sel()), (3, 2));
+        ctrl(&mut e, 'r');
+        assert_eq!((e.len(), e.sel()), (2, 1));
+        // Nothing more to redo / undo past the start.
+        ctrl(&mut e, 'r');
+        assert_eq!(e.len(), 2);
+        press(&mut e, KeyCode::Char('u'));
+        press(&mut e, KeyCode::Char('u'));
+        assert_eq!(e.len(), 3);
+        assert!(e.is_dirty());
+    }
+
+    #[test]
+    fn new_edit_clears_redo() {
+        let mut e = Editor::from_text("a;b");
+        press(&mut e, KeyCode::Char('d'));
+        press(&mut e, KeyCode::Char('u'));
+        press(&mut e, KeyCode::Char('d'));
+        ctrl(&mut e, 'r');
+        assert_eq!(texts(&e), ["b"], "redo was cleared by the new edit");
+    }
+
+    #[test]
+    fn undo_history_is_capped() {
+        let mut e = Editor::from_text("a;b");
+        for _ in 0..(HISTORY_CAP + 10) {
+            press(&mut e, KeyCode::Char('J'));
+            press(&mut e, KeyCode::Char('K'));
+        }
+        assert_eq!(e.undo.len(), HISTORY_CAP);
+    }
+
+    #[test]
+    fn to_text_trims_each_statement() {
+        let e = Editor::from_text("  select 1  ;\n\n  select 2\n");
+        assert_eq!(e.to_text(), "select 1;\n\nselect 2;\n");
+    }
+
+    #[test]
+    fn split_handles_double_quotes_block_comments_and_unterminated() {
+        assert_eq!(
+            split_statements("select \"a;b\" from t; /* x; y */ select 2; select 'open;"),
+            [
+                "select \"a;b\" from t",
+                "/* x; y */ select 2",
+                "select 'open;"
+            ]
+        );
+        // `-` and `/` alone are plain text.
+        assert_eq!(
+            split_statements("select 4-1; select 4/2"),
+            ["select 4-1", "select 4/2"]
+        );
+        // Doubled quote closes and reopens the string.
+        assert_eq!(
+            split_statements("select 'it''s;ok'; x"),
+            ["select 'it''s;ok'", "x"]
+        );
+        // A `*` inside a block comment not followed by `/`.
+        assert_eq!(split_statements("/* a * b; */ x;"), ["/* a * b; */ x"]);
+    }
+
+    #[test]
+    fn format_leaves_comments_and_quoted_text_untouched() {
+        assert_eq!(
+            format_sql("select 1 -- from here\nfrom t"),
+            "SELECT 1 -- from here\nFROM t"
+        );
+        assert_eq!(
+            format_sql("select /* where * from */ \"select\" from t"),
+            "SELECT /* where * from */ \"select\" FROM t"
+        );
+        assert_eq!(
+            format_sql("select 4-1, 4/2 from t"),
+            "SELECT 4-1, 4/2 FROM t"
+        );
+    }
+
+    #[test]
+    fn format_only_changes_whole_keyword_words() {
+        assert_eq!(
+            format_sql("Select selected, from_x, _in from T"),
+            "SELECT selected, from_x, _in FROM T"
+        );
+        assert_eq!(format_sql(""), "");
+        assert_eq!(format_sql("a1 In (1)"), "a1 IN (1)");
+    }
 }

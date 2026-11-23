@@ -309,4 +309,96 @@ mod tests {
         assert!(!t.lost(137, "command terminated with exit code 137"));
         assert!(!t.lost(143, "command terminated with exit code 143"));
     }
+    fn args(cmd: &Command) -> Vec<String> {
+        cmd.get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn the_engine_command_line_for_each_kind() {
+        let docker = ExecTransport {
+            target: ContainerTarget::new(ExecKind::Docker, "web")
+                .unwrap()
+                .with_user("me")
+                .unwrap(),
+            options: ExecOptions::default(),
+        };
+        let cmd = docker.prefix(true, &["A", "B"]);
+        assert_eq!(cmd.get_program(), "docker");
+        assert_eq!(
+            args(&cmd),
+            ["exec", "-i", "-t", "-u", "me", "-e", "A", "-e", "B", "web"]
+        );
+        assert_eq!(
+            args(&docker.prefix(false, &[])),
+            ["exec", "-i", "-u", "me", "web"]
+        );
+        assert_eq!(docker.target().name, "web");
+
+        let kube = k8s();
+        let cmd = kube.prefix(true, &[]);
+        assert_eq!(cmd.get_program(), "kubectl");
+        assert_eq!(
+            args(&cmd),
+            [
+                "exec", "-i", "-t", "-n", "default", "-c", "vixpod", "vixpod", "--"
+            ]
+        );
+        assert_eq!(
+            args(&kube.prefix(false, &[])),
+            [
+                "exec", "-i", "-n", "default", "-c", "vixpod", "vixpod", "--"
+            ]
+        );
+
+        let wsl = ExecTransport {
+            target: ContainerTarget::new(ExecKind::Wsl, "Ubuntu")
+                .unwrap()
+                .with_user("me")
+                .unwrap(),
+            options: ExecOptions::default(),
+        };
+        assert_eq!(wsl.prefix(false, &[]).get_program(), "wsl.exe");
+        assert_eq!(
+            args(&wsl.prefix(false, &[])),
+            ["-d", "Ubuntu", "-u", "me", "--exec"]
+        );
+        let plain = ExecTransport {
+            target: ContainerTarget::new(ExecKind::Podman, "api").unwrap(),
+            options: ExecOptions::default(),
+        };
+        assert_eq!(args(&plain.prefix(false, &[])), ["exec", "-i", "api"]);
+    }
+
+    #[test]
+    fn engine_failures_by_kind_and_script_statuses_are_never_lost() {
+        let docker = ExecTransport {
+            target: ContainerTarget::new(ExecKind::Docker, "web").unwrap(),
+            options: ExecOptions::default(),
+        };
+        assert!(docker.lost(125, ""));
+        assert!(
+            !docker.lost(105, "Error response from daemon"),
+            "a script status"
+        );
+        assert!(docker.lost(1, "Error response from daemon: No such container: web"));
+        assert!(!docker.lost(1, "something else"));
+        let wsl = ExecTransport {
+            target: ContainerTarget::new(ExecKind::Wsl, "Ubuntu").unwrap(),
+            options: ExecOptions::default(),
+        };
+        assert!(wsl.lost(-1, ""));
+        assert!(!wsl.lost(125, ""));
+        assert!(!k8s().lost(125, ""));
+    }
+
+    #[test]
+    fn a_container_authority_knows_its_target_and_disconnects_quietly() {
+        let target = ContainerTarget::new(ExecKind::Docker, "web").unwrap();
+        let auth = ContainerAuthority::new(target.clone(), ExecOptions::default());
+        assert_eq!(auth.target(), &target);
+        auth.disconnect();
+        assert!(!auth.agent_running());
+    }
 }
