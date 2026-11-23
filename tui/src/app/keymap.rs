@@ -1953,4 +1953,59 @@ mod tests {
         app.editor_motion(KeyCode::Right);
         assert_eq!(app.editor.active_tab_mut().unwrap().editor.get_cursor(), 1);
     }
+
+    #[test]
+    fn alt_arrows_move_lines_and_alt_shift_arrows_add_a_column_cursor() {
+        let mut app = with_keymap("km-altarrows", "apple");
+        buffer_with(&mut app, "one\ntwo\nthree\n", 4);
+        app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        assert_eq!(content(&mut app), "two\none\nthree\n");
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+        assert_eq!(content(&mut app), "one\ntwo\nthree\n");
+        app.on_key(KeyEvent::new(
+            KeyCode::Down,
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(app.editor.active_tab().unwrap().editor.caret_count(), 2);
+        app.on_key(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(
+            content(&mut app),
+            "one\ntwo\nthree\n",
+            "selecting never edits"
+        );
+    }
+
+    #[test]
+    fn ctrl_shift_arrows_grow_and_shrink_the_structural_selection() {
+        let mut app = with_keymap("km-selmore", "apple");
+        buffer_with(&mut app, "foo(bar, baz)", 5);
+        let ctrl_shift = KeyModifiers::CONTROL | KeyModifiers::SHIFT;
+        app.on_key(KeyEvent::new(KeyCode::Right, ctrl_shift));
+        let first = app
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
+        assert!(first.is_some(), "select_more selected something");
+        app.on_key(KeyEvent::new(KeyCode::Right, ctrl_shift));
+        let wider = app
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
+        assert!(wider.as_ref().unwrap().len() >= first.as_ref().unwrap().len());
+        app.on_key(KeyEvent::new(KeyCode::Left, ctrl_shift));
+        let back = app
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
+        assert!(back.as_ref().unwrap().len() < wider.as_ref().unwrap().len());
+    }
 }
