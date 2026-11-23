@@ -16,18 +16,6 @@
 //! columns to offer. Owning spec: `crates/vix-db/spec/index.md`
 //! ("Intelligent Autocomplete").
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use super::highlight::KEYWORDS;
 
 /// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners

@@ -20,18 +20,6 @@
 //! `Tables:` / `Foreign keys:` summary, then a task-specific tail. Owning
 //! spec: `crates/vix-db/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use std::fmt::Write as _;
 
 /// Column triples `(table, column, type)` as the catalog returns them.

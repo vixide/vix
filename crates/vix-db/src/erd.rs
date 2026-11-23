@@ -38,7 +38,7 @@ fn ident(name: &str) -> String {
         .collect();
     if out.is_empty() {
         out.push('_');
-    } else if out.as_bytes()[0].is_ascii_digit() {
+    } else if out.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         out.insert(0, '_');
     }
     out

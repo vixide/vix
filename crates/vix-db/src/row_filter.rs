@@ -9,18 +9,6 @@
 //! the whole condition, passed through as written (the workbench still
 //! refuses one that writes). Owning spec: `crates/vix-db/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use super::catalog::{quote_ident, quote_value};
 use super::connect::Kind;
 

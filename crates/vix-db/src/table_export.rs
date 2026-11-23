@@ -32,18 +32,6 @@
 //! tested here; the worker is tested end to end on `SQLite`. Owning spec:
 //! `crates/vix-db/spec/index.md` ("Table export").
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};

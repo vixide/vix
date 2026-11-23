@@ -16,18 +16,6 @@
 //! escapes a literal that starts with `=` (see [`value_sql`]). Owning spec:
 //! `crates/vix-db/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use std::collections::{BTreeSet, HashMap};
 
 use super::catalog::{quote_ident, quote_value};

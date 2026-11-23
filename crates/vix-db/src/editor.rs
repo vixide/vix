@@ -19,18 +19,6 @@
 //! conservative lexical scan, not a SQL parser. Owning spec:
 //! `crates/vix-db/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 /// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners
 /// stop at the end before reading it).
 fn ch(chars: &[char], i: usize) -> char {

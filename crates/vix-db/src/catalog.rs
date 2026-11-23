@@ -27,18 +27,6 @@
 //!
 //! Owning spec: `crates/vix-db/spec/index.md` ("Database Browser").
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use super::connect::Kind;
 
 /// `a - b`, or the declared `fallback` when it would go below zero. The

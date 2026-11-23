@@ -13,18 +13,6 @@
 //! text is never recorded in persisted history (see `history_override` in
 //! `lib.rs`). Owning spec: `crates/vix-db/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use super::catalog::quote_literal;
 
 /// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners

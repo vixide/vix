@@ -27,18 +27,6 @@
 //! SSH tunnel's own errors, which are the workbench's translated ones.
 //! Owning specs: `spec/mcp-server` and `crates/vix-db/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use futures_util::StreamExt as _;
 use std::time::Duration;
 

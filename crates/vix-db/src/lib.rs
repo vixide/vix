@@ -49,6 +49,18 @@
 //! The owning spec is `crates/vix-db/spec/index.md` (the live-session design
 //! is in `crates/vix-db/spec/session.md`).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
 extern crate vix_i18n;
@@ -999,8 +1011,10 @@ fn default_name(database: &str, file: &str, host: &str) -> String {
 /// the row shape comes from a driver and a catalog query.
 fn object_triples(rows: Vec<Vec<String>>) -> Vec<(String, String, String)> {
     rows.into_iter()
-        .filter(|r| r.len() >= 3)
-        .map(|r| (r[0].clone(), r[1].clone(), r[2].clone()))
+        .filter_map(|r| match r.as_slice() {
+            [schema, name, kind, ..] => Some((schema.clone(), name.clone(), kind.clone())),
+            _ => None,
+        })
         .collect()
 }
 

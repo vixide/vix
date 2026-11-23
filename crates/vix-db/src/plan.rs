@@ -34,18 +34,6 @@
 //! Everything here is pure and unit-tested on hand-recorded plans; the owning
 //! spec is `crates/vix-db/spec/index.md` ("Plan tree").
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use serde_json::{Map, Number, Value};
 
 /// A row estimate off from the actual count by at least this factor (either

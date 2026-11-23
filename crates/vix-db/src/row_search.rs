@@ -4,18 +4,6 @@
 //! `WHERE` clause, and the result stays editable like any preview. Owning
 //! spec: `crates/vix-db/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{Browser, Outcome, Pane, catalog, editor, row_filter};

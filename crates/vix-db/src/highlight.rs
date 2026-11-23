@@ -13,18 +13,6 @@
 //! table is shared with [`crate::complete`] and [`crate::format`]. Owning
 //! spec: `crates/vix-db/spec/index.md` ("Syntax Highlighting").
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use ratatui::style::{Color, Style};
 
 /// SQL keywords recognized by the highlighter, the completer, and the

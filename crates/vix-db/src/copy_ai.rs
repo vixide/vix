@@ -16,18 +16,6 @@
 //! the AI assistant's schema-only rule (the assistant itself is never sent a
 //! row). Owning spec: `crates/vix-db/spec/index.md`.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use std::fmt::Write as _;
 
 use super::{Browser, catalog, connect, export};

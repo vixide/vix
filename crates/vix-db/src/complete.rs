@@ -15,18 +15,6 @@
 //! `lib.rs` (popup state is [`crate::Popup`]); owning spec:
 //! `crates/vix-db/spec/index.md` ("Intelligent Autocomplete").
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use super::highlight::KEYWORDS;
 
 /// Most suggestions shown in the popup.

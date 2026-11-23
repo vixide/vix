@@ -14,18 +14,6 @@
 //! (`Browser::format_at_cursor`). Owning spec: `crates/vix-db/spec/index.md`
 //! ("Query Formatting").
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use super::highlight::is_keyword;
 
 /// Tokens the beautifier re-arranges. Whitespace is discarded during the scan

@@ -41,18 +41,6 @@
 //! The design is described in `crates/vix-db/spec/session.md`; the callers are
 //! the `lifecycle` (connect) and `execute` (run/cancel) modules of this crate.
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use futures_util::StreamExt as _;
 use std::sync::mpsc;
 

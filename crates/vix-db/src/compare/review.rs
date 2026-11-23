@@ -11,18 +11,6 @@
 //! target, and running the migration, happen on a background thread polled
 //! by [`Browser::poll_compare`].
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use std::sync::mpsc;
 use std::time::Instant;
 

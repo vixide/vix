@@ -35,18 +35,6 @@
 //!
 //! Owning spec: `crates/vix-db/spec/index.md` ("Database Browser").
 
-#![cfg_attr(
-    not(test),
-    deny(
-        clippy::arithmetic_side_effects,
-        clippy::integer_division,
-        clippy::modulo_arithmetic,
-        clippy::as_conversions,
-        clippy::indexing_slicing,
-        clippy::string_slice
-    )
-)]
-
 use super::connect::Kind;
 
 /// Which way a [`Relation`] points, seen from the selected table.
