@@ -296,7 +296,10 @@ impl App {
     /// state and execution count, or nothing when none runs.
     #[must_use]
     pub fn jupyter_segment(&self) -> String {
-        let Some(kernel) = self.jupyter_current().map(|i| &self.jupyter.kernels[i]) else {
+        let Some(kernel) = self
+            .jupyter_current()
+            .and_then(|i| self.jupyter.kernels.get(i))
+        else {
             return String::new();
         };
         let state = match kernel.state {
@@ -566,7 +569,9 @@ impl App {
             self.status = t!("status.jupyter_no_kernel").to_string();
             return;
         };
-        let kernel = &self.jupyter.kernels[i];
+        let Some(kernel) = self.jupyter.kernels.get(i) else {
+            return;
+        };
         let name = kernel.spec.display_name.clone();
         self.status = match control {
             Control::Interrupt => {
@@ -687,13 +692,13 @@ impl App {
     fn jupyter_start(&mut self, spec: KernelSpec, alias: Option<&str>) -> Option<usize> {
         let mut languages = vec![normalize_language(&spec.language)];
         languages.extend(alias.map(str::to_owned));
-        if let Some(i) = self
+        if let Some((i, kernel)) = self
             .jupyter
             .kernels
-            .iter()
-            .position(|k| k.spec.name == spec.name)
+            .iter_mut()
+            .enumerate()
+            .find(|(_, k)| k.spec.name == spec.name)
         {
-            let kernel = &mut self.jupyter.kernels[i];
             for language in languages {
                 if !kernel.languages.contains(&language) {
                     kernel.languages.push(language);
@@ -743,7 +748,9 @@ impl App {
 
     /// Send `run` to kernel `i` and open its dock section.
     fn jupyter_execute(&mut self, i: usize, run: Run) {
-        let kernel = &mut self.jupyter.kernels[i];
+        let Some(kernel) = self.jupyter.kernels.get_mut(i) else {
+            return;
+        };
         let request = kernel.handle.execute(&run.code);
         let name = kernel.spec.display_name.clone();
         kernel.runs.insert(
@@ -777,16 +784,28 @@ impl App {
     /// Apply one event from kernel `i`. Returns `true` when the kernel is
     /// gone and should be dropped.
     fn jupyter_event(&mut self, i: usize, event: KernelEvent) -> bool {
-        let name = self.jupyter.kernels[i].spec.display_name.clone();
+        let Some(name) = self
+            .jupyter
+            .kernels
+            .get(i)
+            .map(|k| k.spec.display_name.clone())
+        else {
+            return false;
+        };
         match event {
-            KernelEvent::State(state) => self.jupyter.kernels[i].state = state,
+            KernelEvent::State(state) => {
+                if let Some(kernel) = self.jupyter.kernels.get_mut(i) {
+                    kernel.state = state;
+                }
+            }
             KernelEvent::Ready(_) => {
                 // Ready accepts requests; IOPub's own `status` may not follow.
-                let kernel = &mut self.jupyter.kernels[i];
-                if matches!(
-                    kernel.state,
-                    KernelState::Starting | KernelState::Restarting
-                ) {
+                if let Some(kernel) = self.jupyter.kernels.get_mut(i)
+                    && matches!(
+                        kernel.state,
+                        KernelState::Starting | KernelState::Restarting
+                    )
+                {
                     kernel.state = KernelState::Idle;
                 }
                 self.status = t!("status.jupyter_ready", name = name).to_string();
@@ -798,9 +817,10 @@ impl App {
                 execution_count,
             } => self.jupyter_reply(i, &request, status, execution_count),
             KernelEvent::Restarted => {
-                let kernel = &mut self.jupyter.kernels[i];
-                kernel.execution_count = None;
-                kernel.runs.clear();
+                if let Some(kernel) = self.jupyter.kernels.get_mut(i) {
+                    kernel.execution_count = None;
+                    kernel.runs.clear();
+                }
                 self.bottom_dock
                     .push(t!("ui.jupyter_restarted", name = name).to_string());
             }
@@ -819,9 +839,11 @@ impl App {
     /// for an Org block's results), and the hint so far.
     fn jupyter_output(&mut self, i: usize, request: &RequestId, output: Output) {
         let mut lines = output_lines(&output);
-        let (ours, writes_org) = self.jupyter.kernels[i]
-            .runs
-            .get(request)
+        let (ours, writes_org) = self
+            .jupyter
+            .kernels
+            .get(i)
+            .and_then(|k| k.runs.get(request))
             .map_or((false, false), |r| {
                 (true, r.org.as_ref().is_some_and(OrgRun::writes))
             });
@@ -841,7 +863,12 @@ impl App {
                 lines.insert(0, note);
             }
         }
-        if let Some(run) = self.jupyter.kernels[i].runs.get_mut(request) {
+        if let Some(run) = self
+            .jupyter
+            .kernels
+            .get_mut(i)
+            .and_then(|k| k.runs.get_mut(request))
+        {
             if hint.is_some() {
                 run.hint = hint;
             }
@@ -865,7 +892,9 @@ impl App {
         status: ReplyStatus,
         execution_count: Option<u64>,
     ) {
-        let kernel = &mut self.jupyter.kernels[i];
+        let Some(kernel) = self.jupyter.kernels.get_mut(i) else {
+            return;
+        };
         if execution_count.is_some() {
             kernel.execution_count = execution_count;
         }
@@ -1001,7 +1030,7 @@ impl App {
 fn block_target(text: &str, line: usize, language: &str) -> Option<Target> {
     let (begin, end, block_language) = crate::org::src_block_at(text, line)?;
     let lines: Vec<&str> = text.split('\n').collect();
-    let code = lines[begin.plus(1)..end].join("\n");
+    let code = lines.get(begin.plus(1)..end)?.join("\n");
     let language = if block_language.is_empty() {
         language.to_owned()
     } else {
@@ -1009,7 +1038,7 @@ fn block_target(text: &str, line: usize, language: &str) -> Option<Target> {
     };
     let org = OrgRun {
         begin,
-        header: Header::parse(lines[begin]),
+        header: Header::parse(lines.get(begin)?),
     };
     Some(Target {
         code,

@@ -243,7 +243,7 @@ impl App {
                 .unwrap_or_default();
             self.git_head_cache.insert(path.to_path_buf(), head);
         }
-        self.git_head_cache[path].clone()
+        self.git_head_cache.get(path).cloned().unwrap_or_default()
     }
 
     /// Git -> Change Gutter Base...: choose what the change gutter compares
@@ -301,7 +301,10 @@ impl App {
                 .unwrap_or_default();
             self.git_head_cache.insert(path.clone(), head);
         }
-        crate::git::hunks(&self.git_head_cache[&path], &current)
+        crate::git::hunks(
+            self.git_head_cache.get(&path).map_or("", String::as_str),
+            &current,
+        )
     }
 
     /// Move the cursor to the next (or previous) changed hunk, wrapping around.
@@ -325,13 +328,12 @@ impl App {
                 .find(|&s| s < line)
         };
         // Wrap to the first/last hunk when there is none beyond the cursor.
-        let target = target.unwrap_or_else(|| {
-            if forward {
-                hunks[0].current_start
-            } else {
-                hunks[hunks.len().minus(1)].current_start
-            }
-        });
+        let Some(target) = target.or_else(|| {
+            let edge = if forward { hunks.first() } else { hunks.last() };
+            edge.map(|h| h.current_start)
+        }) else {
+            return;
+        };
         let area = self.editor_view();
         self.editor.goto(target.plus(1), None, area);
     }
@@ -359,10 +361,15 @@ impl App {
         let start = hunk.current_start.min(lines.len());
         let end = hunk.current_end.min(lines.len()).max(start);
         let mut rebuilt = String::new();
-        rebuilt.push_str(&lines[..start].concat());
+        rebuilt.push_str(&lines.get(..start).unwrap_or_default().concat());
         rebuilt.push_str(&hunk.head_text);
-        rebuilt.push_str(&lines[end..].concat());
-        let caret: usize = lines[..start].iter().map(|l| l.chars().count()).sum();
+        rebuilt.push_str(&lines.get(end..).unwrap_or_default().concat());
+        let caret: usize = lines
+            .get(..start)
+            .unwrap_or_default()
+            .iter()
+            .map(|l| l.chars().count())
+            .sum();
         self.apply_rebuilt_buffer(&rebuilt, caret, "status.hunk_reverted");
     }
 
@@ -625,9 +632,17 @@ impl App {
         let added = cur_lines
             .get(hunk.current_start..hunk.current_end)
             .map_or_default(<[&str]>::concat);
-        let mut new_index = base_lines[..hunk.head_start].concat();
+        let mut new_index = base_lines
+            .get(..hunk.head_start)
+            .unwrap_or_default()
+            .concat();
         new_index.push_str(&added);
-        new_index.push_str(&base_lines[hunk.head_start.plus(head_count)..].concat());
+        new_index.push_str(
+            &base_lines
+                .get(hunk.head_start.plus(head_count)..)
+                .unwrap_or_default()
+                .concat(),
+        );
         self.apply_hunk_index(
             &rel,
             &new_index,
@@ -663,9 +678,17 @@ impl App {
             self.status = t!("status.unstage_hunk_failed", error = "hunk not staged").to_string();
             return;
         }
-        let mut new_index = base_lines[..hunk.head_start].concat();
+        let mut new_index = base_lines
+            .get(..hunk.head_start)
+            .unwrap_or_default()
+            .concat();
         new_index.push_str(&hunk.head_text);
-        new_index.push_str(&base_lines[hunk.head_start.plus(added_count)..].concat());
+        new_index.push_str(
+            &base_lines
+                .get(hunk.head_start.plus(added_count)..)
+                .unwrap_or_default()
+                .concat(),
+        );
         self.apply_hunk_index(
             &rel,
             &new_index,
@@ -1519,10 +1542,17 @@ fn rebuild_with_resolution(
     how: crate::conflict_tool::Resolution,
 ) -> (String, usize) {
     let lines: Vec<&str> = content.split_inclusive('\n').collect();
-    let mut rebuilt = lines[..conflict.start].concat();
+    let mut rebuilt = lines.get(..conflict.start).unwrap_or_default().concat();
     rebuilt.push_str(&conflict.resolved(how));
-    rebuilt.push_str(&lines[conflict.end.min(lines.len())..].concat());
-    let caret: usize = lines[..conflict.start]
+    rebuilt.push_str(
+        &lines
+            .get(conflict.end.min(lines.len())..)
+            .unwrap_or_default()
+            .concat(),
+    );
+    let caret: usize = lines
+        .get(..conflict.start)
+        .unwrap_or_default()
         .iter()
         .map(|l| l.chars().count())
         .sum();

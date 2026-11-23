@@ -395,8 +395,10 @@ impl App {
             return;
         };
         let lines: Vec<&str> = text.split('\n').collect();
-        tab.editor
-            .copy_to_clipboard(&format!("{}\n", lines[start..end].join("\n")));
+        tab.editor.copy_to_clipboard(&format!(
+            "{}\n",
+            lines.get(start..end).unwrap_or_default().join("\n")
+        ));
         if cut {
             let rest: Vec<&str> = lines
                 .iter()
@@ -1619,7 +1621,7 @@ impl App {
                 .get(line)
                 .copied()
                 .flatten()
-                .map(|idx| view.items[idx].clone()),
+                .and_then(|idx| view.items.get(idx).cloned()),
             _ => return false,
         };
         let Some((path, src_line)) = target else {

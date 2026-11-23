@@ -36,7 +36,12 @@ pub(super) fn human_size(bytes: u64) -> String {
     if unit == 0 {
         return format!("{bytes} B");
     }
-    format!("{}.{:02} {}", scaled.quot(100), scaled % 100, UNITS[unit])
+    format!(
+        "{}.{:02} {}",
+        scaled.quot(100),
+        scaled % 100,
+        UNITS.get(unit).copied().unwrap_or_default()
+    )
 }
 
 /// One row: the dimmed byte offset, then the text, the cursor line and a
@@ -65,15 +70,27 @@ fn row_line(row: &ViewLine, gutter: usize, more_left: bool) -> Line<'static> {
             let chars: Vec<char> = row.text.chars().collect();
             let (a, b) = (a.min(chars.len()), b.min(chars.len()));
             spans.push(Span::styled(
-                chars[..a].iter().collect::<String>(),
+                chars
+                    .get(..a)
+                    .unwrap_or_default()
+                    .iter()
+                    .collect::<String>(),
                 line_style,
             ));
             spans.push(Span::styled(
-                chars[a..b].iter().collect::<String>(),
+                chars
+                    .get(a..b)
+                    .unwrap_or_default()
+                    .iter()
+                    .collect::<String>(),
                 hit_style,
             ));
             spans.push(Span::styled(
-                chars[b..].iter().collect::<String>(),
+                chars
+                    .get(b..)
+                    .unwrap_or_default()
+                    .iter()
+                    .collect::<String>(),
                 line_style,
             ));
         }

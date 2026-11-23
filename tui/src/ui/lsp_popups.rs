@@ -73,7 +73,9 @@ pub(super) fn draw_completion(app: &App, frame: &mut Frame) {
     let end = start.plus(max_rows).min(shown.len());
 
     // Width from the widest visible label (+detail), capped to the area.
-    let widest = shown[start..end]
+    let widest = shown
+        .get(start..end)
+        .unwrap_or_default()
         .iter()
         .map(|it| {
             it.label
@@ -105,7 +107,9 @@ pub(super) fn draw_completion(app: &App, frame: &mut Frame) {
     };
 
     frame.render_widget(Clear, rect);
-    let rows: Vec<ListItem> = shown[start..end]
+    let rows: Vec<ListItem> = shown
+        .get(start..end)
+        .unwrap_or_default()
         .iter()
         .map(|it| {
             let mut spans = vec![Span::raw(it.label.clone())];
@@ -139,7 +143,7 @@ pub(super) fn draw_hover(app: &App, frame: &mut Frame) {
     }
     let text = h.text.replace('\r', "");
     let width = 64u16.min(area.width.minus(2)).max(20);
-    let inner_w = width.minus(2).max(1) as usize;
+    let inner_w = usize::from(width.minus(2).max(1));
     // Estimate wrapped height.
     let mut rows = 0usize;
     for line in text.lines() {

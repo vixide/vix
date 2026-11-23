@@ -52,15 +52,21 @@ pub(super) fn find_urls(text: &str) -> Vec<Range<usize>> {
     let mut from = 0;
     while let Some(start) = SCHEMES
         .iter()
-        .filter_map(|s| text[from..].find(s).map(|i| from.plus(i)))
+        .filter_map(|s| {
+            text.get(from..)
+                .and_then(|rest| rest.find(s))
+                .map(|i| from.plus(i))
+        })
         .min()
     {
-        let len = text[start..]
+        let len = text
+            .get(start..)
+            .unwrap_or_default()
             .find(|c: char| !is_url_char(c))
             .unwrap_or(text.len().minus(start));
         let mut end = start.plus(len);
         loop {
-            let url = &text[start..end];
+            let url = text.get(start..end).unwrap_or_default();
             let Some(last) = url.chars().last() else {
                 break;
             };
@@ -77,7 +83,7 @@ pub(super) fn find_urls(text: &str) -> Vec<Range<usize>> {
             }
         }
         // A bare scheme (`https://` and nothing after) is not a link.
-        let url = &text[start..end];
+        let url = text.get(start..end).unwrap_or_default();
         if SCHEMES
             .iter()
             .any(|s| url.starts_with(s) && url.len() > s.len())
@@ -94,7 +100,9 @@ pub(super) fn urls_in<'a>(texts: impl IntoIterator<Item = &'a str>) -> Vec<Strin
     let mut urls: Vec<String> = Vec::new();
     for text in texts {
         for range in find_urls(text) {
-            let url = &text[range];
+            let Some(url) = text.get(range) else {
+                continue;
+            };
             if !urls.iter().any(|u| u == url) {
                 urls.push(url.to_string());
             }
@@ -129,7 +137,7 @@ pub(super) fn link_area(buf: &mut Buffer, area: Rect, urls: &[String]) {
             })
             .collect();
         for range in find_urls(&row) {
-            let shown = &row[range.clone()];
+            let shown = row.get(range.clone()).unwrap_or_default();
             let Some(url) = urls
                 .iter()
                 .find(|u| u.starts_with(shown) && u.chars().all(is_url_char))

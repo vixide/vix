@@ -1716,8 +1716,10 @@ impl App {
         };
         if let Some(i) = self.cowork_guest_tab(&rel) {
             let (line, column) = (
-                reference.line as usize,
-                reference.column.map(|c| c as usize),
+                usize::try_from(reference.line).unwrap_or(usize::MAX),
+                reference
+                    .column
+                    .map(|c| usize::try_from(c).unwrap_or(usize::MAX)),
             );
             self.with_jump(|s| {
                 s.editor.active = i;

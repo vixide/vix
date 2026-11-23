@@ -797,7 +797,7 @@ impl App {
             return None;
         }
         let bytes = auth.read_limited(path, palette::PREVIEW_BYTES).ok()?;
-        let truncated = bytes.len() as u64 >= palette::PREVIEW_BYTES;
+        let truncated = u64::try_from(bytes.len()).unwrap_or(u64::MAX) >= palette::PREVIEW_BYTES;
         palette::preview_from_bytes(&bytes, line, truncated)
     }
 
