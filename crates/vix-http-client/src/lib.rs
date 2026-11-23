@@ -28,6 +28,18 @@
 //!
 //! Owning spec: `crates/vix-http-client/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod aad;
 pub mod env;
 pub mod rest;

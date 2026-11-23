@@ -94,6 +94,11 @@ pub(crate) fn query(body: &str, path: &str) -> Option<String> {
     }
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero.
+fn sub_u32(a: u32, b: u32, fallback: u32) -> u32 {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// The local part of a possibly prefixed name (`ns:item` -> `item`).
 fn local(name: &str) -> &str {
     name.rsplit(':').next().unwrap_or(name)
@@ -166,7 +171,8 @@ fn positional(step: &Step, found: &mut Vec<Item<'_, '_>>) {
         _ => None,
     });
     if let Some(i) = index {
-        let keep = found.drain(..).nth(i - 1);
+        // Positions count from 1, so `[0]` selects nothing.
+        let keep = i.checked_sub(1).and_then(|n| found.drain(..).nth(n));
         found.extend(keep);
     }
 }
@@ -198,8 +204,9 @@ fn step_end(s: &str) -> usize {
         match (c, quote) {
             ('\'' | '"', None) => quote = Some(c),
             (q, Some(open)) if q == open => quote = None,
-            ('[', None) => depth += 1,
-            (']', None) => depth = depth.saturating_sub(1),
+            ('[', None) => depth = depth.checked_add(1).unwrap_or(depth),
+            // A stray `]` with nothing open leaves the depth at 0.
+            (']', None) => depth = sub_u32(depth, 1, 0),
             ('/', None) if depth == 0 => return i,
             _ => {}
         }
@@ -226,9 +233,9 @@ fn parse_step(axis: Axis, text: &str) -> Option<Step> {
     let mut preds = Vec::new();
     while !preds_text.is_empty() {
         let inner = preds_text.strip_prefix('[')?;
-        let close = inner.find(']')?;
-        preds.push(parse_pred(inner[..close].trim())?);
-        preds_text = &inner[close + 1..];
+        let (inside, remainder) = inner.split_once(']')?;
+        preds.push(parse_pred(inside.trim())?);
+        preds_text = remainder;
     }
     Some(Step {
         axis,

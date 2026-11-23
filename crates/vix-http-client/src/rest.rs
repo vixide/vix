@@ -26,6 +26,20 @@ use crate::{Request, Response};
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A request's line range in the buffer: `start..end`, end exclusive. The
 /// `###` separator lines belong to no block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,11 +60,14 @@ pub fn blocks(text: &str) -> Vec<Block> {
     // Iterate one past the end so the final block (no trailing `###`) is
     // flushed by the same code path as the others.
     for i in 0..=lines.len() {
-        if i == lines.len() || lines[i].trim_start().starts_with("###") {
-            if has_request(&lines[start..i]) {
+        if lines
+            .get(i)
+            .is_none_or(|line| line.trim_start().starts_with("###"))
+        {
+            if lines.get(start..i).is_some_and(has_request) {
                 out.push(Block { start, end: i });
             }
-            start = i + 1;
+            start = add_or(i, 1, usize::MAX);
         }
     }
     out
@@ -84,7 +101,7 @@ pub fn block_at(text: &str, line: usize) -> Option<Block> {
 pub fn block_text(text: &str, block: Block) -> String {
     text.lines()
         .skip(block.start)
-        .take(block.end - block.start)
+        .take(sub_or(block.end, block.start, 0))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -193,20 +210,19 @@ pub fn expand(text: &str, ctx: &Context<'_>) -> Result<String, VarError> {
 /// [`expand`] with the current nesting `depth` (variables referencing
 /// variables); `depth` is capped at `MAX_DEPTH`.
 fn expand_depth(text: &str, ctx: &Context<'_>, depth: usize) -> Result<String, VarError> {
-    let mut out = String::with_capacity(text.len());
+    let mut out = String::new();
     let mut rest = text;
-    while let Some(open) = rest.find("{{") {
-        out.push_str(&rest[..open]);
-        let after = &rest[open + 2..];
+    while let Some((before, after)) = rest.split_once("{{") {
+        out.push_str(before);
         // A lone `{{` is an error rather than literal text, so a typo'd
         // variable fails loudly instead of being sent verbatim.
-        let close = after.find("}}").ok_or(VarError::Unterminated)?;
-        let name = after[..close].trim();
+        let (inner, tail) = after.split_once("}}").ok_or(VarError::Unterminated)?;
+        let name = inner.trim();
         if depth >= MAX_DEPTH {
             return Err(VarError::TooDeep(name.to_string()));
         }
         out.push_str(&resolve(name, ctx, depth)?);
-        rest = &after[close + 2..];
+        rest = tail;
     }
     out.push_str(rest);
     Ok(out)
@@ -233,7 +249,7 @@ fn resolve(name: &str, ctx: &Context<'_>, depth: usize) -> Result<String, VarErr
         .find(|(n, _)| n == name)
         .map(|(_, v)| v.as_str())
         .ok_or_else(|| VarError::Unknown(name.to_string()))?;
-    expand_depth(value, ctx, depth + 1)
+    expand_depth(value, ctx, add_or(depth, 1, usize::MAX))
 }
 
 /// `body`, `body.$.path` (JSON), `body.*`, or `headers.Name`. A body path
@@ -289,10 +305,10 @@ pub fn json_path(body: &str, path: &str) -> Option<String> {
             rest = tail;
         } else {
             let r = rest.strip_prefix('[')?;
-            let close = r.find(']')?;
-            let idx: usize = r[..close].trim().parse().ok()?;
+            let (idx_text, tail) = r.split_once(']')?;
+            let idx: usize = idx_text.trim().parse().ok()?;
             value = value.get(idx)?.clone();
-            rest = &r[close + 1..];
+            rest = tail;
         }
     }
     Some(match value {
@@ -316,33 +332,46 @@ fn system_variable(sys: &str, full: &str, ctx: &Context<'_>) -> Result<String, V
             if max <= min {
                 return Err(bad());
             }
-            let span = u64::try_from(max - min).map_err(|_| bad())?;
+            let span = u64::try_from(max.checked_sub(min).ok_or_else(bad)?).map_err(|_| bad())?;
             // Range is `[min, max)`. The modulo introduces a negligible bias,
             // acceptable for test-data values (this is not for security use).
-            Ok((min + i64::try_from(random_u64() % span).map_err(|_| bad())?).to_string())
+            let pick = random_u64().checked_rem(span).ok_or_else(bad)?;
+            let value = min
+                .checked_add(i64::try_from(pick).map_err(|_| bad())?)
+                .ok_or_else(bad)?;
+            Ok(value.to_string())
         }
         "timestamp" => {
             // Time comes from `ctx.now_ms`, not the clock, so expansion stays
             // deterministic and testable.
-            let ms = ctx.now_ms + offset_ms(parts.next(), parts.next()).ok_or_else(bad)?;
-            Ok((ms / 1000).to_string())
+            let ms = ctx
+                .now_ms
+                .checked_add(offset_ms(parts.next(), parts.next()).ok_or_else(bad)?)
+                .ok_or_else(bad)?;
+            Ok(ms.div_euclid(1000).to_string())
         }
         "datetime" => {
             let format = parts.next().ok_or_else(bad)?;
-            let ms = ctx.now_ms + offset_ms(parts.next(), parts.next()).ok_or_else(bad)?;
+            let ms = ctx
+                .now_ms
+                .checked_add(offset_ms(parts.next(), parts.next()).ok_or_else(bad)?)
+                .ok_or_else(bad)?;
             match format {
-                "iso8601" => Ok(iso8601(ms)),
-                "rfc1123" => Ok(rfc1123(ms)),
+                "iso8601" => iso8601(ms).ok_or_else(bad),
+                "rfc1123" => rfc1123(ms).ok_or_else(bad),
                 _ => Err(bad()),
             }
         }
         "localDatetime" => {
             let format = parts.next().ok_or_else(bad)?;
-            let ms = ctx.now_ms + offset_ms(parts.next(), parts.next()).ok_or_else(bad)?;
+            let ms = ctx
+                .now_ms
+                .checked_add(offset_ms(parts.next(), parts.next()).ok_or_else(bad)?)
+                .ok_or_else(bad)?;
             let off = ctx.local_offset_min;
             match format {
-                "iso8601" => Ok(local_iso8601(ms, off)),
-                "rfc1123" => Ok(local_rfc1123(ms, off)),
+                "iso8601" => local_iso8601(ms, off).ok_or_else(bad),
+                "rfc1123" => local_rfc1123(ms, off).ok_or_else(bad),
                 _ => Err(bad()),
             }
         }
@@ -409,74 +438,103 @@ fn dotenv_get(text: &str, name: &str) -> Option<String> {
     })
 }
 
-/// Days since 1970-01-01 to (year, month, day), proleptic Gregorian.
-fn civil_from_days(z: i64) -> (i64, i64, i64) {
+/// Days since 1970-01-01 to (year, month, day), proleptic Gregorian; `None`
+/// when the day count is too large for the arithmetic.
+fn civil_from_days(z: i64) -> Option<(i64, i64, i64)> {
     // Howard Hinnant's `civil_from_days` algorithm: shifts the epoch to
     // 0000-03-01 so leap days fall at the end of the "year", then works in
     // 400-year eras. Exact for the whole proleptic Gregorian calendar.
-    let z = z + 719_468;
+    let z = z.checked_add(719_468)?;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    (yoe + era * 400 + i64::from(m <= 2), m, d)
+    #[expect(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        reason = "RCA-EXC-2: doe is in [0, 146096], so every intermediate below stays within a few million"
+    )]
+    let (yoe, m, d) = {
+        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        (yoe, m, d)
+    };
+    let year = era
+        .checked_mul(400)?
+        .checked_add(yoe)?
+        .checked_add(i64::from(m <= 2))?;
+    Some((year, m, d))
 }
 
 /// `+hh:mm` (or `-hh:mm`) for an offset in minutes.
 fn offset_colon(off: i32) -> String {
-    let (sign, a) = (if off < 0 { '-' } else { '+' }, off.abs());
-    format!("{sign}{:02}:{:02}", a / 60, a % 60)
+    let (sign, a) = (if off < 0 { '-' } else { '+' }, off.unsigned_abs());
+    format!("{sign}{:02}:{:02}", a.div_euclid(60), a.rem_euclid(60))
+}
+
+/// `ms` shifted by a zone offset in minutes; `None` on overflow.
+fn shifted(ms: i64, off: i32) -> Option<i64> {
+    ms.checked_add(i64::from(off).checked_mul(60_000)?)
 }
 
 /// ISO 8601 in the local zone: shift the instant by the offset, format it as
 /// UTC, then swap the `Z` for the real `+hh:mm` offset.
-fn local_iso8601(ms: i64, off: i32) -> String {
-    let shifted = iso8601(ms + i64::from(off) * 60_000);
+fn local_iso8601(ms: i64, off: i32) -> Option<String> {
+    let text = iso8601(shifted(ms, off)?)?;
     // Swap the trailing `Z` for the real offset.
-    format!("{}{}", shifted.trim_end_matches('Z'), offset_colon(off))
+    Some(format!(
+        "{}{}",
+        text.trim_end_matches('Z'),
+        offset_colon(off)
+    ))
 }
 
 /// RFC 1123 in the local zone; the zone is written `+hhmm` (no colon) as
 /// RFC 1123/822 require, replacing the literal `GMT`.
-fn local_rfc1123(ms: i64, off: i32) -> String {
-    let shifted = rfc1123(ms + i64::from(off) * 60_000);
+fn local_rfc1123(ms: i64, off: i32) -> Option<String> {
+    let text = rfc1123(shifted(ms, off)?)?;
     let zone = offset_colon(off).replace(':', "");
-    format!("{}{zone}", shifted.trim_end_matches("GMT"))
+    Some(format!("{}{zone}", text.trim_end_matches("GMT")))
 }
 
-/// UTC instant as `YYYY-MM-DDThh:mm:ss.mmmZ`.
-fn iso8601(ms: i64) -> String {
-    let (days, rem) = (ms.div_euclid(86_400_000), ms.rem_euclid(86_400_000));
-    let (y, m, d) = civil_from_days(days);
-    format!(
+/// The day count and the milliseconds into that day of a UTC instant.
+fn split_instant(ms: i64) -> (i64, i64) {
+    (ms.div_euclid(86_400_000), ms.rem_euclid(86_400_000))
+}
+
+/// UTC instant as `YYYY-MM-DDThh:mm:ss.mmmZ`; `None` for an instant the
+/// calendar arithmetic cannot represent.
+fn iso8601(ms: i64) -> Option<String> {
+    let (days, rem) = split_instant(ms);
+    let (y, m, d) = civil_from_days(days)?;
+    Some(format!(
         "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{:03}Z",
-        rem / 3_600_000,
-        rem / 60_000 % 60,
-        rem / 1000 % 60,
-        rem % 1000
-    )
+        rem.div_euclid(3_600_000),
+        rem.div_euclid(60_000).rem_euclid(60),
+        rem.div_euclid(1000).rem_euclid(60),
+        rem.rem_euclid(1000)
+    ))
 }
 
-/// UTC instant as an RFC 1123 date, e.g. `Tue, 14 Nov 2023 22:13:20 GMT`.
-fn rfc1123(ms: i64) -> String {
+/// UTC instant as an RFC 1123 date, e.g. `Tue, 14 Nov 2023 22:13:20 GMT`;
+/// `None` for an instant the calendar arithmetic cannot represent.
+fn rfc1123(ms: i64) -> Option<String> {
     // Day 0 (1970-01-01) was a Thursday, hence the rotated table.
     const DAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
     const MONTHS: [&str; 12] = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
-    let (days, rem) = (ms.div_euclid(86_400_000), ms.rem_euclid(86_400_000));
-    let (y, m, d) = civil_from_days(days);
-    format!(
-        "{}, {d:02} {} {y:04} {:02}:{:02}:{:02} GMT",
-        DAYS[usize::try_from(days.rem_euclid(7)).unwrap_or(0)],
-        MONTHS[usize::try_from(m - 1).unwrap_or(0)],
-        rem / 3_600_000,
-        rem / 60_000 % 60,
-        rem / 1000 % 60
-    )
+    let (days, rem) = split_instant(ms);
+    let (y, m, d) = civil_from_days(days)?;
+    let day_name = DAYS.get(usize::try_from(days.rem_euclid(7)).ok()?)?;
+    let month_name = MONTHS.get(usize::try_from(m.checked_sub(1)?).ok()?)?;
+    Some(format!(
+        "{day_name}, {d:02} {month_name} {y:04} {:02}:{:02}:{:02} GMT",
+        rem.div_euclid(3_600_000),
+        rem.div_euclid(60_000).rem_euclid(60),
+        rem.div_euclid(1000).rem_euclid(60)
+    ))
 }
 
 /// Why a `< path` body file could not be loaded.
@@ -827,10 +885,17 @@ mod tests {
 
     #[test]
     fn civil_dates_are_right_on_the_boundaries() {
-        assert_eq!(iso8601(0), "1970-01-01T00:00:00.000Z");
-        assert_eq!(iso8601(951_782_400_000), "2000-02-29T00:00:00.000Z");
-        assert_eq!(rfc1123(0), "Thu, 01 Jan 1970 00:00:00 GMT");
-        assert_eq!(iso8601(-1), "1969-12-31T23:59:59.999Z");
+        assert_eq!(iso8601(0).as_deref(), Some("1970-01-01T00:00:00.000Z"));
+        assert_eq!(
+            iso8601(951_782_400_000).as_deref(),
+            Some("2000-02-29T00:00:00.000Z")
+        );
+        assert_eq!(rfc1123(0).as_deref(), Some("Thu, 01 Jan 1970 00:00:00 GMT"));
+        assert_eq!(iso8601(-1).as_deref(), Some("1969-12-31T23:59:59.999Z"));
+        // The largest instant still has a calendar date; only a day count near
+        // `i64::MAX` itself overflows.
+        assert!(iso8601(i64::MAX).is_some());
+        assert_eq!(civil_from_days(i64::MAX), None);
     }
 
     #[test]
