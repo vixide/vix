@@ -28,11 +28,25 @@ pub const MAX_FRAME: usize = 64 * 1024 * 1024;
 /// The most file bytes one request or reply carries. A larger read or write
 /// is refused with [`ErrorCode::TooBig`] (the SSH authority then uses its
 /// shell scripts for that one operation).
-pub const MAX_DATA: u64 = (MAX_FRAME - 64 * 1024) as u64;
+pub const MAX_DATA: u64 = 64 * 1024 * 1024 - 64 * 1024;
 
 /// The most operations in one [`Op::Batch`], paths in one [`Op::Watch`], or
 /// items in any list other than a directory listing or a walk.
 pub const MAX_BATCH: usize = 4096;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Write one frame holding `payload`.
 ///
@@ -61,21 +75,25 @@ pub fn read_frame(r: &mut impl Read) -> io::Result<Option<Vec<u8>>> {
     let mut head = [0u8; 4];
     let mut got = 0;
     while got < head.len() {
-        match r.read(&mut head[got..]) {
+        let Some(room) = head.get_mut(got..) else {
+            break;
+        };
+        match r.read(room) {
             Ok(0) if got == 0 => return Ok(None),
             Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
-            Ok(n) => got += n,
+            Ok(n) => got = add_or(got, n, usize::MAX),
             Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(e) => return Err(e),
         }
     }
-    let len = u32::from_be_bytes(head) as usize;
+    let len = usize::try_from(u32::from_be_bytes(head)).map_err(|_| bad("frame too large"))?;
     if len > MAX_FRAME {
         return Err(bad("frame too large"));
     }
     // Read through `take`, so a lying length allocates only what arrives.
     let mut payload = Vec::new();
-    r.take(len as u64).read_to_end(&mut payload)?;
+    r.take(u64::try_from(len).map_err(|_| bad("frame too large"))?)
+        .read_to_end(&mut payload)?;
     if payload.len() < len {
         return Err(io::ErrorKind::UnexpectedEof.into());
     }
@@ -586,14 +604,14 @@ impl Enc {
                 match opts.max_depth {
                     Some(d) => {
                         self.u8(1);
-                        self.u64(d as u64);
+                        self.u64(u64::try_from(d).unwrap_or(u64::MAX));
                     }
                     None => self.u8(0),
                 }
                 self.bool(opts.skip_hidden);
                 self.bool(opts.honor_ignore_files);
                 self.list(&opts.prune_dirs, |e, d| e.str(d));
-                self.u64(opts.limit as u64);
+                self.u64(u64::try_from(opts.limit).unwrap_or(u64::MAX));
             }
             Op::Which { name } => {
                 self.u8(17);
@@ -731,7 +749,7 @@ type R<T> = Result<T, &'static str>;
 impl<'a> Dec<'a> {
     /// Bytes not yet consumed.
     fn left(&self) -> usize {
-        self.buf.len() - self.pos
+        sub_or(self.buf.len(), self.pos, 0)
     }
     /// Consume exactly `n` bytes, or fail with `"truncated"` without
     /// advancing. Every length-prefixed read goes through here, so a lying
@@ -740,12 +758,13 @@ impl<'a> Dec<'a> {
         if n > self.left() {
             return Err("truncated");
         }
-        let s = &self.buf[self.pos..self.pos + n];
-        self.pos += n;
+        let end = self.pos.checked_add(n).ok_or("truncated")?;
+        let s = self.buf.get(self.pos..end).ok_or("truncated")?;
+        self.pos = end;
         Ok(s)
     }
     fn u8(&mut self) -> R<u8> {
-        Ok(self.take(1)?[0])
+        self.take(1)?.first().copied().ok_or("truncated")
     }
     /// A strict bool: only 0 and 1 are valid.
     fn bool(&mut self) -> R<bool> {
@@ -756,17 +775,15 @@ impl<'a> Dec<'a> {
         }
     }
     fn u32(&mut self) -> R<u32> {
-        let b = self.take(4)?;
-        Ok(u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+        let b: [u8; 4] = self.take(4)?.try_into().map_err(|_| "truncated")?;
+        Ok(u32::from_be_bytes(b))
     }
     fn u64(&mut self) -> R<u64> {
-        let b = self.take(8)?;
-        let mut a = [0u8; 8];
-        a.copy_from_slice(b);
-        Ok(u64::from_be_bytes(a))
+        let b: [u8; 8] = self.take(8)?.try_into().map_err(|_| "truncated")?;
+        Ok(u64::from_be_bytes(b))
     }
     fn bytes(&mut self) -> R<Vec<u8>> {
-        let n = self.u32()? as usize;
+        let n = usize::try_from(self.u32()?).map_err(|_| "bad length")?;
         Ok(self.take(n)?.to_vec())
     }
     fn str(&mut self) -> R<String> {
@@ -775,8 +792,8 @@ impl<'a> Dec<'a> {
     /// A list count, checked against the bytes left (each item takes at
     /// least `min` bytes) and against `cap`.
     fn count(&mut self, min: usize, cap: usize) -> R<usize> {
-        let n = self.u32()? as usize;
-        if n > cap || n.saturating_mul(min) > self.left() {
+        let n = usize::try_from(self.u32()?).map_err(|_| "bad count")?;
+        if n > cap || n.checked_mul(min).is_none_or(|need| need > self.left()) {
             return Err("bad count");
         }
         Ok(n)
@@ -942,7 +959,7 @@ impl<'a> Dec<'a> {
         let tag = self.u8()?;
         Ok(match tag {
             0 => {
-                let code = *CODES.get(self.u8()? as usize).ok_or("bad code")?;
+                let code = *CODES.get(usize::from(self.u8()?)).ok_or("bad code")?;
                 Reply::Err {
                     code,
                     message: self.str()?,
@@ -1034,7 +1051,7 @@ pub fn decode_stream(input: &[u8]) -> usize {
         if decode(&payload).is_err() {
             break;
         }
-        n += 1;
+        n = add_or(n, 1, usize::MAX);
     }
     n
 }

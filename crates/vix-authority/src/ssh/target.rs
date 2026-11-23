@@ -9,6 +9,12 @@
 //! [`crate::container`]; [`crate::remote::RemoteTarget`] unifies both. Owning
 //! spec: `crates/vix-authority/spec/ssh/index.md`.
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Where a remote path lives: the SSH login and the path on that machine.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -124,10 +130,7 @@ impl SshTarget {
     /// A [`TargetError`] naming the bad part.
     pub fn parse(name: &str) -> Result<Self, TargetError> {
         if let Some(rest) = name.strip_prefix("ssh://") {
-            let (authority, path) = match rest.find('/') {
-                Some(i) => (&rest[..i], &rest[i..]),
-                None => (rest, ""),
-            };
+            let (authority, path) = rest.find('/').map_or((rest, ""), |i| rest.split_at(i));
             let (user, hostport) = split_user(authority);
             let user = user
                 .map(percent_decode)
@@ -145,14 +148,16 @@ impl SshTarget {
         if let Some(rest) = name.strip_prefix("/ssh:") {
             let (login, path) = if rest.starts_with('[') || rest.contains("@[") {
                 let close = rest.find(']').ok_or(TargetError::BadHost)?;
-                let colon = rest[close..]
-                    .find(':')
-                    .ok_or(TargetError::BadPath)?
-                    .saturating_add(close);
-                (&rest[..colon], &rest[colon + 1..])
+                let (before, after) = rest.split_at_checked(close).ok_or(TargetError::BadHost)?;
+                // The first `:` after the closing bracket ends the login.
+                let colon = after.find(':').ok_or(TargetError::BadPath)?;
+                let (bracketed, tail) =
+                    after.split_at_checked(colon).ok_or(TargetError::BadPath)?;
+                let login_len = add_or(before.len(), bracketed.len(), usize::MAX);
+                let login = rest.get(..login_len).ok_or(TargetError::BadPath)?;
+                (login, tail.strip_prefix(':').ok_or(TargetError::BadPath)?)
             } else {
-                let colon = rest.find(':').ok_or(TargetError::BadPath)?;
-                (&rest[..colon], &rest[colon + 1..])
+                rest.split_once(':').ok_or(TargetError::BadPath)?
             };
             let (user, hostport) = split_user(login);
             let (host, port) = split_host_port(hostport, '#')?;
@@ -213,8 +218,8 @@ impl std::fmt::Display for SshTarget {
 
 /// Split `user@rest` at the last `@`.
 fn split_user(text: &str) -> (Option<&str>, &str) {
-    match text.rfind('@') {
-        Some(i) => (Some(&text[..i]), &text[i + 1..]),
+    match text.rsplit_once('@') {
+        Some((user, rest)) => (Some(user), rest),
         None => (None, text),
     }
 }
@@ -222,14 +227,13 @@ fn split_user(text: &str) -> (Option<&str>, &str) {
 /// Split `host[<sep>port]`, with `[v6]` brackets.
 fn split_host_port(text: &str, sep: char) -> Result<(&str, Option<u16>), TargetError> {
     let (host, port) = if let Some(inner) = text.strip_prefix('[') {
-        let close = inner.find(']').ok_or(TargetError::BadHost)?;
-        let after = &inner[close + 1..];
+        let (host_text, after) = inner.split_once(']').ok_or(TargetError::BadHost)?;
         let port = match after.strip_prefix(sep) {
             Some(p) => Some(p),
             None if after.is_empty() => None,
             None => return Err(TargetError::BadHost),
         };
-        (&inner[..close], port)
+        (host_text, port)
     } else {
         match text.split_once(sep) {
             Some((h, p)) => (h, Some(p)),
@@ -295,17 +299,19 @@ pub(crate) fn check_path(path: &str) -> Result<String, TargetError> {
 /// Decode `%XX` escapes (the result must be UTF-8).
 pub(crate) fn percent_decode(text: &str) -> Result<String, TargetError> {
     let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
+    let mut out = Vec::new();
     let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' {
-            let hex = bytes.get(i + 1..i + 3).ok_or(TargetError::BadPath)?;
+    while let Some(&byte) = bytes.get(i) {
+        if byte == b'%' {
+            let hex = bytes
+                .get(add_or(i, 1, usize::MAX)..add_or(i, 3, usize::MAX))
+                .ok_or(TargetError::BadPath)?;
             let hex = std::str::from_utf8(hex).map_err(|_| TargetError::BadPath)?;
             out.push(u8::from_str_radix(hex, 16).map_err(|_| TargetError::BadPath)?);
-            i += 3;
+            i = add_or(i, 3, usize::MAX);
         } else {
-            out.push(bytes[i]);
-            i += 1;
+            out.push(byte);
+            i = add_or(i, 1, usize::MAX);
         }
     }
     String::from_utf8(out).map_err(|_| TargetError::BadPath)

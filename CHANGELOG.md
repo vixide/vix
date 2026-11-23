@@ -13,6 +13,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A `git blame` entry with a malformed author time or timezone is now reported as unreadable instead of dated 1970 or shown at the wrong offset.
 - A snippet tabstop whose number is too large for 32 bits (`$99999999999`) is now kept as literal text instead of becoming a stop capped at 4294967295.
 - In the terminal, `Ctrl` plus a digit or a non-ASCII character now sends that character instead of an arbitrary control byte (`Ctrl-1` used to send `q`).
+- **Breaking: the agent refuses a file `watch` whose interval is outside 100 to 60000 ms.** It used to move the interval into that range; the request now fails with an invalid-input error.
 - **Breaking: `vix-civil-date`'s `civil_from_days` returns `Option<(i64, i64, i64)>` and `days_from_civil` returns `Option<i64>`.** A month outside 1 to 12, a day outside 1 to 31, or a value too large for the arithmetic is `None` instead of a meaningless number or an overflow.
 - **Breaking: `vix-action-catalog`'s `dispatch_scan::every_dispatchable_action_id` returns `Result<BTreeSet<String>, String>`.** It used to panic when a dispatcher file could not be read or its function had drifted from the source.
 - **Breaking: `vix-edit-value`'s `Tree::to_text` returns `Result<String, serde_norway::Error>`.** A tree that cannot be written as YAML gave an empty text that the editor saved over the file; the editor now shows an error and saves nothing.

@@ -92,7 +92,9 @@ fn epoch(field: &str) -> Option<SystemTime> {
 pub(crate) fn epoch_secs(t: SystemTime) -> Option<i64> {
     match t.duration_since(SystemTime::UNIX_EPOCH) {
         Ok(d) => i64::try_from(d.as_secs()).ok(),
-        Err(e) => i64::try_from(e.duration().as_secs()).ok().map(|s| -s),
+        Err(e) => i64::try_from(e.duration().as_secs())
+            .ok()
+            .and_then(i64::checked_neg),
     }
 }
 

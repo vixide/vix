@@ -23,6 +23,11 @@ use std::sync::{Mutex, PoisonError};
 use crate::local::{read_limited_local, walk_local};
 use crate::{Authority, DirEntry, FileStat, ProcessSpec, TextFile, WalkOptions};
 
+/// `a + b` for the trash-name counter; it stops at the top of its type.
+fn add_u32(a: u32, b: u32) -> u32 {
+    a.checked_add(b).unwrap_or(a)
+}
+
 /// One recorded call on a [`FakeAuthority`]: the operation name (the trait
 /// method's name) and the virtual path it was given (the first one, for
 /// two-path operations; the program name for `which`/`command`).
@@ -336,7 +341,7 @@ impl Authority for FakeAuthority {
             let mut numbered = name.clone();
             numbered.push(format!(".{n}"));
             to = self.trash.join(numbered);
-            n += 1;
+            n = add_u32(n, 1);
         }
         vix_fileops::move_path(&from, &to)
     }

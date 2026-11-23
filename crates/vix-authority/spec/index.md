@@ -255,3 +255,7 @@ T712 shipped the SSH authority ([`spec/ssh`](ssh/index.md), with its own
 - ~~The external-change poll stats every open file each second; over SSH it
   wants batching (the remote agent, T717).~~ Done (T717): one
   `metadata_batch` per poll, one round trip with or without the agent.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The wire codec, SSH and container target parsing, remote listings and the scripts use `get`, `split_once`, `checked_*` and `try_from`; lengths never cast. **Changed:** a `watch` interval outside 100 to 60000 ms is refused by the agent with an `InvalidInput` error; it used to be moved into that band. **Declared (AUTH-F1):** the infallible `walk_files` answers an empty list when the walk fails; an `.env`-style missing namespace, pod or container is empty and then rejected by the target constructor; a trash-name counter stops at the top of its type.

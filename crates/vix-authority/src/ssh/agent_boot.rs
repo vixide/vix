@@ -131,15 +131,15 @@ fn upload_script(hash: &str, token: &str) -> String {
 /// The `"version"` value of a `vix --version --json` reply.
 pub(crate) fn json_version(json: &[u8]) -> Option<&str> {
     let text = std::str::from_utf8(json).ok()?;
-    let rest = &text[text.find("\"version\":\"")? + "\"version\":\"".len()..];
-    Some(&rest[..rest.find('"')?])
+    let (_, rest) = text.split_once("\"version\":\"")?;
+    rest.split_once('"').map(|(version, _)| version)
 }
 
 /// The probe's reply: the remote `uname -sm`, and each candidate's path
 /// and version.
 pub(crate) fn parse_probe(reply: &[u8]) -> (String, Vec<(PathBuf, String)>) {
     let mut fields = reply.split(|&b| b == 0);
-    let uname = String::from_utf8_lossy(fields.next().unwrap_or_default())
+    let uname = String::from_utf8_lossy(fields.next().unwrap_or(&[]))
         .trim()
         .to_string();
     let mut candidates = Vec::new();
