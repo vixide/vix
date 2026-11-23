@@ -150,9 +150,10 @@ pub fn parse_todo(text: &str) -> Vec<TodoItem> {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .map(|line| {
             let mut parts = line.splitn(3, char::is_whitespace);
-            let word = parts.next().unwrap_or_default();
-            let sha = parts.next().unwrap_or_default();
-            let subject = parts.next().unwrap_or_default().trim();
+            // A missing word or hash is empty, which makes the line `Other` below.
+            let word = parts.next().unwrap_or("");
+            let sha = parts.next().unwrap_or("");
+            let subject = parts.next().unwrap_or("").trim();
             match RebaseAction::from_word(word) {
                 Some(action) if !sha.is_empty() && !sha.starts_with('-') => {
                     TodoItem::Commit(TodoCommit {
@@ -303,18 +304,22 @@ impl RebaseTodo {
     /// Move the highlighted commit one row earlier (`Alt+↑`); the highlight
     /// follows it.
     pub fn move_up(&mut self) {
-        if self.selected > 0 && self.selected < self.commits.len() {
-            self.commits.swap(self.selected, self.selected - 1);
-            self.selected -= 1;
+        if let Some(earlier) = self.selected.checked_sub(1)
+            && self.selected < self.commits.len()
+        {
+            self.commits.swap(self.selected, earlier);
+            self.selected = earlier;
         }
     }
 
     /// Move the highlighted commit one row later (`Alt+↓`); the highlight
     /// follows it.
     pub fn move_down(&mut self) {
-        if self.selected + 1 < self.commits.len() {
-            self.commits.swap(self.selected, self.selected + 1);
-            self.selected += 1;
+        if let Some(later) = self.selected.checked_add(1)
+            && later < self.commits.len()
+        {
+            self.commits.swap(self.selected, later);
+            self.selected = later;
         }
     }
 

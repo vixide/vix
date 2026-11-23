@@ -235,3 +235,7 @@ Every runner sets `GIT_LITERAL_PATHSPECS=1`, so a path is always a file name
 and never a glob: staging `app/[id]/p` (a Next.js-style route folder) no longer
 also stages `app/i/p`. No caller relies on pathspec magic; one that ever needs
 it opts back in with `:(glob)`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Status, gutter and blame parsing use `chars`, `get`, `checked_*` and `skip` instead of slicing and casts. **Changed:** a blame entry whose `author-time` or `author-tz` is malformed (a zone that is not a sign and four digits with minutes below 60) is no longer read as time 0 or offset 0: the entry is `None`, as for any other unreadable entry. **Declared (GIT-F1):** outside a repository, or when git fails, the branch list is empty; a rebase todo line with no action word or hash is kept as an `Other` line; moving a rebase commit past either end does nothing. Diff run ends carry an `RCA-EXC-2` proof.

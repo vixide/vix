@@ -18,6 +18,18 @@
 //!   [`RebaseTodo`] edits one, and runners start, continue, and abort a rebase
 //!   and cherry-pick a commit.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Interactive rebase / cherry-pick (T633), stash (T634) and worktree (T634)
 // helpers live in their own files; their public items are re-exported flat
 // below so callers use `vix_git::<name>` regardless of which file defines it.
@@ -54,6 +66,25 @@ use std::path::PathBuf;
 use std::process::Command;
 #[cfg(feature = "process")]
 use std::sync::{Mutex, OnceLock};
+
+/// The end of a run of `len` lines starting at `start`. The runs come from a
+/// diff of two texts, so the end is at most their line count.
+fn span_end(start: usize, len: usize) -> usize {
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: a diff run lies inside the diffed text, so start + len is at most its line count"
+    )]
+    let end = start + len;
+    end
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// A kind of change to a file (in the index or the working tree).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -141,10 +172,14 @@ pub fn parse_status(output: &str) -> Vec<FileStatus> {
         if line.len() < 3 {
             continue;
         }
-        let bytes = line.as_bytes();
-        let x = bytes[0] as char;
-        let y = bytes[1] as char;
-        let rest = line[3..].trim_end();
+        let mut chars = line.chars();
+        let (Some(x), Some(y)) = (chars.next(), chars.next()) else {
+            continue;
+        };
+        // After the two status codes and a space comes the path.
+        let Some(rest) = line.get(3..).map(str::trim_end) else {
+            continue;
+        };
         // Rename/copy show "old -> new"; record the destination.
         let path = match rest.rsplit_once(" -> ") {
             Some((_, new)) => new.to_string(),
@@ -270,19 +305,19 @@ pub fn diff_marks(head: &str, current: &str) -> Vec<(usize, LineMark)> {
             DiffOp::Insert {
                 new_index, new_len, ..
             } => {
-                for i in new_index..new_index + new_len {
+                for i in new_index..span_end(new_index, new_len) {
                     marks.push((i, LineMark::Added));
                 }
             }
             DiffOp::Replace {
                 new_index, new_len, ..
             } => {
-                for i in new_index..new_index + new_len {
+                for i in new_index..span_end(new_index, new_len) {
                     marks.push((i, LineMark::Modified));
                 }
             }
             DiffOp::Delete { new_index, .. } => {
-                let at = new_index.min(current_lines.saturating_sub(1));
+                let at = new_index.min(sub_or(current_lines, 1, 0));
                 marks.push((at, LineMark::Deleted));
             }
             DiffOp::Equal { .. } => {}
@@ -375,10 +410,13 @@ pub fn hunks(head: &str, current: &str) -> Vec<Hunk> {
             } => (new_index, new_len, old_index, old_len),
         };
         run = Some(match run {
-            Some((nlo, nhi, olo, ohi)) => {
-                (nlo.min(ni), nhi.max(ni + nl), olo.min(oi), ohi.max(oi + ol))
-            }
-            None => (ni, ni + nl, oi, oi + ol),
+            Some((nlo, nhi, olo, ohi)) => (
+                nlo.min(ni),
+                nhi.max(span_end(ni, nl)),
+                olo.min(oi),
+                ohi.max(span_end(oi, ol)),
+            ),
+            None => (ni, span_end(ni, nl), oi, span_end(oi, ol)),
         });
     }
     flush(&mut run, &mut out);
@@ -427,9 +465,10 @@ pub fn parse_blame_porcelain(output: &str) -> Option<BlameLine> {
         if let Some(name) = line.strip_prefix("author ") {
             author = name.to_string();
         } else if let Some(secs) = line.strip_prefix("author-time ") {
-            time = secs.trim().parse().unwrap_or(0);
+            // A malformed time is a malformed blame entry.
+            time = secs.trim().parse().ok()?;
         } else if let Some(off) = line.strip_prefix("author-tz ") {
-            tz = parse_tz_offset(off.trim());
+            tz = parse_tz_offset(off.trim())?;
         } else if let Some(s) = line.strip_prefix("summary ") {
             summary = s.to_string();
         }
@@ -438,34 +477,41 @@ pub fn parse_blame_porcelain(output: &str) -> Option<BlameLine> {
     Some(BlameLine {
         hash,
         author,
-        date: epoch_to_date(time, tz),
+        date: epoch_to_date(time, tz)?,
         summary,
     })
 }
 
 /// Parse a git tz offset like `+0200` / `-0500` into seconds east of UTC.
-fn parse_tz_offset(tz: &str) -> i32 {
+/// `None` for anything that is not a sign and four digits with minutes below 60.
+fn parse_tz_offset(tz: &str) -> Option<i32> {
     let sign = if tz.starts_with('-') { -1 } else { 1 };
     let digits: String = tz.chars().filter(char::is_ascii_digit).collect();
-    if digits.len() < 4 {
-        return 0;
+    if digits.len() != 4 {
+        return None;
     }
-    let hours: i32 = digits[0..2].parse().unwrap_or(0);
-    let mins: i32 = digits[2..4].parse().unwrap_or(0);
-    sign * (hours * 3600 + mins * 60)
+    let hours: i32 = digits.get(0..2)?.parse().ok()?;
+    let mins: i32 = digits.get(2..4)?.parse().ok()?;
+    if mins >= 60 {
+        return None;
+    }
+    // Hours are two digits and minutes below 60, so this is far below i32::MAX.
+    hours
+        .checked_mul(3600)?
+        .checked_add(mins.checked_mul(60)?)?
+        .checked_mul(sign)
 }
 
 /// Convert a Unix `secs` (+ `tz_offset` seconds east of UTC) to a `YYYY-MM-DD`
-/// calendar date.
+/// calendar date. `None` when the shifted time does not fit.
 ///
 /// Delegates to `vix-civil-date` (Run H, T520) — this crate,
 /// `vix-file-information-panel`, and `vix-org` used to each hand-roll an
 /// independent copy of the same day-count-to-calendar-date algorithm.
-#[must_use]
-fn epoch_to_date(secs: i64, tz_offset: i32) -> String {
-    let days = (secs + i64::from(tz_offset)).div_euclid(86_400);
+fn epoch_to_date(secs: i64, tz_offset: i32) -> Option<String> {
+    let days = secs.checked_add(i64::from(tz_offset))?.div_euclid(86_400);
     let (y, m, d) = vix_civil_date::civil_from_days(days);
-    format!("{y:04}-{m:02}-{d:02}")
+    Some(format!("{y:04}-{m:02}-{d:02}"))
 }
 
 #[cfg(feature = "process")]
@@ -750,8 +796,9 @@ fn relative_to_prefix(prefix: &str, path: &str) -> String {
     let base: Vec<&str> = prefix.split('/').filter(|p| !p.is_empty()).collect();
     let target: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
     let common = base.iter().zip(&target).take_while(|(a, b)| a == b).count();
-    let mut parts: Vec<&str> = vec![".."; base.len() - common];
-    parts.extend(&target[common..]);
+    // `common` is at most `base.len()`, as it counts a prefix of `base`.
+    let mut parts: Vec<&str> = vec![".."; sub_or(base.len(), common, 0)];
+    parts.extend(target.iter().skip(common));
     parts.join("/")
 }
 
@@ -1049,7 +1096,10 @@ pub fn commit_count(dir: &Path) -> Option<u64> {
 /// The local branch names, current branch first when it can be determined.
 #[must_use]
 pub fn local_branches(dir: &Path) -> Vec<String> {
-    let out = git_stdout(dir, &["branch", "--format=%(refname:short)"]).unwrap_or_default();
+    // Outside a repository, or when git fails, there are no branches to list.
+    let Some(out) = git_stdout(dir, &["branch", "--format=%(refname:short)"]) else {
+        return Vec::new();
+    };
     let mut names: Vec<String> = out
         .lines()
         .map(str::trim)
@@ -1833,11 +1883,36 @@ mod tests {
     }
 
     #[test]
+    fn a_malformed_blame_time_or_zone_is_not_a_blame_line() {
+        let head = "0123456789012345678901234567890123456789 1 1 1\nauthor Ann\n";
+        assert!(
+            parse_blame_porcelain(&format!(
+                "{head}author-time 1700000000\nauthor-tz +0200\nsummary s\n"
+            ))
+            .is_some()
+        );
+        assert!(
+            parse_blame_porcelain(&format!("{head}author-time soon\nauthor-tz +0200\n")).is_none()
+        );
+        assert!(parse_blame_porcelain(&format!("{head}author-time 1\nauthor-tz +02\n")).is_none());
+        assert!(
+            parse_blame_porcelain(&format!("{head}author-time 1\nauthor-tz +0299\n")).is_none()
+        );
+        assert_eq!(parse_tz_offset("-0530"), Some(-(5 * 3600 + 30 * 60)));
+    }
+
+    #[test]
     fn epoch_to_date_applies_tz_offset() {
         // 1700000000 is 2023-11-14 22:13:20 UTC; +0200 rolls it into the 15th.
-        assert_eq!(epoch_to_date(1_700_000_000, 0), "2023-11-14");
-        assert_eq!(epoch_to_date(1_700_000_000, 2 * 3600), "2023-11-15");
-        assert_eq!(epoch_to_date(0, 0), "1970-01-01");
+        assert_eq!(
+            epoch_to_date(1_700_000_000, 0).as_deref(),
+            Some("2023-11-14")
+        );
+        assert_eq!(
+            epoch_to_date(1_700_000_000, 2 * 3600).as_deref(),
+            Some("2023-11-15")
+        );
+        assert_eq!(epoch_to_date(0, 0).as_deref(), Some("1970-01-01"));
     }
 
     #[test]
