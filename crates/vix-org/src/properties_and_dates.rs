@@ -7,6 +7,18 @@
 //! `text_refs::column_view` needs `TAGS` too. `line_of_char` stays
 //! `pub(crate)` for `text_refs`'s Footnotes functions.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt::Write as _;
 use std::sync::LazyLock;
 
@@ -14,6 +26,7 @@ use regex::Regex;
 
 use super::{drawer_range, governing, headline_level, relevel, subtree_range};
 use crate::agenda::days_from_civil;
+use crate::{add_or, line_at, next, sub_or};
 
 // ----- Tags & properties -----------------------------------------------------
 
@@ -32,7 +45,7 @@ pub fn get_tags(text: &str, line: usize) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let h = governing(&lines, line)?;
     Some(
-        TAGS.captures(lines[h])
+        TAGS.captures(line_at(&lines, h))
             .map_or_else(String::new, |c| c[1].trim_matches(':').replace("::", ":")),
     )
 }
@@ -43,13 +56,13 @@ pub fn get_tags(text: &str, line: usize) -> Option<String> {
 pub fn set_tags(text: &str, line: usize, tags: &str) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let h = governing(&lines, line)?;
-    let head = TAGS.replace(lines[h], "").trim_end().to_string();
+    let head = TAGS.replace(line_at(&lines, h), "").trim_end().to_string();
     let list: Vec<&str> = tags
         .split([':', ',', ' ', '\t'])
         .filter(|s| !s.is_empty())
         .collect();
     let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
-    out[h] = if list.is_empty() {
+    *out.get_mut(h)? = if list.is_empty() {
         head
     } else {
         format!("{head} :{}:", list.join(":"))
@@ -87,22 +100,26 @@ pub(crate) fn is_planning(line: &str) -> bool {
 pub fn set_property(text: &str, line: usize, name: &str, value: &str) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let h = governing(&lines, line)?;
-    let mut at = h + 1;
-    if at < lines.len() && is_planning(lines[at]) {
-        at += 1;
+    let mut at = next(h);
+    if at < lines.len() && is_planning(line_at(&lines, at)) {
+        at = next(at);
     }
     let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
     let entry = format!(":{name}: {value}");
     let needle = format!(":{}:", name.to_ascii_lowercase());
-    if at < lines.len() && lines[at].trim().eq_ignore_ascii_case(":PROPERTIES:") {
+    if at < lines.len()
+        && line_at(&lines, at)
+            .trim()
+            .eq_ignore_ascii_case(":PROPERTIES:")
+    {
         let (_, end) = drawer_range(&lines, at)?;
-        if let Some(i) = (at + 1..end).find(|&i| {
-            lines[i]
+        if let Some(i) = (next(at)..end).find(|&i| {
+            line_at(&lines, i)
                 .trim_start()
                 .to_ascii_lowercase()
                 .starts_with(&needle)
         }) {
-            out[i] = entry;
+            *out.get_mut(i)? = entry;
         } else {
             out.insert(end, entry);
         }
@@ -125,9 +142,13 @@ pub fn archive_subtree(text: &str, line: usize, time: &str) -> Option<(String, S
     let lines: Vec<&str> = text.split('\n').collect();
     let h = governing(&lines, line)?;
     let (ss, se) = subtree_range(&lines, h)?;
-    let level = headline_level(lines[ss])?;
-    let delta = 1 - i64::try_from(level).ok()?;
-    let block: Vec<String> = lines[ss..se].iter().map(|l| relevel(l, delta)).collect();
+    let level = headline_level(line_at(&lines, ss))?;
+    let delta = 1_i64.checked_sub(i64::try_from(level).ok()?)?;
+    let block: Vec<String> = lines
+        .get(ss..se)?
+        .iter()
+        .map(|l| relevel(l, delta))
+        .collect();
     let block = set_property(&block.join("\n"), 0, "ARCHIVE_TIME", time)?;
     let rest: Vec<&str> = lines
         .iter()
@@ -143,7 +164,7 @@ pub fn archive_subtree(text: &str, line: usize, time: &str) -> Option<(String, S
 /// Parse `YYYY-MM-DD` into `(year, month, day)`.
 fn parse_ymd(s: &str) -> Option<(i64, i64, i64)> {
     let bytes = s.as_bytes();
-    if s.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+    if s.len() != 10 || bytes.get(4) != Some(&b'-') || bytes.get(7) != Some(&b'-') {
         return None;
     }
     let year: i64 = s.get(..4).unwrap_or_default().parse().ok()?;
@@ -161,16 +182,18 @@ fn civil_from_days(z: i64) -> Option<(i64, i64, i64)> {
     vix_civil_date::civil_from_days(z)
 }
 
-/// Three-letter weekday for days since 1970-01-01 (a Thursday).
-#[expect(
-    clippy::expect_used,
-    reason = "the value is bounded well below the target type"
-)]
 /// Weekday abbreviation for a day count since 1970-01-01 (a Thursday, hence the
 /// table starting at `Thu`); `rem_euclid` keeps pre-1970 dates correct.
 fn weekday_name(days: i64) -> &'static str {
-    ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"]
-        [usize::try_from(days.rem_euclid(7)).expect("rem_euclid(7) fits usize")]
+    match days.rem_euclid(7) {
+        0 => "Thu",
+        1 => "Fri",
+        2 => "Sat",
+        3 => "Sun",
+        4 => "Mon",
+        5 => "Tue",
+        _ => "Wed",
+    }
 }
 
 /// An Org timestamp for a `YYYY-MM-DD` date with the weekday computed:
@@ -201,12 +224,12 @@ pub(crate) fn line_of_char(text: &str, cursor: usize) -> (usize, usize) {
     let mut start = 0;
     for (i, l) in text.split('\n').enumerate() {
         let len = l.chars().count();
-        if cursor <= start + len {
+        if cursor <= add_or(start, len, usize::MAX) {
             return (i, start);
         }
-        start += len + 1;
+        start = add_or(start, next(len), usize::MAX);
     }
-    (text.split('\n').count().saturating_sub(1), start)
+    (sub_or(text.split('\n').count(), 1, 0), start)
 }
 
 /// Shift the date under the cursor by `delta_days`, rewriting its weekday (Org
@@ -217,20 +240,26 @@ pub fn shift_timestamp_at(text: &str, cursor: usize, delta_days: i64) -> Option<
     let (line_idx, line_start) = line_of_char(text, cursor);
     let lines: Vec<&str> = text.split('\n').collect();
     let l = *lines.get(line_idx)?;
-    let col = cursor - line_start.min(cursor);
+    let col = sub_or(cursor, line_start.min(cursor), 0);
     let matches: Vec<regex::Match> = DATE.find_iter(l).collect();
     let m = matches
         .iter()
         .find(|m| {
             let sc = l.get(..m.start()).unwrap_or_default().chars().count();
-            let ec = sc
-                + l.get(m.start()..m.end())
+            let ec = add_or(
+                sc,
+                l.get(m.start()..m.end())
                     .unwrap_or_default()
                     .chars()
-                    .count();
+                    .count(),
+                usize::MAX,
+            );
             (sc..=ec).contains(&col)
         })
-        .or_else(|| (matches.len() == 1).then(|| &matches[0]))?;
+        .or(match matches.as_slice() {
+            [only] => Some(only),
+            _ => None,
+        })?;
     let (y, mo, d) = parse_ymd(m.as_str().get(..10)?)?;
     let days = days_from_civil(y, mo, d)?.checked_add(delta_days)?;
     let (ny, nm, nd) = civil_from_days(days)?;
@@ -245,7 +274,7 @@ pub fn shift_timestamp_at(text: &str, cursor: usize, delta_days: i64) -> Option<
         l.get(m.end()..).unwrap_or_default()
     );
     let mut out: Vec<&str> = lines.clone();
-    out[line_idx] = &new_line;
+    *out.get_mut(line_idx)? = &new_line;
     Some((out.join("\n"), cursor))
 }
 
@@ -257,15 +286,16 @@ pub fn shift_timestamp_at(text: &str, cursor: usize, delta_days: i64) -> Option<
 pub fn plan(text: &str, line: usize, keyword: &str, stamp: &str) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let h = governing(&lines, line)?;
-    let pl = h + 1;
+    let pl = next(h);
+    let planning = line_at(&lines, pl);
     let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
-    if pl < lines.len() && is_planning(lines[pl]) {
+    if pl < lines.len() && is_planning(planning) {
         let re = Regex::new(&format!(r"{keyword}:\s*[<\[][^>\]]*[>\]]")).ok()?;
-        out[pl] = if re.is_match(lines[pl]) {
-            re.replace(lines[pl], format!("{keyword}: {stamp}").as_str())
+        *out.get_mut(pl)? = if re.is_match(planning) {
+            re.replace(planning, format!("{keyword}: {stamp}").as_str())
                 .into_owned()
         } else {
-            format!("{} {keyword}: {stamp}", lines[pl].trim_end())
+            format!("{} {keyword}: {stamp}", planning.trim_end())
         };
     } else {
         out.insert(pl, format!("{keyword}: {stamp}"));

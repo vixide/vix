@@ -611,3 +611,9 @@ Org *content* insertion (snippets, inline markers, blocks) lives under
   placeholder expansion (its own crate).
 - [Org tables](../../vix-org-table/spec/index.md) — the built-in table editor
   and `TBLFM` formulas (its own crate).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, the whole crate denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Code reads lines through `get`, `line_at` and `split_at_checked` instead of indexing and slicing. A line number the text does not have is not a headline: every function that takes one returns `None` or leaves the text as it was. Declared fallbacks, each the correct answer to a failed operation on valid data: a line index or count that would pass the top of `usize` stays at the top; a headline level shift that would go below 1 stays at 1 (relevel); a clock total or statistics total past its type stays at the maximum; a time or age summary whose sum does not fit leaves its cell empty.
+
+`clock_out` returns `None` when the end timestamp cannot be read or is before the start; it used to write a duration of 0:00. A numeric time or age value that is not finite, or that does not fit 64 bits, is not a duration and does not parse.

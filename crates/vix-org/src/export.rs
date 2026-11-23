@@ -5,6 +5,18 @@
 //! `text_refs.rs`'s Hyperlinks functions need them too. `safe_href` stays
 //! `pub(crate)`: `lib.rs`'s own test module asserts on it directly.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt::Write as _;
 use std::sync::LazyLock;
 

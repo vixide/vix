@@ -7,11 +7,31 @@
 //! prefix. `headline_todo` stays `pub(crate)` too, for the "Other built-in
 //! agenda views" section's stuck-project/next-action checks.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{DONE, TODO, headline_level, set_headline_keyword, subtree_range};
+use super::{
+    DONE, TODO, add_or, headline_level, line_at, next, set_headline_keyword, sub_or, subtree_range,
+};
+
+/// Line `i` of an owned-line buffer, or the empty line past the end (callers
+/// iterate indices that exist, so the empty line is never observed).
+fn owned_at(lines: &[String], i: usize) -> &str {
+    lines.get(i).map_or("", String::as_str)
+}
 
 // ----- Priority ---------------------------------------------------------
 
@@ -47,7 +67,7 @@ pub(crate) fn strip_priority(body: &str) -> Option<(char, &str)> {
 #[must_use]
 pub fn priority(headline: &str) -> Option<char> {
     let stars = headline_level(headline)?;
-    let (_, rest) = headline.split_at(stars + 1);
+    let (_, rest) = headline.split_at_checked(next(stars))?;
     let (_, body) = split_keyword(rest);
     strip_priority(body).map(|(p, _)| p)
 }
@@ -60,7 +80,7 @@ pub fn set_priority(text: &str, line: usize, priority: Option<char>) -> Option<S
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
     let headline = lines.get(line)?;
     let stars = headline_level(headline)?;
-    let (prefix, rest) = headline.split_at(stars + 1);
+    let (prefix, rest) = headline.split_at_checked(next(stars))?;
     let (keyword, body) = split_keyword(rest);
     let bare = strip_priority(body).map_or(body, |(_, after)| after);
     let new_body = match priority {
@@ -68,7 +88,8 @@ pub fn set_priority(text: &str, line: usize, priority: Option<char>) -> Option<S
         Some(p) => format!("[#{p}] {bare}"),
         None => bare.to_string(),
     };
-    lines[line] = format!("{prefix}{keyword}{new_body}");
+    let rewritten = format!("{prefix}{keyword}{new_body}");
+    *lines.get_mut(line)? = rewritten;
     Some(lines.join("\n"))
 }
 
@@ -76,9 +97,9 @@ pub fn set_priority(text: &str, line: usize, priority: Option<char>) -> Option<S
 /// that order (so index 0 is always `highest`).
 fn priority_range(highest: char, lowest: char) -> Vec<char> {
     let (lo, hi) = if highest <= lowest {
-        (highest as u32, lowest as u32)
+        (u32::from(highest), u32::from(lowest))
     } else {
-        (lowest as u32, highest as u32)
+        (u32::from(lowest), u32::from(highest))
     };
     let mut chars: Vec<char> = (lo..=hi).filter_map(char::from_u32).collect();
     if highest > lowest {
@@ -106,9 +127,9 @@ fn step_priority(
         None => default,
         Some(idx) => {
             let new_idx = if up {
-                idx.saturating_sub(1)
+                sub_or(idx, 1, 0)
             } else {
-                (idx + 1).min(order.len().saturating_sub(1))
+                next(idx).min(sub_or(order.len(), 1, 0))
             };
             order.get(new_idx).copied().unwrap_or(default)
         }
@@ -160,17 +181,18 @@ pub fn priority_down(
 pub fn close_headline(text: &str, line: usize, now: &str, note: &str) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
     let level = headline_level(lines.get(line)?)?;
-    lines[line] = set_headline_keyword(&lines[line], DONE);
+    let marked = set_headline_keyword(lines.get(line)?, DONE);
+    *lines.get_mut(line)? = marked;
 
     // The CLOSED planning line sits immediately under the headline; refresh an
     // existing one rather than stacking duplicates.
     let closed = format!("CLOSED: [{now}]");
-    let closed_idx = line + 1;
+    let closed_idx = next(line);
     if lines
         .get(closed_idx)
         .is_some_and(|l| l.trim_start().starts_with("CLOSED:"))
     {
-        lines[closed_idx] = closed;
+        *lines.get_mut(closed_idx)? = closed;
     } else {
         lines.insert(closed_idx, closed);
     }
@@ -179,22 +201,22 @@ pub fn close_headline(text: &str, line: usize, now: &str, note: &str) -> Option<
         let mut entry: Vec<String> = vec![format!("- Note taken on [{now}] \\\\")];
         entry.extend(note.split('\n').map(|l| format!("  {l}")));
         // The subtree body runs until the next headline of the same/higher level.
-        let mut end = closed_idx + 1;
-        while end < lines.len() && headline_level(&lines[end]).is_none_or(|l| l > level) {
-            end += 1;
+        let mut end = next(closed_idx);
+        while end < lines.len() && headline_level(owned_at(&lines, end)).is_none_or(|l| l > level) {
+            end = next(end);
         }
-        if let Some(lb) =
-            (closed_idx + 1..end).find(|&i| lines[i].trim().eq_ignore_ascii_case(":LOGBOOK:"))
+        if let Some(lb) = (next(closed_idx)..end)
+            .find(|&i| owned_at(&lines, i).trim().eq_ignore_ascii_case(":LOGBOOK:"))
         {
             for (k, e) in entry.into_iter().enumerate() {
-                lines.insert(lb + 1 + k, e);
+                lines.insert(add_or(next(lb), k, usize::MAX).min(lines.len()), e);
             }
         } else {
             let mut drawer = vec![":LOGBOOK:".to_string()];
             drawer.extend(entry);
             drawer.push(":END:".to_string());
             for (k, d) in drawer.into_iter().enumerate() {
-                lines.insert(closed_idx + 1 + k, d);
+                lines.insert(add_or(next(closed_idx), k, usize::MAX).min(lines.len()), d);
             }
         }
     }
@@ -226,11 +248,12 @@ pub fn toggle_checkbox(text: &str, line: usize) -> Option<String> {
     let mark = caps.get(2)?.as_str();
     let new_mark = if mark == " " { "x" } else { " " };
     let lead_end = caps.get(1)?.end();
-    let rest = target.get(lead_end + 3..).unwrap_or_default(); // skip "[m]"
-    lines[line] = format!(
+    let rest = target.get(add_or(lead_end, 3, usize::MAX)..)?; // skip "[m]"
+    let toggled = format!(
         "{}[{new_mark}]{rest}",
         target.get(..lead_end).unwrap_or_default()
     );
+    *lines.get_mut(line)? = toggled;
     Some(lines.join("\n"))
 }
 
@@ -246,7 +269,7 @@ static COOKIE: LazyLock<Regex> =
 
 /// The indentation (leading-whitespace width) of a line.
 fn indent_of(line: &str) -> usize {
-    line.len() - line.trim_start().len()
+    sub_or(line.len(), line.trim_start().len(), 0)
 }
 
 /// Rewrite the first statistics cookie in `line` for `done`/`total`, preserving
@@ -257,7 +280,10 @@ fn set_cookie(line: &str, done: usize, total: usize) -> String {
         return line.to_string();
     };
     let replacement = if m.as_str().contains('%') {
-        let pct = (done * 100).checked_div(total).unwrap_or(0);
+        let pct = done
+            .checked_mul(100)
+            .and_then(|scaled| scaled.checked_div(total))
+            .unwrap_or(0);
         format!("[{pct}%]")
     } else {
         format!("[{done}/{total}]")
@@ -278,7 +304,8 @@ fn set_checkbox_mark(line: &str, mark: char) -> String {
     format!(
         "{}[{mark}]{}",
         line.get(..lead_end).unwrap_or_default(),
-        line.get(lead_end + 3..).unwrap_or_default()
+        line.get(add_or(lead_end, 3, usize::MAX)..)
+            .unwrap_or_default()
     )
 }
 
@@ -377,39 +404,49 @@ fn update_checkboxes(lines: &mut [String]) {
     let mut parent: Vec<Option<usize>> = vec![None; items.len()];
     let mut stack: Vec<usize> = Vec::new();
     for k in 0..items.len() {
-        if k > 0
-            && (items[k - 1].line + 1..items[k].line).any(|li| headline_level(&lines[li]).is_some())
+        let Some(item) = items.get(k) else {
+            continue;
+        };
+        if let Some(prev) = k.checked_sub(1).and_then(|p| items.get(p))
+            && (next(prev.line)..item.line).any(|li| headline_level(owned_at(lines, li)).is_some())
         {
             stack.clear();
         }
         while stack
             .last()
-            .is_some_and(|&top| items[top].indent >= items[k].indent)
+            .is_some_and(|&top| items.get(top).is_some_and(|t| t.indent >= item.indent))
         {
             stack.pop();
         }
-        parent[k] = stack.last().copied();
+        if let Some(slot) = parent.get_mut(k) {
+            *slot = stack.last().copied();
+        }
         stack.push(k);
     }
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); items.len()];
     for (k, p) in parent.iter().enumerate() {
-        if let Some(p) = *p {
-            children[p].push(k);
+        if let Some(list) = p.and_then(|p| children.get_mut(p)) {
+            list.push(k);
         }
     }
     // Process deepest items first so a parent sees its children's final marks.
     let mut order: Vec<usize> = (0..items.len()).collect();
-    order.sort_by_key(|&k| std::cmp::Reverse(items[k].indent));
+    order.sort_by_key(|&k| std::cmp::Reverse(items.get(k).map_or(0, |it| it.indent)));
     for k in order {
-        if children[k].is_empty() {
+        let Some(kids) = children.get(k) else {
+            continue;
+        };
+        if kids.is_empty() {
             continue;
         }
-        let total = children[k].len();
-        let done = children[k]
+        let total = kids.len();
+        let done = kids
             .iter()
-            .filter(|&&c| matches!(items[c].mark, 'x' | 'X'))
+            .filter(|&&c| items.get(c).is_some_and(|it| matches!(it.mark, 'x' | 'X')))
             .count();
-        let any_partial = children[k].iter().any(|&c| items[c].mark == '-');
+        let any_partial = kids
+            .iter()
+            .any(|&c| items.get(c).is_some_and(|it| it.mark == '-'));
         let new_mark = if done == total {
             'X'
         } else if done == 0 && !any_partial {
@@ -417,58 +454,66 @@ fn update_checkboxes(lines: &mut [String]) {
         } else {
             '-'
         };
-        items[k].mark = new_mark;
-        let li = items[k].line;
-        lines[li] = set_checkbox_mark(&lines[li], new_mark);
-        lines[li] = set_cookie(&lines[li], done, total);
+        let Some(item) = items.get_mut(k) else {
+            continue;
+        };
+        item.mark = new_mark;
+        let Some(slot) = lines.get_mut(item.line) else {
+            continue;
+        };
+        let marked = set_checkbox_mark(slot, new_mark);
+        *slot = set_cookie(&marked, done, total);
     }
 }
 
 /// Update statistics cookies that live in headlines (second pass).
 fn update_headline_cookies(lines: &mut [String]) {
     let levels: Vec<Option<usize>> = lines.iter().map(|l| headline_level(l)).collect();
+    let level_at = |j: usize| levels.get(j).copied().flatten();
     for h in 0..lines.len() {
-        let Some(level) = levels[h] else { continue };
-        if !COOKIE.is_match(&lines[h]) {
+        let Some(level) = level_at(h) else { continue };
+        if !COOKIE.is_match(owned_at(lines, h)) {
             continue;
         }
         // The subtree runs until the next headline of the same or higher level.
-        let mut end = h + 1;
-        while end < lines.len() && levels[end].is_none_or(|l| l > level) {
-            end += 1;
+        let mut end = next(h);
+        while end < lines.len() && level_at(end).is_none_or(|l| l > level) {
+            end = next(end);
         }
-        let drawer: Vec<String> = lines[h + 1..end].to_vec();
-        let body_end = (h + 1..end).find(|&j| levels[j].is_some()).unwrap_or(end);
-        let has_checkboxes = (h + 1..body_end).any(|j| CHECKBOX.is_match(&lines[j]));
+        let drawer: Vec<String> = lines.get(next(h)..end).unwrap_or(&[]).to_vec();
+        let body_end = (next(h)..end)
+            .find(|&j| level_at(j).is_some())
+            .unwrap_or(end);
+        let has_checkboxes = (next(h)..body_end).any(|j| CHECKBOX.is_match(owned_at(lines, j)));
         let (count_todo, recursive) = cookie_data(&drawer).unwrap_or((!has_checkboxes, false));
         let (done, total) = if count_todo {
-            let mut d = 0;
-            let mut t = 0;
-            for j in h + 1..end {
-                let direct = levels[j] == Some(level + 1);
+            let mut d = 0usize;
+            let mut t = 0usize;
+            for j in next(h)..end {
+                let direct = level_at(j) == Some(next(level));
                 let counted = if recursive {
-                    levels[j].is_some()
+                    level_at(j).is_some()
                 } else {
                     direct
                 };
-                if counted && let Some(is_done) = headline_todo(&lines[j]) {
-                    t += 1;
+                if counted && let Some(is_done) = headline_todo(owned_at(lines, j)) {
+                    t = next(t);
                     if is_done {
-                        d += 1;
+                        d = next(d);
                     }
                 }
             }
             (d, t)
         } else {
             // Top-level checkboxes in the body (the shallowest indent).
-            let cbs: Vec<(usize, char)> = (h + 1..body_end)
+            let cbs: Vec<(usize, char)> = (next(h)..body_end)
                 .filter_map(|j| {
                     CHECKBOX
-                        .captures(&lines[j])
+                        .captures(owned_at(lines, j))
                         .and_then(|c| c.get(2))
                         .map(|g| {
                             (
-                                indent_of(&lines[j]),
+                                indent_of(owned_at(lines, j)),
                                 g.as_str().chars().next().unwrap_or(' '),
                             )
                         })
@@ -487,7 +532,10 @@ fn update_headline_cookies(lines: &mut [String]) {
                     (d, top.len())
                 })
         };
-        lines[h] = set_cookie(&lines[h], done, total);
+        let rewritten = set_cookie(owned_at(lines, h), done, total);
+        if let Some(slot) = lines.get_mut(h) {
+            *slot = rewritten;
+        }
     }
 }
 
@@ -498,16 +546,16 @@ pub fn move_subtree_down(text: &str, line: usize) -> Option<(String, usize)> {
     let lines: Vec<&str> = text.split('\n').collect();
     let level = headline_level(lines.get(line)?)?;
     let (start, end) = subtree_range(&lines, line)?;
-    if end >= lines.len() || headline_level(lines[end]) != Some(level) {
+    if end >= lines.len() || headline_level(line_at(&lines, end)) != Some(level) {
         return None; // no sibling of the same level follows
     }
     let (_, sib_end) = subtree_range(&lines, end)?;
     let mut out: Vec<&str> = Vec::with_capacity(lines.len());
-    out.extend_from_slice(&lines[..start]);
-    out.extend_from_slice(&lines[end..sib_end]); // sibling first
-    out.extend_from_slice(&lines[start..end]); // then this subtree
-    out.extend_from_slice(&lines[sib_end..]);
-    let new_start = start + (sib_end - end);
+    out.extend_from_slice(lines.get(..start)?);
+    out.extend_from_slice(lines.get(end..sib_end)?); // sibling first
+    out.extend_from_slice(lines.get(start..end)?); // then this subtree
+    out.extend_from_slice(lines.get(sib_end..)?);
+    let new_start = add_or(start, sub_or(sib_end, end, 0), usize::MAX);
     Some((out.join("\n"), new_start))
 }
 
@@ -522,7 +570,7 @@ pub fn move_subtree_up(text: &str, line: usize) -> Option<(String, usize)> {
     // level, bailing if a higher-level (parent) headline appears first.
     let mut prev = None;
     for i in (0..start).rev() {
-        if let Some(l) = headline_level(lines[i]) {
+        if let Some(l) = headline_level(line_at(&lines, i)) {
             if l < level {
                 break;
             }
@@ -534,9 +582,9 @@ pub fn move_subtree_up(text: &str, line: usize) -> Option<(String, usize)> {
     }
     let prev = prev?;
     let mut out: Vec<&str> = Vec::with_capacity(lines.len());
-    out.extend_from_slice(&lines[..prev]);
-    out.extend_from_slice(&lines[start..end]); // this subtree first
-    out.extend_from_slice(&lines[prev..start]); // then the previous sibling
-    out.extend_from_slice(&lines[end..]);
+    out.extend_from_slice(lines.get(..prev)?);
+    out.extend_from_slice(lines.get(start..end)?); // this subtree first
+    out.extend_from_slice(lines.get(prev..start)?); // then the previous sibling
+    out.extend_from_slice(lines.get(end..)?);
     Some((out.join("\n"), prev))
 }

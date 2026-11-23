@@ -13,6 +13,19 @@
 //!
 //! All functions are pure so they can be unit-tested without a live editor.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::{add_or, line_at, next, sub_or};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::sync::LazyLock;
@@ -242,7 +255,7 @@ fn ancestor_columns_spec(lines: &[&str], line: usize) -> Option<ColumnsSpec> {
             && let Some(mut spec) = parse_columns_spec(&val)
         {
             if let Some((start, end)) = own_property_drawer(lines, h) {
-                spec.allowed_values = parse_all_values(&lines[start + 1..end]);
+                spec.allowed_values = parse_all_values(lines.get(next(start)..end).unwrap_or(&[]));
             }
             return Some(spec);
         }
@@ -258,7 +271,7 @@ fn file_level_columns_spec(lines: &[&str]) -> Option<ColumnsSpec> {
         .iter()
         .position(|l| crate::headline_level(l).is_some())
         .unwrap_or(lines.len());
-    let top = &lines[..first_headline];
+    let top = lines.get(..first_headline).unwrap_or(&[]);
     for line in top {
         let t = line.trim();
         // `t.get(..10)` (T559): a byte-length check alone doesn't prove
@@ -274,10 +287,10 @@ fn file_level_columns_spec(lines: &[&str]) -> Option<ColumnsSpec> {
     }
     let mut i = 0;
     while i < top.len() {
-        if top[i].trim().eq_ignore_ascii_case(":PROPERTIES:")
+        if line_at(top, i).trim().eq_ignore_ascii_case(":PROPERTIES:")
             && let Some((_, end)) = crate::drawer_range(top, i)
         {
-            for l in &top[i + 1..end] {
+            for l in top.get(next(i)..end).unwrap_or(&[]) {
                 let t = l.trim();
                 let Some(rest) = t.strip_prefix(':') else {
                     continue;
@@ -293,7 +306,7 @@ fn file_level_columns_spec(lines: &[&str]) -> Option<ColumnsSpec> {
                 }
             }
         }
-        i += 1;
+        i = next(i);
     }
     None
 }
@@ -303,11 +316,15 @@ fn file_level_columns_spec(lines: &[&str]) -> Option<ColumnsSpec> {
 /// The `[header, end]` line range of the `:PROPERTIES:` drawer immediately
 /// owned by headline `h` (after any planning line), or `None` if it has none.
 fn own_property_drawer(lines: &[&str], h: usize) -> Option<(usize, usize)> {
-    let mut at = h + 1;
-    if at < lines.len() && crate::properties_and_dates::is_planning(lines[at]) {
-        at += 1;
+    let mut at = next(h);
+    if at < lines.len() && crate::properties_and_dates::is_planning(line_at(lines, at)) {
+        at = next(at);
     }
-    if at < lines.len() && lines[at].trim().eq_ignore_ascii_case(":PROPERTIES:") {
+    if at < lines.len()
+        && line_at(lines, at)
+            .trim()
+            .eq_ignore_ascii_case(":PROPERTIES:")
+    {
         crate::drawer_range(lines, at)
     } else {
         None
@@ -318,7 +335,7 @@ fn own_property_drawer(lines: &[&str], h: usize) -> Option<(usize, usize)> {
 /// drawer, only if present and non-empty.
 fn property_value_opt(lines: &[&str], h: usize, key: &str) -> Option<String> {
     let (start, end) = own_property_drawer(lines, h)?;
-    for line in &lines[start + 1..end] {
+    for line in lines.get(next(start)..end).unwrap_or(&[]) {
         let t = line.trim();
         let Some(rest) = t.strip_prefix(':') else {
             continue;
@@ -344,10 +361,10 @@ fn property_value(lines: &[&str], h: usize, key: &str) -> String {
 /// The nearest headline above `h` with a smaller level (its outline parent),
 /// or `None` at top level.
 fn parent_headline(lines: &[&str], h: usize) -> Option<usize> {
-    let level = crate::headline_level(lines[h])?;
+    let level = crate::headline_level(line_at(lines, h))?;
     (0..h)
         .rev()
-        .find(|&i| crate::headline_level(lines[i]).is_some_and(|l| l < level))
+        .find(|&i| crate::headline_level(line_at(lines, i)).is_some_and(|l| l < level))
 }
 
 /// The direct children of headline `h`: headlines immediately inside its
@@ -357,13 +374,13 @@ fn direct_children(lines: &[&str], h: usize) -> Vec<usize> {
         return Vec::new();
     };
     let mut kids = Vec::new();
-    let mut i = h + 1;
+    let mut i = next(h);
     while i < end {
-        if crate::headline_level(lines[i]).is_some() {
+        if crate::headline_level(line_at(lines, i)).is_some() {
             kids.push(i);
-            i = crate::subtree_range(lines, i).map_or(i + 1, |(_, e)| e);
+            i = crate::subtree_range(lines, i).map_or(next(i), |(_, e)| e);
         } else {
-            i += 1;
+            i = next(i);
         }
     }
     kids
@@ -402,7 +419,7 @@ fn parse_headline_parts(line: &str) -> (String, String, String) {
 /// The `ITEM` column value: the headline title with stars, TODO keyword,
 /// priority cookie and tags stripped.
 fn item_text(lines: &[&str], h: usize) -> String {
-    parse_headline_parts(lines[h]).2
+    parse_headline_parts(line_at(lines, h)).2
 }
 
 /// The `TODO` column value: the leading keyword (`""` if none).
@@ -412,12 +429,12 @@ fn item_keyword(line: &str) -> String {
 
 /// The `PRIORITY` column value, rendered as `[#A]` (`""` if none).
 fn item_priority(lines: &[&str], h: usize) -> String {
-    parse_headline_parts(lines[h]).1
+    parse_headline_parts(line_at(lines, h)).1
 }
 
 /// A headline's own trailing `:tag:tag:` group, colon-wrapped (`""` if none).
 fn item_tags(lines: &[&str], h: usize) -> String {
-    match crate::properties_and_dates::TAGS.captures(lines[h]) {
+    match crate::properties_and_dates::TAGS.captures(line_at(lines, h)) {
         Some(c) => {
             let inner = c[1].trim_matches(':').replace("::", ":");
             if inner.is_empty() {
@@ -454,25 +471,25 @@ fn item_alltags(lines: &[&str], h: usize) -> String {
 /// The raw `<...>`/`[...]` timestamp text following `KEYWORD:` on headline
 /// `h`'s planning line(s), or `""` if absent.
 fn planning_value(lines: &[&str], h: usize, keyword: &str) -> String {
-    let mut i = h + 1;
+    let mut i = next(h);
     let mut combined = String::new();
-    while i < lines.len() && crate::properties_and_dates::is_planning(lines[i]) {
-        combined.push_str(lines[i]);
+    while i < lines.len() && crate::properties_and_dates::is_planning(line_at(lines, i)) {
+        combined.push_str(line_at(lines, i));
         combined.push(' ');
-        i += 1;
+        i = next(i);
     }
     let needle = format!("{keyword}:");
     let Some(pos) = combined.find(&needle) else {
         return String::new();
     };
     let after = combined
-        .get(pos + needle.len()..)
+        .get(add_or(pos, needle.len(), usize::MAX)..)
         .unwrap_or_default()
         .trim_start();
     let Some(open) = after.find(['<', '[']) else {
         return String::new();
     };
-    let close_char = if after.as_bytes()[open] == b'<' {
+    let close_char = if after.as_bytes().get(open) == Some(&b'<') {
         '>'
     } else {
         ']'
@@ -481,7 +498,7 @@ fn planning_value(lines: &[&str], h: usize, keyword: &str) -> String {
         return String::new();
     };
     after
-        .get(open..=open + close)
+        .get(open..=add_or(open, close, usize::MAX))
         .unwrap_or_default()
         .to_string()
 }
@@ -525,9 +542,9 @@ fn category_value(lines: &[&str], h: usize, file_name: Option<&str>) -> String {
 /// to the next headline of any level — unlike a subtree, this excludes
 /// children).
 fn entry_end(lines: &[&str], h: usize) -> usize {
-    let mut i = h + 1;
-    while i < lines.len() && crate::headline_level(lines[i]).is_none() {
-        i += 1;
+    let mut i = next(h);
+    while i < lines.len() && crate::headline_level(line_at(lines, i)).is_none() {
+        i = next(i);
     }
     i
 }
@@ -540,7 +557,7 @@ fn entry_timestamp(lines: &[&str], h: usize, active: bool) -> String {
     let end = entry_end(lines, h);
     let drawer = own_property_drawer(lines, h);
     let (open, close) = if active { ('<', '>') } else { ('[', ']') };
-    for (i, line) in lines.iter().enumerate().take(end).skip(h + 1) {
+    for (i, line) in lines.iter().enumerate().take(end).skip(next(h)) {
         if let Some((ds, de)) = drawer
             && i >= ds
             && i <= de
@@ -580,7 +597,7 @@ fn clocksum_value(lines: &[&str], h: usize, today_filter: Option<(i32, u32, u32)
         return String::new();
     };
     let mut total = 0u32;
-    for line in &lines[h..end] {
+    for line in lines.get(h..end).unwrap_or(&[]) {
         if let Some(filter) = today_filter {
             let Some(start_ts) = crate::agenda::clock_start(line) else {
                 continue;
@@ -594,7 +611,7 @@ fn clocksum_value(lines: &[&str], h: usize, today_filter: Option<(i32, u32, u32)
             }
         }
         if let Some(min) = crate::agenda::clock_minutes(line) {
-            total += min;
+            total = total.saturating_add(min);
         }
     }
     crate::agenda::hhmm(total)
@@ -604,7 +621,11 @@ fn clocksum_value(lines: &[&str], h: usize, today_filter: Option<(i32, u32, u32)
 /// keyword is not the literal `DONE`, else `""`.
 fn blocked_value(lines: &[&str], h: usize) -> String {
     let kids = direct_children(lines, h);
-    if !kids.is_empty() && kids.iter().any(|&k| item_keyword(lines[k]) != crate::DONE) {
+    if !kids.is_empty()
+        && kids
+            .iter()
+            .any(|&k| item_keyword(line_at(lines, k)) != crate::DONE)
+    {
         "t".to_string()
     } else {
         String::new()
@@ -623,7 +644,7 @@ fn entry_value(
 ) -> String {
     match col.property.to_ascii_uppercase().as_str() {
         "ITEM" => item_text(lines, h),
-        "TODO" => item_keyword(lines[h]),
+        "TODO" => item_keyword(line_at(lines, h)),
         "PRIORITY" => item_priority(lines, h),
         "TAGS" => item_tags(lines, h),
         "ALLTAGS" => item_alltags(lines, h),
@@ -763,7 +784,10 @@ fn checkbox_fraction(values: &[&str]) -> String {
 /// `X%`: `[pct%]`, integer-truncated; `[0%]` with no children (no divide-by-zero).
 fn checkbox_percent(values: &[&str]) -> String {
     let (done, total) = checkbox_counts(values);
-    let pct = (done * 100).checked_div(total).unwrap_or(0);
+    let pct = done
+        .checked_mul(100)
+        .and_then(|scaled| scaled.checked_div(total))
+        .unwrap_or(0);
     format!("[{pct}%]")
 }
 
@@ -776,8 +800,9 @@ fn parse_duration_minutes(s: &str) -> Option<i64> {
     }
     if let Some((h, m)) = s.split_once(':')
         && let (Ok(h), Ok(m)) = (h.trim().parse::<i64>(), m.trim().parse::<i64>())
+        && let Some(minutes) = h.checked_mul(60).and_then(|hm| hm.checked_add(m))
     {
-        return Some(h * 60 + m);
+        return Some(minutes);
     }
     if let Ok(n) = s.parse::<i64>() {
         return Some(n);
@@ -787,17 +812,13 @@ fn parse_duration_minutes(s: &str) -> Option<i64> {
 
 /// Parse an age-column value into seconds: a bare number (seconds), or a
 /// unit-token run (`3d 1h`, `90m`, ...).
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "rounding a bare-seconds value to the nearest whole second is intentional"
-)]
 fn parse_age_seconds(s: &str) -> Option<i64> {
     let s = s.trim();
     if s.is_empty() {
         return None;
     }
     if let Ok(n) = s.parse::<f64>() {
-        return Some(n.round() as i64);
+        return round_to_i64(n);
     }
     parse_unit_duration(s, false)
 }
@@ -806,10 +827,6 @@ fn parse_age_seconds(s: &str) -> Option<i64> {
 /// optional between them) and sums them. `minutes = true` returns whole
 /// minutes (for time columns); `false` returns whole seconds (for age
 /// columns, where a bare `m` unit means minutes, not months).
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "rounding a summed duration to the nearest whole minute/second is intentional"
-)]
 fn parse_unit_duration(s: &str, minutes: bool) -> Option<i64> {
     let mut total_seconds = 0.0f64;
     let mut any = false;
@@ -853,9 +870,32 @@ fn parse_unit_duration(s: &str, minutes: bool) -> Option<i64> {
         return None;
     }
     if minutes {
-        Some((total_seconds / 60.0).round() as i64)
+        round_to_i64(total_seconds / 60.0)
     } else {
-        Some(total_seconds.round() as i64)
+        round_to_i64(total_seconds)
+    }
+}
+
+/// `values` summed, or `None` when the sum does not fit (a sum that large is
+/// not a duration, so the cell stays empty).
+fn sum_i64(values: &[i64]) -> Option<i64> {
+    values.iter().try_fold(0i64, |sum, &v| sum.checked_add(v))
+}
+
+/// `x` rounded to the nearest whole number, or `None` when `x` is not finite
+/// or does not fit an `i64`.
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    reason = "RCA-EXC-2: the rounded value is finite and checked against the i64 range just above"
+)]
+fn round_to_i64(x: f64) -> Option<i64> {
+    let r = x.round();
+    // -2^63 and 2^63 are exact in f64: the half-open range is exactly i64.
+    if (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0).contains(&r) {
+        Some(r as i64)
+    } else {
+        None
     }
 }
 
@@ -867,7 +907,11 @@ fn format_duration_minutes(total: i64) -> String {
     let sign = if total < 0 { "-" } else { "" };
     let total = total.unsigned_abs();
     if total >= 60 {
-        format!("{sign}{}h {}min", total / 60, total % 60)
+        format!(
+            "{sign}{}h {}min",
+            total.div_euclid(60),
+            total.rem_euclid(60)
+        )
     } else {
         format!("{sign}{total}min")
     }
@@ -892,12 +936,18 @@ fn time_reduce(values: &[&str], op: &TimeOp) -> String {
         return String::new();
     }
     let result = match op {
-        TimeOp::Sum => mins.iter().sum(),
+        TimeOp::Sum => match sum_i64(&mins) {
+            Some(sum) => sum,
+            None => return String::new(),
+        },
         TimeOp::Min => *mins.iter().min().unwrap_or(&0),
         TimeOp::Max => *mins.iter().max().unwrap_or(&0),
         TimeOp::Mean => {
             let len = i64::try_from(mins.len()).unwrap_or(1).max(1);
-            mins.iter().sum::<i64>() / len
+            match sum_i64(&mins).and_then(|sum| sum.checked_div(len)) {
+                Some(mean) => mean,
+                None => return String::new(),
+            }
         }
     };
     format_duration_minutes(result)
@@ -910,12 +960,12 @@ fn time_reduce(values: &[&str], op: &TimeOp) -> String {
 fn format_age_seconds(total: i64) -> String {
     let sign = if total < 0 { "-" } else { "" };
     let secs = total.unsigned_abs();
-    let days = secs / 86400;
-    let rem1 = secs % 86400;
-    let hours = rem1 / 3600;
-    let rem2 = rem1 % 3600;
-    let minutes = rem2 / 60;
-    let seconds = rem2 % 60;
+    let days = secs.div_euclid(86400);
+    let rem1 = secs.rem_euclid(86400);
+    let hours = rem1.div_euclid(3600);
+    let rem2 = rem1.rem_euclid(3600);
+    let minutes = rem2.div_euclid(60);
+    let seconds = rem2.rem_euclid(60);
     if days > 0 {
         if hours > 0 {
             format!("{sign}{days}d {hours}h")
@@ -955,7 +1005,10 @@ fn age_reduce(values: &[&str], op: &AgeOp) -> String {
         AgeOp::Max => *secs.iter().max().unwrap_or(&0),
         AgeOp::Mean => {
             let len = i64::try_from(secs.len()).unwrap_or(1).max(1);
-            secs.iter().sum::<i64>() / len
+            match sum_i64(&secs).and_then(|sum| sum.checked_div(len)) {
+                Some(mean) => mean,
+                None => return String::new(),
+            }
         }
     };
     format_age_seconds(result)
@@ -1089,7 +1142,7 @@ fn compute_table_in_scope(
     let lines: Vec<&str> = text.split('\n').collect();
     let (start, end) = (scope.0, scope.1.min(lines.len()));
     let heads: Vec<usize> = (start..end)
-        .filter(|&i| crate::headline_level(lines[i]).is_some())
+        .filter(|&i| crate::headline_level(line_at(&lines, i)).is_some())
         .collect();
     if heads.is_empty() || spec.columns.is_empty() {
         return (Vec::new(), text.to_string());
@@ -1112,7 +1165,7 @@ fn compute_table_in_scope(
     }
     let write_back_idx: HashMap<String, usize> = first_idx_for_prop
         .into_iter()
-        .filter(|(_, idx)| spec.columns[*idx].summary.is_some())
+        .filter(|(_, idx)| spec.columns.get(*idx).is_some_and(|c| c.summary.is_some()))
         .collect();
 
     let mut own_values: HashMap<(usize, usize), String> = HashMap::new();
@@ -1145,9 +1198,9 @@ fn compute_table_in_scope(
     let rows: Vec<ColumnRow> = heads
         .iter()
         .map(|&h| {
-            let level = crate::headline_level(lines[h]).unwrap_or(1);
+            let level = crate::headline_level(line_at(&lines, h)).unwrap_or(1);
             let values: Vec<String> = (0..spec.columns.len())
-                .map(|ci| display[&(h, ci)].clone())
+                .map(|ci| display.get(&(h, ci)).cloned().unwrap_or_default())
                 .collect();
             ColumnRow {
                 line: h,
@@ -1206,7 +1259,7 @@ fn set_item_text(text: &str, line: usize, new_title: &str) -> Option<String> {
         None => String::new(),
     };
     let stars = "*".repeat(level);
-    lines[line] = format!("{stars} {kw_prefix}{priority_prefix}{new_title}{tags_suffix}");
+    *lines.get_mut(line)? = format!("{stars} {kw_prefix}{priority_prefix}{new_title}{tags_suffix}");
     Some(lines.join("\n"))
 }
 
@@ -1216,7 +1269,7 @@ fn set_item_todo(text: &str, line: usize, new_keyword: &str) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let original = *lines.get(line)?;
     let level = crate::headline_level(original)?;
-    let (prefix, rest) = original.split_at(level + 1);
+    let (prefix, rest) = original.split_at_checked(next(level))?;
     let (_, body) = split_keyword_generic(rest);
     let new_keyword = new_keyword.trim();
     let new_rest = if new_keyword.is_empty() {
@@ -1227,7 +1280,7 @@ fn set_item_todo(text: &str, line: usize, new_keyword: &str) -> Option<String> {
         format!("{new_keyword} {body}")
     };
     let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
-    out[line] = format!("{prefix}{new_rest}");
+    *out.get_mut(line)? = format!("{prefix}{new_rest}");
     Some(out.join("\n"))
 }
 
@@ -1344,7 +1397,9 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
     let trimmed = begin_line.trim();
     let lower = trimmed.to_ascii_lowercase();
     let idx = lower.find("columnview")?;
-    let rest = trimmed.get(idx + "columnview".len()..).unwrap_or_default();
+    let rest = trimmed
+        .get(add_or(idx, "columnview".len(), usize::MAX)..)
+        .unwrap_or_default();
     let tokens = tokenize_quoted(rest);
 
     let mut id = String::new();
@@ -1355,9 +1410,9 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
     let mut flags = DblockFlags::empty();
 
     let mut i = 0;
-    while i < tokens.len() {
-        let key = tokens[i].to_ascii_lowercase();
-        let val = tokens.get(i + 1).cloned();
+    while let Some(token) = tokens.get(i) {
+        let key = token.to_ascii_lowercase();
+        let val = tokens.get(next(i)).cloned();
         match key.as_str() {
             ":id" => id = val.unwrap_or_default(),
             ":hlines" => hlines = val,
@@ -1371,10 +1426,13 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
                 // its spaces, or the older quoted string `"a b"`.
                 let mut raw = val.unwrap_or_default();
                 if raw.starts_with('(') {
-                    while !raw.ends_with(')') && i + 2 < tokens.len() {
-                        i += 1;
+                    while !raw.ends_with(')')
+                        && add_or(i, 2, usize::MAX) < tokens.len()
+                        && let Some(more) = tokens.get(add_or(i, 2, usize::MAX))
+                    {
+                        i = next(i);
                         raw.push(' ');
-                        raw.push_str(&tokens[i + 1]);
+                        raw.push_str(more);
                     }
                 }
                 exclude_tags = raw
@@ -1389,11 +1447,11 @@ pub fn parse_dblock_params(begin_line: &str) -> Option<DblockParams> {
             ":link" => flags.set(DblockFlags::LINK, val.as_deref() == Some("t")),
             ":format" => format = val,
             _ => {
-                i += 1;
+                i = next(i);
                 continue;
             }
         }
-        i += 2;
+        i = add_or(i, 2, usize::MAX);
     }
     if id.is_empty() {
         id = "local".to_string();
@@ -1459,7 +1517,7 @@ fn dblock_scope(lines: &[&str], at_line: usize, id: &str) -> (usize, usize) {
         if crate::headline_level(line).is_some()
             && property_value_opt(lines, i, "ID").as_deref() == Some(id)
         {
-            return crate::subtree_range(lines, i).unwrap_or((i, i + 1));
+            return crate::subtree_range(lines, i).unwrap_or((i, next(i)));
         }
     }
     (0, 0)
@@ -1484,7 +1542,7 @@ pub fn render_columnview_dblock(
         .unwrap_or_else(|| resolve_columns_spec(text, at_line));
     let scope = dblock_scope(&lines, at_line, &params.id);
     let root_level = (scope.0..scope.1.min(lines.len()))
-        .find_map(|i| crate::headline_level(lines[i]))
+        .find_map(|i| crate::headline_level(line_at(&lines, i)))
         .unwrap_or(1);
     let (rows, _) = compute_table_in_scope(text, scope, &spec, today, file_name);
 
@@ -1512,7 +1570,7 @@ pub fn render_columnview_dblock(
             continue;
         }
         if let Some(max) = params.maxlevel
-            && row.level > root_level + max - 1
+            && row.level >= add_or(root_level, max, usize::MAX)
         {
             continue;
         }
@@ -1530,16 +1588,14 @@ pub fn render_columnview_dblock(
             let _ = writeln!(body, "|{}|", "---|".repeat(header.len()));
         }
         let mut cells: Vec<String> = row.values.clone();
-        if let Some(ii) = item_idx {
+        if let Some(ii) = item_idx
+            && let Some(cell) = cells.get_mut(ii)
+        {
             if params.flags.contains(DblockFlags::INDENT) {
-                cells[ii] = format!(
-                    "{}{}",
-                    "  ".repeat(row.level.saturating_sub(root_level)),
-                    cells[ii]
-                );
+                *cell = format!("{}{}", "  ".repeat(sub_or(row.level, root_level, 0)), cell);
             }
             if params.flags.contains(DblockFlags::LINK) {
-                cells[ii] = format!("[[*{}]]", cells[ii]);
+                *cell = format!("[[*{cell}]]");
             }
         }
         let cells: Vec<String> = cells.iter().map(|c| c.replace('|', "\\vert{}")).collect();
@@ -1557,15 +1613,15 @@ fn is_columnview_begin(line: &str) -> bool {
 /// Find the matching `#+END:` line for the `#+BEGIN:` at `begin_line`,
 /// stopping (returning `None`) if a headline is reached first.
 fn dblock_end(lines: &[&str], begin_line: usize) -> Option<usize> {
-    let mut i = begin_line + 1;
+    let mut i = next(begin_line);
     while i < lines.len() {
-        if crate::headline_level(lines[i]).is_some() {
+        if crate::headline_level(line_at(lines, i)).is_some() {
             return None;
         }
-        if lines[i].trim().eq_ignore_ascii_case("#+END:") {
+        if line_at(lines, i).trim().eq_ignore_ascii_case("#+END:") {
             return Some(i);
         }
-        i += 1;
+        i = next(i);
     }
     None
 }
@@ -1584,14 +1640,14 @@ pub fn update_columnview_dblock(
     if !is_columnview_begin(lines.get(begin_line)?) {
         return None;
     }
-    let params = parse_dblock_params(lines[begin_line])?;
+    let params = parse_dblock_params(line_at(&lines, begin_line))?;
     let end_line = dblock_end(&lines, begin_line)?;
     let rendered = render_columnview_dblock(text, begin_line, &params, today, file_name);
     let mut out: Vec<&str> = Vec::with_capacity(lines.len());
-    out.extend_from_slice(&lines[..begin_line]);
+    out.extend_from_slice(lines.get(..begin_line).unwrap_or(&[]));
     let rendered_lines: Vec<&str> = rendered.split('\n').collect();
     out.extend_from_slice(&rendered_lines);
-    out.extend_from_slice(&lines[end_line + 1..]);
+    out.extend_from_slice(lines.get(next(end_line)..).unwrap_or(&[]));
     Some(out.join("\n"))
 }
 
@@ -1615,9 +1671,9 @@ pub fn update_all_columnview_dblocks(
         match update_columnview_dblock(&out, idx, today, file_name) {
             Some(updated) => {
                 out = updated;
-                search_from = idx + 1;
+                search_from = next(idx);
             }
-            None => search_from = idx + 1,
+            None => search_from = next(idx),
         }
     }
     out

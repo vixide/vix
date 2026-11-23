@@ -7,6 +7,18 @@
 //! (T516). `LINK`/`BARE_LINK` live in `export.rs` (T516 slice 6), which
 //! defines them; referenced back via `crate::export::`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt::Write as _;
 use std::sync::LazyLock;
 
@@ -16,6 +28,7 @@ use super::{
     TAGS, governing, headline_level, line_of_char, split_keyword, strip_priority, subtree_range,
 };
 use crate::export::{BARE_LINK, LINK};
+use crate::{add_or, line_at, next, sub_or};
 
 // ----- Hyperlinks ------------------------------------------------------------
 
@@ -25,10 +38,14 @@ use crate::export::{BARE_LINK, LINK};
 pub fn link_at(text: &str, cursor: usize) -> Option<(String, Option<String>)> {
     let (line_idx, line_start) = line_of_char(text, cursor);
     let l = *text.split('\n').collect::<Vec<_>>().get(line_idx)?;
-    let col = cursor - line_start.min(cursor);
+    let col = sub_or(cursor, line_start.min(cursor), 0);
     let contains = |l: &str, start: usize, end: usize| {
         let sc = l.get(..start).unwrap_or_default().chars().count();
-        let ec = sc + l.get(start..end).unwrap_or_default().chars().count();
+        let ec = add_or(
+            sc,
+            l.get(start..end).unwrap_or_default().chars().count(),
+            usize::MAX,
+        );
         (sc..=ec).contains(&col)
     };
     for c in LINK.captures_iter(l) {
@@ -75,20 +92,20 @@ fn sparse_folds(text: &str, pred: impl Fn(&str) -> bool) -> Vec<(usize, usize)> 
     let mut folds = Vec::new();
     let mut i = 0;
     while i < lines.len() {
-        if headline_level(lines[i]).is_some() {
+        if headline_level(line_at(&lines, i)).is_some() {
             let Some((s, e)) = subtree_range(&lines, i) else {
                 break;
             };
-            if lines[s..e].iter().any(|l| pred(l)) {
-                i += 1; // a match inside: descend, folding only its misses
+            if lines.get(s..e).unwrap_or(&[]).iter().any(|l| pred(l)) {
+                i = next(i); // a match inside: descend, folding only its misses
             } else {
-                if e - 1 > s {
-                    folds.push((s, e - 1));
+                if sub_or(e, 1, 0) > s {
+                    folds.push((s, sub_or(e, 1, 0)));
                 }
                 i = e;
             }
         } else {
-            i += 1;
+            i = next(i);
         }
     }
     folds
@@ -130,8 +147,7 @@ static FOOTNOTE: LazyLock<Regex> =
 fn line_start_char(text: &str, line: usize) -> usize {
     text.split('\n')
         .take(line)
-        .map(|l| l.chars().count() + 1)
-        .sum()
+        .fold(0, |sum, l| add_or(sum, next(l.chars().count()), usize::MAX))
 }
 
 /// Org's footnote action (`C-c C-x f`), all three behaviors in one:
@@ -145,29 +161,34 @@ pub fn footnote(text: &str, cursor: usize) -> (String, usize) {
     let (line_idx, line_start) = line_of_char(text, cursor);
     let lines: Vec<&str> = text.split('\n').collect();
     let line = lines.get(line_idx).copied().unwrap_or_default();
-    let col = cursor - line_start.min(cursor);
+    let col = sub_or(cursor, line_start.min(cursor), 0);
     let on_definition = FOOTNOTE.find(line).is_some_and(|m| m.start() == 0);
     let label_at_cursor = FOOTNOTE.captures_iter(line).find_map(|c| {
         let m = c.get(0)?;
         let sc = line.get(..m.start()).unwrap_or_default().chars().count();
-        let ec = sc
-            + line
-                .get(m.start()..m.end())
+        let ec = add_or(
+            sc,
+            line.get(m.start()..m.end())
                 .unwrap_or_default()
                 .chars()
-                .count();
+                .count(),
+            usize::MAX,
+        );
         (sc..=ec).contains(&col).then(|| c[1].to_string())
     });
     match label_at_cursor {
         // On a definition: jump to the first reference elsewhere.
-        Some(label) if on_definition && col <= label.chars().count() + 5 => {
+        Some(label) if on_definition && col <= add_or(label.chars().count(), 5, usize::MAX) => {
             let needle = format!("[fn:{label}]");
             for (i, l) in lines.iter().enumerate() {
                 if let Some(pos) = l.find(&needle)
                     && (i != line_idx || pos != 0)
                 {
                     let sc = l.get(..pos).unwrap_or_default().chars().count();
-                    return (text.to_string(), line_start_char(text, i) + sc);
+                    return (
+                        text.to_string(),
+                        add_or(line_start_char(text, i), sc, usize::MAX),
+                    );
                 }
             }
             (text.to_string(), cursor)
@@ -192,8 +213,7 @@ pub fn footnote(text: &str, cursor: usize) -> (String, usize) {
                 .captures_iter(text)
                 .filter_map(|c| c[1].parse::<u64>().ok())
                 .max()
-                .unwrap_or(0)
-                + 1;
+                .map_or(1, |highest| highest.saturating_add(1));
             let mut new: String = text.chars().take(cursor).collect();
             let tail: String = text.chars().skip(cursor).collect();
             let _ = write!(new, "[fn:{next}]");
@@ -270,12 +290,12 @@ fn src_begin(line: &str) -> Option<String> {
 #[must_use]
 pub fn src_block_at(text: &str, line: usize) -> Option<(usize, usize, String)> {
     let lines: Vec<&str> = text.split('\n').collect();
-    let begin = (0..=line.min(lines.len().saturating_sub(1)))
+    let begin = (0..=line.min(sub_or(lines.len(), 1, 0)))
         .rev()
-        .find(|&i| src_begin(lines[i]).is_some())?;
-    let lang = src_begin(lines[begin])?;
-    let end = (begin + 1..lines.len()).find(|&i| {
-        lines[i]
+        .find(|&i| src_begin(line_at(&lines, i)).is_some())?;
+    let lang = src_begin(line_at(&lines, begin))?;
+    let end = (next(begin)..lines.len()).find(|&i| {
+        line_at(&lines, i)
             .trim_start()
             .to_ascii_lowercase()
             .starts_with("#+end_src")
@@ -295,12 +315,12 @@ pub fn replace_src_body(text: &str, begin_line: usize, body: &str) -> Option<Str
     if begin != begin_line {
         return None;
     }
-    let mut out: Vec<&str> = lines[..=begin].to_vec();
+    let mut out: Vec<&str> = lines.get(..=begin)?.to_vec();
     let body = body.trim_end_matches('\n');
     if !body.is_empty() {
         out.extend(body.split('\n'));
     }
-    out.extend_from_slice(&lines[end..]);
+    out.extend_from_slice(lines.get(end..)?);
     Some(out.join("\n"))
 }
 
@@ -328,7 +348,7 @@ pub fn column_view(text: &str) -> String {
         let _ = writeln!(
             out,
             "| {}{} | {} | {} | {} |",
-            "  ".repeat(level - 1),
+            "  ".repeat(sub_or(level, 1, 0)),
             title.replace('|', "\\vert{}"),
             keyword.trim(),
             prio,

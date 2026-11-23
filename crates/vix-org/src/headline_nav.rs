@@ -7,7 +7,19 @@
 //! several other sections' own edits), it's a cohesive feature in its own
 //! right, matching how every other topic here gets its own file.
 
-use super::{headline_level, subtree_range};
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use super::{add_or, headline_level, line_at, next, sub_or, subtree_range};
 
 // ----- Headline location & structure editing --------------------------------
 
@@ -17,7 +29,7 @@ pub(crate) fn governing(lines: &[&str], line: usize) -> Option<usize> {
     let last = lines.len().checked_sub(1)?;
     (0..=line.min(last))
         .rev()
-        .find(|&i| headline_level(lines[i]).is_some())
+        .find(|&i| headline_level(line_at(lines, i)).is_some())
 }
 
 /// Rewrite a headline's stars to shift its level by `delta` (clamped to ≥ 1).
@@ -25,8 +37,10 @@ pub(crate) fn governing(lines: &[&str], line: usize) -> Option<usize> {
 pub(crate) fn relevel(line: &str, delta: i64) -> String {
     match headline_level(line) {
         Some(level) => {
-            let new = usize::try_from((i64::try_from(level).unwrap_or(i64::MAX) + delta).max(1))
-                .unwrap_or(1);
+            let shifted = i64::try_from(level)
+                .unwrap_or(i64::MAX)
+                .saturating_add(delta);
+            let new = usize::try_from(shifted.max(1)).unwrap_or(1);
             format!(
                 "{} {}",
                 "*".repeat(new),
@@ -45,10 +59,10 @@ pub(crate) fn relevel(line: &str, delta: i64) -> String {
 pub fn new_heading(text: &str, line: usize) -> (String, usize) {
     let lines: Vec<&str> = text.split('\n').collect();
     let level = governing(&lines, line)
-        .and_then(|h| headline_level(lines[h]))
+        .and_then(|h| headline_level(line_at(&lines, h)))
         .unwrap_or(1);
     let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
-    let at = (line + 1).min(out.len());
+    let at = next(line).min(out.len());
     out.insert(at, format!("{} ", "*".repeat(level)));
     (out.join("\n"), at)
 }
@@ -62,17 +76,17 @@ pub fn nav_parent(text: &str, line: usize) -> Option<usize> {
     if h != line {
         return Some(h);
     }
-    let level = headline_level(lines[h])?;
+    let level = headline_level(line_at(&lines, h))?;
     (0..h)
         .rev()
-        .find(|&i| headline_level(lines[i]).is_some_and(|l| l < level))
+        .find(|&i| headline_level(line_at(&lines, i)).is_some_and(|l| l < level))
 }
 
 /// The next headline after `line` (any level), like Org `C-c C-n`.
 #[must_use]
 pub fn nav_next(text: &str, line: usize) -> Option<usize> {
     let lines: Vec<&str> = text.split('\n').collect();
-    (line + 1..lines.len()).find(|&i| headline_level(lines[i]).is_some())
+    (next(line)..lines.len()).find(|&i| headline_level(line_at(&lines, i)).is_some())
 }
 
 /// The previous headline before `line` (any level), like Org `C-c C-p`.
@@ -81,7 +95,7 @@ pub fn nav_prev(text: &str, line: usize) -> Option<usize> {
     let lines: Vec<&str> = text.split('\n').collect();
     (0..line.min(lines.len()))
         .rev()
-        .find(|&i| headline_level(lines[i]).is_some())
+        .find(|&i| headline_level(line_at(&lines, i)).is_some())
 }
 
 /// The next sibling headline (same level, within the same parent), like Org
@@ -90,8 +104,8 @@ pub fn nav_prev(text: &str, line: usize) -> Option<usize> {
 pub fn nav_forward_same(text: &str, line: usize) -> Option<usize> {
     let lines: Vec<&str> = text.split('\n').collect();
     let h = governing(&lines, line)?;
-    let level = headline_level(lines[h])?;
-    for (i, l) in lines.iter().enumerate().skip(h + 1) {
+    let level = headline_level(line_at(&lines, h))?;
+    for (i, l) in lines.iter().enumerate().skip(next(h)) {
         match headline_level(l) {
             Some(l) if l < level => return None,
             Some(l) if l == level => return Some(i),
@@ -107,7 +121,7 @@ pub fn nav_forward_same(text: &str, line: usize) -> Option<usize> {
 pub fn nav_backward_same(text: &str, line: usize) -> Option<usize> {
     let lines: Vec<&str> = text.split('\n').collect();
     let h = governing(&lines, line)?;
-    let level = headline_level(lines[h])?;
+    let level = headline_level(line_at(&lines, h))?;
     for (i, l) in lines.iter().enumerate().take(h).rev() {
         match headline_level(l) {
             Some(l) if l < level => return None,
@@ -147,37 +161,37 @@ pub fn sort_children(text: &str, line: usize) -> Option<String> {
     let (start, end, child_level) = match governing(&lines, line) {
         Some(h) => {
             let (s, e) = subtree_range(&lines, h)?;
-            (s + 1, e, headline_level(lines[h])? + 1)
+            (next(s), e, next(headline_level(line_at(&lines, h))?))
         }
         None => (0, lines.len(), 1),
     };
     let mut blocks: Vec<(usize, usize)> = Vec::new();
     let mut i = start;
     while i < end {
-        if headline_level(lines[i]) == Some(child_level) {
+        if headline_level(line_at(&lines, i)) == Some(child_level) {
             let (s, e) = subtree_range(&lines, i)?;
             let e = e.min(end);
             blocks.push((s, e));
             i = e;
         } else {
-            i += 1;
+            i = next(i);
         }
     }
     if blocks.len() < 2 {
         return None;
     }
-    let first = blocks[0].0;
+    let first = blocks.first()?.0;
     let mut sorted = blocks.clone();
     sorted.sort_by_key(|&(s, _)| {
-        let l = lines[s];
+        let l = line_at(&lines, s);
         let lv = headline_level(l).unwrap_or(0);
         l.get(lv..).unwrap_or_default().trim().to_ascii_lowercase()
     });
-    let mut out: Vec<&str> = lines[..first].to_vec();
+    let mut out: Vec<&str> = lines.get(..first)?.to_vec();
     for &(s, e) in &sorted {
-        out.extend_from_slice(&lines[s..e]);
+        out.extend_from_slice(lines.get(s..e)?);
     }
-    out.extend_from_slice(&lines[end..]);
+    out.extend_from_slice(lines.get(end..)?);
     Some(out.join("\n"))
 }
 
@@ -195,18 +209,28 @@ pub fn refile(text: &str, line: usize, target_line: usize) -> Option<(String, us
     }
     let target_level = headline_level(lines.get(target_line)?)?;
     let (_, te) = subtree_range(&lines, target_line)?;
-    let src_level = headline_level(lines[ss])?;
-    let delta = i64::try_from(target_level + 1).ok()? - i64::try_from(src_level).ok()?;
-    let block: Vec<String> = lines[ss..se].iter().map(|l| relevel(l, delta)).collect();
+    let src_level = headline_level(line_at(&lines, ss))?;
+    let delta = i64::try_from(next(target_level))
+        .ok()?
+        .checked_sub(i64::try_from(src_level).ok()?)?;
+    let block: Vec<String> = lines
+        .get(ss..se)?
+        .iter()
+        .map(|l| relevel(l, delta))
+        .collect();
     let mut out: Vec<String> = lines
         .iter()
         .enumerate()
         .filter(|(i, _)| !(ss..se).contains(i))
         .map(|(_, s)| (*s).to_string())
         .collect();
-    let insert_at = if te > ss { te - (se - ss) } else { te };
+    let insert_at = if te > ss {
+        sub_or(te, sub_or(se, ss, 0), 0)
+    } else {
+        te
+    };
     for (k, l) in block.into_iter().enumerate() {
-        out.insert(insert_at + k, l);
+        out.insert(add_or(insert_at, k, usize::MAX).min(out.len()), l);
     }
     Some((out.join("\n"), insert_at))
 }
@@ -224,14 +248,16 @@ pub fn paste_subtree(text: &str, line: usize, clip: &str) -> Option<(String, usi
     let (at, target_level) = match governing(&lines, line) {
         Some(h) => {
             let (_, e) = subtree_range(&lines, h)?;
-            (e, headline_level(lines[h])?)
+            (e, headline_level(line_at(&lines, h))?)
         }
-        None => ((line + 1).min(lines.len()), 1),
+        None => (next(line).min(lines.len()), 1),
     };
-    let delta = i64::try_from(target_level).ok()? - i64::try_from(clip_level).ok()?;
+    let delta = i64::try_from(target_level)
+        .ok()?
+        .checked_sub(i64::try_from(clip_level).ok()?)?;
     let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
     for (k, l) in clip_lines.iter().enumerate() {
-        out.insert(at + k, relevel(l, delta));
+        out.insert(add_or(at, k, usize::MAX).min(out.len()), relevel(l, delta));
     }
     Some((out.join("\n"), at))
 }
