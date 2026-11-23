@@ -32,6 +32,18 @@
 //!
 //! Owning spec: `crates/vix-dap/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::collections::HashMap;
 use std::io::{Read, Write};
 #[cfg(feature = "process")]
@@ -1007,7 +1019,13 @@ impl Dap {
         if let Some(s) = self.session.as_mut() {
             let mut args = json!({ "expression": expr, "context": "repl" });
             if let Some(frame) = s.frame_id {
-                args["frameId"] = json!(frame);
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "RCA-EXC-2: args is the object literal built above, and assigning to a key of an object inserts it"
+                )]
+                {
+                    args["frameId"] = json!(frame);
+                }
             }
             s.request("evaluate", &args, Pending::Evaluate(expr.to_string()));
         }
@@ -1153,8 +1171,8 @@ impl Dap {
                 if s.frame_id != Some(frame_id) {
                     return;
                 }
-                if let Some(i) = auto_expand_scope(&scopes) {
-                    s.request_variables(scopes[i].variables_reference);
+                if let Some(scope) = auto_expand_scope(&scopes).and_then(|i| scopes.get(i)) {
+                    s.request_variables(scope.variables_reference);
                 }
                 events.push(DapEvent::Scopes { frame_id, scopes });
             }
@@ -1222,7 +1240,13 @@ impl Session {
     /// Send a DAP request, recording its `Pending` kind by sequence number.
     fn request(&mut self, command: &str, arguments: &Value, pending: Pending) {
         let seq = self.seq;
-        self.seq += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: seq counts the requests of one debug session, one per message sent, so it cannot reach the top of its type"
+        )]
+        {
+            self.seq += 1;
+        }
         self.pending.insert(seq, pending);
         let msg =
             json!({ "seq": seq, "type": "request", "command": command, "arguments": arguments });
@@ -1551,7 +1575,12 @@ fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
                     return;
                 }
                 Ok(n) => {
-                    decoder.push(&chunk[..n]);
+                    #[expect(
+                        clippy::indexing_slicing,
+                        reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most chunk.len()"
+                    )]
+                    let received = &chunk[..n];
+                    decoder.push(received);
                     while let Some(msg) = decoder.pop() {
                         if tx.send(Incoming::Message(msg)).is_err() {
                             return;

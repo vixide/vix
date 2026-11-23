@@ -298,14 +298,14 @@ impl DebugView {
         // `prefix` ends up holding the name path from the scope down to the
         // node owning `reference`; children extend it to look up the memory.
         let mut prefix = Vec::new();
-        let Some(i) = self
+        let Some(scope) = self
             .scopes
-            .iter()
-            .position(|n| n.path_to(reference, &mut prefix))
+            .iter_mut()
+            .find(|n| n.path_to(reference, &mut prefix))
         else {
             return Vec::new();
         };
-        let Some(node) = self.scopes[i].find_mut(reference) else {
+        let Some(node) = scope.find_mut(reference) else {
             return Vec::new();
         };
         node.children = variables.iter().map(Node::variable).collect();
@@ -445,8 +445,18 @@ impl DebugView {
             .iter()
             .position(|&i| i >= self.selected)
             .unwrap_or(last);
-        let target = at.saturating_add_signed(delta).min(last);
-        self.selected = selectable[target];
+        // A step past either end stops at that end (a declared boundary).
+        let target = match at.checked_add_signed(delta) {
+            Some(t) => t.min(last),
+            None if delta < 0 => 0,
+            None => last,
+        };
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: target is at most last, which is selectable.len() - 1"
+        )]
+        let row = selectable[target];
+        self.selected = row;
     }
 
     /// Highlight the first selectable row.
@@ -506,8 +516,10 @@ impl DebugView {
             node.expanded = false;
             return;
         }
-        if path.len() > 1 {
-            let parent = RowKind::Node(path[..path.len() - 1].to_vec());
+        if let Some((_, parent_path)) = path.split_last()
+            && !parent_path.is_empty()
+        {
+            let parent = RowKind::Node(parent_path.to_vec());
             if let Some(i) = self.rows().iter().position(|r| r.kind == parent) {
                 self.selected = i;
             }
@@ -569,7 +581,12 @@ impl DebugView {
 /// Push `node` and, when expanded, its descendants.
 fn push_node(rows: &mut Vec<Row>, node: &Node, path: &[usize]) {
     let mut row = Row::new(RowKind::Node(path.to_vec()), node.name.clone());
-    row.depth = path.len() - 1;
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: a node's path always holds at least its own index, so the length is at least 1"
+    )]
+    let depth = path.len() - 1;
+    row.depth = depth;
     row.detail.clone_from(&node.value);
     row.expandable = node.reference != 0;
     row.expanded = row.expandable && node.expanded;
