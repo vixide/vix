@@ -13,6 +13,18 @@
 //! public entry points the host's menu actions call to switch views. Owning
 //! spec: `crates/vix-db/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{
@@ -28,6 +40,20 @@ pub(crate) enum PathTarget {
     Import,
     /// Load a `.sql` file into the editor and run it (Ctrl+P, T786).
     RunSql,
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
 }
 
 impl Browser {
@@ -144,7 +170,7 @@ impl Browser {
             self.message = Some(t!("msg.db_import_empty").to_string());
             return;
         }
-        let rows = records.len().saturating_sub(1);
+        let rows = sub_or(records.len(), 1, 0);
         // On production every write shows its SQL and asks first (T781).
         if self.active_environment().is_production() {
             self.pending_run = Some(execute::PendingRun::Import {
@@ -184,12 +210,12 @@ impl Browser {
             self.saved.queries.len()
         };
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => self.list_sel = self.list_sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => self.list_sel = sub_or(self.list_sel, 1, 0),
             KeyCode::Down | KeyCode::Char('j') => {
-                self.list_sel = (self.list_sel + 1).min(len.saturating_sub(1));
+                self.list_sel = add_or(self.list_sel, 1, usize::MAX).min(sub_or(len, 1, 0));
             }
             KeyCode::Home => self.list_sel = 0,
-            KeyCode::End => self.list_sel = len.saturating_sub(1),
+            KeyCode::End => self.list_sel = sub_or(len, 1, 0),
             KeyCode::Enter => {
                 let sql = if self.view == View::History {
                     self.history.entries.get(self.list_sel).cloned()
@@ -214,7 +240,7 @@ impl Browser {
                 }
                 // `len` is the pre-delete length, so `len - 2` is the new last
                 // index.
-                self.list_sel = self.list_sel.min(len.saturating_sub(2));
+                self.list_sel = self.list_sel.min(sub_or(len, 2, 0));
             }
             KeyCode::Esc | KeyCode::Char('q') => self.view = View::Workbench,
             _ => {}
@@ -293,12 +319,12 @@ impl Browser {
     pub(super) fn key_log(&mut self, key: KeyEvent) -> Outcome {
         let len = self.log.entries.len();
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => self.list_sel = self.list_sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => self.list_sel = sub_or(self.list_sel, 1, 0),
             KeyCode::Down | KeyCode::Char('j') => {
-                self.list_sel = (self.list_sel + 1).min(len.saturating_sub(1));
+                self.list_sel = add_or(self.list_sel, 1, usize::MAX).min(sub_or(len, 1, 0));
             }
             KeyCode::Home => self.list_sel = 0,
-            KeyCode::End => self.list_sel = len.saturating_sub(1),
+            KeyCode::End => self.list_sel = sub_or(len, 1, 0),
             KeyCode::Enter => {
                 if let Some(entry) = self.log.entries.get(self.list_sel) {
                     let sql = entry.sql.clone();
@@ -322,16 +348,18 @@ impl Browser {
     /// Keys in the ER-diagram viewer (scroll; `y` yanks the Mermaid text). The
     /// diagram text lives in the shared `cell_text` / `view_scroll` fields.
     pub(super) fn key_erd(&mut self, key: KeyEvent) -> Outcome {
-        let last = self.cell_text.lines().count().saturating_sub(1);
+        let last = sub_or(self.cell_text.lines().count(), 1, 0);
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
-                self.view_scroll = self.view_scroll.saturating_sub(1);
+                self.view_scroll = sub_or(self.view_scroll, 1, 0);
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                self.view_scroll = (self.view_scroll + 1).min(last);
+                self.view_scroll = add_or(self.view_scroll, 1, usize::MAX).min(last);
             }
-            KeyCode::PageUp => self.view_scroll = self.view_scroll.saturating_sub(10),
-            KeyCode::PageDown => self.view_scroll = (self.view_scroll + 10).min(last),
+            KeyCode::PageUp => self.view_scroll = sub_or(self.view_scroll, 10, 0),
+            KeyCode::PageDown => {
+                self.view_scroll = add_or(self.view_scroll, 10, usize::MAX).min(last);
+            }
             KeyCode::Home => self.view_scroll = 0,
             KeyCode::End => self.view_scroll = last,
             KeyCode::Char('y') => {
@@ -363,8 +391,10 @@ impl Browser {
             .run_catalog(catalog::relationships_sql(kind))
             .map_or_default(|(_, rows)| {
                 rows.into_iter()
-                    .filter(|r| r.len() >= 4)
-                    .map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone()))
+                    .filter_map(|r| match r.as_slice() {
+                        [a, b, c, d, ..] => Some((a.clone(), b.clone(), c.clone(), d.clone())),
+                        _ => None,
+                    })
                     .collect()
             });
         self.cell_text = erd::mermaid(&columns, &relationships);
@@ -381,10 +411,16 @@ impl Browser {
         }
         match key.code {
             KeyCode::Left => {
-                self.export_format =
-                    (self.export_format + export::FORMATS.len() - 1) % export::FORMATS.len();
+                self.export_format = self
+                    .export_format
+                    .checked_sub(1)
+                    .unwrap_or_else(|| sub_or(export::FORMATS.len(), 1, 0));
             }
-            KeyCode::Right => self.export_format = (self.export_format + 1) % export::FORMATS.len(),
+            KeyCode::Right => {
+                self.export_format = add_or(self.export_format, 1, usize::MAX)
+                    .checked_rem(export::FORMATS.len())
+                    .unwrap_or(0);
+            }
             KeyCode::Tab => self.export_clipboard = !self.export_clipboard,
             KeyCode::Char(c) => self.export_path.push(c),
             KeyCode::Backspace => {
@@ -404,7 +440,10 @@ impl Browser {
             return;
         }
         self.table_export = None;
-        self.export_path = format!("vix-export.{}", export::FORMATS[self.export_format].label());
+        let label = export::FORMATS
+            .get(self.export_format)
+            .map_or("", |format| format.label());
+        self.export_path = format!("vix-export.{label}");
         self.view = View::Export;
     }
 
@@ -412,9 +451,18 @@ impl Browser {
     /// destination. The table name for SQL `INSERT` output is the last
     /// previewed table, or `vix_export` when the grid is an arbitrary query.
     fn run_export(&mut self) {
-        let format = export::FORMATS[self.export_format % export::FORMATS.len()];
+        let Some(&format) = export::FORMATS.get(
+            self.export_format
+                .checked_rem(export::FORMATS.len())
+                .unwrap_or(0),
+        ) else {
+            return;
+        };
         let order = self.grid.filtered();
-        let rows: Vec<&Vec<String>> = order.iter().map(|&i| &self.grid.rows[i]).collect();
+        let rows: Vec<&Vec<String>> = order
+            .iter()
+            .filter_map(|&i| self.grid.rows.get(i))
+            .collect();
         let table = self
             .last_table
             .clone()
@@ -490,7 +538,7 @@ impl Browser {
             KeyCode::PageUp => self.tree.step(true, page.max(1)),
             KeyCode::PageDown => self.tree.step(false, page.max(1)),
             KeyCode::Home => self.tree.sel = 0,
-            KeyCode::End => self.tree.sel = self.tree.rows().len().saturating_sub(1),
+            KeyCode::End => self.tree.sel = sub_or(self.tree.rows().len(), 1, 0),
             KeyCode::Left => self.tree.toggle(Some(false)),
             KeyCode::Right => self.tree.toggle(Some(true)),
             KeyCode::Char(' ') => self.tree.toggle(None),
@@ -528,16 +576,19 @@ impl Browser {
         if let Some(popup) = self.popup.as_mut() {
             match key.code {
                 KeyCode::Up => {
-                    popup.sel = popup.sel.saturating_sub(1);
+                    popup.sel = sub_or(popup.sel, 1, 0);
                     return;
                 }
                 KeyCode::Down => {
-                    popup.sel = (popup.sel + 1).min(popup.items.len() - 1);
+                    popup.sel =
+                        add_or(popup.sel, 1, usize::MAX).min(sub_or(popup.items.len(), 1, 0));
                     return;
                 }
                 KeyCode::Tab => {
-                    let (start, text) = (popup.start, popup.items[popup.sel].clone());
-                    self.query.replace_prefix(start, &text);
+                    let start = popup.start;
+                    if let Some(text) = popup.items.get(popup.sel).cloned() {
+                        self.query.replace_prefix(start, &text);
+                    }
                     self.popup = None;
                     return;
                 }
@@ -651,7 +702,10 @@ impl Browser {
     /// column sizes it.
     fn chart_results(&mut self) {
         let order = self.grid.filtered();
-        let rows: Vec<&Vec<String>> = order.iter().map(|&i| &self.grid.rows[i]).collect();
+        let rows: Vec<&Vec<String>> = order
+            .iter()
+            .filter_map(|&i| self.grid.rows.get(i))
+            .collect();
         match chart::bars(&self.grid.headers, &rows) {
             Some(text) => {
                 self.cell_text = text;

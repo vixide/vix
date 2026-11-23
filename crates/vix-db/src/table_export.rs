@@ -32,6 +32,18 @@
 //! tested here; the worker is tested end to end on `SQLite`. Owning spec:
 //! `crates/vix-db/spec/index.md` ("Table export").
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -51,6 +63,26 @@ pub const TABLE_FORMATS: &[Format] = &[Format::Csv, Format::Json, Format::Ndjson
 
 /// Rows between two progress reports from the export worker.
 pub const PROGRESS_EVERY: u64 = 512;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a + b` on `u64`, or `u64::MAX` when the sum does not fit (a row counter
+/// that large is shown as full).
+fn add_or_u64(a: u64, b: u64, fallback: u64) -> u64 {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// One exported cell, typed as the driver decoded it, so `NULL`, numbers and
 /// booleans survive into JSON and SQL instead of becoming strings.
@@ -146,22 +178,32 @@ pub fn fk_order(tables: &[String], edges: &[(String, String)]) -> FkOrder {
         if c == p || !seen.insert((c, p)) {
             continue;
         }
-        waiting_on[c] += 1;
-        children[p].push(c);
+        if let Some(w) = waiting_on.get_mut(c) {
+            *w = add_or(*w, 1, usize::MAX);
+        }
+        if let Some(list) = children.get_mut(p) {
+            list.push(c);
+        }
     }
     let mut done = vec![false; n];
     let mut order = Vec::with_capacity(n);
     while order.len() < n {
-        let Some(next) = (0..n).find(|&i| !done[i] && waiting_on[i] == 0) else {
+        let Some(next) =
+            (0..n).find(|&i| !done.get(i).is_some_and(|d| *d) && waiting_on.get(i) == Some(&0))
+        else {
             return FkOrder {
                 order: (0..n).collect(),
                 cycle: true,
             };
         };
-        done[next] = true;
+        if let Some(d) = done.get_mut(next) {
+            *d = true;
+        }
         order.push(next);
-        for &c in &children[next] {
-            waiting_on[c] -= 1;
+        for &c in children.get(next).map_or(&[][..], Vec::as_slice) {
+            if let Some(w) = waiting_on.get_mut(c) {
+                *w = sub_or(*w, 1, 0);
+            }
         }
     }
     FkOrder {
@@ -533,7 +575,9 @@ impl Dialog {
     /// The selected format.
     #[must_use]
     pub fn format(&self) -> Format {
-        TABLE_FORMATS[self.format % TABLE_FORMATS.len()]
+        // A format index past the list wraps around it.
+        let at = self.format.checked_rem(TABLE_FORMATS.len()).unwrap_or(0);
+        TABLE_FORMATS.get(at).copied().unwrap_or(Format::Sql)
     }
 
     /// Whether the destination is a single file (SQL) rather than a
@@ -702,7 +746,11 @@ async fn run(job: &Job, tx: &mpsc::Sender<Event>) -> Result<(u64, bool), ExportE
 
 /// Where a file is written until it is complete.
 fn part_path(path: &Path) -> PathBuf {
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    // A path with no file name has an empty one.
+    let mut name = std::ffi::OsString::new();
+    if let Some(file) = path.file_name() {
+        name.clone_from(&file.to_os_string());
+    }
     name.push(".part");
     path.with_file_name(name)
 }
@@ -719,7 +767,8 @@ async fn write_all(
         return Ok((rows, cycle));
     }
     std::fs::create_dir_all(&job.dest)?;
-    let qualify = job.tables.iter().any(|(s, _)| *s != job.tables[0].0);
+    let first_schema = job.tables.first().map(|(s, _)| s);
+    let qualify = job.tables.iter().any(|(s, _)| Some(s) != first_schema);
     for (index, (schema, table)) in job.tables.iter().enumerate() {
         tx.send(Event::Table {
             index,
@@ -771,7 +820,7 @@ async fn stream_rows(
         let row = row?;
         let values: Vec<Value> = (0..row.len()).map(|i| row.value(i)).collect();
         each(&values)?;
-        *rows += 1;
+        *rows = add_or_u64(*rows, 1, u64::MAX);
         if (*rows).is_multiple_of(PROGRESS_EVERY) {
             tx.send(Event::Rows(*rows))
                 .map_err(|_| ExportError::Cancelled)?;
@@ -841,8 +890,10 @@ async fn write_sql(
     let edges: Vec<(String, String)> = rows_of(conn, catalog::relationships_sql(kind))
         .await?
         .into_iter()
-        .filter(|r| r.len() >= 3)
-        .map(|r| (r[0].clone(), r[2].clone()))
+        .filter_map(|r| match r.as_slice() {
+            [child, _, parent, ..] => Some((child.clone(), parent.clone())),
+            _ => None,
+        })
         .collect();
     let order = fk_order(&names, &edges);
     let part = part_path(&job.dest);
@@ -888,7 +939,9 @@ async fn write_sql_file(
     writeln!(out, "BEGIN;")?;
     let mut resets = Vec::new();
     for (index, &i) in order.order.iter().enumerate() {
-        let (schema, table) = &job.tables[i];
+        let Some((schema, table)) = job.tables.get(i) else {
+            continue;
+        };
         tx.send(Event::Table {
             index,
             name: table.clone(),
@@ -963,14 +1016,13 @@ impl Browser {
             self.message = Some(t!("msg.db_table_export_none").to_string());
             return;
         }
-        let format = self
-            .table_export
-            .as_ref()
-            .map_or(0, |d| d.format % TABLE_FORMATS.len());
+        let format = self.table_export.as_ref().map_or(0, |d| {
+            d.format.checked_rem(TABLE_FORMATS.len()).unwrap_or(0)
+        });
         self.table_export = Some(Dialog {
             tables,
             format,
-            path: default_path(TABLE_FORMATS[format]),
+            path: default_path(TABLE_FORMATS.get(format).copied().unwrap_or(Format::Sql)),
         });
         self.view = View::Export;
     }
@@ -988,9 +1040,14 @@ impl Browser {
             KeyCode::Left | KeyCode::Right => {
                 let was_default = dialog.path == default_path(dialog.format());
                 dialog.format = if key.code == KeyCode::Left {
-                    (dialog.format + n - 1) % n
+                    dialog
+                        .format
+                        .checked_sub(1)
+                        .unwrap_or_else(|| sub_or(n, 1, 0))
                 } else {
-                    (dialog.format + 1) % n
+                    add_or(dialog.format, 1, usize::MAX)
+                        .checked_rem(n)
+                        .unwrap_or(0)
                 };
                 if was_default {
                     dialog.path = default_path(dialog.format());
@@ -1077,7 +1134,7 @@ impl Browser {
         loop {
             match pending.rx.try_recv() {
                 Ok(Event::Table { index, name }) => {
-                    pending.current = (name, index + 1);
+                    pending.current = (name, add_or(index, 1, usize::MAX));
                     progressed = true;
                 }
                 Ok(Event::Rows(rows)) => {

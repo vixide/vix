@@ -13,6 +13,18 @@
 //! table is shared with [`crate::complete`] and [`crate::format`]. Owning
 //! spec: `crates/vix-db/spec/index.md` ("Syntax Highlighting").
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use ratatui::style::{Color, Style};
 
 /// SQL keywords recognized by the highlighter, the completer, and the
@@ -105,6 +117,33 @@ pub const KEYWORDS: &[&str] = &[
     "with",
 ];
 
+/// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners
+/// stop at the end before reading it).
+fn ch(chars: &[char], i: usize) -> char {
+    chars.get(i).copied().unwrap_or('\0')
+}
+
+/// The chars between `from` and `to`; empty for a range that is not inside `chars`.
+fn span(chars: &[char], from: usize, to: usize) -> &[char] {
+    chars.get(from..to).unwrap_or(&[])
+}
+
+/// The chars from `from` on; empty past the end.
+fn span_from(chars: &[char], from: usize) -> &[char] {
+    chars.get(from..).unwrap_or(&[])
+}
+
+/// `from + step`; an index past the top of `usize` is past any text.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A highlight class for one span of text.
 ///
 /// Each class maps to a theme token in [`style`].
@@ -183,44 +222,63 @@ pub fn highlight_line(line: &str, in_block: bool) -> (Vec<(Tok, String)>, bool) 
             // Inside a block comment: consume to the closing `*/` or the end
             // of the line, whichever comes first (the flag carries over).
             let start = i;
-            while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
-                i += 1;
+            while i < chars.len() && !(ch(&chars, i) == '*' && chars.get(ahead(i, 1)) == Some(&'/'))
+            {
+                i = ahead(i, 1);
             }
             if i < chars.len() {
-                i += 2;
+                i = ahead(i, 2);
                 block = false;
             }
-            push(&mut spans, Tok::Comment, chars[start..i].iter().collect());
+            push(
+                &mut spans,
+                Tok::Comment,
+                span(&chars, start, i).iter().collect(),
+            );
             continue;
         }
-        let c = chars[i];
-        if c == '-' && chars.get(i + 1) == Some(&'-') {
-            push(&mut spans, Tok::Comment, chars[i..].iter().collect());
+        let c = ch(&chars, i);
+        if c == '-' && chars.get(ahead(i, 1)) == Some(&'-') {
+            push(
+                &mut spans,
+                Tok::Comment,
+                span_from(&chars, i).iter().collect(),
+            );
             i = chars.len();
-        } else if c == '/' && chars.get(i + 1) == Some(&'*') {
+        } else if c == '/' && chars.get(ahead(i, 1)) == Some(&'*') {
             block = true;
             push(&mut spans, Tok::Comment, "/*".to_string());
-            i += 2;
+            i = ahead(i, 2);
         } else if c == '\'' || c == '"' {
             let start = i;
-            i += 1;
-            while i < chars.len() && chars[i] != c {
-                i += 1;
+            i = ahead(i, 1);
+            while i < chars.len() && ch(&chars, i) != c {
+                i = ahead(i, 1);
             }
-            i = (i + 1).min(chars.len());
-            push(&mut spans, Tok::Str, chars[start..i].iter().collect());
+            i = ahead(i, 1).min(chars.len());
+            push(
+                &mut spans,
+                Tok::Str,
+                span(&chars, start, i).iter().collect(),
+            );
         } else if c.is_ascii_digit() {
             let start = i;
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '.') {
-                i += 1;
+            while i < chars.len() && (ch(&chars, i).is_ascii_alphanumeric() || ch(&chars, i) == '.')
+            {
+                i = ahead(i, 1);
             }
-            push(&mut spans, Tok::Num, chars[start..i].iter().collect());
+            push(
+                &mut spans,
+                Tok::Num,
+                span(&chars, start, i).iter().collect(),
+            );
         } else if c.is_ascii_alphabetic() || c == '_' {
             let start = i;
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
-                i += 1;
+            while i < chars.len() && (ch(&chars, i).is_ascii_alphanumeric() || ch(&chars, i) == '_')
+            {
+                i = ahead(i, 1);
             }
-            let word: String = chars[start..i].iter().collect();
+            let word: String = span(&chars, start, i).iter().collect();
             let tok = if is_keyword(&word) {
                 Tok::Keyword
             } else {
@@ -229,7 +287,7 @@ pub fn highlight_line(line: &str, in_block: bool) -> (Vec<(Tok, String)>, bool) 
             push(&mut spans, tok, word);
         } else {
             push(&mut spans, Tok::Plain, c.to_string());
-            i += 1;
+            i = ahead(i, 1);
         }
     }
     (spans, block)
