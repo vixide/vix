@@ -1163,3 +1163,476 @@ fn semantic_token_capture(lsp_token_type: &str) -> Option<&'static str> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lsp_core::{Position, Range};
+    use crate::settings::Settings;
+    use vix_input::KeyModifiers;
+
+    fn range(l0: u32, c0: u32, l1: u32, c1: u32) -> Range {
+        Range {
+            start: Position {
+                line: l0,
+                character: c0,
+            },
+            end: Position {
+                line: l1,
+                character: c1,
+            },
+        }
+    }
+
+    /// A unique scratch directory holding `name` with `content`, opened in an app.
+    fn app_with_file(tag: &str, name: &str, content: &str) -> (App, PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("vix-r2c-lspdap-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join(name);
+        std::fs::write(&file, content).unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        app.open_initial(&file);
+        // The tab's own spelling of the path (symlinked temp dirs resolve).
+        let file = app
+            .editor
+            .active_tab()
+            .unwrap()
+            .path
+            .clone()
+            .unwrap_or(file);
+        (app, dir, file)
+    }
+
+    fn text(app: &App) -> String {
+        app.editor.active_tab().unwrap().text()
+    }
+
+    fn adapter(ext: &str) -> crate::settings::DebugAdapter {
+        toml::from_str(&format!(
+            "adapter_id = \"fake\"\nextensions = [\"{ext}\"]\ncommand = [\"/nonexistent/vix-r2c-adapter\"]\n"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_run_actions_open_prompts_toggle_the_panel_and_reject_unknown_ids() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        assert!(!app.run_dap_action("run.nonsense"));
+        assert!(app.run_dap_action("run.repl"));
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::DebugRepl
+        ));
+        assert!(app.run_dap_action("run.watch"));
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::DebugWatch
+        ));
+        let shown = app.visible.contains(crate::app::Visible::DEBUG_PANEL);
+        assert!(app.run_dap_action("run.panel"));
+        assert_ne!(
+            shown,
+            app.visible.contains(crate::app::Visible::DEBUG_PANEL)
+        );
+        assert!(app.run_dap_action("run.pause"));
+    }
+
+    #[test]
+    fn starting_the_debugger_reports_what_is_missing() {
+        let (mut app, dir, _file) = app_with_file("dbg-start", "main.zz", "x\n");
+        app.run_dap_action("run.start");
+        assert_eq!(app.status, t!("status.debug_no_adapter").to_string());
+        app.settings.debug_adapters = vec![adapter("zz")];
+        app.run_dap_action("run.attach");
+        // The adapter binary does not exist, so the start fails cleanly.
+        assert_eq!(app.status, t!("status.debug_failed").to_string());
+        let mut bare = App::new(std::env::temp_dir(), Settings::default());
+        bare.editor.active_tab_mut().unwrap().path = None;
+        bare.run_dap_action("run.start");
+        assert_eq!(bare.status, t!("status.debug_no_file").to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn stopping_the_debugger_resets_state_and_focus() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.dap_stopped = Some((PathBuf::from("a.rs"), 3));
+        app.focus = Focus::Debug;
+        app.run_dap_action("run.stop");
+        assert!(app.dap_stopped.is_none());
+        assert_eq!(app.focus, Focus::Editor);
+        assert_eq!(app.status, t!("status.debug_stopped").to_string());
+    }
+
+    #[test]
+    fn breakpoints_toggle_on_the_cursor_line_and_need_a_file() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.editor.active_tab_mut().unwrap().path = None;
+        app.run_dap_action("run.toggle_breakpoint");
+        assert_eq!(app.status, t!("status.blame_no_file").to_string());
+
+        let (mut app, dir, _f) = app_with_file("bp", "a.rs", "one\ntwo\nthree\n");
+        app.editor
+            .goto(2, None, ratatui::layout::Rect::new(0, 0, 80, 24));
+        app.run_dap_action("run.toggle_breakpoint");
+        assert_eq!(app.active_breakpoints(), vec![2]);
+        assert_eq!(app.active_breakpoint(2).unwrap().line, 2);
+        assert!(app.active_breakpoint(1).is_none());
+        app.run_dap_action("run.toggle_breakpoint");
+        assert_eq!(app.active_breakpoints(), Vec::<usize>::new());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_stopped_line_and_breakpoints_reach_the_active_tab() {
+        let (mut app, dir, file) = app_with_file("stop", "a.rs", "one\ntwo\nthree\n");
+        app.editor
+            .goto(3, None, ratatui::layout::Rect::new(0, 0, 80, 24));
+        app.toggle_breakpoint();
+        app.dap_stopped = Some((file, 2));
+        app.refresh_debug_markers();
+        assert_eq!(app.active_breakpoints(), vec![3]);
+        // A stop in another file leaves this buffer without a current line.
+        app.dap_stopped = Some((dir.join("other.rs"), 1));
+        app.refresh_debug_markers();
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn debug_prompts_add_watches_and_ignore_empty_input() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.accept_debug_prompt(PromptKind::DebugWatch, "");
+        assert_eq!(app.dap_view.watches.len(), 0);
+        app.accept_debug_prompt(PromptKind::DebugWatch, "x + 1");
+        assert_eq!(app.dap_view.watches.len(), 1);
+        assert_eq!(app.dap_view.watches[0].0, "x + 1");
+        assert!(app.visible.contains(crate::app::Visible::DEBUG_PANEL));
+        app.accept_debug_prompt(PromptKind::DebugRepl, "");
+        app.accept_debug_prompt(PromptKind::DebugRepl, "1 + 1");
+        app.accept_debug_prompt(PromptKind::LinkedEdit, "ignored");
+    }
+
+    #[test]
+    fn jumping_to_a_debug_location_opens_the_file_at_the_line() {
+        let (mut app, dir, file) = app_with_file("jump", "a.txt", "one\ntwo\nthree\n");
+        let other = dir.join("b.txt");
+        std::fs::write(&other, "x\ny\nz\nw\n").unwrap();
+        app.jump_to_debug_location(&other.to_string_lossy(), 3);
+        assert_eq!(app.editor.cursor_1based().0, 3);
+        assert_eq!(app.focus, Focus::Editor);
+        // A missing file is ignored.
+        app.jump_to_debug_location(&dir.join("gone.txt").to_string_lossy(), 1);
+        assert_eq!(app.editor.cursor_1based().0, 3);
+        let _ = file;
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn inlay_hints_toggle_and_only_apply_while_shown() {
+        let (mut app, dir, _f) = app_with_file("inlay", "a.rs", "let x = 1;\nlet y = 2;\n");
+        let hints = vec![
+            (0, 5, ": i32".to_string()),
+            (1, 5, ": i32".to_string()),
+            (99, 0, "beyond the end".to_string()),
+        ];
+        let on = app.visible.contains(crate::app::Visible::INLAY_HINTS);
+        if on {
+            app.toggle_inlay_hints();
+        }
+        app.apply_inlay_hints(&hints);
+        assert!(!app.editor.active_tab().unwrap().editor.has_inlay_hints());
+        app.toggle_inlay_hints();
+        assert_eq!(app.status, t!("status.inlay_on").to_string());
+        app.apply_inlay_hints(&hints);
+        assert!(app.editor.active_tab().unwrap().editor.has_inlay_hints());
+        app.toggle_inlay_hints();
+        assert_eq!(app.status, t!("status.inlay_off").to_string());
+        assert!(!app.editor.active_tab().unwrap().editor.has_inlay_hints());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn document_highlights_mark_every_occurrence() {
+        let (mut app, dir, _f) = app_with_file("hl", "a.rs", "foo bar foo\n");
+        app.apply_document_highlights(&[range(0, 0, 0, 3), range(0, 8, 0, 11)]);
+        let marks = app
+            .editor
+            .active_tab()
+            .unwrap()
+            .editor
+            .marks()
+            .unwrap()
+            .clone();
+        assert_eq!(marks.len(), 2);
+        assert_eq!((marks[0].0, marks[0].1), (0, 3));
+        assert_eq!((marks[1].0, marks[1].1), (8, 11));
+        assert_eq!(app.status, t!("status.highlights_n", n = 2).to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn selection_ranges_expand_to_the_next_larger_and_shrink_back() {
+        let (mut app, dir, _f) = app_with_file("sel", "a.rs", "fn main() { call(arg); }\n");
+        let chain = [range(0, 17, 0, 20), range(0, 12, 0, 22), range(0, 0, 0, 24)];
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(18);
+        app.expand_selection_dir = Some(true);
+        app.apply_selection_range(&chain);
+        let sel = |a: &mut App| {
+            let s = a
+                .editor
+                .active_tab_mut()
+                .unwrap()
+                .editor
+                .get_selection()
+                .unwrap();
+            (s.start, s.end)
+        };
+        assert_eq!(sel(&mut app), (17, 20));
+        app.expand_selection_dir = Some(true);
+        app.apply_selection_range(&chain);
+        assert_eq!(sel(&mut app), (12, 22));
+        app.expand_selection_dir = Some(true);
+        app.apply_selection_range(&chain);
+        assert_eq!(sel(&mut app), (0, 24));
+        // Shrinking picks the largest range strictly inside the selection.
+        app.expand_selection_dir = Some(false);
+        app.apply_selection_range(&chain);
+        assert_eq!(sel(&mut app), (12, 22));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn semantic_token_types_map_onto_theme_captures() {
+        assert_eq!(semantic_token_capture("comment"), Some("comment"));
+        assert_eq!(semantic_token_capture("keyword"), Some("keyword"));
+        assert_eq!(semantic_token_capture("modifier"), Some("keyword"));
+        assert_eq!(semantic_token_capture("number"), Some("number"));
+        assert_eq!(semantic_token_capture("string"), Some("string"));
+        assert_eq!(semantic_token_capture("regexp"), Some("string"));
+        assert_eq!(semantic_token_capture("variable"), None);
+        // Tokens convert without disturbing the buffer text.
+        let (mut app, dir, _f) = app_with_file("sem", "a.rs", "let s = \"hi\";\n");
+        app.apply_semantic_tokens(&[
+            crate::lsp_core::SemanticToken {
+                line: 0,
+                character: 8,
+                length: 4,
+                token_type: "string".to_string(),
+            },
+            crate::lsp_core::SemanticToken {
+                line: 9,
+                character: 0,
+                length: 1,
+                token_type: "string".to_string(),
+            },
+            crate::lsp_core::SemanticToken {
+                line: 0,
+                character: 0,
+                length: 3,
+                token_type: "function".to_string(),
+            },
+        ]);
+        assert_eq!(text(&app), "let s = \"hi\";\n");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn folding_ranges_become_fold_markers() {
+        let (mut app, dir, _f) = app_with_file("fold", "a.rs", "a {\n b\n}\nc\n");
+        app.apply_folding_ranges(&[(0, 2)]);
+        let ed = &app.editor.active_tab().unwrap().editor;
+        assert_eq!(ed.fold_marker(0), Some(false));
+        assert_eq!(ed.fold_marker(3), None);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_in_sync_edit_reply_rewrites_the_buffer_highest_first() {
+        let (mut app, dir, file) = app_with_file("edits", "a.rs", "let a = 1;\nlet b = 2;\n");
+        let rev = app.editor.active_tab().unwrap().editor.revision();
+        app.lsp_synced.insert(file.clone(), rev);
+        app.apply_lsp_edits(
+            &file,
+            &[
+                (range(0, 4, 0, 5), "alpha".to_string()),
+                (range(1, 4, 1, 5), "beta".to_string()),
+            ],
+        );
+        assert_eq!(text(&app), "let alpha = 1;\nlet beta = 2;\n");
+        assert!(app.editor.active_tab().unwrap().dirty);
+        assert_eq!(app.status, t!("status.formatted").to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_stale_edit_reply_is_dropped_and_cancels_a_pending_format_save() {
+        let (mut app, dir, file) = app_with_file("stale", "a.rs", "x\n");
+        // Never synced: the buffer is not the text the reply was computed for.
+        app.format_save_pending = Some(file.clone());
+        app.apply_lsp_edits(&file, &[(range(0, 0, 0, 1), "y".to_string())]);
+        assert_eq!(text(&app), "x\n");
+        assert!(app.format_save_pending.is_none());
+        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
+        app.status.clear();
+        app.drop_stale_lsp_edits(&file);
+        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_format_on_save_reply_writes_the_formatted_buffer_to_disk() {
+        let (mut app, dir, file) = app_with_file("fmtsave", "a.rs", "let   a=1;\n");
+        let rev = app.editor.active_tab().unwrap().editor.revision();
+        app.lsp_synced.insert(file.clone(), rev);
+        app.format_save_pending = Some(file.clone());
+        app.apply_lsp_edits(&file, &[(range(0, 0, 0, 10), "let a = 1;".to_string())]);
+        assert!(app.format_save_pending.is_none());
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "let a = 1;\n");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn linked_ranges_prompt_for_the_shared_text() {
+        let (mut app, dir, file) = app_with_file("linked", "a.html", "<div></div>\n");
+        // Out of sync: dropped.
+        app.begin_linked_edit(&file, &[range(0, 1, 0, 4), range(0, 7, 0, 10)]);
+        assert!(app.prompt.is_none());
+        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
+        let rev = app.editor.active_tab().unwrap().editor.revision();
+        app.lsp_synced.insert(file.clone(), rev);
+        app.begin_linked_edit(&file, &[range(0, 1, 0, 4), range(0, 7, 0, 10)]);
+        let p = app.prompt.as_ref().unwrap();
+        assert!(matches!(p.kind, PromptKind::LinkedEdit));
+        assert_eq!(p.input, "div");
+        assert_eq!(app.linked_ranges, Some(vec![(1, 4), (7, 10)]));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_workspace_edit_changes_open_buffers_and_closed_files() {
+        let (mut app, dir, file) = app_with_file("wsedit", "a.rs", "let old = 1;\n");
+        let closed = dir.join("b.rs");
+        std::fs::write(&closed, "use old;\n").unwrap();
+        app.apply_workspace_edit(&[
+            (file, vec![(range(0, 4, 0, 7), "new".to_string())]),
+            (closed.clone(), vec![(range(0, 4, 0, 7), "new".to_string())]),
+            (dir.join("unchanged.rs"), Vec::new()),
+        ]);
+        assert_eq!(text(&app), "let new = 1;\n");
+        assert!(app.editor.active_tab().unwrap().dirty);
+        assert_eq!(std::fs::read_to_string(&closed).unwrap(), "use new;\n");
+        assert_eq!(app.status, t!("status.renamed_in", n = 2).to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn lsp_jump_opens_the_file_at_the_utf16_column() {
+        let (mut app, dir, _f) = app_with_file("lspjump", "a.txt", "one\n");
+        let target = dir.join("t.txt");
+        std::fs::write(&target, "zero\nabc def\nlast\n").unwrap();
+        app.lsp_jump(&target, 1, 4);
+        assert_eq!(app.editor.cursor_1based(), (2, 5));
+        // A line past the end clamps to the last line.
+        app.lsp_jump(&target, 99, 0);
+        assert_eq!(app.editor.cursor_1based().0, 4);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn language_server_requests_say_so_when_no_server_handles_the_file() {
+        let (mut app, dir, _f) = app_with_file("inactive", "a.txt", "x\n");
+        let inactive = t!("status.lsp_inactive").to_string();
+        for call in [
+            App::lsp_restart as fn(&mut App),
+            App::lsp_show_log,
+            App::lsp_hover,
+            App::lsp_complete,
+            App::lsp_format,
+            App::lsp_signature_help,
+        ] {
+            app.status.clear();
+            call(&mut app);
+            assert_eq!(app.status, inactive);
+        }
+        // Syncing and diagnostics without a server are quiet no-ops.
+        app.lsp_sync_active();
+        assert!(app.lsp_synced.is_empty());
+        app.refresh_diagnostic_marks();
+        app.goto_diagnostic(true);
+        assert_eq!(app.status, t!("status.no_diagnostics").to_string());
+        app.status.clear();
+        app.open_diagnostics_panel();
+        assert_eq!(app.status, t!("status.no_diagnostics").to_string());
+        assert!(app.workspace_search.is_none());
+        app.after_lsp_restart(vec![PathBuf::from("x")]);
+        assert_eq!(app.status, t!("status.lsp_restarted").to_string());
+        assert!(!app.lsp_busy());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn format_on_type_ignores_keys_without_a_trigger_server() {
+        let (mut app, dir, _f) = app_with_file("ontype", "a.rs", "x\n");
+        let key = |c| KeyEvent::new(c, KeyModifiers::NONE);
+        app.settings.completion.format_on_type = false;
+        app.on_type_formatting_after_key(key(KeyCode::Char(';')));
+        app.settings.completion.format_on_type = true;
+        app.on_type_formatting_after_key(key(KeyCode::Char(';')));
+        app.on_type_formatting_after_key(key(KeyCode::Enter));
+        app.on_type_formatting_after_key(key(KeyCode::Left));
+        app.on_type_formatting_after_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert_eq!(text(&app), "x\n");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn wiki_link_completion_offers_org_node_titles() {
+        let (mut app, dir, _f) = app_with_file("roam", "main.org", "see [[");
+        std::fs::write(dir.join("alpha.org"), "#+title: Alpha Note\n").unwrap();
+        std::fs::write(dir.join("beta.org"), "#+title: Beta Note\n").unwrap();
+        app.file_index = vec![dir.join("alpha.org"), dir.join("beta.org")];
+        app.open_node_link_completion();
+        let popup = app.completion.as_ref().expect("titles offered");
+        let labels: Vec<&str> = popup.items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(labels, vec!["Alpha Note", "Beta Note"]);
+        assert!(popup.items[0].insert_text.ends_with("]]"));
+        app.completion = None;
+        app.file_index.clear();
+        app.open_node_link_completion();
+        assert!(app.completion.is_none());
+        assert_eq!(app.status, t!("status.roam_no_nodes").to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn org_contact_completion_offers_names_and_mailto_links() {
+        let (mut app, dir, _f) = app_with_file("contacts", "main.org", "mail [[");
+        std::fs::write(
+            dir.join("people.org"),
+            "* Ada Lovelace\n:PROPERTIES:\n:EMAIL: ada@example.org\n:END:\n* Bob\n:PROPERTIES:\n:PHONE: 1\n:END:\n",
+        )
+        .unwrap();
+        app.file_index = vec![dir.join("people.org")];
+        app.open_org_contact_link_completion(true);
+        let popup = app.completion.as_ref().unwrap();
+        assert_eq!(popup.items.len(), 1);
+        assert!(popup.items[0].label.contains("ada@example.org"));
+        app.completion = None;
+        app.open_org_contact_link_completion(false);
+        let labels: Vec<&str> = app
+            .completion
+            .as_ref()
+            .unwrap()
+            .items
+            .iter()
+            .map(|i| i.label.as_str())
+            .collect();
+        assert_eq!(labels, vec!["Ada Lovelace", "Bob"]);
+        app.completion = None;
+        app.file_index.clear();
+        app.open_org_contact_link_completion(false);
+        assert_eq!(app.status, t!("status.org_contacts_no_matches").to_string());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}

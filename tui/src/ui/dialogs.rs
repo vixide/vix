@@ -426,3 +426,333 @@ pub(super) fn draw_structural_replace(app: &App, frame: &mut Frame, area: Rect) 
     ]);
     frame.render_widget(Paragraph::new(line).style(theme::base()), bar);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::{
+        Confirm, ConfirmKind, PasteOp, QueryReplace, ReplaceConfirm, ScriptTrustPrompt,
+        StructuralReplace, UnsavedMode, UnsavedPrompt,
+    };
+    use crate::settings::Settings;
+    use ratatui::{Terminal, backend::TestBackend, buffer::Buffer};
+    use std::collections::VecDeque;
+    use std::path::PathBuf;
+
+    fn app() -> App {
+        App::new(std::env::temp_dir(), Settings::default())
+    }
+
+    /// Draw one overlay into a fresh `w` x `h` buffer.
+    fn render(w: u16, h: u16, f: impl FnOnce(&mut Frame, Rect)) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                f(frame, area);
+            })
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    fn rows(buf: &Buffer) -> Vec<String> {
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect()
+    }
+
+    fn text(buf: &Buffer) -> String {
+        rows(buf).join("\n")
+    }
+
+    /// The drawn text with borders removed and whitespace collapsed, so a
+    /// wrapped sentence can be searched for as one string.
+    fn flat(buf: &Buffer) -> String {
+        text(buf)
+            .replace(['│', '╭', '╮', '╰', '╯', '─'], " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn blank(buf: &Buffer) -> bool {
+        text(buf).chars().all(|c| c == ' ' || c == '\n')
+    }
+
+    #[test]
+    fn confirm_draws_title_and_message_and_nothing_without_state() {
+        let mut a = app();
+        assert!(blank(&render(60, 12, |f, r| draw_confirm(&a, f, r))));
+        a.confirm = Some(Confirm {
+            message: "Really delete notes.txt?".to_string(),
+            paths: Vec::new(),
+            kind: ConfirmKind::Delete,
+        });
+        let buf = render(60, 12, |f, r| draw_confirm(&a, f, r));
+        let t = text(&buf);
+        assert!(t.contains(&t!("ui.confirm").to_string()));
+        assert!(t.contains("Really delete notes.txt?"));
+        // Centered box with rounded corners, one third down the screen.
+        assert!(rows(&buf).get(4).is_some_and(|r| r.contains('╭')));
+    }
+
+    #[test]
+    fn confirm_wraps_a_message_wider_than_the_screen() {
+        let mut a = app();
+        a.confirm = Some(Confirm {
+            message: "alpha beta gamma delta epsilon zeta eta theta".to_string(),
+            paths: Vec::new(),
+            kind: ConfirmKind::Delete,
+        });
+        let buf = render(24, 14, |f, r| draw_confirm(&a, f, r));
+        let r = rows(&buf);
+        let first = r.iter().position(|l| l.contains("alpha")).unwrap();
+        let last = r.iter().position(|l| l.contains("theta")).unwrap();
+        assert!(last > first, "the message continues on later rows");
+    }
+
+    #[test]
+    fn mirrored_layout_right_aligns_dialog_text() {
+        let mut a = app();
+        a.confirm = Some(Confirm {
+            message: "Sure?".to_string(),
+            paths: Vec::new(),
+            kind: ConfirmKind::Delete,
+        });
+        let plain = rows(&render(60, 12, |f, r| draw_confirm(&a, f, r)));
+        a.settings.mirror_layout = "on".to_string();
+        let mirrored = rows(&render(60, 12, |f, r| draw_confirm(&a, f, r)));
+        let col = |rs: &[String]| {
+            rs.iter()
+                .find_map(|l| l.find("Sure?").or_else(|| l.find("?eruS")))
+                .unwrap()
+        };
+        assert!(col(&mirrored) >= col(&plain));
+        assert_ne!(plain, mirrored, "the text moved to the right edge");
+    }
+
+    fn trust(count: usize, settings: bool, env: bool, lsp: Option<&str>) -> App {
+        let mut a = app();
+        let mut p = ScriptTrustPrompt {
+            count,
+            settings,
+            env,
+            language_server: lsp.map(str::to_string),
+        };
+        p.count = count;
+        a.script_trust = Some(p);
+        a
+    }
+
+    #[test]
+    fn script_trust_titles_and_messages_follow_what_is_waiting() {
+        let a = app();
+        assert!(blank(&render(100, 20, |f, r| draw_script_trust(&a, f, r))));
+
+        let scripts = trust(2, false, false, None);
+        let t = flat(&render(100, 20, |f, r| draw_script_trust(&scripts, f, r)));
+        assert!(t.contains(&t!("ui.script_trust_title").to_string()));
+        let hint = t!("ui.script_trust_hint").to_string();
+        assert!(t.contains(hint.chars().take(12).collect::<String>().as_str()));
+
+        let both = trust(2, true, false, None);
+        let t = flat(&render(100, 20, |f, r| draw_script_trust(&both, f, r)));
+        assert!(t.contains(&t!("ui.workspace_trust_settings_also").to_string()));
+
+        let settings = trust(0, true, false, None);
+        let t = flat(&render(100, 20, |f, r| draw_script_trust(&settings, f, r)));
+        assert!(t.contains(&t!("ui.workspace_trust_title").to_string()));
+
+        let env = trust(0, false, true, None);
+        let t = flat(&render(100, 20, |f, r| draw_script_trust(&env, f, r)));
+        assert!(t.contains(&t!("ui.workspace_trust_title").to_string()));
+
+        let env_also = trust(1, false, true, None);
+        let t = flat(&render(120, 20, |f, r| draw_script_trust(&env_also, f, r)));
+        assert!(t.contains(&t!("ui.workspace_trust_env_also").to_string()));
+
+        let lsp = trust(0, false, false, Some("rust-analyzer"));
+        let t = flat(&render(100, 20, |f, r| draw_script_trust(&lsp, f, r)));
+        assert!(t.contains("rust-analyzer"));
+
+        let lsp_also = trust(1, false, false, Some("gopls"));
+        let t = flat(&render(100, 20, |f, r| draw_script_trust(&lsp_also, f, r)));
+        assert!(t.contains("gopls"));
+    }
+
+    #[test]
+    fn script_trust_box_is_taller_when_several_things_wait() {
+        let one = trust(1, false, false, None);
+        let many = trust(1, true, true, None);
+        let height = |a: &App| {
+            let buf = render(100, 20, |f, r| draw_script_trust(a, f, r));
+            let r = rows(&buf);
+            let top = r.iter().position(|l| l.contains('╭')).unwrap();
+            let bottom = r.iter().position(|l| l.contains('╰')).unwrap();
+            bottom - top + 1
+        };
+        assert_eq!(height(&one), 7);
+        assert_eq!(height(&many), 9);
+    }
+
+    fn confirm_lines(n: usize) -> ReplaceConfirm {
+        ReplaceConfirm {
+            plan: vec![(PathBuf::from("a.txt"), "x".to_string())],
+            replaced: 3,
+            lines: (0..n).map(|i| format!("file{i}.txt (1)")).collect(),
+            scroll: 0,
+        }
+    }
+
+    #[test]
+    fn replace_confirm_lists_files_and_scrolls() {
+        let mut a = app();
+        assert!(blank(&render(80, 24, |f, r| draw_replace_confirm(
+            &a, f, r
+        ))));
+        a.replace_confirm = Some(confirm_lines(40));
+        let t = text(&render(80, 24, |f, r| draw_replace_confirm(&a, f, r)));
+        assert!(t.contains("file0.txt (1)"));
+        assert!(!t.contains("file39.txt"));
+        assert!(t.contains(&t!("ui.replace_confirm_hint").to_string()));
+        a.replace_confirm.as_mut().unwrap().scroll = 10;
+        let t = text(&render(80, 24, |f, r| draw_replace_confirm(&a, f, r)));
+        assert!(!t.contains("file0.txt (1)"));
+        assert!(t.contains("file10.txt (1)"));
+        // Scrolling past the end clamps to the last row.
+        a.replace_confirm.as_mut().unwrap().scroll = 1000;
+        let t = text(&render(80, 24, |f, r| draw_replace_confirm(&a, f, r)));
+        assert!(t.contains("file39.txt (1)"));
+    }
+
+    #[test]
+    fn wgrep_confirm_uses_its_own_title_and_hint() {
+        let mut a = app();
+        assert!(blank(&render(80, 24, |f, r| draw_wgrep_confirm(&a, f, r))));
+        a.wgrep_confirm = Some(confirm_lines(3));
+        let t = text(&render(80, 24, |f, r| draw_wgrep_confirm(&a, f, r)));
+        assert!(t.contains("file2.txt (1)"));
+        assert!(t.contains(&t!("ui.wgrep_confirm_hint").to_string()));
+    }
+
+    #[test]
+    fn dir_edit_confirm_lists_each_change_before_anything_runs() {
+        let a = app();
+        assert!(blank(&render(80, 24, |f, r| draw_dir_edit_confirm(
+            &a, f, r
+        ))));
+
+        let dir = std::env::temp_dir().join(format!("vix-r2c-diredit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.txt"), "A").unwrap();
+        std::fs::write(dir.join("old.txt"), "O").unwrap();
+        let mut a = App::new(dir.clone(), Settings::default());
+        a.settings.explorer_delete = "hard".to_string();
+        a.layout.editor = Rect::new(0, 0, 80, 24);
+        a.open_initial(&dir.join("a.txt"));
+        a.run_action("explorer.edit_directory");
+        let tab = a.editor.active_tab_mut().unwrap();
+        tab.editor.set_content("/001 renamed.txt\nfresh.txt\n");
+        tab.dirty = true;
+        a.run_action("file.save");
+        let confirm = a
+            .dir_edit_confirm
+            .as_ref()
+            .expect("a confirm step is pending");
+        assert_eq!(confirm.count, 3, "one rename, one create, one delete");
+        let preview = confirm.lines.clone();
+        let buf = render(100, 24, |f, r| draw_dir_edit_confirm(&a, f, r));
+        let t = flat(&buf);
+        for line in &preview {
+            let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
+            assert!(t.contains(&line), "{line:?} is listed");
+        }
+        assert!(t.contains("renamed.txt") && t.contains("fresh.txt") && t.contains("old.txt"));
+        let hint = t!("ui.dir_edit_confirm_hint").to_string();
+        assert!(t.contains(hint.chars().take(12).collect::<String>().as_str()));
+        // Nothing has touched the disk yet.
+        assert!(dir.join("a.txt").exists() && dir.join("old.txt").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn unsaved_prompt_names_the_buffer_and_offers_choices() {
+        let mut a = app();
+        assert!(blank(&render(80, 24, |f, r| draw_unsaved(&a, f, r))));
+        a.unsaved = Some(UnsavedPrompt {
+            mode: UnsavedMode::CloseTab,
+            name: "draft.md".to_string(),
+        });
+        let t = text(&render(80, 24, |f, r| draw_unsaved(&a, f, r)));
+        assert!(t.contains("draft.md"));
+        assert!(t.contains(&t!("ui.unsaved_title").to_string()));
+        assert!(t.contains(&t!("ui.unsaved_choices").to_string()));
+    }
+
+    #[test]
+    fn paste_conflict_names_the_clashing_file() {
+        let mut a = app();
+        assert!(blank(&render(80, 24, |f, r| draw_paste_conflict(&a, f, r))));
+        let mut op = PasteOp {
+            target: PathBuf::from("/dst"),
+            cut: false,
+            queue: VecDeque::new(),
+            overwrite_all: false,
+            skip_all: false,
+            conflict: None,
+        };
+        a.paste = Some(op);
+        // A paste with no pending conflict draws nothing.
+        assert!(blank(&render(80, 24, |f, r| draw_paste_conflict(&a, f, r))));
+        op = a.paste.take().unwrap();
+        op.conflict = Some(PathBuf::from("/src/report.txt"));
+        a.paste = Some(op);
+        let t = text(&render(80, 24, |f, r| draw_paste_conflict(&a, f, r)));
+        assert!(t.contains("report.txt"));
+        assert!(t.contains(&t!("ui.paste_conflict").to_string()));
+    }
+
+    #[test]
+    fn query_replace_bar_shows_label_and_replaced_count() {
+        let mut a = app();
+        assert!(blank(&render(100, 10, |f, r| draw_query_replace(&a, f, r))));
+        a.query_replace = Some(QueryReplace {
+            re: regex::Regex::new("foo").unwrap(),
+            template: "bar".to_string(),
+            regex: false,
+            current: (0, 3),
+            replaced: 4,
+            label: "foo".to_string(),
+        });
+        let buf = render(100, 10, |f, r| draw_query_replace(&a, f, r));
+        let line = rows(&buf).get(8).cloned().unwrap();
+        assert!(line.contains("«foo»"));
+        assert!(line.contains(&t!("ui.qr_replaced", count = 4).to_string()));
+        assert!(line.contains(&t!("ui.qr_quit").to_string()));
+    }
+
+    #[test]
+    fn structural_replace_bar_shows_its_own_label() {
+        let mut a = app();
+        assert!(blank(&render(100, 10, |f, r| draw_structural_replace(
+            &a, f, r
+        ))));
+        a.structural_replace = Some(StructuralReplace {
+            pattern: vix_structural_replace::Pattern::compile("foo($X)").unwrap(),
+            template: "bar($X)".to_string(),
+            current: (0, 3),
+            bounds: None,
+            replaced: 2,
+            label: "foo($X)".to_string(),
+        });
+        let buf = render(100, 10, |f, r| draw_structural_replace(&a, f, r));
+        let line = rows(&buf).get(8).cloned().unwrap();
+        assert!(line.contains("«foo($X)»"));
+        assert!(line.contains(&t!("ui.sr_label").to_string()));
+        assert!(line.contains(&t!("ui.qr_replaced", count = 2).to_string()));
+    }
+}

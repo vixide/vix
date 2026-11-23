@@ -1091,4 +1091,295 @@ mod tests {
         }
         let _ = std::fs::remove_dir_all(&root);
     }
+
+    // ----- App-level behavior without a running agent --------------------
+
+    use super::{App, PromptKind};
+    use crate::settings::Settings;
+    use vix_acp::client::TerminalExit;
+    use vix_acp::display::TerminalView;
+
+    fn trusted_app(tag: &str, agents: &[&str]) -> (App, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("vix-r2c-acp-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir = dir.canonicalize().unwrap();
+        let mut settings = Settings::default();
+        settings.ai_agents = agents.iter().map(ToString::to_string).collect();
+        let session = dir.join("session.toml");
+        let mut app = App::new(dir.clone(), settings).with_session_path(&session);
+        let mut store = app.load_session();
+        store.set_scripts_trusted(&app.session_key(), Some(true));
+        app.store_session(&store).unwrap();
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 80, 24);
+        (app, dir)
+    }
+
+    #[test]
+    fn unknown_actions_are_not_claimed_and_an_idle_agent_reports_itself() {
+        let (mut app, dir) = trusted_app("idle", &[]);
+        assert!(!app.run_acp_action("ai.something_else"));
+        assert!(!app.acp_running());
+        for action in ["ai.agent_plan", "ai.agent_prompt", "ai.agent_stop"] {
+            app.status.clear();
+            assert!(app.run_acp_action(action));
+            assert_eq!(
+                app.status,
+                t!("status.acp_not_running").to_string(),
+                "{action}"
+            );
+        }
+        assert_eq!(app.acp_terminal_lines(), Vec::<String>::new());
+        assert!(app.acp_plan_sections().is_none());
+        let before = app.visible.contains(crate::app::Visible::AGENT_PLAN);
+        assert!(app.run_acp_action("ai.agent_plan_dock"));
+        assert_ne!(
+            before,
+            app.visible.contains(crate::app::Visible::AGENT_PLAN)
+        );
+        assert!(!app.acp_send_prompt("hello"), "no agent to send to");
+        assert_eq!(app.status, t!("status.acp_not_running").to_string());
+        app.submit_acp_permission("yes");
+        app.submit_acp_prompt("hello");
+        app.poll_acp();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn starting_an_agent_needs_trust_and_a_configured_command() {
+        // Untrusted workspaces never get a process, whatever is configured.
+        let dir =
+            std::env::temp_dir().join(format!("vix-r2c-acp-untrusted-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut settings = Settings::default();
+        settings.ai_agents = vec!["/nonexistent/agent".to_string()];
+        let mut app = App::new(dir.clone(), settings).with_session_path(dir.join("s.toml"));
+        app.run_acp_action("ai.agent_start");
+        assert_eq!(app.status, t!("status.acp_untrusted").to_string());
+        app.status.clear();
+        app.run_acp_action("ai.agent_resume");
+        assert_eq!(app.status, t!("status.acp_untrusted").to_string());
+        app.status.clear();
+        app.acp_spawn("/nonexistent/agent", None);
+        assert_eq!(app.status, t!("status.acp_untrusted").to_string());
+        assert!(!app.acp_running());
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let (mut app, dir) = trusted_app("noagent", &[]);
+        app.run_acp_action("ai.agent_start");
+        assert_eq!(app.status, t!("status.acp_no_agent").to_string());
+        app.acp_spawn("   ", None);
+        assert_eq!(app.status, t!("status.acp_no_agent").to_string());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn several_agents_ask_which_and_a_bad_choice_starts_nothing() {
+        let (mut app, dir) = trusted_app("several", &["/nonexistent/a", "/nonexistent/b"]);
+        app.run_acp_action("ai.agent_start");
+        let prompt = app.prompt.as_ref().unwrap();
+        assert!(matches!(prompt.kind, PromptKind::AcpAgent));
+        assert!(prompt.title.contains("1) /nonexistent/a"));
+        assert!(prompt.title.contains("2) /nonexistent/b"));
+        for bad in ["0", "3", "x", "-1"] {
+            app.status.clear();
+            app.submit_acp_agent(bad);
+            assert_eq!(
+                app.status,
+                t!("status.acp_bad_choice").to_string(),
+                "{bad:?}"
+            );
+        }
+        // A valid number (or blank, meaning the first) tries that command; the
+        // program does not exist so nothing runs.
+        app.submit_acp_agent(" 2 ");
+        assert!(
+            app.status
+                .starts_with(t!("status.acp_spawn_failed", error = "").trim_end())
+        );
+        assert!(!app.acp_running());
+        app.status.clear();
+        app.submit_acp_agent("");
+        assert!(
+            app.status
+                .starts_with(t!("status.acp_spawn_failed", error = "").trim_end())
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resuming_needs_a_remembered_session_of_a_still_configured_agent() {
+        let (mut app, dir) = trusted_app("resume", &["/nonexistent/agent"]);
+        app.run_acp_action("ai.agent_resume");
+        assert_eq!(app.status, t!("status.acp_no_session").to_string());
+        // A remembered session whose command is no longer configured is ignored.
+        app.acp_remember_session("/nonexistent/removed", "sess-1");
+        app.status.clear();
+        app.run_acp_action("ai.agent_resume");
+        assert_eq!(app.status, t!("status.acp_no_session").to_string());
+        // A configured one is tried (and fails to spawn here), and it was
+        // saved to the workspace's session so it survives a restart.
+        app.acp_remember_session("/nonexistent/agent", "sess-2");
+        app.acp_last_session = None;
+        app.run_acp_action("ai.agent_resume");
+        assert!(
+            app.status
+                .starts_with(t!("status.acp_spawn_failed", error = "").trim_end())
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `name` under `dir`, spelled as an agent sends it (absolute).
+    fn abs(dir: &std::path::Path, name: &str) -> String {
+        dir.join(name).display().to_string()
+    }
+
+    fn view(
+        exit: Option<TerminalExit>,
+        released: bool,
+        output: &str,
+        truncated: bool,
+    ) -> TerminalView {
+        TerminalView {
+            id: "term-1".to_string(),
+            command: "cargo test".to_string(),
+            output: output.to_string(),
+            truncated,
+            exit,
+            released,
+        }
+    }
+
+    #[test]
+    fn a_terminal_is_summarised_by_how_it_ended() {
+        let lines = |v: &TerminalView, tail| App::acp_terminal_view_lines(v, tail);
+        let running = lines(&view(None, false, "a\nb\n", false), 10);
+        assert_eq!(
+            running[0],
+            format!("$ cargo test  [{}]", t!("ui.acp_term_running"))
+        );
+        assert_eq!(&running[1..], ["  a", "  b"]);
+        let released = lines(&view(None, true, "", false), 10);
+        assert!(released[0].ends_with(&format!("[{}]", t!("ui.acp_term_released"))));
+        let code = lines(
+            &view(
+                Some(TerminalExit {
+                    code: Some(2),
+                    signal: None,
+                }),
+                false,
+                "",
+                false,
+            ),
+            10,
+        );
+        assert!(code[0].ends_with(&format!("[{}]", t!("ui.acp_term_exit", code = 2))));
+        let sig = lines(
+            &view(
+                Some(TerminalExit {
+                    code: None,
+                    signal: Some("SIGKILL".to_string()),
+                }),
+                false,
+                "",
+                false,
+            ),
+            10,
+        );
+        assert!(sig[0].contains("SIGKILL"));
+        let ended = lines(&view(Some(TerminalExit::default()), false, "", false), 10);
+        assert!(ended[0].ends_with(&format!("[{}]", t!("ui.acp_term_ended"))));
+        // Only the newest `tail` lines are kept, with a note that older ones are gone.
+        let tail = lines(&view(None, false, "1\n2\n3\n4\n", false), 2);
+        assert_eq!(tail[1], format!("  {}", t!("ui.acp_term_truncated")));
+        assert_eq!(&tail[2..], ["  3", "  4"]);
+        let cut = lines(&view(None, false, "x\n", true), 10);
+        assert_eq!(cut[1], format!("  {}", t!("ui.acp_term_truncated")));
+    }
+
+    #[test]
+    fn the_agent_reads_open_buffers_and_workspace_files_but_not_secrets() {
+        let (mut app, dir) = trusted_app("read", &[]);
+        std::fs::write(dir.join("a.txt"), "one\ntwo\nthree\n").unwrap();
+        std::fs::write(dir.join(".env"), "TOKEN=1").unwrap();
+        assert_eq!(
+            app.acp_read(&abs(&dir, "a.txt"), None, None).unwrap(),
+            "one\ntwo\nthree\n"
+        );
+        assert_eq!(
+            app.acp_read(&abs(&dir, "a.txt"), Some(2), Some(1)).unwrap(),
+            "two\n"
+        );
+        assert!(
+            app.acp_read(&abs(&dir, "a.txt"), Some(0), None).is_err(),
+            "lines start at 1"
+        );
+        assert!(
+            app.acp_read(&abs(&dir, "../outside.txt"), None, None)
+                .is_err()
+        );
+        assert_eq!(
+            app.status,
+            t!("status.acp_refused", path = abs(&dir, "../outside.txt")).to_string()
+        );
+        let err = app.acp_read(&abs(&dir, ".env"), None, None).unwrap_err();
+        assert!(err.contains("secrets"));
+        assert!(app.acp_read(&abs(&dir, "missing.txt"), None, None).is_err());
+        // An open buffer is read with its unsaved edits.
+        app.open_path(&dir.join("a.txt"), false);
+        let area = ratatui::layout::Rect::new(0, 0, 80, 24);
+        assert!(app.editor.insert_str("EDIT ", area));
+        assert!(
+            app.acp_read(&abs(&dir, "a.txt"), None, None)
+                .unwrap()
+                .starts_with("EDIT one")
+        );
+        // Files past the size limit are refused without reading them.
+        let big = std::fs::File::create(dir.join("big.bin")).unwrap();
+        big.set_len(9 * 1024 * 1024).unwrap();
+        assert_eq!(
+            app.acp_read(&abs(&dir, "big.bin"), None, None).unwrap_err(),
+            "file is too large"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_agent_write_becomes_a_pending_review_never_a_disk_write() {
+        let (mut app, dir) = trusted_app("write", &[]);
+        std::fs::write(dir.join("a.txt"), "old\n").unwrap();
+        assert!(app.acp_write(&abs(&dir, "../escape.txt"), "x").is_some());
+        assert_eq!(
+            app.status,
+            t!("status.acp_refused", path = abs(&dir, "../escape.txt")).to_string()
+        );
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        assert_eq!(
+            app.acp_write(&abs(&dir, "sub"), "x").as_deref(),
+            Some("only files can be edited")
+        );
+        assert_eq!(
+            app.acp_write(&abs(&dir, "nodir/new.txt"), "x").as_deref(),
+            Some("the parent directory does not exist")
+        );
+        assert!(app.acp_write(&abs(&dir, "a.txt"), "new\n").is_none());
+        assert!(app.ai_diff.is_some());
+        assert_eq!(
+            app.status,
+            t!("status.acp_edit_pending", path = abs(&dir, "a.txt")).to_string()
+        );
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "old\n");
+        // A second edit waits for the first to be reviewed.
+        assert_eq!(
+            app.acp_write(&abs(&dir, "a.txt"), "again\n").as_deref(),
+            Some("another edit is awaiting review")
+        );
+        app.ai_diff = None;
+        // A brand-new file opens as an in-memory tab with the path set.
+        assert!(app.acp_write(&abs(&dir, "fresh.txt"), "hello\n").is_none());
+        assert!(!dir.join("fresh.txt").exists());
+        let tab = app.editor.active_tab().unwrap();
+        assert_eq!(tab.path.as_deref(), Some(dir.join("fresh.txt").as_path()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -1333,3 +1333,567 @@ fn draw_db_compare_detail(
     }
     frame.render_widget(Paragraph::new(detail).wrap(Wrap { trim: false }), body);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{Browser, Pane, Popup, View};
+    use crate::settings::Settings;
+    use ratatui::{Terminal, backend::TestBackend, buffer::Buffer};
+
+    fn conn(name: &str, kind: crate::db::connect::Kind) -> crate::db::connect::Connection {
+        crate::db::connect::Connection {
+            name: name.to_string(),
+            kind,
+            host: "db.example.com".to_string(),
+            database: "orders".to_string(),
+            ..crate::db::connect::Connection::default()
+        }
+    }
+
+    fn app_with(b: Browser) -> App {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        app.db = Some(b);
+        app
+    }
+
+    fn draw(app: &mut App, w: u16, h: u16) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                draw_db(app, frame, area);
+            })
+            .unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    fn rows(buf: &Buffer) -> Vec<String> {
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect()
+    }
+
+    fn text(buf: &Buffer) -> String {
+        rows(buf).join("\n")
+    }
+
+    /// The start of a hint line, which a narrow overlay may cut off.
+    fn head(hint: &str) -> String {
+        hint.chars().take(20).collect()
+    }
+
+    fn view(b: Browser, v: View) -> App {
+        let mut app = app_with(b);
+        app.db.as_mut().unwrap().view = v;
+        app
+    }
+
+    #[test]
+    fn nothing_is_drawn_without_a_browser() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        let t = text(&draw(&mut app, 80, 20));
+        assert!(t.chars().all(|c| c == ' ' || c == '\n'));
+    }
+
+    #[test]
+    fn the_connections_list_marks_the_selection_and_shows_targets() {
+        let mut b = Browser::new(vec![
+            conn("prod", crate::db::connect::Kind::Postgres),
+            conn("scratch", crate::db::connect::Kind::Sqlite),
+        ]);
+        b.sel = 1;
+        b.message = Some("hello from the db".to_string());
+        let mut app = app_with(b);
+        let buf = draw(&mut app, 100, 12);
+        let t = text(&buf);
+        assert!(t.contains(&t!("ui.db_connections").to_string()));
+        assert!(t.contains("prod") && t.contains("scratch"));
+        assert!(t.contains("db.example.com"));
+        assert!(
+            t.contains("hello from the db"),
+            "the status line shows the message"
+        );
+        assert!(t.contains(&t!("ui.db_connections_hint").to_string()));
+        assert!(t.contains(&t!("ui.db").to_string()));
+
+        let mut empty = app_with(Browser::new(Vec::new()));
+        let t = text(&draw(&mut empty, 100, 12));
+        assert!(t.contains(&t!("ui.db_connections_empty").to_string()));
+    }
+
+    #[test]
+    fn the_form_shows_every_field_and_the_held_password_note() {
+        let mut b = Browser::new(Vec::new());
+        b.view = View::Form;
+        b.form.fields[0] = "mydb".to_string();
+        b.form.writable = true;
+        b.form.store_keyring = true;
+        b.form.sel = 2;
+        let mut app = app_with(b);
+        let t = text(&draw(&mut app, 100, 30));
+        assert!(t.contains(&t!("ui.db_form").to_string()));
+        assert!(t.contains("mydb"));
+        for key in [
+            "ui.db_field_name",
+            "ui.db_field_host",
+            "ui.db_field_sslmode",
+        ] {
+            assert!(t.contains(&t!(key).to_string()), "{key} is labelled");
+        }
+        assert!(t.contains(&t!("ui.db_access_write").to_string()));
+        assert!(t.contains(&t!("ui.db_toggle_on").to_string()));
+        assert!(t.contains(&head(&t!("ui.db_form_hint"))));
+    }
+
+    #[test]
+    fn the_password_prompt_masks_what_was_typed() {
+        let mut b = Browser::new(Vec::new());
+        b.password = "hunter2".to_string();
+        let mut app = view(b, View::Password);
+        let t = text(&draw(&mut app, 80, 10));
+        assert!(t.contains(&t!("ui.db_password").to_string()));
+        assert!(t.contains(&"\u{2022}".repeat(7)));
+        assert!(!t.contains("hunter2"));
+    }
+
+    #[test]
+    fn history_and_saved_lists_show_entries_and_empty_states() {
+        let mut b = Browser::new(Vec::new());
+        let empty = text(&draw(
+            &mut view(Browser::new(Vec::new()), View::History),
+            80,
+            8,
+        ));
+        assert!(empty.contains(&t!("ui.db_history_empty").to_string()));
+        let empty = text(&draw(
+            &mut view(Browser::new(Vec::new()), View::Saved),
+            80,
+            8,
+        ));
+        assert!(empty.contains(&t!("ui.db_saved_empty").to_string()));
+
+        for i in 0..30 {
+            b.history.entries.push(format!("SELECT {i}\n  FROM t"));
+        }
+        b.list_sel = 25;
+        let mut app = view(b, View::History);
+        let t = text(&draw(&mut app, 80, 10));
+        assert!(t.contains(&t!("ui.db_history").to_string()));
+        assert!(
+            t.contains("SELECT 25 FROM t"),
+            "multi-line SQL is shown on one line"
+        );
+        assert!(
+            !t.contains("SELECT 0 "),
+            "the list scrolled to the selection"
+        );
+
+        let mut b = Browser::new(Vec::new());
+        b.saved.queries.push(crate::db::store::SavedQuery {
+            name: "daily".to_string(),
+            sql: "SELECT count(*)\nFROM orders".to_string(),
+        });
+        let mut app = view(b, View::Saved);
+        let t = text(&draw(&mut app, 80, 8));
+        assert!(t.contains(&t!("ui.db_saved_title").to_string()));
+        assert!(t.contains("daily  SELECT count(*) FROM orders"));
+    }
+
+    #[test]
+    fn the_small_prompts_show_what_was_typed() {
+        let mut b = Browser::new(Vec::new());
+        b.save_name = "my query".to_string();
+        let t = text(&draw(&mut view(b, View::SaveName), 80, 8));
+        assert!(t.contains(&t!("ui.db_save_name").to_string()));
+        assert!(t.contains("my query"));
+
+        let mut b = Browser::new(Vec::new());
+        b.ask_input = "who bought most".to_string();
+        let t = text(&draw(&mut view(b, View::Ask), 80, 8));
+        assert!(t.contains(&t!("ui.db_ask_title").to_string()));
+        assert!(t.contains("who bought most"));
+
+        let mut b = Browser::new(Vec::new());
+        b.edit_input = "new value".to_string();
+        let t = text(&draw(&mut view(b, View::CellEdit), 80, 8));
+        assert!(t.contains(&t!("ui.db_cell_edit_title").to_string()));
+        assert!(t.contains("new value"));
+
+        let mut b = Browser::new(Vec::new());
+        b.import_path = "/tmp/data.csv".to_string();
+        let t = text(&draw(&mut view(b, View::Import), 80, 8));
+        assert!(t.contains(&t!("ui.db_import_title").to_string()));
+        assert!(t.contains("/tmp/data.csv"));
+    }
+
+    #[test]
+    fn the_confirm_screen_is_badged_with_the_environment() {
+        let t = text(&draw(
+            &mut view(Browser::new(Vec::new()), View::Confirm),
+            80,
+            8,
+        ));
+        assert!(t.contains(&t!("ui.db_confirm").to_string()));
+        assert!(t.contains(&t!("ui.db_confirm_hint").to_string()));
+    }
+
+    #[test]
+    fn the_cell_viewer_pretty_prints_json_on_request() {
+        let mut b = Browser::new(Vec::new());
+        b.cell_text = "{\"a\":1,\"b\":[2,3]}".to_string();
+        let raw = text(&draw(&mut view(b, View::Cell), 80, 14));
+        assert!(raw.contains("{\"a\":1,\"b\":[2,3]}"));
+
+        let mut b = Browser::new(Vec::new());
+        b.cell_text = "{\"a\":1,\"b\":[2,3]}".to_string();
+        b.cell_pretty = true;
+        let pretty = rows(&draw(&mut view(b, View::Cell), 80, 14));
+        assert!(pretty.iter().any(|r| r.contains("\"a\": 1")));
+        assert!(!pretty.iter().any(|r| r.contains("{\"a\":1")));
+    }
+
+    #[test]
+    fn the_erd_viewer_scrolls_its_text() {
+        let mut b = Browser::new(Vec::new());
+        b.cell_text = (0..40)
+            .map(|i| format!("entity{i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        b.view_scroll = 10;
+        let t = text(&draw(&mut view(b, View::Erd), 80, 10));
+        assert!(t.contains(&t!("ui.db_erd_title").to_string()));
+        assert!(t.contains("entity10"));
+        assert!(!t.contains("entity9\n") && !t.contains("entity0 "));
+    }
+
+    #[test]
+    fn the_query_log_shows_timing_rows_and_origin() {
+        use crate::db::store::{LogEntry, Origin};
+        let mut b = Browser::new(Vec::new());
+        let t = text(&draw(
+            &mut view(Browser::new(Vec::new()), View::Log),
+            100,
+            8,
+        ));
+        assert!(t.contains(&t!("ui.db_log_empty").to_string()));
+        for (sql, ms, ok, origin) in [
+            ("SELECT fast", 5, true, Origin::User),
+            ("SELECT medium", 120, true, Origin::User),
+            ("SELECT slow", 900, true, Origin::App),
+            ("SELECT broken", 1, false, Origin::User),
+        ] {
+            b.log.push(LogEntry {
+                sql: sql.to_string(),
+                ms,
+                rows: 3,
+                ok,
+                origin,
+            });
+        }
+        b.list_sel = 0;
+        let mut app = view(b, View::Log);
+        let buf = draw(&mut app, 100, 10);
+        let t = text(&buf);
+        assert!(t.contains(&t!("ui.db_log_title").to_string()));
+        for sql in [
+            "SELECT fast",
+            "SELECT medium",
+            "SELECT slow",
+            "SELECT broken",
+        ] {
+            assert!(t.contains(sql));
+        }
+        assert!(t.contains(Origin::App.label()));
+        // The failing statement and the slow one are red, the quick one green.
+        let color_of = |needle: &str| {
+            let rows = rows(&buf);
+            let (y, line) = rows
+                .iter()
+                .enumerate()
+                .find(|(_, l)| l.contains(needle))
+                .unwrap();
+            let x = line
+                .find(needle)
+                .map(|b| line[..b].chars().count())
+                .unwrap();
+            let meta_x = u16::try_from(x.saturating_sub(10)).unwrap();
+            buf[(meta_x, u16::try_from(y).unwrap())].fg
+        };
+        assert_eq!(color_of("SELECT slow"), Color::Red);
+        assert_eq!(color_of("SELECT medium"), Color::Yellow);
+        assert_eq!(color_of("SELECT fast"), Color::Green);
+    }
+
+    #[test]
+    fn the_export_dialogs_show_formats_and_destination() {
+        let mut b = Browser::new(Vec::new());
+        b.export_path = "/tmp/out.csv".to_string();
+        let t = text(&draw(&mut view(b, View::Export), 100, 8));
+        assert!(t.contains(&t!("ui.db_export").to_string()));
+        assert!(t.contains(&crate::db::export::FORMATS[0].label().to_string()));
+        assert!(t.contains("/tmp/out.csv"));
+
+        let mut b = Browser::new(Vec::new());
+        b.export_clipboard = true;
+        let t = text(&draw(&mut view(b, View::Export), 100, 8));
+        assert!(t.contains(&t!("ui.db_export_clipboard").to_string()));
+
+        let mut b = workbench();
+        b.export_marks
+            .insert(("main".to_string(), "users".to_string()));
+        b.open_table_export();
+        let dialog = b.table_export.as_ref().unwrap();
+        assert!(!dialog.single_file(), "CSV exports into a directory");
+        let dir = dialog.path.clone();
+        let mut app = app_with(b);
+        let t = text(&draw(&mut app, 120, 10));
+        assert!(t.contains(&t!("ui.db_table_export").to_string()));
+        assert!(t.contains("users"));
+        assert!(t.contains(&t!("ui.db_table_export_dir").to_string()));
+        assert!(t.contains(&dir));
+        // The SQL format is one file instead.
+        let sql = crate::db::table_export::TABLE_FORMATS.len() - 1;
+        app.db
+            .as_mut()
+            .unwrap()
+            .table_export
+            .as_mut()
+            .unwrap()
+            .format = sql;
+        let t = text(&draw(&mut app, 120, 10));
+        assert!(!t.contains(&t!("ui.db_table_export_dir").to_string()));
+    }
+
+    #[test]
+    fn the_parameter_prompt_shows_progress() {
+        let mut b = Browser::new(Vec::new());
+        let mut prompt = crate::db::ParamPrompt::default();
+        prompt.names = vec!["id".to_string(), "name".to_string()];
+        prompt.values = vec!["7".to_string()];
+        prompt.input = "ada".to_string();
+        b.params = Some(prompt);
+        let t = text(&draw(&mut view(b, View::Params), 100, 8));
+        assert!(
+            t.contains(&t!("ui.db_params_title", name = "name", done = 2, total = 2).to_string())
+        );
+        assert!(t.contains("ada"));
+        // With no prompt state the screen stays empty rather than panicking.
+        let t = text(&draw(
+            &mut view(Browser::new(Vec::new()), View::Params),
+            100,
+            8,
+        ));
+        assert!(!t.contains("ada"));
+    }
+
+    fn workbench() -> Browser {
+        let mut b = Browser::new(vec![conn("prod", crate::db::connect::Kind::Postgres)]);
+        b.conn = Some(conn("prod", crate::db::connect::Kind::Postgres));
+        b.view = View::Workbench;
+        b.tree = crate::db::catalog::Tree::from_objects(&[
+            ("main".to_string(), "users".to_string(), "table".to_string()),
+            (
+                "main".to_string(),
+                "orders".to_string(),
+                "table".to_string(),
+            ),
+            ("main".to_string(), "active".to_string(), "view".to_string()),
+        ]);
+        b.query = crate::db::editor::Query::from_text("SELECT id, name\nFROM users\nWHERE id > 1;");
+        b.grid.set(
+            vec!["id".to_string(), "name".to_string()],
+            vec![
+                vec!["1".to_string(), "ada".to_string()],
+                vec!["2".to_string(), "grace".to_string()],
+            ],
+        );
+        b
+    }
+
+    #[test]
+    fn the_workbench_draws_tree_editor_and_results_and_records_their_areas() {
+        let mut app = app_with(workbench());
+        let buf = draw(&mut app, 120, 32);
+        let t = text(&buf);
+        assert!(t.contains("prod"), "the connection name is in the title");
+        assert!(t.contains(&t!("ui.db_tree").to_string()));
+        assert!(t.contains("users") && t.contains("orders"));
+        assert!(t.contains("SELECT id, name"));
+        assert!(t.contains(&t!("ui.db_results").to_string()));
+        assert!(t.contains("ada") && t.contains("grace"));
+        assert!(t.contains(&t!("msg.db_rows", count = 2).to_string()));
+        assert!(t.contains(&head(&t!("ui.db_hint"))));
+        assert!(t.contains(&t!("ui.db_access_read").to_string()));
+        let l = &app.layout;
+        assert!(l.db_tree.width > 0 && l.db_editor.width > 0 && l.db_results.width > 0);
+        assert!(l.db_tree.right() <= l.db_editor.x);
+        assert!(l.db_editor.bottom() <= l.db_results.y);
+    }
+
+    #[test]
+    fn the_tree_pane_marks_selection_exports_and_empty_state() {
+        let mut b = workbench();
+        b.focus = Pane::Tree;
+        b.tree.sel = 2;
+        b.export_marks
+            .insert(("main".to_string(), "orders".to_string()));
+        let mut app = app_with(b);
+        let buf = draw(&mut app, 120, 32);
+        let t = text(&buf);
+        assert!(t.contains("* orders"), "a marked table shows an asterisk");
+        // The filter shows in the pane title.
+        app.db.as_mut().unwrap().tree.filter = "ord".to_string();
+        let t = text(&draw(&mut app, 120, 32));
+        assert!(t.contains("/ord"));
+
+        let mut b = workbench();
+        b.tree = crate::db::catalog::Tree::default();
+        let t = text(&draw(&mut app_with(b), 120, 32));
+        assert!(t.contains(&t!("ui.db_tree_empty").to_string()));
+    }
+
+    #[test]
+    fn the_editor_title_reports_write_mode_transactions_and_elapsed_time() {
+        let mut b = workbench();
+        b.focus = Pane::Editor;
+        let mut app = app_with(b);
+        let t = text(&draw(&mut app, 120, 32));
+        assert!(t.contains(&t!("ui.db_editor").to_string()));
+        assert!(!t.contains("TX"));
+        // The autocomplete popup draws under the cursor while the editor is focused.
+        app.db.as_mut().unwrap().popup = Some(Popup {
+            items: vec!["users".to_string(), "user_roles".to_string()],
+            sel: 1,
+            start: 0,
+        });
+        let t = text(&draw(&mut app, 120, 32));
+        assert!(t.contains("user_roles"));
+        // An unfocused editor draws no popup.
+        app.db.as_mut().unwrap().focus = Pane::Results;
+        let t = text(&draw(&mut app, 120, 32));
+        assert!(!t.contains("user_roles"));
+    }
+
+    #[test]
+    fn the_results_grid_shows_sort_marks_filters_and_scrolls_columns() {
+        let mut b = workbench();
+        b.focus = Pane::Results;
+        b.grid.sort = Some((0, true));
+        let mut app = app_with(b);
+        let t = text(&draw(&mut app, 120, 32));
+        assert!(t.contains('\u{25b2}'));
+        app.db.as_mut().unwrap().grid.sort = Some((1, false));
+        let t = text(&draw(&mut app, 120, 32));
+        assert!(t.contains('\u{25bc}'));
+        // A client-side filter narrows the rows and shows in the title.
+        {
+            let g = &mut app.db.as_mut().unwrap().grid;
+            g.filter = "gra".to_string();
+        }
+        let t = text(&draw(&mut app, 120, 32));
+        assert!(t.contains("/gra"));
+        assert!(t.contains("grace") && !t.contains("ada"));
+        // Horizontal scroll hides the leading column.
+        {
+            let g = &mut app.db.as_mut().unwrap().grid;
+            g.filter.clear();
+            g.col_off = 1;
+        }
+        let buf = draw(&mut app, 120, 32);
+        let r = rows(&buf);
+        let title = r
+            .iter()
+            .position(|l| l.contains(&t!("ui.db_results").to_string()))
+            .unwrap();
+        let header = r.get(title + 1).unwrap();
+        assert!(header.contains("name"));
+        assert!(
+            !header.contains("id"),
+            "the first column scrolled out: {header:?}"
+        );
+        // An empty grid says there are no results yet.
+        let mut empty = workbench();
+        empty.grid = crate::db::results::Grid::default();
+        let t = text(&draw(&mut app_with(empty), 120, 32));
+        assert!(t.contains(&t!("ui.db_results_empty").to_string()));
+    }
+
+    #[test]
+    fn the_row_filter_form_previews_its_where_clause() {
+        let mut b = workbench();
+        b.row_filter.open = true;
+        b.row_filter.field = 2;
+        b.row_filter.column = 1;
+        b.row_filter.value = "ada".to_string();
+        let mut app = app_with(b);
+        let t = text(&draw(&mut app, 100, 12));
+        assert!(t.contains(&t!("ui.db_filter_title").to_string()));
+        assert!(t.contains("name"));
+        assert!(t.contains("ada"));
+        assert!(t.contains(&t!("ui.db_filter_hint").to_string()));
+    }
+
+    #[test]
+    fn a_long_message_and_hint_stay_on_their_own_lines() {
+        let mut b = workbench();
+        b.message = Some("a very informative status".to_string());
+        let buf = draw(&mut app_with(b), 120, 32);
+        let r = rows(&buf);
+        let h = r.len();
+        // Message sits on the line above the hint, inside the border.
+        assert!(r[h - 3].contains("a very informative status"));
+        assert!(r[h - 2].contains(&head(&t!("ui.db_hint"))));
+    }
+
+    #[test]
+    fn staged_row_changes_are_colored_by_kind() {
+        let mut browser = workbench();
+        browser.focus = Pane::Results;
+        browser.grid.set(
+            vec!["id".to_string(), "name".to_string()],
+            vec![
+                vec!["1".to_string(), "ada".to_string()],
+                vec!["2".to_string(), "grace".to_string()],
+                vec!["3".to_string(), "linus".to_string()],
+            ],
+        );
+        crate::db::staging::set_cell(&mut browser.edits, 0, 1, "ada", "dame");
+        browser.staged.toggle_delete(1);
+        browser.staged.insert_row(2);
+        let mut app = app_with(browser);
+        let buf = draw(&mut app, 120, 32);
+        let all = text(&buf);
+        assert!(
+            all.contains("dame"),
+            "the staged value replaces the loaded one"
+        );
+        let at = |needle: &str| {
+            let r = rows(&buf);
+            let (y, line) = r
+                .iter()
+                .enumerate()
+                .find(|(_, l)| l.contains(needle))
+                .unwrap();
+            let x = line
+                .find(needle)
+                .map(|b| line[..b].chars().count())
+                .unwrap();
+            let cell = &buf[(u16::try_from(x).unwrap(), u16::try_from(y).unwrap())];
+            (cell.fg, cell.modifier)
+        };
+        let (fg, m) = at("dame");
+        assert_eq!(fg, Color::Yellow);
+        assert!(m.contains(Modifier::BOLD));
+        let (fg, m) = at("grace");
+        assert_eq!(fg, Color::Red);
+        assert!(m.contains(Modifier::CROSSED_OUT));
+        let (fg, m) = at("linus");
+        assert_eq!(fg, Color::Green);
+        assert!(m.contains(Modifier::BOLD));
+    }
+}
