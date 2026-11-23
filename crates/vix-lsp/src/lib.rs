@@ -13,6 +13,18 @@
 //! converts them to/from char offsets with [`vix_lsp_core::position`], since only it
 //! holds the buffer text.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod defaults;
 pub mod ghost;
 mod hierarchy;
@@ -119,6 +131,20 @@ enum Pending {
     SemanticTokensDelta,
     /// `semanticTokens/range` (T615): the viewport only, never a delta base.
     SemanticTokensRange,
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
 }
 
 impl Pending {
@@ -635,7 +661,13 @@ impl Server {
     /// Allocate the next request id.
     fn alloc_id(&mut self) -> i64 {
         let id = self.next_id;
-        self.next_id += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: one id per request sent to one server, so an i64 cannot overflow"
+        )]
+        {
+            self.next_id += 1;
+        }
         id
     }
 }
@@ -936,7 +968,7 @@ impl Lsp {
             .values()
             .flat_map(HashMap::values)
             .map(Vec::len)
-            .sum()
+            .fold(0, |total, n| add_or(total, n, usize::MAX))
     }
 
     /// Record `diags` as `lang`'s current diagnostics for `path` (T123b):
@@ -1036,6 +1068,10 @@ impl Lsp {
             if previous == Some(text) {
                 continue;
             }
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: a document version counts its edits in one session, far below the top of its type"
+            )]
             let v = version + 1;
             let params = match previous {
                 Some(old) if server.ready && server.sync == SyncKind::Incremental => {
@@ -1727,7 +1763,13 @@ impl Lsp {
                 let id = server.alloc_id();
                 server.pending.insert(id, Pending::WillFileOperations);
                 server.send(message::request(id, op.will_method(), &params));
-                sent += 1;
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: sent counts the servers asked, at most the configured servers"
+                )]
+                {
+                    sent += 1;
+                }
             }
         }
         self.rename_waiting = sent;
@@ -2166,7 +2208,13 @@ impl Lsp {
         self.last_errors
             .insert(lang.to_string(), ServerError::Crashed);
         let attempts = self.restart_attempts.entry(lang.to_string()).or_insert(0);
-        *attempts += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: the server is marked failed once the count passes MAX_RESTART_ATTEMPTS, so it never gets near the top of its type"
+        )]
+        {
+            *attempts += 1;
+        }
         if *attempts > MAX_RESTART_ATTEMPTS {
             self.failed.insert(lang.to_string());
             events.push(LspEvent::ServerCrashed(lang.to_string()));
@@ -2736,7 +2784,8 @@ impl Lsp {
 
     /// Record one `will*Files` answer and say whether it was the last.
     fn finish_will_rename(&mut self, edits: Vec<FileEdits>, events: &mut Vec<LspEvent>) {
-        self.rename_waiting = self.rename_waiting.saturating_sub(1);
+        // An answer nobody is waiting for leaves the count at 0.
+        self.rename_waiting = sub_or(self.rename_waiting, 1, 0);
         events.push(LspEvent::WillFileOperations {
             edits,
             last: self.rename_waiting == 0,
@@ -2824,19 +2873,22 @@ impl Lsp {
                     message: update.message,
                     percentage: update.percentage,
                 };
-                match pos {
-                    Some(i) => server.progress[i].1 = task,
+                match pos.and_then(|i| server.progress.get_mut(i)) {
+                    Some(entry) => entry.1 = task,
                     None => server.progress.push((update.token, task)),
                 }
             }
             message::ProgressKind::Report => {
-                let i = pos.unwrap_or_else(|| {
+                // The task for this token: the one found, or one just pushed.
+                let index = pos.or_else(|| {
                     server
                         .progress
                         .push((update.token.clone(), ProgressTask::default()));
-                    server.progress.len() - 1
+                    server.progress.len().checked_sub(1)
                 });
-                let task = &mut server.progress[i].1;
+                let Some((_, task)) = index.and_then(|i| server.progress.get_mut(i)) else {
+                    return;
+                };
                 if update.title.is_some() {
                     task.title = update.title;
                 }
@@ -2862,7 +2914,7 @@ impl Lsp {
             let Some(server) = self.servers.get(&config.language_id) else {
                 continue;
             };
-            total += server.progress.len();
+            total = add_or(total, server.progress.len(), usize::MAX);
             if first.is_none()
                 && let Some((_, task)) = server.progress.last()
             {
@@ -2876,7 +2928,7 @@ impl Lsp {
             format!("{lang}: {line}")
         };
         if total > 1 {
-            let _ = write!(out, " +{}", total - 1);
+            let _ = write!(out, " +{}", sub_or(total, 1, 0));
         }
         Some(out)
     }
@@ -3078,7 +3130,12 @@ fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
                     return;
                 }
                 Ok(n) => {
-                    decoder.push(&chunk[..n]);
+                    #[expect(
+                        clippy::indexing_slicing,
+                        reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most chunk.len()"
+                    )]
+                    let received = &chunk[..n];
+                    decoder.push(received);
                     while let Some(msg) = decoder.pop() {
                         if tx.send(Incoming::Message(msg)).is_err() {
                             return; // host dropped the receiver
