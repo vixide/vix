@@ -92,12 +92,6 @@ pub(crate) fn chunk(chunks: &[Rect], i: usize) -> Rect {
     chunks.get(i).copied().unwrap_or_default()
 }
 
-/// `n` as a `u16`, or `u16::MAX` when it does not fit (a count that large is
-/// wider or taller than any screen).
-pub(crate) fn to_u16(n: usize) -> u16 {
-    u16::try_from(n).unwrap_or(u16::MAX)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,11 +112,5 @@ mod tests {
         let one = [Rect::new(1, 2, 3, 4)];
         assert_eq!(chunk(&one, 0), Rect::new(1, 2, 3, 4));
         assert_eq!(chunk(&one, 1), Rect::default());
-    }
-
-    #[test]
-    fn a_huge_count_is_off_screen() {
-        assert_eq!(to_u16(7), 7);
-        assert_eq!(to_u16(usize::MAX), u16::MAX);
     }
 }

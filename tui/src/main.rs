@@ -78,7 +78,12 @@ fn query_background_colour() -> Option<(u8, u8, u8)> {
         return None;
     }
     let mut reply = String::new();
-    let deadline = std::time::Instant::now() + BACKGROUND_QUERY_TIMEOUT;
+    // The timeout is a small constant, so the deadline always exists; if it
+    // somehow did not, there is nothing to wait for.
+    let Some(deadline) = std::time::Instant::now().checked_add(BACKGROUND_QUERY_TIMEOUT) else {
+        let _ = crossterm::terminal::disable_raw_mode();
+        return None;
+    };
     while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
         if !crossterm::event::poll(left).unwrap_or(false) {
             break;
@@ -406,7 +411,7 @@ fn run(
             // terminal reports too) sends dozens of events at once, and
             // drawing a whole frame after each one made scrolling lag behind
             // the wheel. Bounded, so a flood of input still lets frames out.
-            let mut handled = 0;
+            let mut handled = 0_usize;
             while let Some(event) = next.take() {
                 // A resize only redraws; it is not something a user waits on.
                 if !matches!(event, Event::Resize(..))
@@ -415,7 +420,11 @@ fn run(
                     p.input_read(Instant::now());
                 }
                 handle_event(app, event);
-                handled += 1;
+                // A count past the top of `usize` is far past the per-frame cap.
+                let Some(count) = handled.checked_add(1) else {
+                    break;
+                };
+                handled = count;
                 if handled < MAX_EVENTS_PER_FRAME
                     && start.elapsed() < MAX_EVENT_BURST
                     && !app.flags.contains(AppFlags::SHOULD_QUIT)

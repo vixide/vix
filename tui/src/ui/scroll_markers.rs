@@ -16,7 +16,7 @@
     )
 )]
 
-use crate::geo::{Geo, chunk};
+use crate::geo::Geo;
 use ratatui::style::Color;
 
 use crate::editor::Tab;
