@@ -964,4 +964,83 @@ mod tests {
             Err(ShareError::NoSuchTable { .. })
         ));
     }
+
+    #[test]
+    fn sharing_toggles_both_ways() {
+        assert_eq!(Sharing::Private.toggled(), Sharing::Shared);
+        assert_eq!(Sharing::Shared.toggled(), Sharing::Private);
+        assert!(Sharing::Shared.is_shared() && !Sharing::Private.is_shared());
+    }
+
+    #[test]
+    fn a_mysql_catalog_without_schemas_uses_the_empty_name() {
+        assert_eq!(default_schema(Kind::Mysql, &[]), "");
+    }
+
+    #[test]
+    fn every_share_error_explains_itself_and_chains_its_cause() {
+        let errors = [
+            (ShareError::from(Refusal::Empty), None),
+            (
+                ShareError::NeedsPassword { connection: "prod".into() },
+                Some("connection prod needs a password"),
+            ),
+            (
+                ShareError::Tunnel(tunnel::TunnelError::Timeout),
+                Some("SSH tunnel failed:"),
+            ),
+            (ShareError::Connect("nope".into()), Some("cannot connect: nope")),
+            (ShareError::Query("syntax".into()), Some("syntax")),
+            (ShareError::Timeout, Some("ran longer than")),
+            (
+                ShareError::NoSuchTable { schema: String::new(), table: "t".into() },
+                Some("no table or view named t"),
+            ),
+            (
+                ShareError::NoSuchTable { schema: "s".into(), table: "t".into() },
+                Some("no table or view named t in schema s"),
+            ),
+            (
+                ShareError::Runtime(std::io::Error::other("no threads")),
+                Some("cannot start the database runtime: no threads"),
+            ),
+        ];
+        for (error, expected) in &errors {
+            let text = error.to_string();
+            assert!(!text.is_empty());
+            if let Some(expected) = expected {
+                assert!(text.contains(expected), "{text}");
+            }
+        }
+        let chained: Vec<bool> = errors
+            .iter()
+            .map(|(e, _)| std::error::Error::source(e).is_some())
+            .collect();
+        assert_eq!(
+            chained,
+            [true, false, true, false, false, false, false, false, true]
+        );
+    }
+
+    #[test]
+    fn an_unopenable_sqlite_file_is_a_connect_error_and_a_refusal_comes_first() {
+        let missing = Connection {
+            name: "gone".into(),
+            kind: Kind::Sqlite,
+            file: "/no/such/dir/app.db".into(),
+            ..Connection::default()
+        };
+        assert!(matches!(
+            query(&missing, "select 1"),
+            Err(ShareError::Connect(_))
+        ));
+        assert!(matches!(
+            tables(&missing, None),
+            Err(ShareError::Connect(_))
+        ));
+        assert!(matches!(
+            query(&missing, "delete from t"),
+            Err(ShareError::Refused(Refusal::NotARead(_)))
+        ));
+    }
 }

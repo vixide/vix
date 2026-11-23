@@ -129,3 +129,30 @@ pub(crate) fn file_workbench(
     assert_eq!(b.view, View::Workbench, "{:?}", b.message);
     (b, dir)
 }
+
+/// Serializes the tests that install a process-global custom theme.
+static THEME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Run `f` with a custom theme named `themed` active (colors from `json`'s
+/// `syntax`), restoring "no theme" afterwards, even if `f` panics.
+pub(crate) fn with_theme<R>(json: &str, f: impl FnOnce() -> R) -> R {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            vix_theme::set_custom(None);
+        }
+    }
+    let _guard = THEME.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _reset = Reset;
+    vix_theme::set_custom(Some(
+        serde_json::from_str::<vix_theme::CustomTheme>(json).expect("a valid theme"),
+    ));
+    f()
+}
+
+/// Run `f` with no custom theme active, serialized against [`with_theme`].
+pub(crate) fn without_theme<R>(f: impl FnOnce() -> R) -> R {
+    let _guard = THEME.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    vix_theme::set_custom(None);
+    f()
+}
