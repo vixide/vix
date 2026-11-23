@@ -791,4 +791,428 @@ mod tests {
         assert!(b.compare().is_none());
         assert!(b.message.is_some());
     }
+
+    use crate::test_support::{press, typed, workbench};
+
+    /// A fresh scratch directory for one test.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("vix-cmp-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A `SQLite` file holding `ddl`, as a saved connection.
+    fn target_file(dir: &std::path::Path, name: &str, ddl: &[&str], writable: bool) -> connect::Connection {
+        let path = dir.join(format!("{name}.db")).display().to_string();
+        let mut s =
+            session::Session::connect(&crate::catalog::sqlite_url(&path, "rwc"), &[]).unwrap();
+        for sql in ddl {
+            s.run(sql).unwrap();
+        }
+        connect::Connection {
+            name: name.into(),
+            kind: connect::Kind::Sqlite,
+            file: path,
+            writable,
+            ..connect::Connection::default()
+        }
+    }
+
+    /// Let the background compare work finish, without sleeping.
+    fn settle(b: &mut Browser) {
+        let deadline = Instant::now() + std::time::Duration::from_secs(30);
+        while b.compare_running() {
+            b.poll_compare();
+            assert!(Instant::now() < deadline, "compare work stalled");
+            std::thread::yield_now();
+        }
+        b.poll_compare();
+    }
+
+    /// A source with `a` and `shared`, and a saved target with `shared` and
+    /// `extra`: the diff is "create a" (checked) and "drop extra" (unchecked).
+    fn compare_pair(dir: &std::path::Path, target_writable: bool) -> Browser {
+        let mut b = workbench(
+            true,
+            &["CREATE TABLE a (id INTEGER)", "CREATE TABLE shared (x INTEGER)"],
+        );
+        let target = target_file(
+            dir,
+            "other",
+            &["CREATE TABLE shared (x INTEGER)", "CREATE TABLE extra (y INTEGER)"],
+            target_writable,
+        );
+        b.connections = vec![
+            connect::Connection {
+                name: "mem".into(),
+                kind: connect::Kind::Sqlite,
+                writable: true,
+                ..connect::Connection::default()
+            },
+            target,
+        ];
+        b
+    }
+
+    fn at_review(dir: &std::path::Path, target_writable: bool) -> Browser {
+        let mut b = compare_pair(dir, target_writable);
+        b.open_compare();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::Working);
+        settle(&mut b);
+        assert_eq!(b.compare().unwrap().screen, Screen::Review, "{:?}", b.message);
+        b
+    }
+
+    #[test]
+    fn opening_refuses_unsupported_engines_and_a_missing_target() {
+        let mut b = workbench(true, &[]);
+        b.conn.as_mut().unwrap().kind = connect::Kind::Mysql;
+        b.open_compare();
+        assert!(b.compare().is_none());
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_compare_unsupported", kind = connect::Kind::Mysql.label()).to_string())
+        );
+        b.conn.as_mut().unwrap().kind = connect::Kind::Sqlite;
+        b.open_compare();
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_compare_no_target", kind = connect::Kind::Sqlite.label()).to_string())
+        );
+        assert!(!b.compare_running());
+    }
+
+    #[test]
+    fn the_picker_chooses_a_target_and_edits_the_schema_name() {
+        let dir = scratch("pick");
+        let mut b = compare_pair(&dir, true);
+        b.open_compare();
+        let c = b.compare().unwrap();
+        assert_eq!(c.screen, Screen::Pick);
+        assert_eq!(c.candidates, [1], "only the other saved connection");
+        assert_eq!(c.schema, "main");
+        assert_eq!(c.source_name, "mem");
+        assert_eq!(c.target_name(), "");
+        assert_eq!(c.target_environment(), None);
+        assert_eq!(c.elapsed_secs(), None);
+        assert!(!c.running_migration());
+        press(&mut b, KeyCode::Down);
+        press(&mut b, KeyCode::Up);
+        press(&mut b, KeyCode::Up);
+        press(&mut b, KeyCode::Tab);
+        assert_eq!(b.compare().unwrap().pick, 0);
+        press(&mut b, KeyCode::Backspace);
+        typed(&mut b, "x");
+        assert_eq!(b.compare().unwrap().schema, "maix");
+        press(&mut b, KeyCode::Esc);
+        assert!(b.compare().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_empty_schema_name_does_not_start() {
+        let dir = scratch("schema");
+        let mut b = compare_pair(&dir, true);
+        b.open_compare();
+        for _ in 0..4 {
+            press(&mut b, KeyCode::Backspace);
+        }
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::Pick);
+        assert!(!b.compare_running());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_source_that_cannot_be_read_reports_why() {
+        let dir = scratch("nosession");
+        let mut b = compare_pair(&dir, true);
+        b.open_compare();
+        b.session = None;
+        press(&mut b, KeyCode::Enter);
+        assert!(b.message.is_some());
+        assert_eq!(b.compare().unwrap().screen, Screen::Pick);
+        assert!(b.log.entries.iter().any(|e| !e.ok), "the failed read is logged");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reading_can_be_abandoned_with_escape() {
+        let dir = scratch("abandon");
+        let mut b = compare_pair(&dir, true);
+        b.open_compare();
+        press(&mut b, KeyCode::Enter);
+        assert!(b.compare_running());
+        press(&mut b, KeyCode::Char('x'));
+        assert_eq!(b.compare().unwrap().screen, Screen::Working, "other keys wait");
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.compare().unwrap().screen, Screen::Pick);
+        assert!(!b.compare_running());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_unreachable_target_returns_to_the_picker_with_the_error() {
+        let dir = scratch("unreachable");
+        let mut b = compare_pair(&dir, true);
+        b.connections[1].file = dir.join("no/such/dir/x.db").display().to_string();
+        b.open_compare();
+        press(&mut b, KeyCode::Enter);
+        settle(&mut b);
+        assert_eq!(b.compare().unwrap().screen, Screen::Pick);
+        assert!(b.message.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_target_that_needs_a_password_prompts_for_it() {
+        let dir = scratch("password");
+        let mut b = compare_pair(&dir, true);
+        b.open_compare();
+        press(&mut b, KeyCode::Enter);
+        settle(&mut b);
+        // Drive the password screen directly: SQLite never asks for one.
+        b.compare.as_mut().unwrap().screen = Screen::Password;
+        typed(&mut b, "pw!");
+        press(&mut b, KeyCode::Backspace);
+        press(&mut b, KeyCode::Tab);
+        assert_eq!(b.compare().unwrap().password, "pw");
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.compare().unwrap().screen, Screen::Pick);
+        assert!(b.compare().unwrap().password.is_empty());
+        b.compare.as_mut().unwrap().screen = Screen::Password;
+        typed(&mut b, "pw");
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::Working);
+        settle(&mut b);
+        assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_review_lists_changes_with_destructive_ones_unchecked() {
+        let dir = scratch("review");
+        let mut b = at_review(&dir, false);
+        let c = b.compare().unwrap();
+        assert_eq!(c.changes.len(), 2, "{:?}", c.changes.len());
+        assert_eq!(c.checked.iter().filter(|on| **on).count(), 1);
+        assert_eq!(c.target_name(), "other");
+        assert!(!c.target_write_enabled());
+        assert_eq!(c.target_environment(), Some(crate::environment::badge(connect::Environment::Local)));
+        let first_checked = c.checked[0];
+        // Cursor movement clamps at both ends; space toggles the change.
+        press(&mut b, KeyCode::Up);
+        assert_eq!(b.compare().unwrap().cursor, 0);
+        press(&mut b, KeyCode::Char(' '));
+        assert_eq!(b.compare().unwrap().checked[0], !first_checked);
+        press(&mut b, KeyCode::Char(' '));
+        press(&mut b, KeyCode::Down);
+        press(&mut b, KeyCode::Char('j'));
+        assert_eq!(b.compare().unwrap().cursor, 1);
+        press(&mut b, KeyCode::PageUp);
+        assert_eq!(b.compare().unwrap().cursor, 0);
+        press(&mut b, KeyCode::PageDown);
+        assert_eq!(b.compare().unwrap().cursor, 1);
+        press(&mut b, KeyCode::Home);
+        assert_eq!(b.compare().unwrap().cursor, 0);
+        press(&mut b, KeyCode::End);
+        assert_eq!(b.compare().unwrap().cursor, 1);
+        press(&mut b, KeyCode::Char('k'));
+        assert_eq!(b.compare().unwrap().cursor, 0);
+        let script = b.compare().unwrap().script();
+        assert!(script.contains("CREATE TABLE"), "{script}");
+        assert!(!script.contains("DROP TABLE"), "the destructive change is unchecked");
+        press(&mut b, KeyCode::Esc);
+        assert!(b.compare().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_script_view_scrolls_and_returns() {
+        let dir = scratch("script");
+        let mut b = at_review(&dir, false);
+        press(&mut b, KeyCode::Char('v'));
+        assert_eq!(b.compare().unwrap().screen, Screen::Script);
+        press(&mut b, KeyCode::Down);
+        press(&mut b, KeyCode::Char('j'));
+        press(&mut b, KeyCode::PageDown);
+        assert_eq!(b.compare().unwrap().script_scroll, 2 + 1);
+        press(&mut b, KeyCode::PageUp);
+        press(&mut b, KeyCode::Up);
+        press(&mut b, KeyCode::Char('k'));
+        assert_eq!(b.compare().unwrap().script_scroll, 0);
+        press(&mut b, KeyCode::PageDown);
+        press(&mut b, KeyCode::Home);
+        assert_eq!(b.compare().unwrap().script_scroll, 0);
+        press(&mut b, KeyCode::Tab);
+        assert_eq!(b.compare().unwrap().screen, Screen::Script);
+        for leave in [KeyCode::Esc, KeyCode::Char('q'), KeyCode::Enter] {
+            b.compare.as_mut().unwrap().screen = Screen::Script;
+            press(&mut b, leave);
+            assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        }
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::Script, "Enter views it too");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_script_can_be_copied_saved_and_opened_in_the_editor() {
+        let dir = scratch("save");
+        let mut b = at_review(&dir, false);
+        press(&mut b, KeyCode::Char('y'));
+        assert_eq!(b.message, Some(t!("msg.db_copied").to_string()));
+        press(&mut b, KeyCode::Char('s'));
+        assert_eq!(b.compare().unwrap().screen, Screen::SavePath);
+        assert_eq!(b.compare().unwrap().path, "migration-other.sql");
+        // An empty path does nothing; Esc goes back.
+        b.compare.as_mut().unwrap().path.clear();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::SavePath);
+        press(&mut b, KeyCode::Tab);
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        // An unwritable path reports the error and stays on the prompt.
+        press(&mut b, KeyCode::Char('s'));
+        b.compare.as_mut().unwrap().path = dir.join("no/dir/x.sql").display().to_string();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::SavePath);
+        assert!(b.message.is_some());
+        let out = dir.join("m.sql");
+        b.compare.as_mut().unwrap().path.clear();
+        typed(&mut b, &out.display().to_string());
+        press(&mut b, KeyCode::Backspace);
+        typed(&mut b, "l");
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_exported", path = out.display().to_string()).to_string())
+        );
+        let saved = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(saved, b.compare().unwrap().script());
+        // `o` moves the script into the workbench editor and closes the compare.
+        press(&mut b, KeyCode::Char('o'));
+        assert!(b.compare().is_none());
+        assert_eq!(b.focus, Pane::Editor);
+        assert!(b.query.text().contains("CREATE TABLE"));
+        assert_eq!(b.message, Some(t!("msg.db_compare_opened", name = "other").to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn running_needs_something_to_run_and_a_writable_target() {
+        let dir = scratch("gates");
+        let mut b = at_review(&dir, false);
+        press(&mut b, KeyCode::Char('r'));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_compare_read_only", name = "other").to_string())
+        );
+        assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        // Un-check everything: nothing to run.
+        for on in &mut b.compare.as_mut().unwrap().checked {
+            *on = false;
+        }
+        press(&mut b, KeyCode::Char('r'));
+        assert_eq!(b.message, Some(t!("msg.db_compare_nothing").to_string()));
+        // The run gate holds even if the confirmation were reached anyway.
+        b.compare.as_mut().unwrap().screen = Screen::Confirm;
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_compare_read_only", name = "other").to_string())
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn f8_toggles_write_mode_on_the_target_session() {
+        let dir = scratch("f8");
+        let mut b = at_review(&dir, false);
+        press(&mut b, KeyCode::F(8));
+        assert!(b.compare().unwrap().target_write_enabled());
+        assert_eq!(b.message, Some(t!("msg.db_write_enabled").to_string()));
+        press(&mut b, KeyCode::F(8));
+        assert!(!b.compare().unwrap().target_write_enabled());
+        assert_eq!(b.message, Some(t!("msg.db_read_only_on").to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn confirming_runs_the_migration_on_the_target_and_rereads_it() {
+        let dir = scratch("run");
+        let mut b = at_review(&dir, true);
+        press(&mut b, KeyCode::Char('r'));
+        assert_eq!(b.compare().unwrap().screen, Screen::Confirm);
+        // Declining goes back to the review.
+        press(&mut b, KeyCode::Char('n'));
+        assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        press(&mut b, KeyCode::Char('r'));
+        press(&mut b, KeyCode::Tab);
+        press(&mut b, KeyCode::Char('y'));
+        assert_eq!(b.compare().unwrap().screen, Screen::Working);
+        assert!(b.compare().unwrap().running_migration());
+        assert!(b.compare().unwrap().elapsed_secs().is_some());
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(
+            b.compare().unwrap().screen,
+            Screen::Working,
+            "a running migration cannot be abandoned"
+        );
+        settle(&mut b);
+        assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_compare_applied", count = 1, name = "other").to_string())
+        );
+        // The target now has `a`; only the unchecked drop of `extra` remains.
+        let changes = b.compare().unwrap().changes.len();
+        assert_eq!(changes, 1);
+        let target = &b.connections[1].file;
+        let mut s = session::Session::connect(&crate::catalog::sqlite_url(target, "ro"), &[]).unwrap();
+        let (_, rows) = s
+            .run("SELECT name FROM sqlite_master WHERE name = 'a'")
+            .unwrap();
+        assert_eq!(rows, [["a"]]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failing_migration_rolls_back_and_reports_the_statement() {
+        let dir = scratch("fail");
+        let mut b = at_review(&dir, true);
+        // Choose the drop of `extra`, then take `extra` away behind its back so
+        // the migration's DROP fails.
+        for on in &mut b.compare.as_mut().unwrap().checked {
+            *on = true;
+        }
+        let target = b.connections[1].file.clone();
+        let mut other =
+            session::Session::connect(&crate::catalog::sqlite_url(&target, "rwc"), &[]).unwrap();
+        other.run("DROP TABLE extra").unwrap();
+        drop(other);
+        press(&mut b, KeyCode::Char('r'));
+        press(&mut b, KeyCode::Enter);
+        settle(&mut b);
+        assert_eq!(b.compare().unwrap().screen, Screen::Review);
+        let msg = b.message.clone().unwrap();
+        assert!(msg.contains("extra"), "{msg}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn keys_are_ignored_without_a_compare_and_polling_is_a_no_op() {
+        let mut b = workbench(true, &[]);
+        b.poll_compare();
+        assert_eq!(b.key_compare(crate::test_support::key(KeyCode::Enter), 5), Outcome::Consumed);
+        b.confirm_compare_run();
+        b.toggle_target_write();
+        b.run_compare();
+        b.open_compare_script();
+        assert!(b.compare().is_none());
+    }
 }
