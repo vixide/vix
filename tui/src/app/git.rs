@@ -1753,4 +1753,6 @@ impl App {
 }
 
 #[cfg(test)]
+mod cov_r3;
+#[cfg(test)]
 pub(super) mod tests;

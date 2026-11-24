@@ -423,3 +423,6 @@ mod tests {
         assert_eq!(wrap("", 4), vec![""]);
     }
 }
+
+#[cfg(test)]
+mod cov_r3;

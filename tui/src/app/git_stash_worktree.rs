@@ -382,3 +382,6 @@ impl App {
         self.load_worktree_chooser(false, None);
     }
 }
+
+#[cfg(test)]
+mod tests;

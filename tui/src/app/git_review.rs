@@ -797,3 +797,6 @@ fn review_select_error(e: SelectError) -> String {
     }
     .to_string()
 }
+
+#[cfg(test)]
+mod tests;

@@ -270,3 +270,6 @@ impl App {
             .is_some_and(crate::db::Browser::reconnect_running)
     }
 }
+
+#[cfg(test)]
+mod cov_r3;

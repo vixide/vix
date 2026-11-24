@@ -719,3 +719,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod cov_r3;

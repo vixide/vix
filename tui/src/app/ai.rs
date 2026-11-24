@@ -1425,3 +1425,6 @@ mod tests {
         assert_eq!(app.selected_or_word_text(), "");
     }
 }
+
+#[cfg(test)]
+mod cov_r3;

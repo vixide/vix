@@ -835,3 +835,6 @@ fn collect_menu_leaves(
         }
     }
 }
+
+#[cfg(test)]
+mod cov_r3;
