@@ -219,3 +219,7 @@ fn outcome_text(oo: &OperationOutcome) -> String {
     }
     out
 }
+
+#[cfg(test)]
+#[path = "fhir_http_tests_r4.rs"]
+mod tests_r4;

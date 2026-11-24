@@ -15155,6 +15155,10 @@ mod app_tests_r2a;
 mod app_tests_r3a;
 
 #[cfg(test)]
+#[path = "app_tests_r4a.rs"]
+mod app_tests_r4a;
+
+#[cfg(test)]
 mod tests {
     #[cfg(not(feature = "jj"))]
     #[test]

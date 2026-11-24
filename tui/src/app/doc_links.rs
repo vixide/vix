@@ -378,3 +378,7 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "doc_links_tests_r4.rs"]
+mod tests_r4;

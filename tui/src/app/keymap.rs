@@ -2160,3 +2160,7 @@ mod tests {
         assert!(app.emacs_c_x_chord_key(key('~')));
     }
 }
+
+#[cfg(test)]
+#[path = "keymap_tests_r4.rs"]
+mod tests_r4;

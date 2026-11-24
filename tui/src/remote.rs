@@ -166,4 +166,70 @@ mod tests {
         let mut files = vec![PathBuf::from("docker://-it/x")];
         assert!(connect_cli(&mut files, "off").is_err());
     }
+    /// A bare name that parses as remote but is malformed reports the
+    /// translated bad-name message naming the argument.
+    #[test]
+    fn the_bad_name_message_names_the_argument() {
+        let mut files = vec![PathBuf::from("ssh://-oProxyCommand=x/y")];
+        let err = connect_cli(&mut files, "off").unwrap_err();
+        assert!(err.contains("-oProxyCommand=x"), "{err}");
+    }
+
+    /// What the user is told about the remote agent after a connect.
+    #[cfg(feature = "tasks")]
+    #[test]
+    fn the_agent_note_reports_use_upload_and_failure_only() {
+        use crate::authority::ssh::AgentStatus;
+        let path = PathBuf::from("/home/u/.cache/vix/agent");
+        let ran = agent_note(
+            "h",
+            &AgentStatus::Running {
+                path: path.clone(),
+                uploaded: false,
+            },
+        );
+        assert_eq!(
+            ran,
+            Some(
+                t!(
+                    "msg.remote_agent_running",
+                    host = "h",
+                    path = path.display()
+                )
+                .to_string()
+            )
+        );
+        let up = agent_note(
+            "h",
+            &AgentStatus::Running {
+                path: path.clone(),
+                uploaded: true,
+            },
+        );
+        assert_eq!(
+            up,
+            Some(
+                t!(
+                    "msg.remote_agent_uploaded",
+                    host = "h",
+                    path = path.display()
+                )
+                .to_string()
+            )
+        );
+        assert_ne!(ran, up);
+        assert_eq!(
+            agent_note("h", &AgentStatus::Unavailable("no exec".into())),
+            Some(
+                t!(
+                    "msg.remote_agent_unavailable",
+                    host = "h",
+                    error = "no exec"
+                )
+                .to_string()
+            )
+        );
+        assert_eq!(agent_note("h", &AgentStatus::Off), None);
+        assert_eq!(agent_note("h", &AgentStatus::NotInstalled), None);
+    }
 }
