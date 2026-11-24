@@ -359,4 +359,33 @@ mod tests {
         );
         assert_eq!(row(&render(&ed, 10), 0), "x");
     }
+
+    #[test]
+    fn setting_a_layer_again_replaces_its_texts_and_an_empty_list_removes_it() {
+        let mut ed = editor("one\ntwo\n");
+        ed.set_eol_texts(
+            VirtualTextLayer::Diagnostics,
+            vec![EolText::new(0, "first")],
+        );
+        ed.set_eol_texts(VirtualTextLayer::DebugValues, vec![EolText::new(1, "dbg")]);
+        ed.set_eol_texts(
+            VirtualTextLayer::Diagnostics,
+            vec![EolText::new(1, "second")],
+        );
+        let texts = ed.eol_texts(VirtualTextLayer::Diagnostics);
+        assert_eq!(texts.len(), 1);
+        assert_eq!((texts[0].line, texts[0].text.as_str()), (1, "second"));
+        assert_eq!(
+            ed.eol_texts(VirtualTextLayer::DebugValues).len(),
+            1,
+            "other layers keep theirs"
+        );
+        assert!(!ed.has_eol_texts(0));
+        ed.set_eol_texts(VirtualTextLayer::Diagnostics, Vec::new());
+        assert_eq!(ed.eol_texts(VirtualTextLayer::Diagnostics).len(), 0);
+        // Clearing a layer that was never set is a no-op.
+        ed.set_eol_texts(VirtualTextLayer::TaskProblems, Vec::new());
+        assert_eq!(ed.eol_texts(VirtualTextLayer::TaskProblems).len(), 0);
+        assert!(ed.has_eol_texts(1));
+    }
 }

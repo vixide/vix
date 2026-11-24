@@ -1083,4 +1083,174 @@ mod tests {
                 .contains("line 0")
         );
     }
+
+    #[test]
+    fn start_is_a_no_op_once_started() {
+        let mut c = Client::new("/w");
+        assert_eq!(c.start().len(), 1);
+        assert_eq!(c.start().len(), 0);
+    }
+
+    #[test]
+    fn a_session_new_reply_without_an_id_fails_and_a_prompt_reply_may_omit_the_stop_reason() {
+        let mut c = Client::new("/w");
+        c.start();
+        c.handle(&json!({"id":1,"result":{"protocolVersion":1}}));
+        let s = c.handle(&json!({"id":2,"result":{}}));
+        assert_eq!(
+            s.events,
+            vec![Event::Failed("session/new returned no sessionId".into())]
+        );
+        assert_ne!(c.phase(), Phase::Ready);
+
+        let mut c = ready();
+        c.prompt("hi").unwrap();
+        let s = c.handle(&json!({"id":3,"result":{}}));
+        assert_eq!(
+            s.events,
+            vec![Event::TurnEnded {
+                stop_reason: "end_turn".into()
+            }]
+        );
+        assert_eq!(c.phase(), Phase::Ready);
+    }
+
+    #[test]
+    fn thought_chunks_and_plans_become_events_and_unknown_updates_are_skipped() {
+        let mut c = ready();
+        let s = c.handle(&update(&json!({
+            "sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"hm"}})));
+        assert_eq!(s.events, vec![Event::Thought("hm".into())]);
+        let s = c.handle(&update(&json!({
+            "sessionUpdate":"plan","entries":[{"content":"do it","status":"done"},{}]})));
+        let Event::Plan(entries) = &s.events[0] else {
+            panic!("{:?}", s.events)
+        };
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].content, "do it");
+        assert_eq!(entries[0].status, "done");
+        assert_eq!(entries[1].status, "pending");
+        let s = c.handle(&update(&json!({"sessionUpdate":"future_kind"})));
+        assert!(s.events.is_empty() && s.out.is_empty());
+        // An update with no `update` object is ignored.
+        let s = c.handle(&json!({"method":"session/update","params":{"sessionId":"S"}}));
+        assert_eq!(s.events.len(), 0);
+        // An update for a foreign session is ignored.
+        let s = c.handle(&json!({"method":"session/update","params":{
+            "sessionId":"other","update":{"sessionUpdate":"agent_message_chunk"}}}));
+        assert_eq!(s.events.len(), 0);
+    }
+
+    #[test]
+    fn responses_to_unknown_ids_and_other_notifications_are_ignored() {
+        let mut c = ready();
+        let s = c.handle(&json!({"id":999,"result":{}}));
+        assert!(s.events.is_empty() && s.out.is_empty());
+        let s = c.handle(&json!({"method":"some/other","params":{}}));
+        assert!(s.events.is_empty() && s.out.is_empty());
+        let s = c.handle(&json!("not json-rpc"));
+        assert!(s.events.is_empty() && s.out.is_empty());
+    }
+
+    #[test]
+    fn terminal_requests_become_events_and_malformed_ones_are_refused() {
+        let mut c = ready();
+        for (method, expect) in [
+            ("terminal/output", "output"),
+            ("terminal/wait_for_exit", "wait"),
+            ("terminal/kill", "kill"),
+            ("terminal/release", "release"),
+        ] {
+            let s = c.handle(&json!({"id":11,"method":method,
+                "params":{"sessionId":"S","terminalId":"T1"}}));
+            let ev = s.events.first().expect(method);
+            let ok = match (expect, ev) {
+                ("output", Event::TerminalOutput { terminal_id, .. })
+                | ("wait", Event::TerminalWait { terminal_id, .. })
+                | ("kill", Event::TerminalKill { terminal_id, .. })
+                | ("release", Event::TerminalRelease { terminal_id, .. }) => terminal_id == "T1",
+                _ => false,
+            };
+            assert!(ok, "{method}: {ev:?}");
+            let s = c.handle(&json!({"id":12,"method":method,
+                "params":{"sessionId":"S"}}));
+            assert_eq!(s.out[0]["error"]["code"], -32602, "{method}");
+            assert_eq!(s.out[0]["error"]["message"], "missing terminalId");
+        }
+    }
+
+    #[test]
+    fn malformed_file_and_terminal_create_requests_are_refused_with_invalid_params() {
+        let mut c = ready();
+        let s = c.handle(&json!({"id":5,"method":"fs/read_text_file",
+            "params":{"sessionId":"S"}}));
+        assert_eq!(s.out[0]["error"]["message"], "missing path");
+        let s = c.handle(&json!({"id":6,"method":"fs/write_text_file",
+            "params":{"sessionId":"S","path":"/w/a"}}));
+        assert_eq!(s.out[0]["error"]["message"], "missing path or content");
+        let s = c.handle(&json!({"id":7,"method":"fs/write_text_file",
+            "params":{"sessionId":"S","path":"/w/a","content":"x"}}));
+        assert_eq!(
+            s.events,
+            vec![Event::WriteFile {
+                req_id: json!(7),
+                path: "/w/a".into(),
+                content: "x".into()
+            }]
+        );
+        let s = c.handle(&json!({"id":8,"method":"terminal/create",
+            "params":{"sessionId":"S","command":"   "}}));
+        assert_eq!(s.out[0]["error"]["message"], "missing command");
+    }
+
+    #[test]
+    fn terminal_answers_have_the_acp_shapes() {
+        let id = json!(3);
+        assert_eq!(Client::answer_unit(&id)["result"], Value::Null);
+        assert_eq!(
+            Client::answer_denied(&id, "no")["error"],
+            json!({"code": -32000, "message": "no"})
+        );
+        let exit = TerminalExit {
+            code: Some(2),
+            signal: None,
+        };
+        assert_eq!(
+            Client::answer_terminal_exit(&id, &exit)["result"],
+            json!({"exitCode": 2, "signal": null})
+        );
+        assert_eq!(
+            Client::answer_read(&id, Err("nope"))["error"]["message"],
+            "nope"
+        );
+        assert_eq!(
+            Client::answer_write(&id, Err("ro"))["error"]["code"],
+            -32602
+        );
+    }
+
+    #[test]
+    fn permission_options_with_an_unknown_kind_or_no_id_are_dropped() {
+        let mut c = ready();
+        let s = c.handle(
+            &json!({"id":9,"method":"session/request_permission","params":{
+            "sessionId":"S","toolCall":{"title":"x"},
+            "options":[{"optionId":"a","kind":"allow_always"},
+                       {"optionId":"b","kind":"reject_always","name":"Never"},
+                       {"optionId":"c","kind":"mystery"},
+                       {"kind":"allow_once"}]}}),
+        );
+        let Event::Permission { options, .. } = &s.events[0] else {
+            panic!("{:?}", s.events)
+        };
+        let kinds: Vec<_> = options.iter().map(|o| (o.id.as_str(), o.kind)).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                ("a", OptionKind::AllowAlways),
+                ("b", OptionKind::RejectAlways)
+            ]
+        );
+        assert_eq!(options[1].name, "Never");
+    }
 }

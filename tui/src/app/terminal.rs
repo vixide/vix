@@ -453,3 +453,6 @@ fn open_terminal(
     );
     Terminal::open_command(spec.program(), &args, &dir, rows, cols, scrollback)
 }
+
+#[cfg(test)]
+mod tests;

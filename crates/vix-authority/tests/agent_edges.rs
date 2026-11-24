@@ -1001,9 +1001,14 @@ fn a_watch_thread_reports_a_change_to_the_client() {
     let watch = auth
         .watch(std::slice::from_ref(&file), Duration::from_millis(100))
         .unwrap();
-    std::fs::write(&file, b"changed, longer").unwrap();
+    // The watch thread takes its baseline snapshot on its own schedule, so a
+    // single write right after `watch` can land before the baseline and never
+    // look like a change. Instead make a *new* change (a different length)
+    // before every bounded wait on the event channel: whichever write follows
+    // the baseline is reported, and nothing depends on timing.
     let mut seen = Vec::new();
-    for _ in 0..100 {
+    for round in 0..100usize {
+        std::fs::write(&file, vec![b'x'; round + 2]).unwrap();
         if let Some(paths) = watch.next_timeout(Duration::from_millis(100)) {
             seen.extend(paths);
             break;
