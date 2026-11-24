@@ -211,4 +211,11 @@ mod tests {
         assert_ne!(PeerId::guest(0), PeerId::HOST);
         assert_eq!(PeerId::guest(0), PeerId(2));
     }
+
+    #[test]
+    fn guest_ids_start_at_two_and_saturate_at_the_top() {
+        assert_eq!(PeerId::guest(0), PeerId(2));
+        assert_eq!(PeerId::guest(5), PeerId(7));
+        assert_eq!(PeerId::guest(u64::MAX), PeerId(u64::MAX));
+    }
 }

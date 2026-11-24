@@ -145,4 +145,27 @@ mod tests {
         assert_eq!(Path::parse("PID-1.2.3.4"), Err(PathError::Trailing));
         assert_eq!(Path::parse("PID-1(2"), Err(PathError::Trailing));
     }
+
+    #[test]
+    fn errors_display_a_short_reason() {
+        assert_eq!(PathError::MissingSegment.to_string(), "missing segment id");
+        assert_eq!(PathError::MissingField.to_string(), "missing field number");
+        assert_eq!(PathError::BadNumber.to_string(), "bad number");
+        assert_eq!(PathError::Trailing.to_string(), "unexpected trailing text");
+    }
+
+    #[test]
+    fn malformed_paths_report_which_part_is_wrong() {
+        assert_eq!(Path::parse("PID").unwrap_err(), PathError::MissingField);
+        assert_eq!(Path::parse("-5").unwrap_err(), PathError::MissingSegment);
+        assert_eq!(Path::parse("PID-").unwrap_err(), PathError::MissingField);
+        assert_eq!(Path::parse("PID-0").unwrap_err(), PathError::BadNumber);
+        assert_eq!(Path::parse("PID-x").unwrap_err(), PathError::BadNumber);
+        assert_eq!(Path::parse("PID-5(2").unwrap_err(), PathError::Trailing);
+        assert_eq!(Path::parse("PID-5.1.2.3").unwrap_err(), PathError::Trailing);
+        assert_eq!(Path::parse("PID-5.0").unwrap_err(), PathError::BadNumber);
+        let p = Path::parse(" PID-5(2).1.3 ").unwrap();
+        assert_eq!(p.to_string(), "PID-5(2).1.3");
+        assert_eq!(Path::field("PID", 3).to_string(), "PID-3");
+    }
 }

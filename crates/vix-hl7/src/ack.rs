@@ -134,4 +134,35 @@ mod tests {
         assert!(Ack::from_message(&Message::parse("MSH|^~\\&|R\rPID|1")).is_none());
         assert_eq!(AckCode::from_code("??"), AckCode::Unknown);
     }
+
+    #[test]
+    fn every_code_reads_back_and_classifies() {
+        use AckCode::*;
+        for (text, code) in [
+            ("AA", ApplicationAccept),
+            ("AE", ApplicationError),
+            ("AR", ApplicationReject),
+            ("CA", CommitAccept),
+            ("CE", CommitError),
+            ("CR", CommitReject),
+            (" AA ", ApplicationAccept),
+            ("ZZ", Unknown),
+        ] {
+            assert_eq!(AckCode::from_code(text), code, "{text:?}");
+        }
+        assert!(CommitAccept.is_accept() && !CommitAccept.is_nak());
+        assert!(CommitError.is_nak() && CommitReject.is_nak());
+        assert!(!Unknown.is_accept() && !Unknown.is_nak());
+    }
+
+    #[test]
+    fn a_sparse_msa_reads_missing_fields_as_empty_and_err_falls_back_to_err1() {
+        let msg = Message::parse("MSH|^~\\&|APP\rMSA|AE\rERR|207");
+        let ack = Ack::from_message(&msg).expect("has MSA");
+        assert_eq!(ack.code, AckCode::ApplicationError);
+        assert_eq!(ack.control_id, "");
+        assert_eq!(ack.text, "");
+        assert_eq!(ack.error_code.as_deref(), Some("207"));
+        assert_eq!(Ack::from_message(&Message::parse("MSH|^~\\&|APP")), None);
+    }
 }

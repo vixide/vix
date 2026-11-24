@@ -359,4 +359,26 @@ mod tests {
         f.on_peer_left(PeerId(2));
         assert_eq!(f.target(), None);
     }
+
+    #[test]
+    fn follow_starts_stops_and_unpins_on_scroll_or_departure() {
+        let mut f = Follow::default();
+        assert_eq!(f.target(), None);
+        f.start(PeerId(7));
+        assert_eq!(f.target(), Some(PeerId(7)));
+        f.on_peer_left(PeerId(8));
+        assert_eq!(
+            f.target(),
+            Some(PeerId(7)),
+            "another peer leaving changes nothing"
+        );
+        f.on_peer_left(PeerId(7));
+        assert_eq!(f.target(), None);
+        f.start(PeerId(7));
+        f.on_local_scroll();
+        assert_eq!(f.target(), None);
+        f.start(PeerId(9));
+        f.stop();
+        assert_eq!(f.target(), None);
+    }
 }

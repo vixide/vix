@@ -430,4 +430,210 @@ mod tests {
     fn sanitize_config_toml_rejects_content_that_is_not_valid_toml() {
         assert_eq!(sanitize_config_toml("not valid toml {{{"), None);
     }
+
+    /// Serializes tests that write into the (shared) config directory.
+    static FS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// The config directory, but only when it is provably a throwaway one
+    /// (`XDG_CONFIG_HOME` set and the config path inside it); `None` means
+    /// the test must not touch the filesystem (it would be the user's real
+    /// config).
+    fn throwaway_config_dir() -> Option<PathBuf> {
+        let xdg = PathBuf::from(std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty())?);
+        let cfg = Settings::config_path()?;
+        if !cfg.starts_with(&xdg) {
+            return None;
+        }
+        cfg.parent().map(Path::to_path_buf)
+    }
+
+    fn bundle_of(pairs: &[(&str, &str)]) -> Bundle {
+        Bundle {
+            format: FORMAT,
+            entries: pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn apply_writes_then_backs_up_and_collect_reads_back() {
+        let _g = FS_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(dir) = throwaway_config_dir() else {
+            return;
+        };
+        let macros = dir.join("macros.toml");
+        let dict = dir.join("user_dictionary.txt");
+        let keys = dir.join("keybindings.toml");
+        let _ = std::fs::remove_file(&macros);
+        let _ = std::fs::remove_file(&dict);
+        let _ = std::fs::remove_file(&keys);
+        let _ = std::fs::remove_file(dir.join("macros.toml.bak"));
+
+        let first = apply(&bundle_of(&[
+            ("macros.toml", "first = 1\n"),
+            ("user_dictionary.txt", "zorble\n"),
+            ("keybindings.toml", "k = 1\n"),
+            ("bogus.txt", "x"),
+        ]));
+        let outcome = |name: &str| {
+            first
+                .iter()
+                .find(|(n, _, _)| n == name)
+                .map(|(_, o, p)| (o.clone(), *p))
+        };
+        assert_eq!(outcome("macros.toml"), Some((EntryOutcome::Written, false)));
+        assert_eq!(outcome("bogus.txt"), Some((EntryOutcome::Skipped, false)));
+        assert_eq!(std::fs::read_to_string(&macros).unwrap(), "first = 1\n");
+
+        // Second import: the previous file is renamed to `.bak`.
+        let second = apply(&bundle_of(&[("macros.toml", "second = 2\n")]));
+        assert_eq!(
+            second,
+            vec![(
+                "macros.toml".to_string(),
+                EntryOutcome::WrittenAfterBackup,
+                false
+            )]
+        );
+        assert_eq!(std::fs::read_to_string(&macros).unwrap(), "second = 2\n");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("macros.toml.bak")).unwrap(),
+            "first = 1\n"
+        );
+
+        let collected = collect(&Settings::default());
+        assert_eq!(
+            collected.entries.get("macros.toml").map(String::as_str),
+            Some("second = 2\n")
+        );
+        assert_eq!(
+            collected
+                .entries
+                .get("user_dictionary.txt")
+                .map(String::as_str),
+            Some("zorble\n")
+        );
+        assert_eq!(
+            collected
+                .entries
+                .get("keybindings.toml")
+                .map(String::as_str),
+            Some("k = 1\n")
+        );
+        for f in [&macros, &dict, &keys] {
+            let _ = std::fs::remove_file(f);
+        }
+        let _ = std::fs::remove_file(dir.join("macros.toml.bak"));
+    }
+
+    #[test]
+    fn apply_config_toml_skips_invalid_and_writes_valid() {
+        let _g = FS_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(dir) = throwaway_config_dir() else {
+            return;
+        };
+        let bad = apply(&bundle_of(&[("config.toml", "not valid toml {{{")]));
+        assert_eq!(
+            bad,
+            vec![("config.toml".to_string(), EntryOutcome::Skipped, false)]
+        );
+        let _ = std::fs::create_dir_all(&dir);
+        let good = apply(&bundle_of(&[("config.toml", "")]));
+        assert_eq!(good.len(), 1);
+        assert!(matches!(
+            good[0].1,
+            EntryOutcome::Written | EntryOutcome::WrittenAfterBackup
+        ));
+        assert!(
+            !good[0].2,
+            "default command fields match: nothing preserved"
+        );
+        // The written file is valid, loadable settings TOML.
+        let text = std::fs::read_to_string(dir.join("config.toml")).unwrap();
+        assert!(toml::from_str::<Settings>(&text).is_ok());
+        let _ = std::fs::remove_file(dir.join("config.toml"));
+        let _ = std::fs::remove_file(dir.join("config.toml.bak"));
+    }
+
+    #[test]
+    fn apply_config_toml_preserves_current_command_fields() {
+        let _g = FS_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(dir) = throwaway_config_dir() else {
+            return;
+        };
+        let _ = std::fs::remove_file(dir.join("config.toml"));
+        let mut evil = Settings::default();
+        evil.test_command = "rm -rf ~".to_string();
+        let text = toml::to_string_pretty(&evil).unwrap();
+        let out = apply(&bundle_of(&[("config.toml", &text)]));
+        assert_eq!(out.len(), 1);
+        assert!(out[0].2, "the differing command field was preserved");
+        let written = std::fs::read_to_string(dir.join("config.toml")).unwrap();
+        let reloaded: Settings = toml::from_str(&written).unwrap();
+        assert_eq!(reloaded.test_command, Settings::default().test_command);
+        let _ = std::fs::remove_file(dir.join("config.toml"));
+        let _ = std::fs::remove_file(dir.join("config.toml.bak"));
+    }
+
+    #[test]
+    fn theme_entry_round_trips_through_apply_and_collect() {
+        let _g = FS_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(dir) = throwaway_config_dir() else {
+            return;
+        };
+        let themes = dir.join("themes");
+        let file = themes.join("r4bundle.json");
+        let json = r#"{"name":"R4 Bundle Theme"}"#;
+        let out = apply(&bundle_of(&[("theme/r4bundle.json", json)]));
+        assert_eq!(out[0].1, EntryOutcome::Written);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), json);
+        // A non-json neighbour and an unparsable json are ignored by the scan.
+        std::fs::write(themes.join("notes.txt"), "x").unwrap();
+        std::fs::write(themes.join("broken.json"), "{ nope").unwrap();
+
+        let mut settings = Settings::default();
+        settings.theme = "r4 bundle theme".to_string();
+        let (name, content) = active_theme_file(&settings).expect("theme is found by name");
+        assert_eq!(name, "r4bundle.json");
+        assert_eq!(content, json);
+        let bundle = collect(&settings);
+        assert_eq!(
+            bundle
+                .entries
+                .get("theme/r4bundle.json")
+                .map(String::as_str),
+            Some(json)
+        );
+        settings.theme = "no such theme".to_string();
+        assert_eq!(active_theme_file(&settings), None);
+        for f in ["r4bundle.json", "notes.txt", "broken.json"] {
+            let _ = std::fs::remove_file(themes.join(f));
+        }
+    }
+
+    #[test]
+    fn write_fails_for_unwritable_path_and_read_rejects_bad_files() {
+        let dir = std::env::temp_dir().join(format!("vix-bundle-r4-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bundle = bundle_of(&[("config.toml", "")]);
+        // Writing to a directory path fails.
+        assert!(write(&bundle, &dir).is_err());
+        // Reading a missing file fails.
+        assert!(read(&dir.join("absent.json")).is_err());
+        // Reading a non-bundle file fails.
+        let bad = dir.join("bad.json");
+        std::fs::write(&bad, "not json").unwrap();
+        assert!(read(&bad).is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

@@ -419,4 +419,16 @@ mod tests {
         assert_eq!(f[0].col, 4);
         assert_eq!(f[2].col, 7);
     }
+
+    #[test]
+    fn get_raw_addresses_subcomponents_and_rejects_out_of_range() {
+        let m = Message::parse("MSH|^~\\&|APP\rPID|1||||DOE^JANE&X^M");
+        let sub = |t: &str| m.get_raw(&Path::parse(t).unwrap());
+        assert_eq!(sub("PID-5.2.2").as_deref(), Some("X"));
+        assert_eq!(sub("PID-5.2").as_deref(), Some("JANE&X"));
+        assert_eq!(sub("PID-5.2.9"), None);
+        assert_eq!(sub("PID-5.9"), None);
+        assert_eq!(sub("PID-99"), None);
+        assert_eq!(sub("ZZZ-1"), None);
+    }
 }

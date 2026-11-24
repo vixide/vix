@@ -1187,4 +1187,30 @@ mod tests {
             prop_assert_eq!(decode(&m.encode()).unwrap(), m);
         }
     }
+
+    #[test]
+    fn every_error_code_round_trips_and_unassigned_tags_are_refused() {
+        for code in [
+            ErrorCode::PermissionDenied,
+            ErrorCode::TooLarge,
+            ErrorCode::BadPath,
+            ErrorCode::Version,
+            ErrorCode::Removed,
+            ErrorCode::Declined,
+        ] {
+            let msg = Message::Error { code };
+            assert_eq!(decode(&msg.encode()), Ok(msg));
+        }
+        assert_eq!(decode(&[13, 6]), Err(WireProblem::UnknownTag(6).into()));
+    }
+
+    #[test]
+    fn presence_messages_travel_on_the_presence_channel() {
+        let presence = samples()
+            .into_iter()
+            .find(|m| matches!(m, Message::Presence(_)))
+            .expect("a presence sample");
+        assert_eq!(presence.channel(), Channel::Presence);
+        assert_eq!(decode(&presence.encode()), Ok(presence));
+    }
 }

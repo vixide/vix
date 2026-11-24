@@ -27,6 +27,7 @@ vix-textops = { workspace = true }
 vix-theme = { workspace = true }
 
 [dev-dependencies]
+image = { workspace = true }
 proptest = { workspace = true }
 
 [lints]

@@ -160,4 +160,13 @@ mod tests {
         let s = "a|b^c&d~e\\f\ng";
         assert_eq!(unescape(&escape(s, &d), &d), s);
     }
+
+    #[test]
+    fn escape_encodes_newlines_drops_carriage_returns_and_delimiters() {
+        let d = Delimiters::default();
+        assert_eq!(escape("a\nb", &d), "a\\.br\\b");
+        assert_eq!(escape("a\r\nb", &d), "a\\.br\\b");
+        assert_eq!(escape("a|b^c", &d), "a\\F\\b\\S\\c");
+        assert_eq!(escape("a\rb", &d), "ab", "a bare CR is dropped");
+    }
 }
