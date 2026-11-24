@@ -954,3 +954,304 @@ pub(super) fn draw_conflict_list(app: &mut App, frame: &mut Frame, area: Rect) {
             .min(chunk(&chunks, 0).height),
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::cov4::{app_at, temp};
+    use ratatui::{Terminal, backend::TestBackend};
+    use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn ch(c: char) -> KeyEvent {
+        key(KeyCode::Char(c))
+    }
+
+    /// Draw the whole app into a `w` x `h` terminal and return its text,
+    /// one string per row.
+    fn render(app: &mut App, w: u16, h: u16) -> Vec<String> {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.draw(|f| crate::ui::draw(app, f)).unwrap();
+        let buf = terminal.backend().buffer().clone();
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// The first characters of a (possibly clipped) hint line.
+    fn head(text: impl std::fmt::Display) -> String {
+        text.to_string().chars().take(10).collect()
+    }
+
+    fn any_row(rows: &[String], needle: &str) -> bool {
+        rows.iter().any(|r| r.contains(needle))
+    }
+
+    #[test]
+    fn fit_pads_and_cuts_to_the_width() {
+        assert_eq!(fit("ab", 4), "ab  ");
+        assert_eq!(fit("abcdef", 3), "abc");
+    }
+
+    #[test]
+    fn preview_line_keeps_the_first_line_and_marks_a_cut() {
+        assert_eq!(preview_line("short\nsecond", 10), "short");
+        assert_eq!(preview_line("abcdefgh", 3), "abc…");
+        assert_eq!(preview_line("", 3), "");
+    }
+
+    /// The table editor scrolls horizontally to keep the selected column in
+    /// view, shows a dirty marker after an edit and the find query while
+    /// typing it.
+    #[test]
+    fn table_editor_scrolls_columns_and_shows_edit_and_find_state() {
+        let mut app = app_at(&temp("r3-ui-table"));
+        let wide = "x".repeat(20);
+        let header: Vec<String> = (0..14).map(|i| format!("{wide}{i}")).collect();
+        let csv = format!("{}\n{}\n", header.join(","), header.join(","));
+        app.edit
+            .open_edit_table(crate::edit_table::Grid::from_text(&csv, false));
+        let page = 5;
+        {
+            let grid = app.edit.edit_table_mut().unwrap();
+            for _ in 0..10 {
+                grid.handle_key(key(KeyCode::Right), page);
+            }
+        }
+        let rows = render(&mut app, 70, 20);
+        assert!(any_row(&rows, &t!("ui.edit_table")), "{rows:?}");
+        assert!(!any_row(&rows, &format!("{wide}0 ")), "scrolled past col 0");
+        assert!(app.edit.edit_table().unwrap().col_scroll() > 0);
+        // Edit a cell: the title gains the dirty marker and the hint changes.
+        {
+            let grid = app.edit.edit_table_mut().unwrap();
+            grid.handle_key(key(KeyCode::Enter), page);
+            grid.handle_key(ch('Z'), page);
+        }
+        let rows = render(&mut app, 70, 20);
+        assert!(any_row(&rows, &t!("ui.edit_table_editing")));
+        {
+            let grid = app.edit.edit_table_mut().unwrap();
+            grid.handle_key(key(KeyCode::Enter), page);
+            assert!(grid.is_dirty());
+            grid.handle_key(ch('/'), page);
+            grid.handle_key(ch('q'), page);
+        }
+        let rows = render(&mut app, 70, 20);
+        assert!(any_row(&rows, " *"), "{rows:?}");
+        assert!(any_row(&rows, "/q"), "{rows:?}");
+    }
+
+    /// An empty table closes without drawing; the other surfaces draw nothing
+    /// when closed.
+    #[test]
+    fn closed_surfaces_draw_nothing() {
+        let mut app = app_at(&temp("r3-ui-closed"));
+        let before = render(&mut app, 60, 12);
+        for f in [
+            draw_edit_table,
+            draw_column_view,
+            draw_edit_outline,
+            draw_edit_value,
+            draw_edit_bytes,
+            draw_outline,
+            draw_conflict_list,
+            draw_html_panel,
+        ] {
+            let mut terminal = Terminal::new(TestBackend::new(60, 12)).unwrap();
+            terminal
+                .draw(|frame| {
+                    let area = frame.area();
+                    f(&mut app, frame, area);
+                })
+                .unwrap();
+            let buf = terminal.backend().buffer();
+            assert!(
+                (0..12).all(|y| (0..60).all(|x| buf[(x, y)].symbol() == " ")),
+                "a closed surface leaves the frame blank"
+            );
+        }
+        assert_eq!(render(&mut app, 60, 12), before);
+    }
+
+    /// The Org Column View shows its header, hint and the edit notices.
+    #[test]
+    fn column_view_shows_hint_editing_and_allowed_value_notices() {
+        let mut app = app_at(&temp("r3-ui-cv"));
+        let text = "#+COLUMNS: %25ITEM %TODO %EFFORT\n* TODO Task\n:PROPERTIES:\n:EFFORT: 1h\n:END:\n* Other\n";
+        app.editor.new_tab_with_content(text);
+        app.editor.active_tab_mut().unwrap().path = Some(app.root.join("x.org"));
+        app.edit
+            .open_column_view(crate::column_view::ColumnView::open(
+                text,
+                1,
+                (2025, 1, 2),
+                Some("x.org".into()),
+            ));
+        let rows = render(&mut app, 80, 20);
+        assert!(any_row(&rows, &head(t!("ui.column_view_hint"))), "{rows:?}");
+        assert!(any_row(&rows, "ITEM"));
+        // Move to the EFFORT column and start a raw-value edit.
+        let mut body = text.to_string();
+        {
+            let view = app.edit.column_view_mut().unwrap();
+            view.handle_key(key(KeyCode::Right), &mut body);
+            view.handle_key(key(KeyCode::Right), &mut body);
+            view.handle_key(ch('e'), &mut body);
+            assert!(view.is_editing());
+        }
+        let rows = render(&mut app, 160, 20);
+        assert!(
+            any_row(&rows, &head(t!("ui.column_view_editing"))),
+            "{rows:?}"
+        );
+        // The allowed-values editor on the TODO column.
+        {
+            let view = app.edit.column_view_mut().unwrap();
+            view.handle_key(key(KeyCode::Esc), &mut body);
+            view.handle_key(key(KeyCode::Left), &mut body);
+            view.handle_key(ch('a'), &mut body);
+            assert!(view.is_editing_allowed());
+        }
+        let rows = render(&mut app, 160, 20);
+        assert!(
+            any_row(&rows, &head(t!("ui.column_view_editing_allowed"))),
+            "{rows:?}"
+        );
+    }
+
+    /// The SQL statement editor lists statements and a placeholder when empty.
+    #[cfg(feature = "sql")]
+    #[test]
+    fn sql_editor_lists_statements_dirty_marker_and_empty_state() {
+        let mut app = app_at(&temp("r3-ui-sql"));
+        app.edit.open_edit_sql(crate::edit_sql::Editor::from_text(
+            "select 1;\nselect 2;\ninsert into t values (1);\n",
+        ));
+        let rows = render(&mut app, 70, 20);
+        assert!(any_row(&rows, &head(t!("ui.edit_sql_hint"))), "{rows:?}");
+        {
+            let ed = app.edit.edit_sql_mut().unwrap();
+            ed.handle_key(ch('d'), 4);
+            assert!(ed.is_dirty());
+        }
+        let rows = render(&mut app, 70, 20);
+        assert!(any_row(&rows, " *"), "{rows:?}");
+        for _ in 0..3 {
+            app.edit.edit_sql_mut().unwrap().handle_key(ch('d'), 4);
+        }
+        let rows = render(&mut app, 70, 20);
+        assert!(any_row(&rows, &t!("ui.edit_sql_empty")), "{rows:?}");
+    }
+
+    /// The outline, JSON/YAML and byte editors mark unsaved edits in the
+    /// title; the bytes view scrolls with its cursor.
+    #[test]
+    fn outline_value_and_byte_editors_mark_unsaved_edits() {
+        let mut app = app_at(&temp("r3-ui-edits"));
+        app.edit
+            .open_edit_outline(crate::edit_outline::Tree::from_text("one\n  child\ntwo\n"));
+        let rows = render(&mut app, 70, 20);
+        assert!(any_row(&rows, &t!("ui.edit_outline")), "{rows:?}");
+        {
+            let t = app.edit.edit_outline_mut().unwrap();
+            t.handle_key(key(KeyCode::Down), 4);
+            t.handle_key(key(KeyCode::Down), 4);
+            t.handle_key(key(KeyCode::Tab), 4);
+            assert!(t.is_dirty());
+        }
+        assert!(any_row(&render(&mut app, 70, 20), " *"));
+        app.edit.close_edit_outline();
+
+        let tree = crate::edit_value::Tree::from_text(
+            "{\"a\": 1, \"b\": [1, 2]}",
+            crate::edit_value::Format::Json,
+        )
+        .unwrap();
+        app.edit.open_edit_value(tree);
+        let rows = render(&mut app, 70, 20);
+        assert!(!any_row(&rows, " *"));
+        {
+            let t = app.edit.edit_value_mut().unwrap();
+            t.handle_key(key(KeyCode::Down), 8);
+            t.handle_key(key(KeyCode::Enter), 8);
+            t.handle_key(key(KeyCode::Backspace), 8);
+            t.handle_key(ch('9'), 8);
+            t.handle_key(key(KeyCode::Enter), 8);
+            assert!(t.is_dirty());
+        }
+        assert!(any_row(&render(&mut app, 70, 20), " *"));
+        app.edit.close_edit_value();
+
+        app.edit.open_edit_bytes(crate::edit_bytes::Hex::from_bytes(
+            (0..=255u8).cycle().take(2000).collect(),
+        ));
+        {
+            let h = app.edit.edit_bytes_mut().unwrap();
+            h.handle_key(key(KeyCode::PageDown), 4);
+            h.handle_key(ch('f'), 4);
+            assert!(h.is_dirty());
+        }
+        let rows = render(&mut app, 80, 20);
+        assert!(any_row(&rows, " *"), "{rows:?}");
+        assert!(any_row(&rows, &head(t!("ui.edit_bytes_hint"))));
+    }
+
+    /// The HTML entity picker, document outline and conflict list draw their
+    /// rows, a scrollbar only when they overflow, and the selected row.
+    #[test]
+    fn picker_outline_and_conflict_overlays_draw_their_rows() {
+        let mut app = app_at(&temp("r3-ui-lists"));
+        app.open_html_panel();
+        let short = render(&mut app, 80, 12);
+        assert!(any_row(&short, &t!("ui.html_header")), "{short:?}");
+        let tall = render(&mut app, 80, 400);
+        assert!(any_row(&tall, &head(t!("ui.html_hint"))));
+        app.html_panel = None;
+
+        app.outline = Some(vix_outline_panel::Outline::new(vec![
+            crate::outline_panel::Entry {
+                kind: "fn".into(),
+                name: "alpha".into(),
+                line: 1,
+            },
+            crate::outline_panel::Entry {
+                kind: String::new(),
+                name: "Heading".into(),
+                line: 5,
+            },
+        ]));
+        let rows = render(&mut app, 80, 20);
+        assert!(
+            any_row(&rows, "alpha") && any_row(&rows, "Heading"),
+            "{rows:?}"
+        );
+        app.outline = None;
+
+        let long = "y".repeat(80);
+        app.conflict_list = Some(vix_conflict_tool::List::new(vec![
+            vix_conflict_tool::Conflict {
+                start: 0,
+                end: 5,
+                ours: format!("{long}\nmore\n"),
+                theirs: "theirs\n".into(),
+            },
+            vix_conflict_tool::Conflict {
+                start: 6,
+                end: 9,
+                ours: String::new(),
+                theirs: "gone\n".into(),
+            },
+        ]));
+        let rows = render(&mut app, 100, 20);
+        assert!(any_row(&rows, "…"), "{rows:?}");
+        assert!(any_row(&rows, "gone"));
+    }
+}

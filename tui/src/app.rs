@@ -15151,6 +15151,10 @@ const MIN_EDITOR_WIDTH: u16 = 20;
 mod app_tests_r2a;
 
 #[cfg(test)]
+#[path = "app_tests_r3a.rs"]
+mod app_tests_r3a;
+
+#[cfg(test)]
 mod tests {
     #[cfg(not(feature = "jj"))]
     #[test]
