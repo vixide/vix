@@ -1289,3 +1289,230 @@ mod tests {
         assert!(c.is_me("ANA"));
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn cfg(realname: &str) -> Config {
+        Config {
+            nick: "ana".into(),
+            user: "ana".into(),
+            realname: realname.into(),
+            channels: Vec::new(),
+            sasl: None,
+        }
+    }
+
+    fn registered() -> Client {
+        let mut c = Client::new(cfg("Ana"));
+        let _ = c.start().unwrap();
+        let _ = c.handle_line(":srv 001 ana :Welcome");
+        c
+    }
+
+    #[test]
+    fn empty_realname_falls_back_to_nick() {
+        let mut c = Client::new(cfg("\0\r"));
+        let s = c.start().unwrap();
+        assert_eq!(s.send.last().map(String::as_str), Some("USER ana 0 * ana"));
+    }
+
+    #[test]
+    fn isupport_accessor_reflects_005() {
+        let mut c = registered();
+        assert_eq!(c.isupport(), &Isupport::default());
+        let _ = c.handle_line(":srv 005 ana NICKLEN=12 CHANTYPES=# :are supported");
+        assert_eq!(c.isupport().nicklen, Some(12));
+    }
+
+    #[test]
+    fn welcome_without_nick_param_keeps_configured_nick() {
+        let mut c = Client::new(cfg("Ana"));
+        let _ = c.start().unwrap();
+        let s = c.handle_line(":srv 001");
+        assert_eq!(s.events, vec![Event::Connected { nick: "ana".into() }]);
+        assert_eq!(c.nick(), "ana");
+    }
+
+    #[test]
+    fn cap_ack_disables_and_other_subcommands_are_ignored() {
+        let mut c = Client::new(cfg("Ana"));
+        let _ = c.start().unwrap();
+        let _ = c.handle_line("CAP * LS :server-time away-notify");
+        let _ = c.handle_line("CAP * ACK :server-time away-notify");
+        assert_eq!(c.enabled_caps(), ["server-time", "away-notify"]);
+        let _ = c.handle_line("CAP * ACK :-away-notify server-time");
+        assert_eq!(c.enabled_caps(), ["server-time"]);
+        let s = c.handle_line("CAP * LIST :server-time");
+        assert_eq!(s, Step::default());
+        assert_eq!(c.enabled_caps(), ["server-time"]);
+    }
+
+    #[test]
+    fn authenticate_without_credentials_aborts() {
+        let mut c = Client::new(cfg("Ana"));
+        let _ = c.start().unwrap();
+        // Force the SASL phase with credentials that are then consumed.
+        let mut with = cfg("Ana");
+        with.sasl = Some(Sasl {
+            user: "ana".into(),
+            password: Password::new("pw".into()),
+        });
+        let mut c2 = Client::new(with);
+        let _ = c2.start().unwrap();
+        let _ = c2.handle_line("CAP * LS :sasl");
+        let _ = c2.handle_line("CAP * ACK :sasl");
+        let first = c2.handle_line("AUTHENTICATE +");
+        assert_eq!(first.send.len(), 1);
+        // A second challenge finds the credentials gone and aborts with `*`.
+        let second = c2.handle_line("AUTHENTICATE +");
+        assert_eq!(second.send, vec!["AUTHENTICATE *"]);
+        // Outside the SASL phase, or for a non-`+` challenge, nothing happens.
+        assert_eq!(c.handle_line("AUTHENTICATE +"), Step::default());
+        assert_eq!(c2.handle_line("AUTHENTICATE abc"), Step::default());
+    }
+
+    #[test]
+    fn sasl_payload_of_exactly_400_base64_bytes_ends_with_plus() {
+        let mut config = cfg("Ana");
+        // "\0u\0" + 297 bytes = 300 plain bytes = 400 base64 characters.
+        config.sasl = Some(Sasl {
+            user: "u".into(),
+            password: Password::new("p".repeat(297)),
+        });
+        let mut c = Client::new(config);
+        let _ = c.start().unwrap();
+        let _ = c.handle_line("CAP * LS :sasl");
+        let _ = c.handle_line("CAP * ACK :sasl");
+        let s = c.handle_line("AUTHENTICATE +");
+        assert_eq!(s.send.len(), 2);
+        assert_eq!(s.send[0].len(), "AUTHENTICATE ".len() + 400);
+        assert_eq!(s.send[1], "AUTHENTICATE +");
+    }
+
+    #[test]
+    fn empty_topic_numeric_topic_change_and_notice() {
+        let mut c = registered();
+        let s = c.handle_line(":srv 331 ana #vix :No topic is set");
+        assert_eq!(
+            s.events,
+            vec![Event::Topic {
+                channel: "#vix".into(),
+                topic: None,
+                set_by: None
+            }]
+        );
+        let s = c.handle_line(":bob!b@h TOPIC #vix :new topic");
+        assert_eq!(
+            s.events,
+            vec![Event::Topic {
+                channel: "#vix".into(),
+                topic: Some("new topic".into()),
+                set_by: Some("bob".into())
+            }]
+        );
+        let s = c.handle_line(":bob!b@h TOPIC #vix :");
+        assert!(matches!(&s.events[0], Event::Topic { topic: None, .. }));
+        let s = c.handle_line("@time=1970-01-01T00:00:01Z :bob!b@h NOTICE ana :psst");
+        assert_eq!(
+            s.events,
+            vec![Event::Notice {
+                target: "ana".into(),
+                from: "bob".into(),
+                text: "psst".into(),
+                time: Some(1000)
+            }]
+        );
+    }
+
+    #[test]
+    fn part_forms_and_nick_before_registration() {
+        let mut c = registered();
+        let s = c.command(Command::Part {
+            channel: "#vix".into(),
+            reason: None,
+        });
+        assert_eq!(s.send, vec!["PART #vix"]);
+        let s = c.command(Command::Part {
+            channel: "#vix".into(),
+            reason: Some("\0\r".into()),
+        });
+        assert_eq!(s.send, vec!["PART #vix"]);
+        let s = c.command(Command::Part {
+            channel: "#vix".into(),
+            reason: Some("bye now".into()),
+        });
+        assert_eq!(s.send, vec!["PART #vix :bye now"]);
+
+        let mut fresh = Client::new(cfg("Ana"));
+        let _ = fresh.start().unwrap();
+        let s = fresh.command(Command::Nick("zed".into()));
+        assert_eq!(s.send, vec!["NICK zed"]);
+        assert_eq!(fresh.nick(), "zed");
+        // Once registered the nick only changes when the server confirms it.
+        let mut c = registered();
+        let s = c.command(Command::Nick("zed".into()));
+        assert_eq!(s.send, vec!["NICK zed"]);
+        assert_eq!(c.nick(), "ana");
+    }
+
+    #[test]
+    fn own_part_kick_and_nick_events() {
+        let mut c = registered();
+        let s = c.handle_line(":ana!a@h PART #vix :later");
+        assert_eq!(
+            s.events,
+            vec![Event::Parted {
+                channel: "#vix".into(),
+                reason: Some("later".into())
+            }]
+        );
+        let s = c.handle_line(":bob!b@h PART #vix");
+        assert_eq!(
+            s.events,
+            vec![Event::UserParted {
+                channel: "#vix".into(),
+                nick: "bob".into(),
+                reason: None
+            }]
+        );
+        let s = c.handle_line(":bob!b@h KICK #vix ana :out");
+        assert!(matches!(&s.events[0], Event::Parted { reason: Some(r), .. } if r == "out"));
+        let s = c.handle_line(":bob!b@h KICK #vix cat :spam");
+        assert_eq!(
+            s.events,
+            vec![Event::UserParted {
+                channel: "#vix".into(),
+                nick: "cat".into(),
+                reason: Some("spam".into())
+            }]
+        );
+        let s = c.handle_line(":ana!a@h NICK :ana2");
+        assert_eq!(
+            s.events,
+            vec![Event::NickChanged {
+                old: "ana".into(),
+                new: "ana2".into(),
+                is_self: true
+            }]
+        );
+        assert_eq!(c.nick(), "ana2");
+    }
+
+    #[test]
+    fn numeric_errors_map_to_kinds_and_non_errors_are_ignored() {
+        let mut c = registered();
+        let s = c.handle_line(":srv 404 ana #vix :Cannot send to channel");
+        assert_eq!(
+            s.events,
+            vec![Event::Error {
+                kind: ErrorKind::Numeric(404),
+                detail: "#vix Cannot send to channel".into()
+            }]
+        );
+        assert_eq!(c.handle_line(":srv 372 ana :motd"), Step::default());
+        assert_eq!(c.handle_line(":srv 0404 ana :x"), Step::default());
+        assert_eq!(c.handle_line(":srv FOO ana :x"), Step::default());
+    }
+}

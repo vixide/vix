@@ -151,3 +151,36 @@ mod tests {
         assert!(!s.is_channel("#vix"));
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn casemapping_tokens_and_strict_folding() {
+        assert_eq!(CaseMapping::from_token("rfc1459"), CaseMapping::Rfc1459);
+        assert_eq!(
+            CaseMapping::from_token("Strict-RFC1459"),
+            CaseMapping::StrictRfc1459
+        );
+        assert_eq!(CaseMapping::from_token("ascii"), CaseMapping::Ascii);
+        assert_eq!(CaseMapping::from_token("whatever"), CaseMapping::Ascii);
+        assert!(CaseMapping::StrictRfc1459.same("a\\b", "a|b"));
+        assert!(CaseMapping::Rfc1459.same("a\\b", "a|b"));
+        assert!(!CaseMapping::Ascii.same("a\\b", "a|b"));
+    }
+
+    #[test]
+    fn negated_tokens_reset_to_defaults_and_unknown_ignored() {
+        let mut s = Isupport::default();
+        let default_types = s.chantypes.clone();
+        s.apply(&["CASEMAPPING=rfc1459", "NICKLEN=9", "CHANTYPES=&", "FOO=bar"]);
+        assert_eq!(s.casemapping, CaseMapping::Rfc1459);
+        assert_eq!(s.nicklen, Some(9));
+        assert!(s.is_channel("&x"));
+        s.apply(&["-CASEMAPPING", "-NICKLEN", "-CHANTYPES", "-FOO"]);
+        assert_eq!(s.casemapping, Isupport::default().casemapping);
+        assert_eq!(s.nicklen, None);
+        assert_eq!(s.chantypes, default_types);
+    }
+}

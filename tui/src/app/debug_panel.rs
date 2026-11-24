@@ -546,3 +546,6 @@ impl App {
         self.show_exception_filters(row);
     }
 }
+
+#[cfg(test)]
+mod cov_r3;

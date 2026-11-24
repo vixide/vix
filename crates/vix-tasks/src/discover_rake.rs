@@ -193,3 +193,20 @@ mod tests {
         assert_eq!(names, ["rake:db:migrate", "rake:outside"]);
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn plain_blocks_and_task_blocks_keep_namespaces_balanced() {
+        // `each do` opens a block that its own `end` closes, so the
+        // namespace's `end` still closes the namespace and `b` is outside it.
+        let rake = "namespace :db do\n  [1, 2].each do\n    puts 1\n  end\n  task :migrate do\n    puts 2\n  end\nend\ntask :b do\nend\n";
+        let names: Vec<String> = discover_rake_tasks(&[("Rakefile", rake)], false)
+            .into_iter()
+            .map(|t| t.name)
+            .collect();
+        assert_eq!(names, ["rake:db:migrate", "rake:b"]);
+    }
+}

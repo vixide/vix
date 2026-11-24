@@ -1537,3 +1537,264 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("vix-fileops-cov-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn copy_recursive_creates_missing_parents_for_files_and_links() {
+        let base = scratch("copy-parents");
+        let file = base.join("a.txt");
+        fs::write(&file, b"hello").unwrap();
+        let dst = base.join("x").join("y").join("a.txt");
+        copy_recursive(&file, &dst).unwrap();
+        assert_eq!(fs::read(&dst).unwrap(), b"hello");
+        #[cfg(unix)]
+        {
+            let link = base.join("link");
+            std::os::unix::fs::symlink("a.txt", &link).unwrap();
+            let copied = base.join("p").join("q").join("link");
+            copy_recursive(&link, &copied).unwrap();
+            assert_eq!(fs::read_link(&copied).unwrap(), Path::new("a.txt"));
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn move_path_renames_or_merges_then_removes_the_source() {
+        let base = scratch("move");
+        let src = base.join("src");
+        fs::create_dir_all(src.join("sub")).unwrap();
+        fs::write(src.join("sub").join("f.txt"), b"data").unwrap();
+        let dst = base.join("dst");
+        move_path(&src, &dst).unwrap();
+        assert!(!src.exists());
+        assert_eq!(fs::read(dst.join("sub").join("f.txt")).unwrap(), b"data");
+
+        // A rename onto a non-empty directory fails, so the copy+remove
+        // fallback merges the source into it and still removes the source.
+        let src2 = base.join("src2");
+        fs::create_dir_all(&src2).unwrap();
+        fs::write(src2.join("g.txt"), b"more").unwrap();
+        move_path(&src2, &dst).unwrap();
+        assert!(!src2.exists());
+        assert_eq!(fs::read(dst.join("g.txt")).unwrap(), b"more");
+        assert_eq!(fs::read(dst.join("sub").join("f.txt")).unwrap(), b"data");
+        assert!(move_path(&base.join("missing"), &base.join("nowhere")).is_err());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn remove_path_deletes_files_and_directory_trees() {
+        let base = scratch("remove");
+        let tree = base.join("tree");
+        fs::create_dir_all(tree.join("deep")).unwrap();
+        fs::write(tree.join("deep").join("f"), b"x").unwrap();
+        remove_path(&tree).unwrap();
+        assert!(!tree.exists());
+        let file = base.join("f");
+        fs::write(&file, b"x").unwrap();
+        remove_path(&file).unwrap();
+        assert!(!file.exists());
+        assert!(remove_path(&file).is_err());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn which_on_path_finds_a_standard_tool_and_not_a_missing_one() {
+        let sh = which_on_path("sh").expect("sh is on PATH");
+        assert!(sh.is_file());
+        assert_eq!(sh.file_name().unwrap(), "sh");
+        assert_eq!(which_on_path("vix-definitely-not-a-program-xyz"), None);
+    }
+
+    #[test]
+    fn identity_refusal_and_text_refusals_describe_themselves() {
+        assert!(
+            RenameWouldChangeIdentity
+                .to_string()
+                .contains("hard links or owner")
+        );
+        let all = [
+            TextReadError::NotRegular.to_string(),
+            TextReadError::TooLarge.to_string(),
+            TextReadError::Binary.to_string(),
+        ];
+        assert_eq!(all[0], "not a regular file");
+        assert_eq!(all[2], "binary file");
+        assert!(all[1].contains("too large"));
+        let wrapped = io::Error::new(io::ErrorKind::InvalidData, TextReadError::Binary);
+        assert_eq!(
+            TextReadError::from_io(&wrapped),
+            Some(TextReadError::Binary)
+        );
+        assert_eq!(TextReadError::from_io(&io::Error::other("x")), None);
+    }
+
+    #[test]
+    fn recoveries_skip_junk_and_report_malformed_copies() {
+        let dir = scratch("recover");
+        assert_eq!(pending_recoveries(&dir.join("missing")), []);
+        fs::write(dir.join("notes.txt"), b"ignored: wrong extension").unwrap();
+        fs::write(dir.join("a.vixrecover"), b"WRONG MAGIC\n/x\ndata").unwrap();
+        fs::write(dir.join("b.vixrecover"), RECOVERY_MAGIC.as_bytes()).unwrap();
+        assert_eq!(pending_recoveries(&dir), []);
+
+        let good = dir.join("c.vixrecover");
+        let original = dir.join("orig.txt");
+        let body = format!("{RECOVERY_MAGIC}\n{}\nsaved bytes", original.display());
+        fs::write(&good, body).unwrap();
+        let found = pending_recoveries(&dir);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].original, original);
+        assert_eq!(found[0].contents().unwrap(), b"saved bytes");
+
+        let bad = Recovery {
+            copy: dir.join("b.vixrecover"),
+            original: original.clone(),
+        };
+        assert_eq!(
+            bad.contents().unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        let gone = Recovery {
+            copy: dir.join("nope.vixrecover"),
+            original,
+        };
+        assert_eq!(gone.contents().unwrap_err().kind(), io::ErrorKind::NotFound);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn private_atomic_write_falls_back_in_place_and_keeps_the_mode() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = scratch("private-fallback");
+        let p = dir.join("secret.txt");
+        fs::write(&p, b"old").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o644)).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let result = write_atomic_private(&p, b"new");
+        let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o755));
+        result.expect("falls back to an in-place write");
+        assert_eq!(fs::read(&p).unwrap(), b"new");
+        // An existing file keeps its own mode.
+        assert_eq!(
+            fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn writing_over_a_directory_fails_with_both_attempts_reported() {
+        let dir = scratch("write-dir");
+        let target = dir.join("is-a-dir");
+        fs::create_dir_all(&target).unwrap();
+        assert!(write_atomic(&target, b"x").is_err());
+        assert!(target.is_dir());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn private_temp_reports_errors_other_than_name_clashes() {
+        let err = write_private_temp("no-such-dir/prefix", b"x").unwrap_err();
+        assert_ne!(err.kind(), io::ErrorKind::AlreadyExists);
+    }
+
+    #[test]
+    fn unique_copy_names_count_up_and_keep_the_extension() {
+        let dir = scratch("copyname");
+        let original = dir.join("a.txt");
+        fs::write(&original, b"x").unwrap();
+        assert_eq!(
+            unique_copy_name(&dir, &original),
+            Some(dir.join("a copy.txt"))
+        );
+        fs::write(dir.join("a copy.txt"), b"x").unwrap();
+        fs::write(dir.join("a copy 2.txt"), b"x").unwrap();
+        assert_eq!(
+            unique_copy_name(&dir, &original),
+            Some(dir.join("a copy 3.txt"))
+        );
+        let bare = dir.join("Makefile");
+        assert_eq!(
+            unique_copy_name(&dir, &bare),
+            Some(dir.join("Makefile copy"))
+        );
+        fs::write(dir.join("Makefile copy"), b"x").unwrap();
+        assert_eq!(
+            unique_copy_name(&dir, &bare),
+            Some(dir.join("Makefile copy 2"))
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn decode_text_applies_its_guards_and_decodes_legacy_bytes() {
+        let too_big = decode_text(vec![b'a'; 10], 5).unwrap_err();
+        assert_eq!(
+            TextReadError::from_io(&too_big),
+            Some(TextReadError::TooLarge)
+        );
+        let binary = decode_text(b"ab\0cd".to_vec(), 100).unwrap_err();
+        assert_eq!(TextReadError::from_io(&binary), Some(TextReadError::Binary));
+        let plain = decode_text("héllo".as_bytes().to_vec(), 100).unwrap();
+        assert_eq!(plain.text, "héllo");
+        assert!(!plain.lossy);
+        // Not UTF-8: the legacy detector or the lossy fallback still yields text.
+        let legacy = decode_text(b"caf\xe9".to_vec(), 100).unwrap();
+        assert!(legacy.text.starts_with("caf"));
+        // A UTF-16 BOM skips the raw NUL check, but NULs once decoded are binary.
+        let utf16_nuls = decode_text(vec![0xff, 0xfe, 0, 0, 0, 0], 100).unwrap_err();
+        assert_eq!(
+            TextReadError::from_io(&utf16_nuls),
+            Some(TextReadError::Binary)
+        );
+    }
+
+    #[test]
+    fn encode_like_follows_the_existing_file_and_passes_errors_through() {
+        let missing = Err(io::Error::from(io::ErrorKind::NotFound));
+        assert_eq!(encode_like(missing, "é").unwrap(), "é".as_bytes());
+        let other = Err(io::Error::from(io::ErrorKind::PermissionDenied));
+        assert_eq!(
+            encode_like(other, "x").unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        let lossy = TextFile {
+            text: String::new(),
+            lossy: true,
+            encoding: vix_encoding::TextEncoding::UTF8,
+        };
+        assert_eq!(
+            encode_like(Ok(lossy), "x").unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+    }
+
+    #[test]
+    fn read_to_string_guarded_reads_text_and_refuses_directories() {
+        let dir = scratch("guarded");
+        let f = dir.join("t.txt");
+        fs::write(&f, "hello\n").unwrap();
+        assert_eq!(read_to_string_guarded(&f).unwrap(), "hello\n");
+        let err = read_to_string_guarded(&dir).unwrap_err();
+        assert_eq!(
+            TextReadError::from_io(&err),
+            Some(TextReadError::NotRegular)
+        );
+        assert!(read_to_string_guarded(&dir.join("missing")).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+}

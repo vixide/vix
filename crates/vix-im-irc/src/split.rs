@@ -249,3 +249,36 @@ mod tests {
         assert_eq!(two, vec!["PRIVMSG ana :a", "PRIVMSG ana :b"]);
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn text_errors_have_distinct_messages() {
+        let msgs: Vec<String> = [
+            TextError::BadName,
+            TextError::Empty,
+            TextError::TooLong,
+            TextError::NotRegistered,
+        ]
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+        for (i, a) in msgs.iter().enumerate() {
+            for b in msgs.iter().skip(i + 1) {
+                assert_ne!(a, b);
+            }
+        }
+    }
+
+    #[test]
+    fn too_little_budget_is_too_long() {
+        // Overhead is "PRIVMSG #a :" + CRLF = 14 bytes; 16 leaves a budget of 2 (< 4).
+        assert_eq!(
+            privmsg_lines("#a", "hi", false, 16),
+            Err(TextError::TooLong)
+        );
+        assert!(privmsg_lines("#a", "hi", false, 18).is_ok());
+    }
+}

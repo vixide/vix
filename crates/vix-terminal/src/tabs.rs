@@ -299,3 +299,55 @@ mod tests {
         assert_eq!(tabs.len(), 2);
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn three() -> (Tabs<&'static str>, [u64; 3]) {
+        let mut t = Tabs::default();
+        let ids = [t.push("a"), t.push("b"), t.push("c")];
+        (t, ids)
+    }
+
+    #[test]
+    fn navigation_wraps_and_select_ignores_out_of_range() {
+        let (mut t, ids) = three();
+        assert_eq!(t.active_index(), 2);
+        t.next();
+        assert_eq!(t.active_index(), 0);
+        t.prev();
+        assert_eq!(t.active_index(), 2);
+        t.select(1);
+        assert_eq!(t.active_id(), Some(ids[1]));
+        t.select(9);
+        assert_eq!(t.active_index(), 1);
+        let mut empty: Tabs<&str> = Tabs::default();
+        empty.next();
+        empty.prev();
+        assert_eq!(empty.active_index(), 0);
+        assert!(empty.active().is_none());
+    }
+
+    #[test]
+    fn iter_mut_and_lookup_by_id_reach_each_tab() {
+        let (mut t, ids) = three();
+        for (id, item) in t.iter_mut() {
+            if id == ids[0] {
+                *item = "A";
+            }
+        }
+        assert_eq!(t.get(ids[0]), Some(&"A"));
+        *t.get_mut(ids[2]).unwrap() = "C";
+        let all: Vec<&str> = t.iter().map(|(_, x)| *x).collect();
+        assert_eq!(all, ["A", "b", "C"]);
+        assert!(t.get(99).is_none());
+        assert!(t.get_mut(99).is_none());
+        assert_eq!(t.len(), 3);
+        // Closing the active (last) tab falls back to the new last and the
+        // panel hides only when none remain.
+        assert_eq!(t.close_active(), Some("C"));
+        assert_eq!(t.active_index(), 1);
+        assert!(t.is_visible());
+    }
+}

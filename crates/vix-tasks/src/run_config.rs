@@ -468,3 +468,103 @@ mod tests {
         assert_eq!(load(Path::new("/nonexistent/project")).unwrap(), []);
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn cfg(name: &str, command: Option<&str>, before: &[&str], compound: &[&str]) -> RunConfig {
+        RunConfig {
+            name: name.into(),
+            command: command.map(Into::into),
+            before: before.iter().map(|s| (*s).into()).collect(),
+            compound: compound.iter().map(|s| (*s).into()).collect(),
+            ..RunConfig::default()
+        }
+    }
+
+    #[test]
+    fn errors_display_the_offending_names() {
+        assert_eq!(
+            RunConfigError::Parse("bad toml".into()).to_string(),
+            "bad toml"
+        );
+        assert_eq!(RunConfigError::Duplicate("a".into()).to_string(), "a");
+        assert_eq!(RunConfigError::Cycle("c".into()).to_string(), "c");
+        assert_eq!(
+            RunConfigError::Unknown {
+                config: "stack".into(),
+                name: "ghost".into()
+            }
+            .to_string(),
+            "stack: ghost"
+        );
+    }
+
+    #[test]
+    fn blank_names_are_invalid() {
+        let err = parse("[[config]]\nname = \"  \"\ncommand = \"x\"\n").unwrap_err();
+        assert_eq!(err, RunConfigError::Invalid(String::new()));
+        assert!(matches!(parse("[[config"), Err(RunConfigError::Parse(_))));
+    }
+
+    #[test]
+    fn load_reads_dot_vix_run_toml_and_reports_parse_errors() {
+        let dir = std::env::temp_dir().join(format!("vix-runcfg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".vix")).unwrap();
+        std::fs::write(
+            dir.join(".vix").join("run.toml"),
+            "[[config]]\nname = \"go\"\ncommand = \"make\"\n",
+        )
+        .unwrap();
+        assert_eq!(load(&dir).unwrap()[0].name, "go");
+        std::fs::write(dir.join(".vix").join("run.toml"), "[[config").unwrap();
+        assert!(matches!(load(&dir), Err(RunConfigError::Parse(_))));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn compounds_report_unknown_members_cycles_and_flatten_nested_groups() {
+        let missing = [cfg("stack", None, &[], &["ghost"])];
+        assert_eq!(
+            plan(&missing, &[], "stack").unwrap_err(),
+            RunConfigError::Unknown {
+                config: "stack".into(),
+                name: "ghost".into()
+            }
+        );
+        // A compound that lists itself is a cycle.
+        let looped = [cfg("a", None, &[], &["a"])];
+        assert_eq!(
+            plan(&looped, &[], "a").unwrap_err(),
+            RunConfigError::Cycle("a".into())
+        );
+        // A nested compound is flattened into its parent's stage; members of
+        // it that are themselves compounds are skipped.
+        let nested = [
+            cfg("x", Some("run x"), &[], &[]),
+            cfg("y", Some("run y"), &[], &[]),
+            cfg("inner", None, &[], &["x", "deep"]),
+            cfg("deep", None, &[], &["y"]),
+            cfg("outer", None, &[], &["inner", "y"]),
+        ];
+        let p = plan(&nested, &[], "outer").unwrap();
+        assert_eq!(p.stages.len(), 1);
+        let cmds: Vec<&str> = p.stages[0].iter().map(|s| s.command.as_str()).collect();
+        assert_eq!(cmds, ["run x", "run y"]);
+    }
+
+    #[test]
+    fn a_config_that_only_groups_before_entries_runs_an_empty_command() {
+        // parse() rejects it, but a hand-built grouping still plans.
+        let group = [
+            cfg("setup", Some("echo setup"), &[], &[]),
+            cfg("group", None, &["setup"], &[]),
+        ];
+        let p = plan(&group, &[], "group").unwrap();
+        assert_eq!(p.stages.len(), 2);
+        assert_eq!(p.stages[0][0].command, "echo setup");
+        assert_eq!(p.stages[1][0].command, "");
+    }
+}

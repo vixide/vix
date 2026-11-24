@@ -1141,3 +1141,315 @@ mod tests {
         assert_eq!(s.problems().len(), MAX_PROBLEMS);
     }
 }
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn one(spec: &str, output: &str) -> Problem {
+        let found = scan(MatcherSpec::parse(spec).unwrap(), output);
+        assert_eq!(found.len(), 1, "{found:?}");
+        found.into_iter().next().unwrap()
+    }
+
+    /// A line number too large for `usize`: the line matches but names no usable location.
+    const HUGE: &str = "99999999999999999999999999";
+
+    #[test]
+    fn severity_tags_and_source_names() {
+        assert_eq!(Severity::Error.tag(), "error");
+        assert_eq!(Severity::Warning.tag(), "warning");
+        assert_eq!(Severity::Info.tag(), "info");
+        assert_eq!(Source::Custom.name(), "custom");
+        assert_eq!(Source::Builtin(Builtin::Go).name(), "go");
+    }
+
+    #[test]
+    fn matcher_errors_describe_themselves() {
+        let bad = MatcherSpec::parse("(unclosed").unwrap_err();
+        assert!(matches!(bad, MatcherError::Regex(_)));
+        assert_ne!(bad.to_string(), "");
+        let missing = MatcherSpec::parse(r"(?P<file>\S+)").unwrap_err();
+        assert!(matches!(missing, MatcherError::MissingGroup("line")));
+        assert!(missing.to_string().contains("(?P<line>"));
+    }
+
+    #[test]
+    fn a_pinned_builtin_ignores_other_tools_output() {
+        let spec = || MatcherSpec::parse("go").unwrap();
+        assert_eq!(scan(spec(), "src/a.c:3:4: error: boom"), []);
+        assert_eq!(scan(spec(), "main.go:3:4: undefined: x").len(), 1);
+        // Custom and Off specs never run a built-in.
+        assert_eq!(scan(MatcherSpec::Off, "main.go:3:4: undefined: x"), []);
+        let custom = MatcherSpec::parse(r"^(?P<file>\S+) (?P<line>\d+)$").unwrap();
+        assert!(!custom.runs(Builtin::Go));
+        assert!(!MatcherSpec::Off.runs(Builtin::Go));
+    }
+
+    #[test]
+    fn overlong_lines_are_clipped_on_a_char_boundary() {
+        let long = format!("{}é{}", "a".repeat(MAX_LINE - 1), "b".repeat(50));
+        let clipped = clip(&long);
+        assert!(clipped.len() <= MAX_LINE);
+        assert!(long.starts_with(clipped));
+        assert_eq!(clip("short"), "short");
+    }
+
+    #[test]
+    fn emit_rejects_pseudo_locations_and_duplicates() {
+        // Line 0 and empty files are never problems.
+        assert_eq!(scan(MatcherSpec::Auto, "a.c:0: error: zero"), []);
+        let twice = scan(MatcherSpec::Auto, "a.c:3: error: x\na.c:3: error: x\n");
+        assert_eq!(twice.len(), 1);
+    }
+
+    #[test]
+    fn problem_count_is_capped() {
+        let mut s = Scanner::new(MatcherSpec::Auto);
+        for i in 1..=MAX_PROBLEMS + 20 {
+            s.push_line(&format!("a.c:{i}: error: e{i}"));
+        }
+        assert_eq!(s.problems().len(), MAX_PROBLEMS);
+    }
+
+    #[test]
+    fn python_traceback_warning_and_aborted_tracebacks() {
+        let p = one(
+            "python",
+            "Traceback (most recent call last):\n  File \"a.py\", line 3, in f\n    x()\nDeprecationWarning: old api\n",
+        );
+        assert_eq!(p.severity, Severity::Warning);
+        assert_eq!(p.file, "a.py");
+        assert_eq!(p.line, 3);
+        // A chained traceback keeps waiting for the real exception line.
+        let p = one(
+            "python",
+            "  File \"a.py\", line 3, in f\nDuring handling of the above exception, another exception occurred:\nTraceback (most recent call last):\n  File \"b.py\", line 9, in g\nValueError: bad\n",
+        );
+        assert_eq!((p.file.as_str(), p.line), ("b.py", 9));
+        // Unindented text that is no exception ends the traceback silently.
+        let none = scan(
+            MatcherSpec::parse("python").unwrap(),
+            "  File \"a.py\", line 3, in f\n$ next command\nValueError: late\n",
+        );
+        assert_eq!(none, []);
+        // A pseudo file such as `<stdin>` is not a location.
+        let none = scan(
+            MatcherSpec::parse("python").unwrap(),
+            "  File \"<stdin>\", line 1, in <module>\nNameError: x\n",
+        );
+        assert_eq!(none, []);
+    }
+
+    #[test]
+    fn pytest_locations_skip_traceback_frames_and_classify_warnings() {
+        let spec = || MatcherSpec::parse("pytest").unwrap();
+        assert_eq!(scan(spec(), "tests/test_x.py:12: in test_thing"), []);
+        let p = &scan(spec(), "tests/test_x.py:14: UserWarning: careful")[0];
+        assert_eq!(p.severity, Severity::Warning);
+        let p = &scan(spec(), "tests/test_x.py:14: AssertionError")[0];
+        assert_eq!(p.severity, Severity::Error);
+        assert_eq!(p.column, None);
+    }
+
+    #[test]
+    fn rust_panics_in_both_formats_and_notes() {
+        let p = one(
+            "rustc",
+            "thread 'main' (123) panicked at src/lib.rs:9:5:\nassertion failed: x\n",
+        );
+        assert_eq!(
+            (p.file.as_str(), p.line, p.column),
+            ("src/lib.rs", 9, Some(5))
+        );
+        assert_eq!(p.message, "assertion failed: x");
+        let p = one(
+            "rustc",
+            "thread 'main' panicked at 'boom', src/old.rs:4:2\n",
+        );
+        assert_eq!(p.message, "boom");
+        assert_eq!(p.line, 4);
+        // A blank line after a new-format panic keeps the placeholder message.
+        let p = one("rustc", "thread 'main' panicked at src/lib.rs:9:5:\n\n");
+        assert_eq!(p.message, "panicked");
+        // Notes and helps do not become problems of their own.
+        assert_eq!(
+            scan(
+                MatcherSpec::parse("rustc").unwrap(),
+                "note: see this\n --> src/a.rs:1:1\n"
+            ),
+            []
+        );
+        // Unusable line numbers still consume the line without a problem.
+        let overflow = format!("error: e\n --> src/a.rs:{HUGE}:1\n");
+        assert_eq!(scan(MatcherSpec::parse("rustc").unwrap(), &overflow), []);
+        let overflow = format!("thread 'm' panicked at 'x', src/a.rs:{HUGE}:1\n");
+        assert_eq!(scan(MatcherSpec::parse("rustc").unwrap(), &overflow), []);
+        let overflow = format!("thread 'm' panicked at src/a.rs:{HUGE}:1:\n");
+        assert_eq!(scan(MatcherSpec::parse("rustc").unwrap(), &overflow), []);
+    }
+
+    #[test]
+    fn eslint_formats_and_rows_without_a_header() {
+        // A stylish row with no file header above it is not a problem.
+        assert_eq!(
+            scan(
+                MatcherSpec::parse("eslint").unwrap(),
+                "  3:7  error  Bad  no-x\n"
+            ),
+            []
+        );
+        let stylish = "src/a.js\n  3:7  error  Unexpected thing  no-thing\n  4:1  warning  Meh\n\u{2716} 2 problems\n  9:9  error  Orphan  r\n";
+        let found = scan(MatcherSpec::parse("eslint").unwrap(), stylish);
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].message, "Unexpected thing (no-thing)");
+        assert_eq!(found[1].message, "Meh");
+        assert_eq!(found[1].severity, Severity::Warning);
+        let p = one(
+            "eslint",
+            "src/a.js: line 3, col 7, Warning - Missing semicolon",
+        );
+        assert_eq!(
+            (p.line, p.column, p.severity),
+            (3, Some(7), Severity::Warning)
+        );
+        let p = one("eslint", "src/a.js:3:7: Missing semicolon [Error/semi]");
+        assert_eq!(p.message, "Missing semicolon (semi)");
+        let p = one("eslint", "src/a.js:3:7: Parsing error [Error]");
+        assert_eq!(p.message, "Parsing error");
+        for bad in [
+            format!("src/a.js: line {HUGE}, col 7, Error - x"),
+            format!("src/a.js:{HUGE}:7: x [Error]"),
+        ] {
+            assert_eq!(scan(MatcherSpec::parse("eslint").unwrap(), &bad), []);
+        }
+        // A `$ command` or `[bracket]` line is not taken for a file header.
+        let none = scan(
+            MatcherSpec::parse("eslint").unwrap(),
+            "$ npm run lint\n  3:7  error  Bad  r\n",
+        );
+        assert_eq!(none, []);
+    }
+
+    #[test]
+    fn unusable_line_numbers_are_dropped_by_each_recognizer() {
+        for (spec, line) in [
+            ("tsc", format!("a.ts({HUGE},1): error TS1: x")),
+            ("gcc", format!("a.c:{HUGE}: error: x")),
+            ("go", format!("a.go:{HUGE}: x")),
+            ("python", format!("tests/t.py:{HUGE}: Error")),
+        ] {
+            assert!(
+                scan(MatcherSpec::parse(spec).unwrap(), &line).is_empty(),
+                "{spec}"
+            );
+        }
+    }
+
+    #[test]
+    fn custom_matchers_read_optional_groups() {
+        let p = one(
+            r"^(?P<file>\S+)@(?P<line>\d+):(?P<column>\d+) (?P<severity>\w+) (?P<message>.+)$",
+            "x.txt@4:2 warning check it",
+        );
+        assert_eq!(p.file, "x.txt");
+        assert_eq!(p.column, Some(2));
+        assert_eq!(p.severity, Severity::Warning);
+        assert_eq!(p.message, "check it");
+        assert_eq!(p.source, Source::Custom);
+        let p = one(r"^(?P<file>\S+)@(?P<line>\d+)", "x.txt@4 whole line");
+        assert_eq!(p.severity, Severity::Error);
+        assert_eq!(p.message, "x.txt@4 whole line");
+        let none = scan(
+            MatcherSpec::parse(r"^(?P<file>\S+)@(?P<line>\d+)").unwrap(),
+            &format!("x.txt@{HUGE}"),
+        );
+        assert_eq!(none, []);
+    }
+
+    #[test]
+    fn locate_finds_the_click_target_of_each_line_shape() {
+        assert_eq!(
+            locate("  --> src/a.rs:3:5"),
+            Some(("src/a.rs".into(), 3, Some(5)))
+        );
+        assert_eq!(
+            locate("  File \"a.py\", line 12, in f"),
+            Some(("a.py".into(), 12, None))
+        );
+        assert_eq!(locate("  File \"<stdin>\", line 1, in <module>"), None);
+        assert_eq!(
+            locate("thread 'm' panicked at 'x', src/o.rs:4:2"),
+            Some(("src/o.rs".into(), 4, Some(2)))
+        );
+        assert_eq!(
+            locate("thread 'm' panicked at src/n.rs:9:1:"),
+            Some(("src/n.rs".into(), 9, Some(1)))
+        );
+        assert_eq!(
+            locate("a.c:7:2: error: x"),
+            Some(("a.c".into(), 7, Some(2)))
+        );
+        assert_eq!(
+            locate("tests/t.py:14: AssertionError"),
+            Some(("tests/t.py".into(), 14, None))
+        );
+        assert_eq!(locate("nothing to see"), None);
+        assert_eq!(locate(&format!("a.c:{HUGE}: error: x")), None);
+    }
+
+    #[test]
+    fn resolve_path_folds_dots_without_climbing_past_the_root() {
+        let cwd = Path::new("/work/proj");
+        assert_eq!(
+            resolve_path(cwd, "./src/../lib.rs"),
+            Path::new("/work/proj/lib.rs")
+        );
+        assert_eq!(resolve_path(cwd, "/abs/x.rs"), Path::new("/abs/x.rs"));
+        assert_eq!(resolve_path(cwd, "../../../../x"), Path::new("/x"));
+    }
+
+    #[test]
+    fn problem_list_walks_with_wraparound() {
+        let mk = |file: &str| Problem {
+            file: file.into(),
+            line: 1,
+            column: None,
+            severity: Severity::Error,
+            message: "m".into(),
+            source: Source::Custom,
+        };
+        let mut empty = ProblemList::new("/w".into(), Vec::new());
+        assert!(empty.is_empty());
+        assert_eq!(empty.step(true), None);
+        let mut l = ProblemList::new("/w".into(), vec![mk("a.rs"), mk("../b.rs")]);
+        assert_eq!(l.len(), 2);
+        assert_eq!(l.cwd(), Path::new("/w"));
+        assert_eq!(l.problems().len(), 2);
+        assert_eq!(l.current(), None);
+        assert_eq!(l.path(1), Some(Path::new("/b.rs")));
+        assert_eq!(l.path(5), None);
+        assert_eq!(
+            l.step(false),
+            Some(Step {
+                index: 1,
+                wrapped: false
+            })
+        );
+        assert_eq!(
+            l.step(true),
+            Some(Step {
+                index: 0,
+                wrapped: true
+            })
+        );
+        assert_eq!(
+            l.step(false),
+            Some(Step {
+                index: 1,
+                wrapped: true
+            })
+        );
+        assert_eq!(l.current(), Some(1));
+    }
+}
