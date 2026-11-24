@@ -176,6 +176,7 @@ fn focusing_panes_of_an_unsplit_editor_does_nothing() {
 mod image_tab {
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use ratatui_image::picker::Picker;
 
@@ -185,8 +186,17 @@ mod image_tab {
         Picker::halfblocks().new_resize_protocol(image::DynamicImage::new_rgb8(2, 2))
     }
 
+    /// A directory and image of its own for each test. The tests run in parallel
+    /// and each ends by deleting its directory; one named only after the process
+    /// was shared, so a test could lose its file between two `open_image` calls
+    /// (the second then canonicalized differently and added a duplicate tab).
     fn temp_png() -> (PathBuf, PathBuf) {
-        let dir = std::env::temp_dir().join(format!("vix-editor-img-{}", std::process::id()));
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "vix-editor-img-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("pic.png");
         fs::write(&path, b"not really a png; only the extension matters").unwrap();
