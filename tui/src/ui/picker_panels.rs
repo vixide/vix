@@ -664,3 +664,7 @@ pub(super) fn draw_todo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
             .min(chunk(&chunks, 0).height),
     };
 }
+
+#[cfg(test)]
+#[path = "tests_r3_picker_panels.rs"]
+mod r3_tests;

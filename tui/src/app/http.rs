@@ -264,3 +264,7 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_http.rs"]
+mod r3_tests;

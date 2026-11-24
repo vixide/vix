@@ -407,3 +407,7 @@ fn diff_error_text(e: &DiffError) -> String {
         _ => e.to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_dir_edit.rs"]
+mod r3_tests;

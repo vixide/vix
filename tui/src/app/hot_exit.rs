@@ -514,3 +514,7 @@ impl App {
         !self.hot_exit.pending.is_empty()
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_hot_exit.rs"]
+mod r3_tests;
