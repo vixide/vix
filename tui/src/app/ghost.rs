@@ -319,3 +319,6 @@ impl App {
             .then(|| (g.first_line(), g.has_more_lines()))
     }
 }
+
+#[cfg(test)]
+mod tests;

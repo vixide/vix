@@ -729,4 +729,25 @@ mod tests {
         e.reverse_lines();
         assert_eq!(content(&e), "b\nc\na\n");
     }
+
+    #[test]
+    fn joining_skips_the_separator_around_blank_lines() {
+        // A blank second line adds nothing and no space; a blank first line
+        // lets the next line start the merged text without a leading space.
+        let mut e = ed("a\n\nb\n", 0);
+        e.set_selection_range(0, 5);
+        e.join_lines();
+        assert_eq!(content(&e), "a b\n");
+
+        let mut e = ed("\n  b\n", 0);
+        e.join_lines();
+        assert_eq!(content(&e), "b\n");
+    }
+
+    #[test]
+    fn joining_on_the_last_line_has_nothing_below_to_join() {
+        let mut e = ed("a\nb", 3);
+        e.join_lines();
+        assert_eq!(content(&e), "a\nb");
+    }
 }
