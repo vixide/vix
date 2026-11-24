@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The local gate (`scripts/check`) now runs against throwaway XDG config, data and state directories, so a gate run can no longer rewrite the developer's real `~/.config/vix` settings, session or history (`VIX_HERMETIC_HOME=0` opts out).
 - Fixed: Org priority on a bare `* TODO` or `* DONE` headline no longer produces `* TODO[#A]` without a space, and a column summary of no numeric children no longer renders `-0`.
 - Fixed: in a Git conflict, "next conflict" now moves past the conflict the cursor is in instead of finding it again, and the welcome overlay's `End` key now scrolls to the end.
 - The local gate (`scripts/check`) runs its independent slow steps concurrently on separate target directories, keeps semver baselines in a persistent cache, scopes `cargo doc` and semver to the changed crates and their dependents by default (`--scope all` for the whole workspace; CI and the attestation always run the whole workspace) and `VIX_PRIVATE_TARGET=1`, test builds carry less debug information, and the gate runs tests with `cargo nextest` by default off macOS (`VIX_NEXTEST=1` opts in on macOS). The checks themselves are unchanged. See `spec/local-ci`.

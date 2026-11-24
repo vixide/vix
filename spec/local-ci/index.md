@@ -99,6 +99,13 @@ The landing bar is unchanged; these make the same checks wait less.
   `cargo test --doc`). On macOS it stays opt-in (`VIX_NEXTEST=1`) because every process
   spawn is scanned by the OS and it measured about twice as slow; `VIX_NEXTEST=0`
   forces `cargo test` anywhere. CI and `scripts/ci` already behaved this way.
+- **The gate never touches your real config.** The tests build an `App` that
+  persists settings, the session and history, and an ordinary run used to rewrite
+  the developer's `~/.config/vix`. `scripts/check` now points `XDG_CONFIG_HOME`,
+  `XDG_DATA_HOME` and `XDG_STATE_HOME` at a throwaway directory for the whole
+  run and removes it on exit (`VIX_HERMETIC_HOME=0` opts out). Running
+  `cargo test` by hand does not get this protection: set those three variables
+  yourself, or use the gate.
 - **Test builds carry less debug information.** `[profile.test]` uses
   line-tables-only and no debug information for dependencies, as `[profile.dev]`
   already did; backtraces keep file and line for workspace code.

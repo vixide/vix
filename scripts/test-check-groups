@@ -18,7 +18,7 @@ src=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 # The gate may run this with its own knobs set; the scratch runs must not see them.
-unset VIX_PRIVATE_TARGET VIX_SCOPE VIX_PARALLEL VIX_NEXTEST VIX_SEMVER_TARGET VIX_CLEAN_ROOM XDG_CACHE_HOME CARGO_TARGET_DIR
+unset VIX_PRIVATE_TARGET VIX_SCOPE VIX_PARALLEL VIX_NEXTEST VIX_SEMVER_TARGET VIX_CLEAN_ROOM VIX_HERMETIC_HOME XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME CARGO_TARGET_DIR
 export HOME="$work/home"
 mkdir -p "$HOME" "$work/bin"
 
@@ -59,7 +59,7 @@ semver-checks)
 	fi
 	;;
 esac
-echo "$sub target=${CARGO_TARGET_DIR:-none} args=$*" >>"$VIX_TEST_LOG"
+echo "$sub target=${CARGO_TARGET_DIR:-none} xdg=${XDG_CONFIG_HOME:-unset} args=$*" >>"$VIX_TEST_LOG"
 [ "${VIX_TEST_FAIL:-}" = "$sub" ] && {
 	echo "stub: $sub failed on purpose" >&2
 	exit 1
@@ -165,6 +165,18 @@ has "doc is narrowed to the closure" "$work/log.scoped" "^doc .*-p core -p mid -
 hasnt "doc skips the unrelated crate" "$work/log.scoped" "^doc .*-p loner"
 has "semver is narrowed to the closure" "$work/log.scoped" "^semver-checks .*--package core --package mid --package top"
 hasnt "semver skips the unrelated crate" "$work/log.scoped" "^semver-checks .*--package loner"
+
+# The run is hermetic: tests see throwaway XDG dirs, never the real config dir,
+# and the throwaway dir is removed afterwards (VIX_HERMETIC_HOME=0 opts out).
+st=$(run herm -- --tier push --scope all)
+[ "$st" = 0 ] || bad "hermetic run exit $st"
+has "tests run with a throwaway XDG config dir" "$work/log.herm" "^test .*xdg=.*/vix-check-home\\."
+hasnt "the real home is not the config dir" "$work/log.herm" "xdg=$HOME"
+leftover=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'vix-check-home.*' 2>/dev/null | wc -l | tr -d ' ')
+[ "$leftover" = 0 ] && ok "the throwaway dir is removed" || ok "the throwaway dir count is $leftover (other runs may be live)"
+st=$(run noherm VIX_HERMETIC_HOME=0 -- --tier push --scope all)
+[ "$st" = 0 ] || bad "opt-out run exit $st"
+has "VIX_HERMETIC_HOME=0 leaves XDG alone" "$work/log.noherm" "^test .*xdg=unset"
 
 # An explicit --scope all widens it again, whatever changed.
 st=$(run wide -- --tier full --scope all)

@@ -106,6 +106,22 @@ esac
 . "$(dirname "$0")/clean-room.sh"
 vix_clean_room
 
+# Hermetic user directories: the tests build an App that persists settings, the
+# session and history under the user's config and data directories, so an
+# ordinary run used to rewrite the developer's real ~/.config/vix. The whole run
+# gets throwaway XDG directories instead (VIX_HERMETIC_HOME=0 opts out). Cargo
+# and rustup keep their own homes (CARGO_HOME, RUSTUP_HOME) and are unaffected.
+hermetic_home=""
+if [ "${VIX_HERMETIC_HOME:-1}" != 0 ]; then
+	hermetic_home=$(mktemp -d "${TMPDIR:-/tmp}/vix-check-home.XXXXXX")
+	mkdir -p "$hermetic_home/config" "$hermetic_home/data" "$hermetic_home/state"
+	XDG_CONFIG_HOME=$hermetic_home/config
+	XDG_DATA_HOME=$hermetic_home/data
+	XDG_STATE_HOME=$hermetic_home/state
+	export XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME
+	echo "    hermetic user dirs: $hermetic_home (the real config dir is not touched)"
+fi
+
 # vix_seed_target DEST SRC: make DEST a copy of SRC (copy-on-write where the
 # filesystem has it) so a new target directory starts warm; an existing DEST is
 # kept (its warm state is the point), and a failed copy leaves an empty one.
@@ -176,6 +192,9 @@ on_exit() {
 "
 		fi
 		print_summary
+	fi
+	if [ -n "$hermetic_home" ]; then
+		rm -rf "$hermetic_home"
 	fi
 	exit "$status"
 }
