@@ -561,6 +561,13 @@ mod tests {
         assert!(host.db_tables("c", None).is_none());
         assert!(host.db_describe("c", None, "t").is_none());
         assert!(host.db_query("c", "select 1").is_none());
+        // The shell host delegates to the same defaults.
+        let shell = ShellHost::default();
+        assert!(shell.sqlite_schema(Path::new("x.db")).is_none());
+        assert!(shell.shared_connections().is_none());
+        assert!(shell.db_tables("c", None).is_none());
+        assert!(shell.db_describe("c", None, "t").is_none());
+        assert!(shell.db_query("c", "select 1").is_none());
     }
 
     #[cfg(feature = "sql")]
@@ -825,6 +832,53 @@ mod tests {
                 session_path: Some(dir.join("session.toml")),
             };
             assert!(shell.sqlite_schema(&db).unwrap().is_ok());
+        }
+
+        /// The shell host reads the user's own settings, so this only runs
+        /// when the config directory is a throwaway one.
+        #[test]
+        fn the_shell_host_delegates_the_shared_connection_tools_and_refuses_unknown_ones() {
+            let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) else {
+                return;
+            };
+            if !Settings::config_path().is_some_and(|p| p.starts_with(&xdg)) {
+                return;
+            }
+            let dir = temp("mcp-shell-shared");
+            let shell = ShellHost {
+                session_path: Some(dir.join("session.toml")),
+            };
+            // A default config shares nothing.
+            assert!(shell.shared_connections().unwrap().is_ok());
+            // Unknown connections are refused (and logged beside the session).
+            assert!(
+                shell
+                    .db_tables("r4-no-such-connection", None)
+                    .unwrap()
+                    .is_err()
+            );
+            assert!(
+                shell
+                    .db_describe("r4-no-such-connection", Some("main"), "t")
+                    .unwrap()
+                    .is_err()
+            );
+            assert!(
+                shell
+                    .db_query("r4-no-such-connection", "select 1")
+                    .unwrap()
+                    .is_err()
+            );
+            let log = std::fs::read_to_string(dir.join(DB_LOG_NAME)).unwrap();
+            let tools: Vec<String> = log
+                .lines()
+                .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+                .filter_map(|v| v["tool"].as_str().map(str::to_string))
+                .collect();
+            assert_eq!(
+                tools,
+                ["db_connections", "db_tables", "db_describe", "db_query"]
+            );
         }
     }
 }

@@ -1018,4 +1018,83 @@ mod tests {
         app.resolve_selected_completion(); // no server: nothing
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn an_import_edit_that_replaces_text_shifts_the_caret_and_an_overlapping_one_is_dropped() {
+        let (mut app, dir) = app_with("edits", "use X;\nfoo");
+        let mut item = CompletionItem::new("foobar", "foobar");
+        // Replace `X` (line 0, cols 4..5) by `YY`: one char longer.
+        // The second edit overlaps the main edit (line 1, cols 0..2).
+        item.additional_edits = vec![
+            (range(0, 4, 5), "YY".into()),
+            (range(1, 0, 2), "NOPE".into()),
+        ];
+        app.on_completion_list(CompletionList::new(vec![item], false));
+        key(&mut app, KeyCode::Enter);
+        let want = "use YY;\nfoobar";
+        assert_eq!(text(&app), want);
+        assert_eq!(
+            app.editor.active_tab().unwrap().editor.get_cursor(),
+            want.chars().count(),
+            "the caret follows the text it was after"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn accepting_with_nothing_open_or_nothing_selectable_is_inert() {
+        let (mut app, dir) = app_with("inert", "fo");
+        app.accept_completion();
+        assert!(app.completion.is_none());
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("foo", "foo")],
+            false,
+        ));
+        assert!(app.completion.is_some());
+        app.completion.as_mut().unwrap().visible.clear();
+        app.accept_completion();
+        assert!(app.completion.is_none(), "the popup is consumed");
+        assert_eq!(text(&app), "fo", "nothing was inserted");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_popup_closes_when_the_cursor_leaves_the_anchor_word() {
+        // Backspacing past the anchor.
+        let (mut app, dir) = app_with("past-anchor", "ab ");
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("abc", "abc")],
+            false,
+        ));
+        let anchor = app.completion_popup().unwrap().anchor;
+        assert_eq!(anchor, 3);
+        key(&mut app, KeyCode::Backspace);
+        assert!(
+            app.completion.is_none(),
+            "the cursor went before the anchor"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // The anchor is on another line than the cursor.
+        let (mut app, dir) = app_with("other-line", "ab\ncd");
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("cde", "cde")],
+            false,
+        ));
+        app.completion.as_mut().unwrap().anchor = 0;
+        key(&mut app, KeyCode::Char('e'));
+        assert!(app.completion.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // The anchor is past the end of the buffer.
+        let (mut app, dir) = app_with("beyond", "ab");
+        app.on_completion_list(CompletionList::new(
+            vec![CompletionItem::new("abc", "abc")],
+            false,
+        ));
+        app.completion.as_mut().unwrap().anchor = 99;
+        key(&mut app, KeyCode::Char('c'));
+        assert!(app.completion.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

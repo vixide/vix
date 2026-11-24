@@ -1200,3 +1200,27 @@ fn an_unreadable_org_file_in_the_index_is_skipped_when_following_an_id() {
     app.org_action("org.link.follow");
     assert_eq!(app.active_path().unwrap(), d.join("z.org"));
 }
+
+#[test]
+fn the_agenda_t_key_reports_a_task_that_is_no_longer_a_headline() {
+    let (d, mut app) = app_with("agenda-moved", &[("t.org", AGENDA_FILE)]);
+    app.org_action("org.agenda.todo");
+    let row = text(&app)
+        .lines()
+        .position(|l| l.contains("write docs"))
+        .unwrap();
+    goto(&mut app, row);
+    // The file was rewritten since the agenda was built: its lines are now
+    // plain prose, so there is no headline to cycle.
+    std::fs::write(d.join("t.org"), "just prose\n".repeat(40)).unwrap();
+    assert!(app.org_view_key(key(KeyCode::Char('t'))));
+    assert_eq!(app.status, t!("status.org_not_headline").to_string());
+    assert_eq!(
+        std::fs::read_to_string(d.join("t.org")).unwrap(),
+        "just prose\n".repeat(40),
+        "nothing was written back"
+    );
+    // With every tab gone the agenda cannot be the active buffer.
+    app.editor.tabs.clear();
+    assert!(!app.org_view_key(key(KeyCode::Char('t'))));
+}

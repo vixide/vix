@@ -1964,4 +1964,78 @@ mod tests {
         assert!(idle.contains(&t!("ui.db_access_read").to_string()));
         assert!(!idle.contains(&t!("ui.db_ai_thinking").to_string()));
     }
+
+    type PaneFn = fn(&mut App, &mut Frame, Rect);
+
+    #[test]
+    fn every_overlay_pane_draws_nothing_without_a_browser() {
+        let mut app = App::new(std::env::temp_dir(), Settings::default());
+        assert!(app.db.is_none());
+        let panes: [(&str, PaneFn); 16] = [
+            ("connections", draw_db_connections),
+            ("form", draw_db_form),
+            ("password", draw_db_password),
+            ("query_list", draw_db_query_list),
+            ("save_name", draw_db_save_name),
+            ("cell_edit", draw_db_cell_edit),
+            ("row_filter", draw_db_row_filter),
+            ("import", draw_db_import),
+            ("params", draw_db_params),
+            ("ask", draw_db_ask),
+            ("confirm", draw_db_confirm),
+            ("cell", draw_db_cell),
+            ("log", draw_db_log),
+            ("erd", draw_db_erd),
+            ("export", draw_db_export),
+            ("table_export", draw_db_table_export),
+        ];
+        for (name, pane) in panes {
+            let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
+            terminal
+                .draw(|frame| {
+                    let area = frame.area();
+                    pane(&mut app, frame, area);
+                })
+                .unwrap();
+            let t = text(&terminal.backend().buffer().clone());
+            assert!(
+                t.chars().all(|c| c == ' ' || c == '\n'),
+                "{name} drew something with no browser: {t:?}"
+            );
+        }
+        // The read-only panes and the compare screen likewise.
+        let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                draw_db_tree(&app, frame, area);
+                draw_db_editor(&app, frame, area);
+                draw_db_results(&app, frame, area);
+                draw_db_compare(&mut app, frame, area);
+            })
+            .unwrap();
+        let t = text(&terminal.backend().buffer().clone());
+        assert!(t.chars().all(|c| c == ' ' || c == '\n'), "{t:?}");
+    }
+
+    #[test]
+    fn each_compare_screen_has_its_own_hint() {
+        use crate::db::compare::review::Screen;
+        assert_eq!(compare_hint(Screen::Pick), t!("ui.db_compare_pick_hint"));
+        assert_eq!(compare_hint(Screen::Password), t!("ui.db_password_hint"));
+        assert_eq!(
+            compare_hint(Screen::Review),
+            t!("ui.db_compare_review_hint")
+        );
+        assert_eq!(compare_hint(Screen::Confirm), t!("ui.db_confirm_hint"));
+        assert_eq!(
+            compare_hint(Screen::SavePath),
+            t!("ui.db_compare_save_hint")
+        );
+        assert_eq!(
+            compare_hint(Screen::Script),
+            t!("ui.db_compare_script_hint")
+        );
+        assert_eq!(compare_hint(Screen::Working), t!("ui.db_compare_wait_hint"));
+    }
 }
