@@ -12537,9 +12537,12 @@ dependencies = [
 name = "vix-fileops"
 version = "3.0.0"
 dependencies = [
+ "confy",
+ "etcetera 0.11.0",
  "globset",
  "jiff",
  "nix 0.31.3",
+ "serde",
  "trash",
  "vix-encoding",
 ]
@@ -12988,7 +12991,6 @@ name = "vix-settings"
 version = "3.0.0"
 dependencies = [
  "confy",
- "etcetera 0.11.0",
  "serde",
  "toml 1.2.1+spec-1.1.0",
  "vix-fileops",
