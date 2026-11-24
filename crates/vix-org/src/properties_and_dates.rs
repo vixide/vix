@@ -199,12 +199,16 @@ pub fn timestamp_for(date: &str, active: bool) -> Option<String> {
 }
 
 /// A `YYYY-MM-DD` date with an optional weekday, as found inside timestamps.
+/// The weekday is one of the abbreviations Vix itself writes (`Mon`..`Sun`) and
+/// a whole word: any other word after a date (`on`, `the`, `Wedding`) is prose,
+/// not a weekday, and is left alone.
 #[expect(
     clippy::expect_used,
     reason = "fixed regex literal, compiled once and covered by tests"
 )]
-static DATE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\d{4}-\d{2}-\d{2}( [A-Za-z]{2,3})?").expect("date regex"));
+static DATE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\d{4}-\d{2}-\d{2}( (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b)?").expect("date regex")
+});
 
 /// The 0-based line index and starting char offset of the line containing char
 /// offset `cursor`.

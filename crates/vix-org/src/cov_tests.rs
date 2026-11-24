@@ -576,3 +576,92 @@ fn clock_report_totals_per_headline_and_top_level() {
     assert!(report.contains("| Play | 1:00 |"), "{report}");
     assert!(report.contains("3:30"), "{report}");
 }
+
+#[test]
+fn emphasis_never_reads_urls_or_generated_tags_as_markers() {
+    // A bold run's closing tag has a slash; italics used to pair it with the
+    // next slash and eat the tag.
+    let html = to_html("*one* then *two* then /three/");
+    assert!(
+        html.contains("<b>one</b> then <b>two</b> then <i>three</i>"),
+        "{html}"
+    );
+
+    // A URL's slashes are not italic markers, in a link target or bare text.
+    let html = to_html("see [[https://example.com/a/b/][the /docs/]] now");
+    assert!(
+        html.contains("<a href=\"https://example.com/a/b/\">the <i>docs</i></a>"),
+        "{html}"
+    );
+    let html = to_html("visit https://example.com/a/b/c or https://example.org/x/y/z");
+    assert!(!html.contains("<i>"), "{html}");
+    assert!(html.contains("https://example.com/a/b/c"), "{html}");
+
+    // Org's boundary rules: `and/or`, `a_b_c` and `2*3*4` are plain text.
+    for plain in ["and/or 5/6", "snake_case_name here", "2*3*4", "a+b+c"] {
+        let html = to_html(plain);
+        for tag in ["<i>", "<u>", "<b>", "<del>"] {
+            assert!(!html.contains(tag), "{plain}: {html}");
+        }
+    }
+    // Verbatim text is literal: markers inside `=...=` stay.
+    let html = to_html("run =a/b/c= now");
+    assert!(html.contains("<code>a/b/c</code>"), "{html}");
+    // Markers next to punctuation still work.
+    let html = to_html("(/aside/), *bold*. \"/quoted/\"");
+    assert!(
+        html.contains("(<i>aside</i>),") && html.contains("<b>bold</b>."),
+        "{html}"
+    );
+    assert!(html.contains("<i>quoted</i>"), "{html}");
+}
+
+#[test]
+fn markdown_and_latex_emphasis_leave_links_and_tags_alone() {
+    let md = to_markdown("see [[https://example.com/a/b/][the /docs/]] and /it/ *b* /it2/");
+    assert!(
+        md.contains("[the *docs*](https://example.com/a/b/)"),
+        "{md}"
+    );
+    assert!(md.contains("*it* **b** *it2*"), "{md}");
+    let md = to_markdown("bare [[https://example.com/x/y/]] and =a/b/c=");
+    assert!(md.contains("<https://example.com/x/y/>"), "{md}");
+    assert!(md.contains("`a/b/c`"), "{md}");
+
+    let tex = to_latex("a [[https://example.com/a/b/][site]] then /it/ and *b* and /it2/");
+    assert!(
+        tex.contains(r"\href{https://example.com/a/b/}{site}"),
+        "{tex}"
+    );
+    assert!(
+        tex.contains(r"\textit{it} and \textbf{b} and \textit{it2}"),
+        "{tex}"
+    );
+}
+
+#[test]
+fn input_cannot_forge_a_stash_placeholder() {
+    // The private-use characters the exporter reserves are dropped from input.
+    let html = to_html("x \u{E000}0\u{E001} *y*");
+    assert!(
+        !html.contains('\u{E000}') && html.contains("<b>y</b>"),
+        "{html}"
+    );
+}
+
+#[test]
+fn shifting_a_date_leaves_the_word_after_it_alone() {
+    // A short word after the date used to be taken for its weekday and replaced.
+    let (out, _) = shift_timestamp_at("meet 2026-08-05 on the 5th", 8, 1).unwrap();
+    assert_eq!(out, "meet 2026-08-06 on the 5th");
+    let (out, _) = shift_timestamp_at("due 2026-08-05 to Bob", 6, 1).unwrap();
+    assert_eq!(out, "due 2026-08-06 to Bob");
+    // A word that merely starts like a weekday is prose too.
+    let (out, _) = shift_timestamp_at("2026-08-05 Wedding day", 2, 1).unwrap();
+    assert_eq!(out, "2026-08-06 Wedding day");
+    // A real weekday is still rewritten (2026-08-05 is a Wednesday).
+    let (out, _) = shift_timestamp_at("<2026-08-05 Wed> and more", 3, 1).unwrap();
+    assert_eq!(out, "<2026-08-06 Thu> and more");
+    let (out, _) = shift_timestamp_at("[2026-08-05 Wed]", 3, -1).unwrap();
+    assert_eq!(out, "[2026-08-04 Tue]");
+}

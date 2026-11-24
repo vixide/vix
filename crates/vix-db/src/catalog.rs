@@ -802,7 +802,8 @@ pub fn primary_key_sql(kind: Kind, schema: &str, table: &str) -> String {
 }
 
 /// A query whose first row's **last** column is the `CREATE` statement for
-/// `schema`.`table`. `SQLite` reads it from `sqlite_master`, `MySQL` uses
+/// `schema`.`table` (a view too, in `SQLite`: its `sqlite_master` row has the
+/// `CREATE VIEW` text). `SQLite` reads it from `sqlite_master`, `MySQL` uses
 /// `SHOW CREATE TABLE`, and `PostgreSQL` reconstructs a basic definition from
 /// `information_schema` (columns and types; constraints are not reproduced).
 #[must_use]
@@ -810,7 +811,7 @@ pub fn ddl_sql(kind: Kind, schema: &str, table: &str) -> String {
     let (s, t) = (quote_str(schema), quote_str(table));
     match kind {
         Kind::Sqlite => {
-            format!("SELECT sql FROM sqlite_master WHERE type='table' AND name='{t}';")
+            format!("SELECT sql FROM sqlite_master WHERE type IN ('table', 'view') AND name='{t}';")
         }
         Kind::Mysql => format!("SHOW CREATE TABLE {};", quote_ident(kind, table)),
         Kind::Postgres => format!(
@@ -1337,6 +1338,10 @@ mod tests {
         }
         assert!(primary_key_sql(Kind::Postgres, "s", "t").contains("indisprimary"));
         assert!(primary_key_sql(Kind::Mysql, "s", "t").contains("'PRIMARY'"));
+        // SQLite stores a view's CREATE text beside the tables', so the lookup
+        // must not be limited to type='table'.
+        let sqlite = ddl_sql(Kind::Sqlite, "main", "v");
+        assert!(sqlite.contains("type IN ('table', 'view')"), "{sqlite}");
         assert!(ddl_sql(Kind::Mysql, "s", "t").starts_with("SHOW CREATE TABLE `t`"));
         assert!(ddl_sql(Kind::Postgres, "s", "t").contains("string_agg"));
         assert!(relationships_sql(Kind::Postgres).contains("FOREIGN KEY"));

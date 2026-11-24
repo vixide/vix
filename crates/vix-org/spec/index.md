@@ -600,6 +600,20 @@ Org *content* insertion (snippets, inline markers, blocks) lives under
   and `[[url][desc]]` / `[[url]]` links.
 - Bullet lists → Markdown `-` / HTML `<ul><li>`. Block delimiters (`#+BEGIN_…`)
   are dropped, their inner text kept.
+- Emphasis follows Org's boundary rules. An opening marker must come at the
+  start of the text, after whitespace or after one of `-`, `(`, `{`, `'`, `"`,
+  and be followed by a non-space; a closing marker must follow a non-space and
+  be followed by the end of the text, whitespace or one of `-.,;:!?')}"[`. A
+  marker anywhere else (`and/or`, `snake_case_name`, `2*3*4`, the slashes of a
+  URL) is plain text. A link's target and a bare link are never scanned, the
+  tags the exporter writes are never read back as markers, and the text of
+  `=verbatim=` and `~code~` is literal (no emphasis inside it). The exporters
+  keep what they must not rescan in a stash of placeholder characters from the
+  Unicode private-use area, which input text cannot forge: those characters
+  are dropped from the input first.
+- A weekday after a date (`2026-08-05 Wed`) is recognized only as one of the
+  English abbreviations `Mon`..`Sun` as a whole word; any other word after a
+  date is prose, so shifting the date leaves it alone.
 
 ## Sub-specs
 

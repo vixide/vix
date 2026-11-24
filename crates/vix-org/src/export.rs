@@ -10,7 +10,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{agenda_items, headline_level};
+use super::{add_or, agenda_items, headline_level, sub_or};
 
 // ----- Export ---------------------------------------------------------------
 
@@ -29,28 +29,172 @@ pub(crate) static LINK: LazyLock<Regex> =
 pub(crate) static BARE_LINK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\[\[([^\]]+)\]\]").expect("bare link regex"));
 
+/// Marks the start of a stashed fragment (see [`Stash`]); a private-use char, so it
+/// cannot be confused with text.
+const STASH_OPEN: char = '\u{E000}';
+/// Marks the end of a stashed fragment.
+const STASH_CLOSE: char = '\u{E001}';
+
+/// Fragments set aside during inline conversion so a later emphasis pass cannot
+/// see them: generated tags (their `/` is not an italic marker), link targets
+/// and verbatim text. Each is replaced in the working text by a placeholder and
+/// put back by [`Stash::restore`] once every pass has run.
+#[derive(Default)]
+struct Stash(Vec<String>);
+
+impl Stash {
+    /// Set `fragment` aside and return its placeholder.
+    fn put(&mut self, fragment: impl Into<String>) -> String {
+        let index = self.0.len();
+        self.0.push(fragment.into());
+        format!("{STASH_OPEN}{index}{STASH_CLOSE}")
+    }
+
+    /// `text` with every placeholder replaced by its fragment (fragments may
+    /// themselves hold placeholders, so this recurses).
+    fn restore(&self, text: &str) -> String {
+        let mut out = String::with_capacity(text.len());
+        let mut chars = text.chars();
+        while let Some(c) = chars.next() {
+            if c != STASH_OPEN {
+                out.push(c);
+                continue;
+            }
+            let digits: String = chars.by_ref().take_while(|&d| d != STASH_CLOSE).collect();
+            if let Some(fragment) = digits.parse::<usize>().ok().and_then(|i| self.0.get(i)) {
+                out.push_str(&self.restore(fragment));
+            }
+        }
+        out
+    }
+}
+
+/// `text` without the stash placeholder characters, so input that happens to
+/// contain them cannot forge a placeholder.
+fn without_stash_marks(text: &str) -> String {
+    text.chars()
+        .filter(|&c| c != STASH_OPEN && c != STASH_CLOSE)
+        .collect()
+}
+
+/// Whether Org allows an emphasis marker to *start* right after `c`.
+fn emphasis_may_follow(c: char) -> bool {
+    c.is_whitespace()
+        || matches!(
+            c,
+            '-' | '(' | '{' | '\'' | '"' | ';' | '\u{2}' | STASH_CLOSE
+        )
+}
+
+/// Whether Org allows an emphasis marker to *end* right before `c`. (`&` begins
+/// an HTML entity the exporter has already made of a quote, and `\u{3}` ends a
+/// LaTeX link's text; neither is part of the word.)
+fn emphasis_may_precede(c: char) -> bool {
+    c.is_whitespace()
+        || matches!(
+            c,
+            '-' | '.'
+                | ','
+                | ';'
+                | ':'
+                | '!'
+                | '?'
+                | '\''
+                | ')'
+                | '}'
+                | '"'
+                | '['
+                | '&'
+                | '\u{3}'
+                | STASH_OPEN
+        )
+}
+
 /// Apply an inline-emphasis substitution for a single marker char, mapping
-/// `<m>text<m>` to `open`…`close`. Word-ish: the marker hugs the text.
-#[expect(
-    clippy::expect_used,
-    reason = "fixed regex literal, compiled once and covered by tests"
-)]
-fn emph(input: &str, marker: char, open: &str, close: &str) -> String {
-    let m = regex::escape(&marker.to_string());
-    let re = Regex::new(&format!(r"{m}([^{m}\s][^{m}]*?){m}")).expect("emph regex");
-    re.replace_all(input, format!("{open}$1{close}"))
-        .into_owned()
+/// `<m>text<m>` to `open`…`close`, as Org does: the opening marker follows the
+/// start of the text, whitespace or an opening punctuation mark and hugs the
+/// text; the closing marker hugs the text and precedes whitespace, closing
+/// punctuation or the end. A marker anywhere else (`and/or`, `a_b`, the
+/// slashes of a URL) is plain text. The tags go into `stash`, so a later
+/// marker's pass cannot read them as markers; with `literal` the text between
+/// the markers is stashed too (Org's `=verbatim=` and `~code~`). A link target
+/// between `\u{1}` and `\u{2}` (see [`inline_latex`]) is never scanned.
+fn emph(
+    input: &str,
+    marker: char,
+    (open, close): (&str, &str),
+    literal: bool,
+    stash: &mut Stash,
+) -> String {
+    let chars: Vec<char> = input.chars().collect();
+    let n = chars.len();
+    let at = |k: usize| chars.get(k).copied();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0usize;
+    while i < n {
+        let Some(c) = at(i) else { break };
+        if c == '\u{1}' {
+            // Copy a link target through its closing `\u{2}` untouched.
+            let end = (i..n)
+                .find(|&k| at(k) == Some('\u{2}'))
+                .map_or(n, |k| add_or(k, 1, n));
+            out.extend((i..end).filter_map(at));
+            i = end;
+            continue;
+        }
+        let opens = c == marker
+            && (i == 0 || at(sub_or(i, 1, 0)).is_some_and(emphasis_may_follow))
+            && at(add_or(i, 1, n)).is_some_and(|d| !d.is_whitespace() && d != marker);
+        let close_at = opens
+            .then(|| (add_or(i, 1, n)..n).find(|&k| at(k) == Some(marker)))
+            .flatten()
+            .filter(|&j| {
+                at(sub_or(j, 1, 0)).is_some_and(|d| !d.is_whitespace())
+                    && at(add_or(j, 1, n)).is_none_or(emphasis_may_precede)
+            });
+        if let Some(j) = close_at {
+            let inner: String = (add_or(i, 1, n)..j).filter_map(at).collect();
+            if literal {
+                out.push_str(&stash.put(format!("{open}{inner}{close}")));
+            } else {
+                out.push_str(&stash.put(open));
+                out.push_str(&inner);
+                out.push_str(&stash.put(close));
+            }
+            i = add_or(j, 1, n);
+        } else {
+            out.push(c);
+            i = add_or(i, 1, n);
+        }
+    }
+    out
 }
 
 /// Convert Org inline markup (links and emphasis) to Markdown.
 fn inline_md(s: &str) -> String {
-    let s = LINK.replace_all(s, "[$2]($1)").into_owned();
-    let s = BARE_LINK.replace_all(&s, "<$1>").into_owned();
-    let s = emph(&s, '*', "**", "**");
-    let s = emph(&s, '/', "*", "*");
-    let s = emph(&s, '~', "`", "`");
-    let s = emph(&s, '=', "`", "`");
-    emph(&s, '+', "~~", "~~")
+    use regex::Captures;
+    let mut stash = Stash::default();
+    let s = without_stash_marks(s);
+    // Links first, their targets stashed: a URL's slashes are not italics.
+    let s = LINK
+        .replace_all(&s, |c: &Captures| {
+            format!(
+                "{}{}{}",
+                stash.put("["),
+                &c[2],
+                stash.put(format!("]({})", &c[1]))
+            )
+        })
+        .into_owned();
+    let s = BARE_LINK
+        .replace_all(&s, |c: &Captures| stash.put(format!("<{}>", &c[1])))
+        .into_owned();
+    let s = emph(&s, '~', ("`", "`"), true, &mut stash);
+    let s = emph(&s, '=', ("`", "`"), true, &mut stash);
+    let s = emph(&s, '*', ("**", "**"), false, &mut stash);
+    let s = emph(&s, '/', ("*", "*"), false, &mut stash);
+    let s = emph(&s, '+', ("~~", "~~"), false, &mut stash);
+    stash.restore(&s)
 }
 
 /// Convert Org text to Markdown (a pragmatic, line-oriented mapping).
@@ -114,25 +258,33 @@ pub(crate) fn safe_href(url: &str) -> String {
 /// Convert Org inline markup to HTML (escaping text first).
 fn inline_html(s: &str) -> String {
     use regex::Captures;
-    let s = escape_html(s);
+    let mut stash = Stash::default();
+    let s = escape_html(&without_stash_marks(s));
     // Links: the regex ran on escaped text, so brackets are intact. The href is
-    // scheme-checked so a `javascript:`/`data:` URL can't produce an active link.
+    // scheme-checked so a `javascript:`/`data:` URL can't produce an active
+    // link, and stashed so the emphasis passes never read its slashes.
     let s = LINK
         .replace_all(&s, |c: &Captures| {
-            format!("<a href=\"{}\">{}</a>", safe_href(&c[1]), &c[2])
+            format!(
+                "{}{}{}",
+                stash.put(format!("<a href=\"{}\">", safe_href(&c[1]))),
+                &c[2],
+                stash.put("</a>")
+            )
         })
         .into_owned();
     let s = BARE_LINK
         .replace_all(&s, |c: &Captures| {
-            format!("<a href=\"{}\">{}</a>", safe_href(&c[1]), &c[1])
+            stash.put(format!("<a href=\"{}\">{}</a>", safe_href(&c[1]), &c[1]))
         })
         .into_owned();
-    let s = emph(&s, '*', "<b>", "</b>");
-    let s = emph(&s, '/', "<i>", "</i>");
-    let s = emph(&s, '_', "<u>", "</u>");
-    let s = emph(&s, '~', "<code>", "</code>");
-    let s = emph(&s, '=', "<code>", "</code>");
-    emph(&s, '+', "<del>", "</del>")
+    let s = emph(&s, '~', ("<code>", "</code>"), true, &mut stash);
+    let s = emph(&s, '=', ("<code>", "</code>"), true, &mut stash);
+    let s = emph(&s, '*', ("<b>", "</b>"), false, &mut stash);
+    let s = emph(&s, '/', ("<i>", "</i>"), false, &mut stash);
+    let s = emph(&s, '_', ("<u>", "</u>"), false, &mut stash);
+    let s = emph(&s, '+', ("<del>", "</del>"), false, &mut stash);
+    stash.restore(&s)
 }
 
 /// Convert Org text to a small standalone HTML document (a pragmatic subset:
@@ -228,16 +380,19 @@ static SENTINEL: LazyLock<Regex> =
 /// markers; bold/italic/strike and links are what remain meaningful.
 fn inline_latex(s: &str) -> String {
     use regex::Captures;
+    let s = without_stash_marks(s);
     let s = LINK
-        .replace_all(s, |c: &Captures| {
+        .replace_all(&s, |c: &Captures| {
             format!("\u{1}{}\u{2}{}\u{3}", &c[1], &c[2])
         })
         .into_owned();
+    let mut stash = Stash::default();
     let s = escape_latex(&s);
-    let s = emph(&s, '*', r"\textbf{", "}");
-    let s = emph(&s, '/', r"\textit{", "}");
-    let s = emph(&s, '=', r"\texttt{", "}");
-    let s = emph(&s, '+', r"\sout{", "}");
+    let s = emph(&s, '=', (r"\texttt{", "}"), true, &mut stash);
+    let s = emph(&s, '*', (r"\textbf{", "}"), false, &mut stash);
+    let s = emph(&s, '/', (r"\textit{", "}"), false, &mut stash);
+    let s = emph(&s, '+', (r"\sout{", "}"), false, &mut stash);
+    let s = stash.restore(&s);
     SENTINEL
         .replace_all(&s, |c: &Captures| {
             format!(r"\href{{{}}}{{{}}}", c[1].replace(['{', '}'], ""), &c[2])

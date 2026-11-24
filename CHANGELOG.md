@@ -33,6 +33,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **DB workbench: Show DDL on a SQLite view** now shows its `CREATE VIEW` statement instead of "no DDL"; the lookup was limited to tables.
+- **Org exporters** (Markdown, HTML, LaTeX) no longer corrupt text with emphasis markers they should not read: URLs and link targets keep their slashes, the closing tag of a bold run is no longer paired with a later `/`, `=verbatim=` and `~code~` text is left literal, and, as in Org, a marker only counts at a word edge, so `and/or`, `snake_case_name` and `2*3*4` stay plain text.
+- **Org: shifting a date** (`S-Up`/`S-Down` on a timestamp) no longer swallows the word after it: only a real weekday abbreviation (`Mon`..`Sun`) is rewritten, so `2026-08-05 on the 5th` keeps its `on`.
+- **Modal Visual Line:** `V` then `j` now selects the buffer's final line when it has no trailing newline, and a selection of several lines that reaches that line ends at the end of the buffer instead of falling short.
 - **Org: Sort Children** no longer moves the buffer's final newline into the middle of the text: a document that ended in a newline still does, with no stray blank line before the last sorted subtree.
 - **AI replace and diff review** now keep the line breaks that ended the replaced text. A whole-buffer reply no longer drops the file's final newline, and a selection of whole lines no longer glues the next line onto the replacement.
 - **Soft wrap** now draws word-occurrence marks and LSP diagnostic underlines, which only the no-wrap view drew. (Inlay hints still appear only without soft wrap; see the editor-core spec.)

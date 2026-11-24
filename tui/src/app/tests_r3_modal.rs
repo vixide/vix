@@ -182,10 +182,9 @@ fn visual_line_snaps_to_whole_lines_in_both_directions() {
     keys(&mut app, "j");
     assert_eq!(selection(&mut app), Some((0, 8)));
     keys(&mut app, "jj");
-    // Suspected bug, pinned as current behavior: moving down onto the final
-    // line (which has no trailing newline) does not extend the selection to
-    // cover it, so `V` + `j` cannot select the last line.
-    assert_eq!(selection(&mut app), Some((0, 14)));
+    // The final line has no trailing newline; `V` + `j` still selects it
+    // (it ends at the end of the buffer, offset 18).
+    assert_eq!(selection(&mut app), Some((0, 18)));
     // Growing upward keeps the caret at the top.
     app.on_key(code(KeyCode::Esc));
     app.editor.active_tab_mut().unwrap().editor.set_cursor(10);
@@ -196,4 +195,39 @@ fn visual_line_snaps_to_whole_lines_in_both_directions() {
     assert_eq!((s, e), (4, 14));
     assert_eq!(cursor(&mut app), 4);
     let _ = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+}
+
+#[test]
+fn visual_line_reaches_the_last_line_when_the_buffer_has_no_final_newline() {
+    // "a\nb\nc": a=0 b=2 c=4, and the buffer ends at 5 with no line break.
+    let mut app = vi("m-vl-last", "a\nb\nc");
+    keys(&mut app, "jV");
+    assert_eq!(selection(&mut app), Some((2, 4)), "`b` alone");
+    keys(&mut app, "j");
+    assert_eq!(
+        selection(&mut app),
+        Some((2, 5)),
+        "`b` and the last line `c`"
+    );
+    // `j` on the last line has nowhere to go and keeps the selection.
+    keys(&mut app, "j");
+    assert_eq!(selection(&mut app), Some((2, 5)));
+    // `V` on the last line selects just that line.
+    let mut app = vi("m-vl-last-only", "a\nb\nc");
+    keys(&mut app, "GV");
+    assert_eq!(selection(&mut app), Some((4, 5)), "the last line alone");
+}
+
+#[test]
+fn visual_line_with_a_final_newline_still_ends_after_it() {
+    let mut app = vi("m-vl-nl", "a\nb\nc\n");
+    keys(&mut app, "jV");
+    keys(&mut app, "j");
+    assert_eq!(
+        selection(&mut app),
+        Some((2, 6)),
+        "`b` and `c` with its newline"
+    );
+    keys(&mut app, "j");
+    assert_eq!(selection(&mut app), Some((2, 6)), "nothing further to add");
 }

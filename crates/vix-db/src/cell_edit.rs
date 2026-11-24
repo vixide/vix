@@ -1356,14 +1356,21 @@ mod tests {
     }
 
     #[test]
-    fn a_view_has_no_ddl_row_on_sqlite() {
+    fn a_view_shows_its_create_view_statement_on_sqlite() {
         let mut b = family(true);
         query(&mut b, "CREATE VIEW v AS SELECT 1 AS one");
         b.refresh_catalog();
         select_table(&mut b, "v");
         b.show_ddl();
-        assert_eq!(b.view, View::Workbench, "the viewer stays closed");
-        assert_eq!(b.message, Some(t!("msg.db_ddl_none").to_string()));
+        // SQLite keeps a view's CREATE text in `sqlite_master` beside the
+        // tables'; the lookup used to be limited to tables and reported "no DDL".
+        assert_eq!(b.view, View::Cell, "the viewer opens");
+        assert!(
+            b.cell_text.contains("CREATE VIEW v AS SELECT 1 AS one"),
+            "{}",
+            b.cell_text
+        );
+        assert_ne!(b.message, Some(t!("msg.db_ddl_none").to_string()));
     }
 
     #[test]
