@@ -323,3 +323,7 @@ pub(super) fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
         Rect::default()
     };
 }
+
+#[cfg(test)]
+#[path = "tests_r3_docks.rs"]
+mod r3_tests;

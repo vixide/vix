@@ -257,3 +257,7 @@ impl App {
         debug_assert!(self.layout.hl7_panel.width < u16::MAX);
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_hl7.rs"]
+mod r3_tests;

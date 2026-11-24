@@ -439,3 +439,7 @@ mod tests {
         assert_eq!(password_var("my net.2"), "VIX_IM_PASSWORD_MY_NET_2");
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_im_net.rs"]
+mod r3_tests;

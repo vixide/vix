@@ -1094,3 +1094,7 @@ mod tests {
         assert!(app.theme_editor.is_some(), "a blank name keeps the draft");
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_picker_panels.rs"]
+mod r3_tests;

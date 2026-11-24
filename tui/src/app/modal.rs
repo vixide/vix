@@ -851,3 +851,7 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_modal.rs"]
+mod r3_tests;
