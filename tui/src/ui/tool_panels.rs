@@ -591,3 +591,7 @@ pub(super) fn draw_unit_converter(app: &mut App, frame: &mut Frame, area: Rect) 
         chunk(&rows, 4),
     );
 }
+
+#[cfg(test)]
+#[path = "tool_panels_tests_r4.rs"]
+mod tests_r4;

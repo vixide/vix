@@ -251,6 +251,9 @@ pub fn run(
 }
 
 #[cfg(test)]
+mod tests_r4;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
