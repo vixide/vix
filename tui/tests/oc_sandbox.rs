@@ -255,3 +255,97 @@ fn oc_panel_against_a_fake_docker() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+/// A fake `docker` that lists containers but fails every other command.
+const FAILING_DOCKER: &str = r#"#!/bin/sh
+case "$1" in
+  "ps") echo '{"ID":"abc123def456","Names":"web","Image":"nginx:latest","State":"running","Status":"Up 2 hours"}' ;;
+  *) echo "boom" >&2; exit 1 ;;
+esac
+"#;
+
+/// The newest message's text, or empty.
+fn newest(app: &App) -> String {
+    app.messages
+        .items
+        .last()
+        .map_or_else(String::new, |m| m.text.clone())
+}
+
+fn failing_body() {
+    let home = std::env::var_os("HOME").expect("sandbox HOME");
+    let root = Path::new(&home).join("work");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut app = new_app(&root, "full");
+
+    // The listing works; a confirmed stop fails and says why.
+    app.run_action("oc.containers");
+    assert!(screen(&mut app).contains("web"));
+    app.on_key(key('x'));
+    app.on_key(key('y'));
+    let msg = newest(&app);
+    assert!(msg.contains("boom") && msg.contains("stop"), "{msg}");
+
+    // Inspect fails: the panel stays open and the error is reported.
+    let before = app.messages.items.len();
+    app.on_key(key('i'));
+    assert_eq!(app.messages.items.len(), before + 1);
+    assert!(newest(&app).contains("boom"), "{}", newest(&app));
+    assert!(
+        screen(&mut app).contains("web"),
+        "a failed inspect keeps the panel"
+    );
+
+    // Switching to a kind whose listing fails reports the failure.
+    app.on_key(code(KeyCode::Tab));
+    assert!(newest(&app).contains("boom"), "{}", newest(&app));
+
+    // A compose file with a failing engine: confirm, run, report.
+    std::fs::write(root.join("compose.yaml"), "services: {}\n").unwrap();
+    app.run_action("oc.compose_up");
+    app.on_key(key('y'));
+    assert!(newest(&app).contains("boom"), "{}", newest(&app));
+}
+
+#[test]
+fn oc_panel_against_a_failing_docker() {
+    if std::env::var_os(SANDBOX_VAR).is_some() {
+        failing_body();
+        return;
+    }
+    let base = std::env::temp_dir().join(format!("vix-oc-fail-sandbox-{}", std::process::id()));
+    let bin = base.join("bin");
+    let home = base.join("home");
+    let config = base.join("config");
+    for dir in [&bin, &home, &config] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let docker = bin.join("docker");
+        std::fs::write(&docker, FAILING_DOCKER).unwrap();
+        std::fs::set_permissions(&docker, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "oc_panel_against_a_failing_docker",
+            "--nocapture",
+        ])
+        .current_dir(&home)
+        .env(SANDBOX_VAR, "1")
+        .env("PATH", &bin)
+        .env("HOME", &home)
+        .env("XDG_CONFIG_HOME", &config)
+        .env("XDG_DATA_HOME", home.join("data"))
+        .env_remove("SHELL")
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&base);
+    assert!(
+        output.status.success(),
+        "the sandboxed OC test failed:\n{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

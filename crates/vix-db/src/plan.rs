@@ -1110,4 +1110,62 @@ mod tests {
         assert_eq!(format_rows(1270.0), "1270");
         assert_eq!(format_rows(2.5), "2.50");
     }
+
+    #[test]
+    fn a_bare_plan_object_and_loose_field_types_parse() {
+        // No outer array, a boolean detail, a numeric string, a number in a
+        // string slot, and an unusable (null) field.
+        let doc: Value = serde_json::from_str(
+            r#"{"Plan": {"Node Type": "Seq Scan", "Relation Name": "t",
+                "Total Cost": "12.5", "Plan Rows": "7", "Actual Loops": null,
+                "Filter": true, "Alias": 5}}"#,
+        )
+        .unwrap();
+        let plan = from_value(&doc).unwrap();
+        let node = &plan.nodes[0];
+        assert_eq!(node.cost, Some(12.5));
+        assert_eq!(node.plan_rows, Some(7.0));
+        assert_eq!(node.loops, None, "null is not a number");
+        assert_eq!(node.alias.as_deref(), Some("5"));
+        assert!(
+            node.details
+                .iter()
+                .any(|(k, v)| k == "Filter" && v == "true")
+        );
+        assert!(!plan.analyzed);
+        assert_eq!(from_value(&Value::Array(Vec::new())), None);
+    }
+
+    #[test]
+    fn a_plan_whose_time_is_all_zero_has_no_shares() {
+        let doc: Value = serde_json::from_str(
+            r#"[{"Plan": {"Node Type": "Result", "Actual Loops": 1,
+                "Actual Total Time": 0.0, "Actual Rows": 1}}]"#,
+        )
+        .unwrap();
+        let plan = from_value(&doc).unwrap();
+        assert!(plan.analyzed);
+        assert_eq!(plan.nodes[0].share, None);
+        assert!(!plan.nodes[0].slowest);
+    }
+
+    #[test]
+    fn the_note_cell_says_never_executed() {
+        let plan = parse_json(MODIFY_JSON).unwrap();
+        let (_, rows, _) = grid(&plan);
+        assert_eq!(rows[1][6], t!("ui.db_plan_never"));
+    }
+
+    #[test]
+    fn yaml_sequences_may_hold_nulls_and_nested_blocks() {
+        let v = yaml_value("- \n- a\n-\n  - b\n  - c\n").unwrap();
+        assert_eq!(
+            v,
+            Value::Array(vec![
+                Value::Null,
+                Value::String("a".into()),
+                Value::Array(vec![Value::String("b".into()), Value::String("c".into())]),
+            ])
+        );
+    }
 }

@@ -1494,4 +1494,83 @@ mod tests {
         assert!(s.contains(':') && s.contains('-'));
         assert_eq!(format_time_ms(u64::MAX), "");
     }
+
+    #[test]
+    fn secondary_keys_close_a_non_history_chooser_without_acting() {
+        let (mut app, dir) = app_in("secondary");
+        open(&mut app, &dir, "a.txt", "x\n");
+        let target = dir.join("def.txt");
+        std::fs::write(&target, "l1\nl2\n").unwrap();
+        let before_tab = app.editor.active;
+        let tabs = app.editor.tabs.len();
+        let purposes = [
+            ChoicePurpose::RunConfig {
+                names: vec!["build".to_string()],
+            },
+            ChoicePurpose::CodeLens { lenses: Vec::new() },
+            ChoicePurpose::ExceptionFilters {
+                ids: vec!["raised".to_string()],
+            },
+            ChoicePurpose::Peek {
+                path: target,
+                line: 2,
+            },
+        ];
+        for purpose in purposes {
+            app.status.clear();
+            app.choice_list = Some(list(purpose, &["row"]));
+            // `o` is the history-only "open snapshot" key: for these purposes
+            // it only dismisses the overlay.
+            app.choice_list_key(key(KeyCode::Char('o')));
+            assert!(app.choice_list.is_none());
+            assert_eq!(app.status, "", "nothing ran");
+            assert_eq!(app.editor.tabs.len(), tabs, "no file was opened");
+            assert_eq!(app.editor.active, before_tab);
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn enter_on_a_row_the_purpose_does_not_know_does_nothing() {
+        let (mut app, dir) = app_in("unknown-row");
+        // Two rows shown, but the purpose only knows about the first.
+        app.choice_list = Some(list(
+            ChoicePurpose::CodeLens { lenses: Vec::new() },
+            &["a", "b"],
+        ));
+        app.status.clear();
+        let messages = app.messages.items.len();
+        app.choice_list_key(key(KeyCode::Enter));
+        assert!(app.choice_list.is_none());
+        assert_eq!(app.status, "");
+        app.choice_list = Some(list(
+            ChoicePurpose::LocalHistory {
+                file: dir.join("a.txt"),
+                ids: Vec::new(),
+                lines: (0, 1),
+            },
+            &["snapshot"],
+        ));
+        app.choice_list_key(key(KeyCode::Enter));
+        assert!(app.choice_list.is_none());
+        assert_eq!(app.status, "");
+        assert_eq!(app.messages.items.len(), messages);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn editing_run_configs_reports_a_workspace_that_cannot_hold_the_file() {
+        let (mut app, dir) = app_in("runcfg-blocked");
+        open(&mut app, &dir, "a.txt", "x\n");
+        // `.vix` is a regular file, so the starter file cannot be created.
+        std::fs::write(dir.join(".vix"), "not a directory").unwrap();
+        let tabs = app.editor.tabs.len();
+        let messages = app.messages.items.len();
+        app.run_action("project.run_config_edit");
+        assert_eq!(app.messages.items.len(), messages + 1);
+        assert!(!app.messages.items.is_empty());
+        assert_eq!(app.editor.tabs.len(), tabs, "nothing was opened");
+        assert!(!dir.join(".vix").join("run.toml").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

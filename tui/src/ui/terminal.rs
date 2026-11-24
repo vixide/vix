@@ -192,3 +192,126 @@ pub(super) fn draw_cowork_terminal(app: &App, frame: &mut Frame, area: Rect) {
     let inner = draw_frame(frame, area, &title);
     draw_screen(frame, inner, screen, can_type, None);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn nz(n: u16) -> std::num::NonZeroU16 {
+        std::num::NonZeroU16::new(n).unwrap()
+    }
+
+    /// A parser over a 3x8 screen that has been fed `bytes`.
+    fn screen_of(bytes: &[u8]) -> vt100::Parser {
+        let mut p = vt100::Parser::new(nz(3), nz(8), 0);
+        p.process(bytes);
+        p
+    }
+
+    fn render(
+        p: &vt100::Parser,
+        w: u16,
+        h: u16,
+        cursor: bool,
+        sel: Option<Selection>,
+    ) -> Terminal<TestBackend> {
+        let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+        term.draw(|f| draw_screen(f, Rect::new(0, 0, w, h), p.screen(), cursor, sel))
+            .unwrap();
+        term
+    }
+
+    #[test]
+    fn vt_colors_map_to_ratatui_colors() {
+        assert_eq!(vt_color(vt100::Color::Default), Color::Reset);
+        assert_eq!(vt_color(vt100::Color::Idx(9)), Color::Indexed(9));
+        assert_eq!(vt_color(vt100::Color::Rgb(1, 2, 3)), Color::Rgb(1, 2, 3));
+    }
+
+    #[test]
+    fn cells_carry_text_colors_and_attributes() {
+        // bold red "B", italic "I", underlined "U", truecolor background "R".
+        let p = screen_of(b"\x1b[1;31mB\x1b[0m\x1b[3mI\x1b[0m\x1b[4mU\x1b[0m\x1b[48;2;10;20;30mR");
+        let term = render(&p, 8, 3, false, None);
+        let buf = term.backend().buffer();
+        assert_eq!(buf[(0, 0)].symbol(), "B");
+        assert_eq!(buf[(0, 0)].fg, Color::Indexed(1));
+        assert!(buf[(0, 0)].modifier.contains(Modifier::BOLD));
+        assert!(buf[(1, 0)].modifier.contains(Modifier::ITALIC));
+        assert!(buf[(2, 0)].modifier.contains(Modifier::UNDERLINED));
+        assert_eq!(buf[(3, 0)].bg, Color::Rgb(10, 20, 30));
+        assert_eq!(buf[(5, 0)].symbol(), " ", "empty cells draw as spaces");
+    }
+
+    #[test]
+    fn selection_reverses_cells_and_cancels_existing_reverse_video() {
+        // Column 0 is already inverse; the selection covers columns 0-1.
+        let p = screen_of(b"\x1b[7mA\x1b[0mB");
+        let sel = Selection {
+            anchor: (0, 0),
+            head: (0, 1),
+        };
+        let term = render(&p, 8, 3, false, Some(sel));
+        let buf = term.backend().buffer();
+        assert!(
+            !buf[(0, 0)].modifier.contains(Modifier::REVERSED),
+            "inverse + selected shows normally"
+        );
+        assert!(buf[(1, 0)].modifier.contains(Modifier::REVERSED));
+        assert!(!buf[(2, 0)].modifier.contains(Modifier::REVERSED));
+        // Without a selection the inverse cell stays reversed.
+        let plain = render(&p, 8, 3, false, None);
+        assert!(
+            plain.backend().buffer()[(0, 0)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+    }
+
+    #[test]
+    fn the_real_cursor_follows_the_shell_when_shown_and_in_bounds() {
+        let p = screen_of(b"ab\r\nc");
+        let mut term = render(&p, 8, 3, true, None);
+        term.backend_mut().assert_cursor_position((1, 1));
+        // Hidden by the shell (DECTCEM off): never placed.
+        let hidden = screen_of(b"ab\x1b[?25l");
+        let mut term = render(&hidden, 8, 3, true, None);
+        assert_eq!(
+            term.backend_mut().get_cursor_position().unwrap(),
+            Position::new(0, 0)
+        );
+        // An area narrower than the cursor column leaves it alone.
+        let wide = screen_of(b"abcdef");
+        let mut term = render(&wide, 4, 3, true, None);
+        assert_eq!(
+            term.backend_mut().get_cursor_position().unwrap(),
+            Position::new(0, 0)
+        );
+    }
+
+    #[test]
+    fn the_screen_is_clipped_to_the_inner_area() {
+        let p = screen_of(b"abcdefgh");
+        let term = render(&p, 3, 1, false, None);
+        let buf = term.backend().buffer();
+        assert_eq!(buf[(2, 0)].symbol(), "c");
+    }
+
+    #[test]
+    fn the_frame_is_titled_and_never_smaller_than_two_cells() {
+        let mut term = Terminal::new(TestBackend::new(20, 4)).unwrap();
+        let mut inner = Rect::default();
+        term.draw(|f| inner = draw_frame(f, Rect::new(0, 0, 20, 4), "Shell"))
+            .unwrap();
+        assert_eq!(inner, Rect::new(1, 1, 18, 2));
+        let top: String = (0..20)
+            .map(|x| term.backend().buffer()[(x, 0)].symbol().to_string())
+            .collect();
+        assert!(top.contains("Shell"), "{top}");
+        // A zero-size area is lifted to the 2x2 minimum.
+        term.draw(|f| inner = draw_frame(f, Rect::new(0, 0, 0, 0), "x"))
+            .unwrap();
+        assert_eq!(inner, Rect::new(1, 1, 0, 0));
+    }
+}
