@@ -170,7 +170,7 @@ pnpm run check     # i18n catalog check, then svelte-check
 ## License
 
 Licensed under your choice of Apache-2.0, BSD-3-Clause, MIT, GPL-2.0,
-GPL-3.0, OGL-UK-3.0, or CC-BY-NC-SA-4.0 — see [LICENSE](LICENSE).
+GPL-3.0, OGL-UK-3.0, or CC-BY-SA-4.0 — see [LICENSE](LICENSE).
 
 ---
 
