@@ -1702,14 +1702,26 @@ impl<'a> Iterator for RopeGraphemes<'a> {
     type Item = RopeSlice<'a>;
 
     /// Yields the next grapheme cluster as a (possibly multi-chunk) rope slice.
+    ///
+    /// A cluster that runs off the end of a rope chunk is decided on a
+    /// *window*: the cluster's text so far followed by the next chunk, as one
+    /// string starting at the cluster's own start. `GraphemeCursor` mishandles
+    /// the other way of continuing, a chunk that begins exactly where the
+    /// cursor now is: it asks for pre-context while it already holds a running
+    /// count of regional indicators and adds the two, so a flag whose two
+    /// indicators fall either side of a chunk boundary was split in two.
     fn next(&mut self) -> Option<RopeSlice<'a>> {
         let a = self.cursor.cur_cursor();
+        // Set once the cluster has run past `cur_chunk`: its text from `a` on,
+        // and the byte offset it starts at (`a`).
+        let mut window: Option<String> = None;
         let b;
         loop {
-            match self
-                .cursor
-                .next_boundary(self.cur_chunk, self.cur_chunk_start)
-            {
+            let (chunk, chunk_start) = match window.as_deref() {
+                Some(w) => (w, a),
+                None => (self.cur_chunk, self.cur_chunk_start),
+            };
+            match self.cursor.next_boundary(chunk, chunk_start) {
                 Ok(None) => {
                     return None;
                 }
@@ -1718,13 +1730,22 @@ impl<'a> Iterator for RopeGraphemes<'a> {
                     break;
                 }
                 Err(GraphemeIncomplete::NextChunk) => {
+                    // What is already read of this cluster, from `a` to the end
+                    // of the chunk the cursor was in.
+                    let mut grown =
+                        String::from(chunk.get(sub_or(a, chunk_start, 0)..).unwrap_or(""));
                     self.cur_chunk_start =
                         add_or(self.cur_chunk_start, self.cur_chunk.len(), usize::MAX);
                     self.cur_chunk = self.chunks.next().unwrap_or("");
+                    grown.push_str(self.cur_chunk);
+                    window = Some(grown);
                 }
                 Err(GraphemeIncomplete::PreContext(idx)) => {
+                    // The chunk the cursor asked for must end exactly at `idx`.
                     let (chunk, byte_idx, _, _) = self.text.chunk_at_byte(sub_or(idx, 1, 0));
-                    self.cursor.provide_context(chunk, byte_idx);
+                    let upto = sub_or(idx, byte_idx, 0);
+                    self.cursor
+                        .provide_context(chunk.get(..upto).unwrap_or(chunk), byte_idx);
                 }
                 _ => unreachable!(),
             }
@@ -2370,11 +2391,27 @@ mod tests {
     fn graphemes_straddling_rope_chunks_are_kept_whole() {
         // Far more than one rope chunk of text, built from clusters that need
         // context on both sides of a chunk boundary: combining marks and ZWJ
-        // emoji. (A flag, a pair of regional indicators, split across two
-        // chunks is segmented as two clusters by `RopeGraphemes`: a suspected bug, left
-        // unfixed and untested here.)
-        for unit in ["e\u{301}", "\u{1F468}\u{200D}\u{1F469}", "ab"] {
-            for pad in ["", "x", "xy"] {
+        // emoji, flags (a pair of regional indicators) and Indic conjuncts.
+        // The pads move the text across every alignment with the chunk
+        // boundaries, including the one that falls between a flag's two halves.
+        for unit in [
+            "e\u{301}",
+            "\u{1F468}\u{200D}\u{1F469}",
+            "ab",
+            "\u{1F1EB}\u{1F1F7}",
+            "\u{1F1EB}\u{1F1F7}\u{1F1E9}\u{1F1EA}\u{1F1EF}",
+            "\u{0915}\u{094D}\u{0937}",
+        ] {
+            for pad in [
+                "",
+                "x",
+                "xy",
+                "xyz",
+                "xyzw",
+                "\u{e9}",
+                "\u{e9}x",
+                "\u{1F600}",
+            ] {
                 let text = format!("{pad}{}", unit.repeat(2500));
                 let rope = ropey::Rope::from_str(&text);
                 let slice = rope.slice(..);

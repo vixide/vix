@@ -405,7 +405,9 @@ impl App {
         };
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
-        let Some((first, last)) = crate::org_table::table_range(&text, line) else {
+        // Org's `C-c ^` sorts the rows between the nearest horizontal rules, so a
+        // header above a rule is not sorted in with the body below it.
+        let Some((first, last)) = crate::org_table::section_range(&text, line) else {
             self.status = t!("status.org_table_no_table").to_string();
             return;
         };

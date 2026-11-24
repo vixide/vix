@@ -741,7 +741,7 @@ supported; **MySQL** is not (the workbench says so). The module tree is
 **Opening it.** `Ctrl+D` in the workbench, or **DB → Schema Compare…**
 (`db.schema_compare`). The first screen lists the candidate targets
 (`↑`/`↓`) and the schema name, typed in place: on PostgreSQL it starts as the
-schema of the tree selection, else `public`; on SQLite it is `main`. `Enter`
+schema of the tree selection, else `public`; on SQLite it is `main`, and `main` is the only schema SQLite compares (its migrations name no schema, so they always act on `main`): any other name is refused with `msg.db_compare_sqlite_main_only` rather than read as `main`. `Enter`
 reads the source schema on the workbench session, then connects to the
 target on a background thread through the normal credential waterfall
 (`password_command`, the OS keyring, then a masked password prompt) and

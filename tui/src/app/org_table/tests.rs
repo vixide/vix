@@ -331,6 +331,24 @@ fn table_actions_with_no_buffer_do_nothing() {
 }
 
 #[test]
+fn sorting_sorts_the_cursors_section_and_keeps_the_header() {
+    let body = "| name | n |\n|------+---|\n| pear | 3 |\n| apple | 1 |\n| fig | 2 |\n";
+    // Cursor in the body: the header stays on top, the body is sorted.
+    let mut app = app_with("sort-body", body, true);
+    goto(&mut app, 3);
+    app.accept_org_table_sort("1");
+    let out = text(&app);
+    let lines: Vec<&str> = out.lines().collect();
+    assert!(lines[0].contains("name"), "{out}");
+    assert!(lines[2].contains("apple") && lines[3].contains("fig") && lines[4].contains("pear"));
+    // Cursor in the header: that section is one row, so nothing moves.
+    let mut app = app_with("sort-head", body, true);
+    goto(&mut app, 0);
+    app.accept_org_table_sort("1");
+    assert_eq!(text(&app), body);
+}
+
+#[test]
 fn recalc_applies_formulas_and_works_from_the_formula_line() {
     let body = "| 1 | 2 | |\n#+TBLFM: $3=$1+$2\n";
     let mut app = app_with("recalc", body, true);

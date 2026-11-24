@@ -44,6 +44,20 @@ has. `code::full_text_scans()` counts this thread's whole-buffer passes
 (`get_content`, `max_line_chars`) so tests can assert an idle frame makes
 none.
 
+## Grapheme segmentation across rope chunks
+
+`code::RopeGraphemes` walks a `RopeSlice` one grapheme cluster at a time
+without copying the text. A cluster that runs off the end of a rope chunk is
+decided on a window (the cluster's text so far and the next chunk, as one
+string starting at the cluster), never on a chunk that begins exactly where
+the segmenter now is: `unicode-segmentation`'s `GraphemeCursor` then asks for
+pre-context while already holding a running count of regional indicators and
+adds the two, which split a flag in two when a chunk boundary fell between its
+halves. The pre-context chunk handed back is cut to end exactly at the offset
+the segmenter asks for. The test sweeps flags, ZWJ emoji, combining marks and
+Indic conjuncts over many padding offsets so every alignment with a chunk
+boundary is hit, and checks the result against the `String` segmentation.
+
 ## Mark layers under soft wrap
 
 Soft wrap draws the same mark layers as the no-wrap view: highlight marks,

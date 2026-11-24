@@ -25,6 +25,9 @@ use std::fmt::Write as _;
 pub enum ReadError {
     /// The engine has no schema reader (`MySQL`).
     Unsupported(Kind),
+    /// `SQLite` compares only its `main` schema (its migrations name no
+    /// schema, so they always act on `main`); this other name was asked for.
+    SqliteMainOnly(String),
     /// A catalog query failed.
     Query(SessionError),
 }
@@ -35,6 +38,9 @@ impl std::fmt::Display for ReadError {
             ReadError::Unsupported(kind) => {
                 f.write_str(&t!("msg.db_compare_unsupported", kind = kind.label()))
             }
+            ReadError::SqliteMainOnly(schema) => {
+                f.write_str(&t!("msg.db_compare_sqlite_main_only", schema = schema))
+            }
             ReadError::Query(e) => write!(f, "{e}"),
         }
     }
@@ -44,7 +50,7 @@ impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ReadError::Query(e) => Some(e),
-            ReadError::Unsupported(_) => None,
+            ReadError::Unsupported(_) | ReadError::SqliteMainOnly(_) => None,
         }
     }
 }
@@ -95,8 +101,9 @@ pub fn read_session(
 ///
 /// # Errors
 ///
-/// [`ReadError::Unsupported`] for `MySQL`, or the first failing catalog
-/// query.
+/// [`ReadError::Unsupported`] for `MySQL`, [`ReadError::SqliteMainOnly`]
+/// for a `SQLite` schema other than `main` (the reader used to read `main`
+/// whatever the name), or the first failing catalog query.
 pub fn read(
     kind: Kind,
     schema: &str,
@@ -104,6 +111,9 @@ pub fn read(
 ) -> Result<Snapshot, ReadError> {
     let mut snapshot = match kind {
         Kind::Postgres => read_postgres(schema, run)?,
+        Kind::Sqlite if !schema.eq_ignore_ascii_case("main") => {
+            return Err(ReadError::SqliteMainOnly(schema.to_string()));
+        }
         Kind::Sqlite => read_sqlite(run)?,
         Kind::Mysql => return Err(ReadError::Unsupported(kind)),
     };
@@ -843,6 +853,37 @@ mod tests {
             read_session(&mut s, Kind::Mysql, "x"),
             Err(ReadError::Unsupported(_))
         ));
+    }
+
+    #[test]
+    fn sqlite_compares_only_its_main_schema() {
+        // Any other name used to read `main` and label it `main`.
+        let mut calls = 0;
+        let err = read(Kind::Sqlite, "public", &mut |_| {
+            calls += 1;
+            Ok(Vec::new())
+        })
+        .unwrap_err();
+        assert!(matches!(&err, ReadError::SqliteMainOnly(n) if n == "public"));
+        assert_eq!(calls, 0, "no catalog query runs for another name");
+        assert_eq!(
+            err.to_string(),
+            t!("msg.db_compare_sqlite_main_only", schema = "public").to_string()
+        );
+        assert!(std::error::Error::source(&err).is_none());
+        // `main` itself, in any case, is read.
+        for name in ["main", "MAIN", "Main"] {
+            let snapshot = read(Kind::Sqlite, name, &mut |_| Ok(Vec::new())).unwrap();
+            assert_eq!(snapshot.schema, "main");
+        }
+        // A live session says the same through `read_session`.
+        let mut s = Session::connect("sqlite::memory:", &[]).unwrap();
+        assert!(matches!(
+            read_session(&mut s, Kind::Sqlite, "aux"),
+            Err(ReadError::SqliteMainOnly(_))
+        ));
+        // PostgreSQL still reads any schema (and says when it is missing).
+        assert!(read(Kind::Postgres, "other", &mut |_| Ok(Vec::new())).is_ok());
     }
 
     #[test]

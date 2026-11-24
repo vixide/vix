@@ -29,7 +29,8 @@ prompts for confirmation, then acts per the `explorer_delete` setting:
 
 - `"trash"` (the default) moves each path to the OS trash / Recycle Bin
   (`vix_fileops::trash_path`) — undoable from the platform's own
-  trash/recycle view. macOS and Windows use the
+  trash/recycle view. A path that is not there is `io::ErrorKind::NotFound`
+  on every platform (it is looked up before the OS mechanism runs). macOS and Windows use the
   [`trash`](https://docs.rs/trash) crate (macOS through `NSFileManager`, no
   `osascript` child). Linux and the BSDs use Vix's own
   [freedesktop.org Trash](https://specifications.freedesktop.org/trash-spec/latest/)

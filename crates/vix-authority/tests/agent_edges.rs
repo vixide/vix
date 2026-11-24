@@ -792,7 +792,11 @@ fn the_server_reports_failures_by_code() {
         },
     ]);
     assert_eq!(code(&replies[0]), ErrorCode::NotFound);
-    assert!(matches!(replies[1], Reply::Err { .. }));
+    assert_eq!(
+        code(&replies[1]),
+        ErrorCode::NotFound,
+        "trashing what is not there is not found, whatever the platform's trash says"
+    );
     assert_eq!(code(&replies[2]), ErrorCode::NotFound);
     assert_eq!(code(&replies[3]), ErrorCode::NotRegular);
     assert_eq!(code(&replies[4]), ErrorCode::NotFound);

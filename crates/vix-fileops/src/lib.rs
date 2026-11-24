@@ -170,8 +170,14 @@ pub fn which_on_path(name: &str) -> Option<PathBuf> {
 /// # Errors
 ///
 /// Returns an error if the platform's trash mechanism rejects the move (no
-/// trash available, permission denied, the path doesn't exist, …).
+/// trash available, permission denied, …). A path that does not exist is
+/// [`io::ErrorKind::NotFound`] on every platform.
 pub fn trash_path(path: &Path) -> io::Result<()> {
+    // Look before moving anything: trashing a path that is not there is
+    // `NotFound` on every platform, not whatever the OS mechanism makes of it
+    // (macOS and the fallback reported `Other`). `symlink_metadata`, so a
+    // dangling symlink, which is trashed rather than followed, still counts.
+    fs::symlink_metadata(path)?;
     // On macOS the crate's default asks Finder through an `osascript` child
     // process; the `NSFileManager` call does the same job without starting one.
     #[cfg(target_os = "macos")]
@@ -1435,6 +1441,19 @@ mod tests {
             !target.exists(),
             "file should be gone from its original location"
         );
+    }
+
+    #[test]
+    fn trashing_a_missing_path_is_not_found_on_every_platform() {
+        // The macOS and fallback mechanisms used to report this as `Other`.
+        let missing = std::env::temp_dir().join(format!(
+            "vix-trash-missing-{}-{}",
+            std::process::id(),
+            TMP_SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
+        assert!(!missing.exists());
+        let err = trash_path(&missing).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound, "{err}");
     }
 
     #[test]

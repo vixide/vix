@@ -33,6 +33,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **DB workbench: schema compare on SQLite** no longer reads `main` under whatever schema name was typed and labels it `main`. SQLite compares only `main` (its migrations name no schema), so any other name now says so (`msg.db_compare_sqlite_main_only`, in all 15 locales) instead of silently comparing the wrong schema.
+- **Editor: flags split at a chunk boundary.** A flag (two regional indicators) whose halves fell either side of a rope chunk boundary was segmented as two graphemes, so the cursor could land between them. Graphemes that run off the end of a chunk are now decided on a window that starts at the cluster, and the pre-context handed back to the segmenter ends exactly where it asks.
+- **Move to Trash** reports a missing path as `NotFound` on macOS and the fallback too (they said `Other`), as Linux and the fake authority already did.
+- **Org tables: Sort** (`C-c ^`) sorts the rows between the nearest horizontal rules, as in Org, and no row crosses a rule. A header above a rule was being sorted in with the body.
 - **DB workbench: Show DDL on a SQLite view** now shows its `CREATE VIEW` statement instead of "no DDL"; the lookup was limited to tables.
 - **Org exporters** (Markdown, HTML, LaTeX) no longer corrupt text with emphasis markers they should not read: URLs and link targets keep their slashes, the closing tag of a bold run is no longer paired with a later `/`, `=verbatim=` and `~code~` text is left literal, and, as in Org, a marker only counts at a word edge, so `and/or`, `snake_case_name` and `2*3*4` stay plain text.
 - **Org: shifting a date** (`S-Up`/`S-Down` on a timestamp) no longer swallows the word after it: only a real weekday abbreviation (`Mon`..`Sun`) is rewritten, so `2026-08-05 on the 5th` keeps its `on`.
