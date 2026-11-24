@@ -1265,4 +1265,71 @@ mod tests {
         press(&mut a, KeyCode::Esc);
         assert!(a.info.system_info().is_none());
     }
+
+    /// Every info panel's key and mouse handler is harmless when its panel is
+    /// not open: nothing opens, nothing is inserted, and the status is untouched.
+    #[test]
+    fn handlers_of_closed_panels_do_nothing() {
+        let mut a = app();
+        a.status.clear();
+        let before = a.editor.active_tab().unwrap().editor.get_content();
+        let keys = [
+            KeyCode::Up,
+            KeyCode::Down,
+            KeyCode::PageUp,
+            KeyCode::PageDown,
+            KeyCode::Home,
+            KeyCode::End,
+            KeyCode::Backspace,
+            KeyCode::Enter,
+            KeyCode::Esc,
+            KeyCode::Char('x'),
+        ];
+        let click = |a: &mut App, rect: Rect| {
+            a.layout.editor = Rect::new(0, 0, 80, 24);
+            let m = MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: rect.x,
+                row: rect.y,
+                modifiers: KeyModifiers::NONE,
+            };
+            (m, rect)
+        };
+        for code in keys {
+            let k = KeyEvent::new(code, KeyModifiers::NONE);
+            a.contacts_key(k);
+            a.vcard_key(k);
+            a.file_info_key(k);
+            a.text_info_key(k);
+            a.markdown_preview_key(k);
+            a.markdown_toc_key(k);
+            a.snippets_key(k);
+            a.system_info_key(k);
+        }
+        a.layout.contacts = Rect::new(0, 0, 20, 5);
+        a.layout.vcard = Rect::new(0, 0, 20, 5);
+        a.layout.snippets = Rect::new(0, 0, 20, 5);
+        for rect in [
+            a.layout.contacts,
+            a.layout.vcard,
+            a.layout.file_info,
+            a.layout.text_info,
+            a.layout.snippets,
+            a.layout.system_info,
+        ] {
+            let (m, _) = click(&mut a, Rect::new(rect.x, rect.y.plus(1), 5, 5));
+            a.contacts_mouse(m);
+            a.vcard_mouse(m);
+            a.file_info_mouse(m);
+            a.text_info_mouse(m);
+            a.snippets_mouse(m);
+            a.system_info_mouse(m);
+        }
+        assert!(a.contacts.is_none() && a.vcard.is_none() && a.snippets.is_none());
+        assert!(a.info.file_info().is_none() && a.info.text_info().is_none());
+        assert!(a.info.system_info().is_none());
+        assert!(a.markdown_preview.is_none() && a.markdown_toc.is_none());
+        assert_eq!(a.status, "");
+        assert_eq!(a.editor.active_tab().unwrap().editor.get_content(), before);
+    }
 }

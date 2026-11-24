@@ -281,3 +281,348 @@ impl App {
         self.after_tree_change();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::git::tests::{app_at, git, repo, temp};
+    use super::*;
+    use crate::app::cov4::{code, key};
+
+    /// A repo on `main` whose history after the seed commit is `c1`, `c2`, `c3`
+    /// (each adding its own file), with an app rooted in it.
+    fn three_commits(tag: &str) -> (std::path::PathBuf, App) {
+        let d = repo(tag, &[("seed.txt", "seed\n")]);
+        for n in ["c1", "c2", "c3"] {
+            std::fs::write(d.join(format!("{n}.txt")), format!("{n}\n")).unwrap();
+            git(&d, &["add", "-A"]);
+            git(&d, &["commit", "-q", "-m", n]);
+        }
+        let app = app_at(&d);
+        (d, app)
+    }
+
+    fn subjects(dir: &std::path::Path) -> Vec<String> {
+        git(dir, &["log", "--format=%s"])
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    fn rebase_rows(app: &App) -> Vec<(String, crate::git::RebaseAction)> {
+        app.git_rebase
+            .as_ref()
+            .unwrap()
+            .commits
+            .iter()
+            .map(|c| (c.subject.clone(), c.action))
+            .collect()
+    }
+
+    #[test]
+    fn unknown_rebase_actions_are_not_handled() {
+        let d = temp("rebase-unknown");
+        let mut app = app_at(&d);
+        assert!(!app.run_git_rebase_action("git.rebase_nope"));
+    }
+
+    #[test]
+    fn rebase_actions_outside_a_repository_say_so_and_open_nothing() {
+        let d = temp("rebase-norepo");
+        let mut app = app_at(&d);
+        for action in [
+            "git.rebase_interactive",
+            "git.rebase_continue",
+            "git.rebase_abort",
+            "git.cherry_pick",
+        ] {
+            app.status.clear();
+            assert!(app.run_git_rebase_action(action));
+            assert_eq!(
+                app.status,
+                t!("status.git_not_repo").to_string(),
+                "{action}"
+            );
+        }
+        assert!(app.prompt.is_none() && app.git_rebase.is_none());
+    }
+
+    #[test]
+    fn the_rebase_prompt_asks_for_a_base_and_continue_abort_need_a_stopped_rebase() {
+        let (_d, mut app) = three_commits("rebase-prompt");
+        assert!(app.run_git_rebase_action("git.rebase_interactive"));
+        let prompt = app.prompt.take().unwrap();
+        assert!(matches!(prompt.kind, PromptKind::GitRebaseBase));
+        for action in ["git.rebase_continue", "git.rebase_abort"] {
+            app.status.clear();
+            app.run_git_rebase_action(action);
+            assert_eq!(app.status, t!("status.git_rebase_none").to_string());
+        }
+    }
+
+    #[test]
+    fn beginning_a_rebase_lists_the_commits_after_the_base() {
+        let (_d, mut app) = three_commits("rebase-begin");
+        let status = app.status.clone();
+        app.git_rebase_begin("");
+        assert!(
+            app.git_rebase.is_none() && app.status == status,
+            "empty input is a no-op"
+        );
+        app.git_rebase_begin("HEAD");
+        assert!(app.git_rebase.is_none());
+        assert_eq!(
+            app.status,
+            t!("status.git_rebase_nothing", base = "HEAD").to_string()
+        );
+        app.git_rebase_begin("no-such-base");
+        assert!(app.git_rebase.is_none());
+        assert!(
+            app.messages
+                .items
+                .last()
+                .unwrap()
+                .text
+                .starts_with(t!("msg.git_failed_reason", error = "").trim_end())
+        );
+        app.git_rebase_begin("HEAD~3");
+        let todo = app.git_rebase.as_ref().unwrap();
+        assert_eq!(todo.base_label, "HEAD~3");
+        assert_eq!(
+            rebase_rows(&app)
+                .iter()
+                .map(|(s, a)| (s.as_str(), *a))
+                .collect::<Vec<_>>(),
+            [
+                ("c1", crate::git::RebaseAction::Pick),
+                ("c2", crate::git::RebaseAction::Pick),
+                ("c3", crate::git::RebaseAction::Pick)
+            ],
+            "oldest first, all picks"
+        );
+    }
+
+    #[test]
+    fn overlay_keys_move_reorder_set_actions_and_cancel() {
+        let (_d, mut app) = three_commits("rebase-keys");
+        app.git_rebase_begin("HEAD~3");
+        app.git_rebase_key(code(KeyCode::Down));
+        assert_eq!(app.git_rebase.as_ref().unwrap().selected, 1);
+        app.git_rebase_key(code(KeyCode::Up));
+        assert_eq!(app.git_rebase.as_ref().unwrap().selected, 0);
+        app.git_rebase_key(code(KeyCode::Down));
+        // Alt+Up moves c2 above c1.
+        app.git_rebase_key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        let order: Vec<String> = rebase_rows(&app).into_iter().map(|(s, _)| s).collect();
+        assert_eq!(order, ["c2", "c1", "c3"]);
+        app.git_rebase_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+        let order: Vec<String> = rebase_rows(&app).into_iter().map(|(s, _)| s).collect();
+        assert_eq!(order, ["c1", "c2", "c3"]);
+        // `d` drops the highlighted commit; an unbound letter changes nothing.
+        app.git_rebase_key(key('d'));
+        app.git_rebase_key(key('z'));
+        app.git_rebase_key(code(KeyCode::Tab));
+        assert_eq!(
+            rebase_rows(&app)[2],
+            ("c3".to_string(), crate::git::RebaseAction::Pick)
+        );
+        assert_eq!(rebase_rows(&app)[1].1, crate::git::RebaseAction::Drop);
+        app.git_rebase_key(code(KeyCode::Esc));
+        assert!(app.git_rebase.is_none());
+        assert_eq!(app.status, t!("status.git_rebase_cancelled").to_string());
+        // Keys with no overlay open do nothing.
+        app.git_rebase_key(key('d'));
+        app.git_rebase_key(code(KeyCode::Enter));
+    }
+
+    #[test]
+    fn reword_prompts_with_the_subject_and_a_typed_message_is_remembered() {
+        let (_d, mut app) = three_commits("rebase-reword");
+        app.git_rebase_begin("HEAD~3");
+        app.git_rebase_key(key('r'));
+        let prompt = app.prompt.take().unwrap();
+        assert!(matches!(prompt.kind, PromptKind::GitRebaseReword));
+        assert_eq!(prompt.input, "c1", "seeded with the subject");
+        assert_eq!(rebase_rows(&app)[0].1, crate::git::RebaseAction::Reword);
+        app.git_rebase_reword("");
+        assert_eq!(
+            app.git_rebase.as_ref().unwrap().commits[0].message,
+            None,
+            "an empty message keeps the original"
+        );
+        app.git_rebase_reword("renamed one");
+        assert_eq!(
+            app.git_rebase.as_ref().unwrap().commits[0]
+                .message
+                .as_deref(),
+            Some("renamed one")
+        );
+        app.git_rebase_key(key('r'));
+        assert_eq!(
+            app.prompt.take().unwrap().input,
+            "renamed one",
+            "reopens with it"
+        );
+        // With no overlay a reword has nothing to prompt about.
+        app.git_rebase = None;
+        app.git_rebase_key(key('r'));
+        assert!(app.prompt.is_none());
+        app.git_rebase_reword("ignored");
+    }
+
+    #[test]
+    fn running_a_reordered_dropped_and_reworded_list_rewrites_history() {
+        let (d, mut app) = three_commits("rebase-run");
+        app.git_rebase_begin("HEAD~3");
+        // c1 -> reworded, c2 -> dropped.
+        app.git_rebase_key(key('r'));
+        app.prompt = None;
+        app.git_rebase_reword("first, renamed");
+        app.git_rebase_key(code(KeyCode::Down));
+        app.git_rebase_key(key('d'));
+        app.git_rebase_key(code(KeyCode::Enter));
+        assert!(app.git_rebase.is_none(), "the overlay closes");
+        assert_eq!(app.status, t!("status.git_rebase_done").to_string());
+        assert_eq!(subjects(&d), ["c3", "first, renamed", "seed"]);
+        assert!(
+            !d.join("c2.txt").exists(),
+            "the dropped commit's file is gone"
+        );
+    }
+
+    #[test]
+    fn a_list_that_melds_the_first_commit_is_refused_before_anything_runs() {
+        let (d, mut app) = three_commits("rebase-melds");
+        app.git_rebase_begin("HEAD~3");
+        app.git_rebase_key(key('s'));
+        app.git_rebase_key(code(KeyCode::Enter));
+        assert_eq!(app.status, t!("status.git_rebase_melds_first").to_string());
+        assert!(app.git_rebase.is_some(), "the overlay stays for fixing");
+        assert_eq!(subjects(&d), ["c3", "c2", "c1", "seed"]);
+        // Fixing the first commit lets the squash of the second through.
+        app.git_rebase_key(key('p'));
+        app.git_rebase_key(code(KeyCode::Down));
+        app.git_rebase_key(key('f'));
+        app.git_rebase_key(code(KeyCode::Enter));
+        assert_eq!(app.status, t!("status.git_rebase_done").to_string());
+        assert_eq!(subjects(&d), ["c3", "c1", "seed"], "c2 melded into c1");
+        assert!(d.join("c2.txt").exists(), "a fixup keeps the change");
+    }
+
+    #[test]
+    fn an_edit_stop_can_be_continued_or_aborted() {
+        let (d, mut app) = three_commits("rebase-edit");
+        app.git_rebase_begin("HEAD~3");
+        app.git_rebase_key(code(KeyCode::Down));
+        app.git_rebase_key(key('e'));
+        app.git_rebase_key(code(KeyCode::Enter));
+        assert_eq!(app.status, t!("status.git_rebase_stopped").to_string());
+        assert!(crate::git::rebase_in_progress(&d));
+        // While stopped, starting another rebase explains how to finish.
+        app.git_rebase_prompt();
+        assert_eq!(app.status, t!("status.git_rebase_in_progress").to_string());
+        assert!(app.prompt.is_none());
+        app.git_rebase_continue();
+        assert_eq!(app.status, t!("status.git_rebase_done").to_string());
+        assert!(!crate::git::rebase_in_progress(&d));
+        assert_eq!(subjects(&d), ["c3", "c2", "c1", "seed"]);
+
+        // A second stop, this time abandoned.
+        app.git_rebase_begin("HEAD~3");
+        app.git_rebase_key(key('e'));
+        app.git_rebase_key(code(KeyCode::Enter));
+        assert!(crate::git::rebase_in_progress(&d));
+        app.git_rebase_abort();
+        assert_eq!(app.status, t!("status.git_rebase_aborted").to_string());
+        assert!(!crate::git::rebase_in_progress(&d));
+        assert_eq!(subjects(&d), ["c3", "c2", "c1", "seed"]);
+    }
+
+    #[test]
+    fn clicking_a_row_selects_it_and_clicks_past_the_list_do_nothing() {
+        let (_d, mut app) = three_commits("rebase-mouse");
+        app.git_rebase_begin("HEAD~3");
+        app.layout.chooser = ratatui::layout::Rect::new(0, 0, 40, 10);
+        let before = app.git_rebase.as_ref().unwrap().selected;
+        app.git_rebase_mouse(crate::app::cov4::click(5, 5));
+        assert_eq!(
+            app.git_rebase.as_ref().unwrap().selected,
+            before,
+            "row 5 is past three commits"
+        );
+        app.git_rebase = None;
+        app.git_rebase_mouse(crate::app::cov4::click(5, 1));
+    }
+
+    #[test]
+    fn cherry_picking_lists_the_missing_commits_and_applies_the_chosen_one() {
+        let (d, mut app) = three_commits("cherry");
+        git(&d, &["checkout", "-q", "-b", "feature", "HEAD~3"]);
+        std::fs::write(d.join("f1.txt"), "f1\n").unwrap();
+        git(&d, &["add", "-A"]);
+        git(&d, &["commit", "-q", "-m", "feature one"]);
+        git(&d, &["checkout", "-q", "main"]);
+        app.refresh_git();
+
+        assert!(app.run_git_rebase_action("git.cherry_pick"));
+        assert!(matches!(
+            app.prompt.take().unwrap().kind,
+            PromptKind::GitCherryPickFrom
+        ));
+        app.git_cherry_pick_from("");
+        assert!(app.git_log.is_none(), "empty input is a no-op");
+        app.git_cherry_pick_from("main");
+        assert!(app.git_log.is_none());
+        assert_eq!(
+            app.status,
+            t!("status.git_cherry_pick_nothing", rev = "main").to_string()
+        );
+        app.git_cherry_pick_from("no-such-rev");
+        assert!(app.git_log.is_none());
+        assert!(
+            app.messages
+                .items
+                .last()
+                .unwrap()
+                .text
+                .starts_with(t!("msg.git_failed_reason", error = "").trim_end())
+        );
+
+        app.git_cherry_pick_from("feature");
+        let panel = app.git_log.as_ref().unwrap();
+        assert!(matches!(panel.scope, crate::git::LogScope::Pick(ref r) if r == "feature"));
+        let abbrev = panel.selected_abbrev().unwrap().to_string();
+        app.cherry_pick_selected_commit();
+        assert!(app.git_log.is_none(), "the log closes");
+        assert_eq!(
+            app.status,
+            t!("status.git_cherry_picked", sha = abbrev).to_string()
+        );
+        assert_eq!(subjects(&d)[0], "feature one");
+        assert!(d.join("f1.txt").exists());
+        // With no log open there is nothing to pick.
+        app.cherry_pick_selected_commit();
+    }
+
+    #[test]
+    fn a_failing_cherry_pick_reports_the_git_error() {
+        let (d, mut app) = three_commits("cherry-conflict");
+        git(&d, &["checkout", "-q", "-b", "other", "HEAD~3"]);
+        std::fs::write(d.join("c3.txt"), "conflicting\n").unwrap();
+        git(&d, &["add", "-A"]);
+        git(&d, &["commit", "-q", "-m", "other c3"]);
+        git(&d, &["checkout", "-q", "main"]);
+        app.refresh_git();
+        app.git_cherry_pick_from("other");
+        app.cherry_pick_selected_commit();
+        assert!(app.git_log.is_none());
+        assert!(
+            app.messages
+                .items
+                .last()
+                .unwrap()
+                .text
+                .starts_with(t!("msg.git_failed_reason", error = "").trim_end())
+        );
+        git(&d, &["cherry-pick", "--abort"]);
+    }
+}

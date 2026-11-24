@@ -1896,4 +1896,72 @@ mod tests {
         assert_eq!(fg, Color::Green);
         assert!(m.contains(Modifier::BOLD));
     }
+
+    #[test]
+    fn the_import_prompt_becomes_a_run_file_prompt_for_a_sql_path() {
+        let mut b = workbench();
+        b.view = View::Import;
+        b.import_path = "data.csv".to_string();
+        let mut app = app_with(b);
+        let t = text(&draw(&mut app, 100, 8));
+        assert!(t.contains(&t!("ui.db_import_title").to_string()));
+        assert!(t.contains("data.csv"));
+        assert!(t.contains(&head(&t!("ui.db_import_hint"))));
+        let mut b = workbench();
+        b.open_run_file();
+        b.import_path = "seed.sql".to_string();
+        let mut app = app_with(b);
+        let t = text(&draw(&mut app, 100, 8));
+        assert!(t.contains(&t!("ui.db_run_file_title").to_string()));
+        assert!(t.contains("seed.sql"));
+        assert!(t.contains(&head(&t!("ui.db_run_file_hint"))));
+        assert!(!t.contains(&t!("ui.db_import_title").to_string()));
+    }
+
+    #[test]
+    fn every_view_survives_a_tiny_terminal_and_keeps_its_frame_size() {
+        for v in [
+            View::Connections,
+            View::Form,
+            View::Password,
+            View::Workbench,
+            View::History,
+            View::Saved,
+            View::SaveName,
+            View::Confirm,
+            View::Cell,
+            View::Export,
+            View::Log,
+            View::Erd,
+            View::Ask,
+            View::Params,
+            View::Import,
+            View::CellEdit,
+        ] {
+            for (w, h) in [(1, 1), (3, 3), (12, 4), (40, 6), (120, 40)] {
+                let mut app = view(workbench(), v);
+                let buf = draw(&mut app, w, h);
+                assert_eq!(
+                    (buf.area.width, buf.area.height),
+                    (w, h),
+                    "{v:?} at {w}x{h}"
+                );
+            }
+            // At a sensible size the overlay draws its own title.
+            let mut app = view(workbench(), v);
+            let t = text(&draw(&mut app, 120, 40));
+            assert!(
+                t.contains(&t!("ui.db").to_string()),
+                "{v:?} is framed as the DB overlay"
+            );
+        }
+    }
+
+    #[test]
+    fn an_idle_editor_title_shows_the_access_badge_and_no_ai_busy_marker() {
+        let mut app = app_with(workbench());
+        let idle = text(&draw(&mut app, 120, 32));
+        assert!(idle.contains(&t!("ui.db_access_read").to_string()));
+        assert!(!idle.contains(&t!("ui.db_ai_thinking").to_string()));
+    }
 }

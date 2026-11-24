@@ -1136,3 +1136,67 @@ fn roam_prompts_edit_the_active_node() {
     app.accept_roam_prompt(PromptKind::RoamDailyDate, "");
     app.accept_roam_prompt(PromptKind::GotoByte, "1");
 }
+
+// ----- round 3: gaps -------------------------------------------------------------------
+
+#[test]
+fn pasting_something_that_is_not_a_subtree_says_so_and_leaves_the_buffer() {
+    static CLIP: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _g = CLIP
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut app = scratch("* A\n* B\n");
+    // Whatever the clipboard holds, a plain line of prose is no subtree.
+    vix_clipboard::set("just some prose").ok();
+    app.org_action("org.subtree.paste");
+    if vix_clipboard::get().is_ok_and(|c| c == "just some prose") {
+        assert_eq!(app.status, t!("status.org_no_subtree_clip").to_string());
+        assert_eq!(text(&app), "* A\n* B\n");
+    }
+}
+
+#[test]
+fn sorting_children_reorders_the_subtree_under_the_cursor() {
+    let mut app = scratch("* Parent\n** beta\n** alpha");
+    app.org_action("org.sort_children");
+    assert_eq!(text(&app), "* Parent\n** alpha\n** beta");
+}
+
+#[test]
+fn archiving_into_a_file_without_a_trailing_newline_starts_a_fresh_line() {
+    let (d, mut app) = app_with(
+        "archive-nonl",
+        &[("n.org", "* Keep\n* Gone\n"), ("n.org_archive", "* Old")],
+    );
+    goto(&mut app, 1);
+    app.org_action("org.archive.subtree");
+    let archived = std::fs::read_to_string(d.join("n.org_archive")).unwrap();
+    assert!(archived.starts_with("* Old\n* Gone"), "{archived}");
+    assert!(archived.ends_with('\n'));
+}
+
+#[test]
+fn the_table_sort_prompt_reports_a_cursor_outside_any_table() {
+    let mut app = scratch("* Not a table\n");
+    app.accept_org_prompt(PromptKind::OrgTableSort, "1");
+    assert_eq!(app.status, t!("status.org_table_no_table").to_string());
+}
+
+#[test]
+fn an_unreadable_org_file_in_the_index_is_skipped_when_following_an_id() {
+    let (d, mut app) = app_with(
+        "id-skip",
+        &[
+            ("a.org", "[[id:target-1][t]]\n"),
+            ("z.org", "* Z\n:PROPERTIES:\n:ID: target-1\n:END:\n"),
+        ],
+    );
+    // A directory named like an org file cannot be read as text, and a
+    // non-org file is not even tried.
+    std::fs::create_dir(d.join("dir.org")).unwrap();
+    std::fs::write(d.join("notes.txt"), ":ID: target-1\n").unwrap();
+    app.build_file_index();
+    app.editor.active_tab_mut().unwrap().editor.set_cursor(3);
+    app.org_action("org.link.follow");
+    assert_eq!(app.active_path().unwrap(), d.join("z.org"));
+}
