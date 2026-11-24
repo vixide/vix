@@ -159,3 +159,67 @@ fn deleting_a_saved_connection_updates_and_persists_the_settings() {
     assert_eq!(app.settings.db_connections, []);
     assert!(app.messages.items.len() > before);
 }
+
+/// Seed a `SQLite` file and return an app whose settings hold it as the only
+/// saved connection, with the workbench connected to it.
+fn connected_app(tag: &str) -> (std::path::PathBuf, App) {
+    let d = temp(tag);
+    let file = d.join("fixture.db");
+    let mut seed =
+        crate::db::session::Session::connect(&format!("sqlite:{}?mode=rwc", file.display()), &[])
+            .unwrap();
+    seed.run("CREATE TABLE t (id INTEGER, label TEXT)").unwrap();
+    seed.run("INSERT INTO t VALUES (1, 'alpha'), (2, 'beta')")
+        .unwrap();
+    drop(seed);
+    let mut settings = crate::settings::Settings::default();
+    settings.db_connections = vec![vix_settings::Connection {
+        name: "fixture".to_string(),
+        kind: vix_settings::Kind::Sqlite,
+        file: file.display().to_string(),
+        ..vix_settings::Connection::default()
+    }];
+    let mut app = crate::app::cov4::app_with(&d, settings);
+    app.settings_path = Some(d.join("vix-test-config.toml"));
+    app.db_action("db.connections");
+    // Enter connects to the highlighted connection (asynchronously).
+    app.db_key(code(KeyCode::Enter));
+    drain(&mut app);
+    (d, app)
+}
+
+/// Poll the app's DB tasks until none is running.
+fn drain(app: &mut App) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while app.db_connect_running() || app.db_query_running() || app.db_reconnect_running() {
+        app.poll_db_connect();
+        app.poll_db_query();
+        app.poll_db_reconnect();
+        assert!(std::time::Instant::now() < deadline, "DB work stalled");
+        std::thread::yield_now();
+    }
+}
+
+#[test]
+fn a_connected_workbench_opens_the_query_view_and_runs_the_buffer() {
+    let (_d, mut app) = connected_app("db-connected");
+    assert!(app.db.as_ref().unwrap().conn.is_some(), "connected");
+    assert!(app.db_action("db.query"));
+    assert!(matches!(
+        app.db.as_ref().unwrap().view,
+        crate::db::View::Workbench
+    ));
+    // The active buffer's text runs statement by statement into the grid.
+    app.editor.new_tab();
+    buffer_with(&mut app, "SELECT label FROM t ORDER BY id;", 0);
+    app.db_action("db.run_buffer");
+    drain(&mut app);
+    let b = app.db.as_ref().unwrap();
+    assert!(matches!(b.view, crate::db::View::Workbench));
+    assert_eq!(b.grid.headers, ["label"]);
+    assert_eq!(
+        b.grid.rows,
+        vec![vec!["alpha".to_string()], vec!["beta".to_string()]]
+    );
+    assert!(!app.db_query_running());
+}

@@ -860,4 +860,63 @@ mod tests {
         assert_eq!(v.watches, vec![("x".to_string(), String::new())]);
         assert!(v.threads.is_empty() && v.frames.is_empty());
     }
+
+    #[test]
+    fn replies_for_another_frame_or_an_unknown_reference_change_nothing() {
+        let mut v = stopped_view();
+        let before = kinds(&v);
+        assert_eq!(
+            v.set_scopes(99, &[Scope::new("Other", 40)]),
+            Vec::<i64>::new()
+        );
+        assert_eq!(
+            v.set_variables(404, &[Variable::new("z", "0")]),
+            Vec::<i64>::new()
+        );
+        v.variable_set(404, "x", "9");
+        v.variable_set(5, "missing", "9");
+        assert_eq!(kinds(&v), before);
+        // A known name under a known container takes the new value.
+        v.variable_set(5, "x", "9");
+        v.selected = 8;
+        assert_eq!(v.selected_variable(), Some((5, "x".into(), "9".into())));
+    }
+
+    #[test]
+    fn collapse_closes_an_open_node_then_climbs_to_its_parent() {
+        let mut v = stopped_view();
+        v.selected = 9; // p, a variable under Locals
+        assert_eq!(v.activate(), Activation::Load(7));
+        v.set_variables(7, &[Variable::new("y", "4")]);
+        v.selected = 10; // y, a child of p
+        v.collapse();
+        assert_eq!(
+            v.selected_row().map(|r| r.kind),
+            Some(RowKind::Node(vec![0, 1])),
+            "a leaf collapse moves to the parent"
+        );
+        v.collapse();
+        assert!(
+            !v.rows()
+                .iter()
+                .any(|r| r.kind == RowKind::Node(vec![0, 1, 0]))
+        );
+        // A scope has no parent row to climb to: nothing moves.
+        v.selected = 7;
+        v.collapse();
+        v.collapse();
+        assert_eq!(v.selected_variable(), None, "a scope is not a variable");
+    }
+
+    #[test]
+    fn expand_on_a_thread_selects_it_and_on_a_leaf_does_nothing() {
+        let mut v = stopped_view();
+        v.selected = 2; // worker thread
+        assert_eq!(v.expand(), Activation::SelectThread(2));
+        v.selected = 8; // x, no children
+        assert_eq!(v.expand(), Activation::None);
+        v.selected = 0; // a section header
+        assert_eq!(v.activate(), Activation::None);
+        assert_eq!(v.expand(), Activation::None);
+    }
 }

@@ -1796,4 +1796,54 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn an_idle_client_ignores_every_session_command() {
+        let mut dap = Dap::new();
+        assert!(!dap.is_active() && !dap.is_stopped() && !dap.busy());
+        dap.continue_();
+        dap.step_over();
+        dap.step_into();
+        dap.step_out();
+        dap.pause();
+        dap.select_thread(7);
+        dap.select_frame(11);
+        dap.variables(5);
+        dap.variables(0);
+        dap.evaluate("x");
+        dap.set_breakpoints("/a.rs", &[SourceBreakpoint::new(3)]);
+        dap.stop();
+        assert_eq!((dap.thread_id(), dap.frame_id()), (None, None));
+        assert!(dap.capabilities().is_none());
+        assert_eq!(dap.data_breakpoints().len(), 0);
+        assert_eq!(dap.poll().len(), 0);
+        assert!(!dap.set_variable(5, "x", "1"), "no session, nothing sent");
+        assert!(!dap.data_breakpoint_info(5, "x"));
+        assert!(!dap.set_data_breakpoints(vec![DataBreakpoint::new("d", "x")]));
+    }
+
+    #[test]
+    fn idle_breakpoints_and_exception_filters_are_kept_for_the_next_session() {
+        let mut dap = Dap::new();
+        assert_eq!(dap.exception_filters().len(), 0, "no choice, no session");
+        dap.set_exception_filters(&["raised".to_string()]);
+        assert_eq!(dap.exception_filters(), ["raised"]);
+        dap.set_function_breakpoints(vec![FunctionBreakpoint::new("main")]);
+        assert_eq!(dap.function_breakpoints().len(), 1);
+        assert_eq!(dap.function_breakpoints()[0].name, "main");
+        let ib = InstructionBreakpoint::new("0x4005d0");
+        assert!(dap.set_instruction_breakpoints(vec![ib]));
+        assert_eq!(dap.instruction_breakpoints().len(), 1);
+        assert_eq!(dap.instruction_breakpoints()[0].reference, "0x4005d0");
+    }
+
+    #[test]
+    fn a_workdir_is_stored_and_an_adapter_with_no_command_does_not_start() {
+        let mut dap = Dap::new();
+        dap.set_workdir(Some(std::path::PathBuf::from("/work")));
+        let adapter = DebugAdapter::new("none", vec!["rs".into()], Vec::new());
+        assert!(!dap.start(&adapter, "/a.rs", HashMap::new(), StartMode::Launch));
+        assert!(!dap.is_active());
+        assert!(!dap.start(&adapter, "/a.rs", HashMap::new(), StartMode::Attach));
+    }
 }
