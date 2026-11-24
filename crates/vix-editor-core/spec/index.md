@@ -44,6 +44,18 @@ has. `code::full_text_scans()` counts this thread's whole-buffer passes
 (`get_content`, `max_line_chars`) so tests can assert an idle frame makes
 none.
 
+## Mark layers under soft wrap
+
+Soft wrap draws the same mark layers as the no-wrap view: highlight marks,
+passive word-occurrence marks (reversed and dim), spell marks (red underline)
+and LSP diagnostic marks (an underline in the severity color), each painted
+per grapheme of every visual row, so a mark that crosses a wrap boundary
+continues on the next row. **Inlay hints are the exception:** they insert
+text into a line and so change the widths the wrap layout, the caret, scrolling
+and mouse hit-testing are computed from; they are drawn only in the no-wrap
+view (and, as there, only when the view is not horizontally scrolled). Hints
+under soft wrap would need `visual_rows` to count their widths first.
+
 ## Code lens rows (T726)
 
 `Editor::set_code_lenses(Vec<(line, label)>)` gives a line a **virtual row

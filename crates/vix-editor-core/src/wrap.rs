@@ -260,6 +260,76 @@ impl Editor {
         }
     }
 
+    /// Paint the mark layers (highlight, spell, word-occurrence and diagnostic
+    /// marks) that cover character offset `ch` onto the cell at `cell_x`.
+    fn paint_mark_layers(
+        &self,
+        buf: &mut Buffer,
+        cell_x: u16,
+        gw: u16,
+        right: u16,
+        draw_y: u16,
+        ch: usize,
+    ) {
+        if let Some(marks) = self.marks.as_ref()
+            && marks.iter().any(|&(s, e, _)| s <= ch && ch < e)
+        {
+            paint(
+                buf,
+                cell_x,
+                gw,
+                right,
+                draw_y,
+                Style::default().add_modifier(Modifier::UNDERLINED),
+            );
+        }
+        if let Some(spell) = self.spell_marks.as_ref()
+            && spell.iter().any(|&(s, e)| s <= ch && ch < e)
+        {
+            paint(
+                buf,
+                cell_x,
+                gw,
+                right,
+                draw_y,
+                Style {
+                    fg: Some(Color::Red),
+                    ..Style::default().add_modifier(Modifier::UNDERLINED)
+                },
+            );
+        }
+        // Passive word-occurrence marks, as in the unwrapped view.
+        if let Some(words) = self.word_marks.as_ref()
+            && words.iter().any(|&(s, e)| s <= ch && ch < e)
+        {
+            paint(
+                buf,
+                cell_x,
+                gw,
+                right,
+                draw_y,
+                Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM),
+            );
+        }
+        // LSP diagnostic underlines, coloured per severity, on their own
+        // channel so they coexist with spell marks.
+        if let Some(diags) = self.diagnostic_marks.as_ref()
+            && let Some(&(_, _, color)) = diags.iter().find(|&&(s, e, _)| s <= ch && ch < e)
+        {
+            paint(
+                buf,
+                cell_x,
+                gw,
+                right,
+                draw_y,
+                Style {
+                    fg: Some(color),
+                    ..Style::default().add_modifier(Modifier::UNDERLINED)
+                },
+            );
+        }
+    }
+
     /// Style one visual row's graphemes (whitespace, syntax, selection, marks,
     /// spell, bracket, inline extra carets) starting at character offset
     /// `start_ch` / byte offset `start_byte`. Returns the primary caret's visual
@@ -311,33 +381,7 @@ impl Editor {
             if caret_sels.iter().any(|&(ss, se)| ss <= ch && ch < se) {
                 paint(buf, cell_x, gw, right, draw_y, self.selection_style);
             }
-            if let Some(marks) = self.marks.as_ref()
-                && marks.iter().any(|&(s, e, _)| s <= ch && ch < e)
-            {
-                paint(
-                    buf,
-                    cell_x,
-                    gw,
-                    right,
-                    draw_y,
-                    Style::default().add_modifier(Modifier::UNDERLINED),
-                );
-            }
-            if let Some(spell) = self.spell_marks.as_ref()
-                && spell.iter().any(|&(s, e)| s <= ch && ch < e)
-            {
-                paint(
-                    buf,
-                    cell_x,
-                    gw,
-                    right,
-                    draw_y,
-                    Style {
-                        fg: Some(Color::Red),
-                        ..Style::default().add_modifier(Modifier::UNDERLINED)
-                    },
-                );
-            }
+            self.paint_mark_layers(buf, cell_x, gw, right, draw_y, ch);
             if bracket == Some(ch) {
                 paint(buf, cell_x, gw, right, draw_y, self.bracket_style);
             }

@@ -145,7 +145,13 @@ pub fn governing_subtree(text: &str, line: usize) -> Option<(usize, usize)> {
 /// trees when before the first headline. `None` with fewer than two children.
 #[must_use]
 pub fn sort_children(text: &str, line: usize) -> Option<String> {
-    let lines: Vec<&str> = text.split('\n').collect();
+    // The newline that ends the buffer is not a line of the last subtree: set it
+    // aside so it cannot travel with a sorted block, and put it back at the end.
+    let (body, final_newline) = match text.strip_suffix('\n') {
+        Some(body) => (body, true),
+        None => (text, false),
+    };
+    let lines: Vec<&str> = body.split('\n').collect();
     let (start, end, child_level) = match governing(&lines, line) {
         Some(h) => {
             let (s, e) = subtree_range(&lines, h)?;
@@ -180,7 +186,11 @@ pub fn sort_children(text: &str, line: usize) -> Option<String> {
         out.extend_from_slice(lines.get(s..e)?);
     }
     out.extend_from_slice(lines.get(end..)?);
-    Some(out.join("\n"))
+    let mut sorted_text = out.join("\n");
+    if final_newline {
+        sorted_text.push('\n');
+    }
+    Some(sorted_text)
 }
 
 /// Refile the subtree governing `line` to the end of the subtree at

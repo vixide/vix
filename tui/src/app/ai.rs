@@ -511,7 +511,10 @@ impl App {
                     return;
                 }
                 match ar.dest {
-                    AiDest::Replace { tab, target } => self.apply_ai_replace(tab, target, text),
+                    AiDest::Replace { tab, target } => {
+                        let text = self.with_original_line_breaks(tab, target, text);
+                        self.apply_ai_replace(tab, target, &text);
+                    }
                     AiDest::NewTab => {
                         self.editor.new_tab_with_content(text);
                         self.focus = Focus::Editor;
@@ -522,7 +525,10 @@ impl App {
                             panel.push(crate::ai_panel::Role::Assistant, text);
                         }
                     }
-                    AiDest::Diff { tab, target } => self.open_ai_diff(tab, target, text),
+                    AiDest::Diff { tab, target } => {
+                        let text = self.with_original_line_breaks(tab, target, text);
+                        self.open_ai_diff(tab, target, &text);
+                    }
                     #[cfg(feature = "sql")]
                     AiDest::Db => {
                         if let Some(b) = self.db.as_mut() {
@@ -613,6 +619,34 @@ impl App {
         let caret = tab.editor.get_cursor();
         tab.editor.set_cursor(caret);
         tab.dirty = true;
+    }
+
+    /// `reply` (already stripped of its own trailing newlines) followed by the
+    /// line breaks that ended the text it is about to replace. A model reply
+    /// rarely ends the way the original did, and without this a whole-buffer
+    /// or whole-line replacement silently dropped the file's final newline.
+    fn with_original_line_breaks(&self, tab_idx: usize, target: AiTarget, reply: &str) -> String {
+        // The range is clamped to the buffer exactly as `apply_ai_replace` does.
+        let old = self
+            .editor
+            .tabs
+            .get(tab_idx)
+            .map_or_else(String::new, |tab| {
+                let content = tab.editor.get_content();
+                match target {
+                    AiTarget::Whole => content,
+                    AiTarget::Range(start, end) => {
+                        let chars: Vec<char> = content.chars().collect();
+                        let start = start.min(chars.len());
+                        let end = end.min(chars.len()).max(start);
+                        chars.get(start..end).unwrap_or(&[]).iter().collect()
+                    }
+                }
+            });
+        let kept = old.chars().rev().take_while(|c| *c == '\n').count();
+        let mut out = reply.to_string();
+        out.extend(std::iter::repeat_n('\n', kept));
+        out
     }
 
     /// Whether a background AI transform is in progress.
@@ -973,6 +1007,78 @@ mod tests {
     }
 
     #[test]
+    fn a_replacement_keeps_the_line_breaks_that_ended_the_original() {
+        let dir = temp("ai-keep-newline");
+        let mut app = app_at(&dir);
+        // A whole buffer that ends in a newline still does after the reply,
+        // whether or not the reply ends in one.
+        buffer_with(&mut app, "alpha\nbeta\n", 0);
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Whole,
+            },
+            done("ALPHA\nBETA"),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "ALPHA\nBETA\n");
+
+        // Two trailing line breaks stay two.
+        buffer_with(&mut app, "x\n\n", 0);
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Whole,
+            },
+            done("X\n\n\n"),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "X\n\n");
+
+        // A buffer with no final newline does not gain one.
+        buffer_with(&mut app, "no newline", 0);
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Whole,
+            },
+            done("changed\n"),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "changed");
+
+        // A selection of whole lines (ending at a line break) keeps that break,
+        // so the next line is not glued onto the replacement.
+        buffer_with(&mut app, "one\ntwo\nthree\n", 0);
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Range(4, 8),
+            },
+            done("TWO"),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "one\nTWO\nthree\n");
+
+        // A selection that ends mid-line does not gain a break.
+        buffer_with(&mut app, "hello world", 0);
+        inject(
+            &mut app,
+            AiDest::Replace {
+                tab: 0,
+                target: AiTarget::Range(0, 5),
+            },
+            done("HOWDY\n"),
+        );
+        app.poll_ai_replace();
+        assert_eq!(content(&mut app), "HOWDY world");
+    }
+
+    #[test]
     fn a_diff_reply_opens_a_review_that_applies_only_accepted_hunks() {
         let dir = temp("ai-diff");
         let mut app = app_at(&dir);
@@ -1002,8 +1108,9 @@ mod tests {
         app.ai_diff_key(key('z')); // ignored
         app.ai_diff_key(code(KeyCode::Enter));
         assert!(app.ai_diff_review().is_none());
-        // The reply's trailing newline is trimmed on arrival.
-        assert_eq!(content(&mut app), "one\ntwo\nthree\nfour\nFIVE");
+        // The reply's own trailing newline is trimmed on arrival and the
+        // original's is kept, so the file still ends with one.
+        assert_eq!(content(&mut app), "one\ntwo\nthree\nfour\nFIVE\n");
         assert_eq!(
             app.status,
             t!("status.ai_done", action = t!("menu.ai")).to_string()

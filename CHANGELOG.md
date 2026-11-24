@@ -33,6 +33,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Org: Sort Children** no longer moves the buffer's final newline into the middle of the text: a document that ended in a newline still does, with no stray blank line before the last sorted subtree.
+- **AI replace and diff review** now keep the line breaks that ended the replaced text. A whole-buffer reply no longer drops the file's final newline, and a selection of whole lines no longer glues the next line onto the replacement.
+- **Soft wrap** now draws word-occurrence marks and LSP diagnostic underlines, which only the no-wrap view drew. (Inlay hints still appear only without soft wrap; see the editor-core spec.)
 - **The base converter no longer overflows on `i128::MIN`.** Input with a second sign inside the digits, such as `--170141183460469231731687303715884105728`, parsed to the smallest `i128` and then negated it, which panicked in debug builds and wrapped in release builds. It is now reported as out of range.
 - **List navigation can no longer overflow.** Moving a highlighted row up or down, by a row or a page, or scrolling it into view now uses checked arithmetic with a declared fallback for every case (stop at the top or last row, wrap, an empty list), as `spec/rust-checked-arithmetic` requires. A selection or page size at the edge of `usize` no longer panics in debug builds or wraps in release builds. This is the first crate converted; the lints are denied for it from now on.
 - **Org Capture with no templates configured no longer crashes on Up/Down.** Cycling the chooser past either end divided by the number of templates, which is zero when the list is empty. The thirteen choosers that wrap (Capture, Refile, tasks, clipboard history, macros, encodings, recent files and locations, branches, workspaces, scripts, commands, completion cycling) now share one zero-safe `wrap_up`/`wrap_down`.

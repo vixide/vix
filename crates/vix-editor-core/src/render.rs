@@ -1581,6 +1581,28 @@ mod layer_tests {
     }
 
     #[test]
+    fn soft_wrap_paints_word_marks_and_diagnostic_underlines() {
+        // These two layers were drawn only by the unwrapped renderer.
+        let mut e = bare("text", "abcdefghij");
+        e.set_soft_wrap(true);
+        e.set_word_marks(vec![(1, 3)]);
+        e.set_diagnostic_marks(vec![(6, 8, Color::Blue), (9, 999, Color::Blue)]);
+        // Five columns per row: "abcde" / "fghij".
+        let b = draw(&e, 5, 3);
+        let dim = Modifier::REVERSED | Modifier::DIM;
+        assert!(has(&b, 1, 0, dim) && has(&b, 2, 0, dim));
+        assert!(!has(&b, 0, 0, Modifier::REVERSED) && !has(&b, 3, 0, Modifier::REVERSED));
+        // Diagnostics on the wrapped row: 'g' and 'h' underlined in blue.
+        assert_eq!(b[(1, 1)].fg, Color::Blue);
+        assert!(has(&b, 1, 1, Modifier::UNDERLINED) && has(&b, 2, 1, Modifier::UNDERLINED));
+        assert!(!has(&b, 0, 1, Modifier::UNDERLINED) && !has(&b, 3, 1, Modifier::UNDERLINED));
+        // A range running past the buffer paints what exists and nothing else.
+        assert!(has(&b, 4, 1, Modifier::UNDERLINED));
+        assert_eq!(row(&b, 0), "abcde");
+        assert_eq!(row(&b, 1), "fghij");
+    }
+
+    #[test]
     fn soft_wrap_paints_marks_selection_and_spell_underlines() {
         let mut e = bare("text", "abcdefghij");
         e.set_soft_wrap(true);

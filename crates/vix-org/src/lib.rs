@@ -329,6 +329,44 @@ mod tests {
     }
 
     #[test]
+    fn sort_children_keeps_the_final_newline_at_the_end() {
+        // The newline that ends the buffer used to travel with the last block,
+        // landing as a blank line in the middle and leaving the text unterminated.
+        assert_eq!(
+            sort_children("* P\n** beta\n** alpha\n", 0).as_deref(),
+            Some("* P\n** alpha\n** beta\n")
+        );
+        // Without a final newline the result has none either.
+        assert_eq!(
+            sort_children("* P\n** beta\n** alpha", 0).as_deref(),
+            Some("* P\n** alpha\n** beta")
+        );
+    }
+
+    #[test]
+    fn sort_children_carries_bodies_and_blank_lines_with_their_headline() {
+        let text = "* P\n** b\nbody b\n\n** a\nbody a\n";
+        assert_eq!(
+            sort_children(text, 0).as_deref(),
+            Some("* P\n** a\nbody a\n** b\nbody b\n\n")
+        );
+    }
+
+    #[test]
+    fn sort_children_of_top_level_trees_keeps_the_final_newline() {
+        // A cursor before the first headline sorts the top-level trees.
+        assert_eq!(
+            sort_children("intro\n* b\n* a\n", 0).as_deref(),
+            Some("intro\n* a\n* b\n")
+        );
+    }
+
+    #[test]
+    fn sort_children_with_fewer_than_two_children_changes_nothing() {
+        assert_eq!(sort_children("* P\n** only\n", 0), None);
+    }
+
+    #[test]
     fn refile_moves_subtree_under_target() {
         let (text, line) = refile(DOC, 3, 5).expect("refile");
         let lines: Vec<&str> = text.split('\n').collect();
