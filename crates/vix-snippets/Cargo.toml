@@ -13,5 +13,9 @@ vix-list-state = { workspace = true }
 vix-settings = { workspace = true }
 vix-snippet-tool = { workspace = true }
 
+# Tests never read or write the real ~/.config/vix (crates/vix-fileops user_dirs).
+[dev-dependencies]
+vix-fileops = { workspace = true, features = ["isolated-user-dirs"] }
+
 [lints]
 workspace = true

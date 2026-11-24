@@ -6204,6 +6204,7 @@ dependencies = [
  "bitflags 2.13.2",
  "serde_json",
  "vix-authority",
+ "vix-fileops",
  "vix-lsp-core",
  "vix-settings",
 ]
@@ -6243,6 +6244,7 @@ name = "vix-doctor"
 version = "3.0.0"
 dependencies = [
  "rust-i18n",
+ "vix-fileops",
  "vix-i18n",
  "vix-settings",
  "vix-spellcheck",
@@ -6410,9 +6412,12 @@ dependencies = [
 name = "vix-fileops"
 version = "3.0.0"
 dependencies = [
+ "confy",
+ "etcetera 0.11.0",
  "globset",
  "jiff",
  "nix 0.31.4",
+ "serde",
  "trash",
  "vix-encoding",
 ]
@@ -6631,6 +6636,7 @@ version = "3.0.0"
 dependencies = [
  "serde_json",
  "vix-authority",
+ "vix-fileops",
  "vix-lsp-core",
  "vix-project-env",
  "vix-settings",
@@ -6747,6 +6753,7 @@ name = "vix-org-capture"
 version = "3.0.0"
 dependencies = [
  "proptest",
+ "vix-fileops",
  "vix-settings",
 ]
 
@@ -6859,7 +6866,6 @@ name = "vix-settings"
 version = "3.0.0"
 dependencies = [
  "confy",
- "etcetera 0.11.0",
  "serde",
  "toml 1.2.1+spec-1.1.0",
  "vix-fileops",
@@ -6872,6 +6878,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml 1.2.1+spec-1.1.0",
+ "vix-fileops",
  "vix-settings",
  "vix-theme-model",
 ]
@@ -6885,6 +6892,7 @@ name = "vix-snippets"
 version = "3.0.0"
 dependencies = [
  "serde_json",
+ "vix-fileops",
  "vix-list-state",
  "vix-settings",
  "vix-snippet-tool",

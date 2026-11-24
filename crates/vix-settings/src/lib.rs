@@ -1070,7 +1070,7 @@ impl Settings {
     /// (Run H, T537), meaning the user's actual settings are about to be
     /// silently discarded in favor of defaults unless the caller reports it.
     pub fn try_load() -> Result<Settings, confy::ConfyError> {
-        confy::load(APP_NAME, Some(CONFIG_NAME))
+        vix_fileops::user_dirs::load(APP_NAME, CONFIG_NAME)
     }
 
     /// Load settings from an explicit file, falling back to
@@ -1167,7 +1167,7 @@ impl Settings {
     /// Returns a [`confy::ConfyError`] if the config directory cannot be
     /// created or the file cannot be written/serialized.
     pub fn save(&self) -> Result<(), confy::ConfyError> {
-        confy::store(APP_NAME, Some(CONFIG_NAME), self)?;
+        vix_fileops::user_dirs::store(APP_NAME, CONFIG_NAME, self)?;
         if let Some(path) = Self::config_path() {
             vix_fileops::restrict_to_owner(&path);
         }
@@ -1192,7 +1192,7 @@ impl Settings {
     /// `None` if the config location cannot be determined.
     #[must_use]
     pub fn config_path() -> Option<std::path::PathBuf> {
-        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME)).ok()
+        vix_fileops::user_dirs::config_file(APP_NAME, CONFIG_NAME)
     }
 
     /// Vix's directory under the platform data directory (for example
@@ -1200,19 +1200,14 @@ impl Settings {
     /// Used for data that is not configuration, such as IM history (T755).
     #[must_use]
     pub fn data_dir() -> Option<std::path::PathBuf> {
-        use etcetera::BaseStrategy as _;
-        etcetera::choose_base_strategy()
-            .ok()
-            .map(|s| s.data_dir().join(APP_NAME))
+        vix_fileops::user_dirs::data_dir(APP_NAME)
     }
 
     /// Directory holding custom JSON themes (`<config dir>/themes/`), or `None`
     /// if the config location cannot be determined.
     #[must_use]
     pub fn themes_dir() -> Option<std::path::PathBuf> {
-        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.join("themes")))
+        Self::config_path().and_then(|p| p.parent().map(|d| d.join("themes")))
     }
 
     /// Directory holding global user `.rhai` scripts (`<config dir>/scripts/`),
@@ -1220,9 +1215,7 @@ impl Settings {
     /// `crates/vix-script/spec/index.md`, "Script discovery".
     #[must_use]
     pub fn scripts_dir() -> Option<std::path::PathBuf> {
-        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.join("scripts")))
+        Self::config_path().and_then(|p| p.parent().map(|d| d.join("scripts")))
     }
 
     /// The Rhai plugin lock (`<config dir>/plugins.lock`, T637), or `None` if
@@ -1230,9 +1223,7 @@ impl Settings {
     /// `crates/vix-script/spec/index.md`, "Plugins".
     #[must_use]
     pub fn plugins_lock_path() -> Option<std::path::PathBuf> {
-        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.join("plugins.lock")))
+        Self::config_path().and_then(|p| p.parent().map(|d| d.join("plugins.lock")))
     }
 
     /// File holding the user's personal spellcheck word list, one word per line
@@ -1240,18 +1231,14 @@ impl Settings {
     /// cannot be determined. Words added via the spell-suggest popup persist here.
     #[must_use]
     pub fn user_dictionary_path() -> Option<std::path::PathBuf> {
-        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.join("user_dictionary.txt")))
+        Self::config_path().and_then(|p| p.parent().map(|d| d.join("user_dictionary.txt")))
     }
 
     /// File holding saved keyboard macros (`<config dir>/macros.toml`), or `None`
     /// if the config location cannot be determined.
     #[must_use]
     pub fn macros_path() -> Option<std::path::PathBuf> {
-        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.join("macros.toml")))
+        Self::config_path().and_then(|p| p.parent().map(|d| d.join("macros.toml")))
     }
 
     /// File holding the user's persisted key binding overrides
@@ -1260,9 +1247,7 @@ impl Settings {
     /// "Persisted user overrides".
     #[must_use]
     pub fn keybindings_path() -> Option<std::path::PathBuf> {
-        confy::get_configuration_file_path(APP_NAME, Some(CONFIG_NAME))
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.join("keybindings.toml")))
+        Self::config_path().and_then(|p| p.parent().map(|d| d.join("keybindings.toml")))
     }
 }
 

@@ -47,7 +47,9 @@ fn body() {
     let path = Settings::keybindings_path().expect("a config path");
     let config = std::env::var_os("XDG_CONFIG_HOME").expect("sandbox XDG_CONFIG_HOME");
     assert!(
-        path.starts_with(&home) || path.starts_with(&config),
+        path.starts_with(&home)
+            || path.starts_with(&config)
+            || (vix_fileops::user_dirs::is_isolated() && path.starts_with(std::env::temp_dir())),
         "{} is outside the sandbox {}",
         path.display(),
         Path::new(&home).display()

@@ -23,5 +23,9 @@ vix-spellcheck = { path = "../vix-spellcheck", version = "3.0.0", default-featur
 [package.metadata.cargo-machete]
 ignored = ["rust-i18n"]
 
+# Tests never read or write the real ~/.config/vix (crates/vix-fileops user_dirs).
+[dev-dependencies]
+vix-fileops = { workspace = true, features = ["isolated-user-dirs"] }
+
 [lints]
 workspace = true

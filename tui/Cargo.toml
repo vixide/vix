@@ -477,6 +477,8 @@ ropey = { workspace = true }
 unicode-width = { workspace = true }
 
 [dev-dependencies]
+# Tests never read or write the real ~/.config/vix (crates/vix-fileops user_dirs).
+vix-fileops = { workspace = true, features = ["isolated-user-dirs"] }
 clap_mangen = { workspace = true }
 criterion = { workspace = true }
 insta = { workspace = true }

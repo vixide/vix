@@ -28,6 +28,7 @@ pub mod dir_edit;
     all(test, unix)
 ))]
 mod freedesktop_trash;
+pub mod user_dirs;
 
 use std::fs;
 use std::io;

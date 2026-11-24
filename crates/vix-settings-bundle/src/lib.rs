@@ -439,7 +439,14 @@ mod tests {
     /// the test must not touch the filesystem (it would be the user's real
     /// config).
     fn throwaway_config_dir() -> Option<PathBuf> {
-        let xdg = PathBuf::from(std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty())?);
+        // Isolated user dirs live under the temp dir; otherwise only a throwaway
+        // XDG_CONFIG_HOME counts.
+        let root = if vix_fileops::user_dirs::is_isolated() {
+            Some(std::env::temp_dir().into_os_string())
+        } else {
+            std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty())
+        };
+        let xdg = PathBuf::from(root?);
         let cfg = Settings::config_path()?;
         if !cfg.starts_with(&xdg) {
             return None;

@@ -265,7 +265,7 @@ impl Session {
     /// Load the saved sessions, falling back to an empty set on any error.
     #[must_use]
     pub fn load() -> Session {
-        confy::load(APP_NAME, Some(SESSION_NAME)).unwrap_or_default()
+        vix_fileops::user_dirs::load(APP_NAME, SESSION_NAME).unwrap_or_default()
     }
 
     /// Load sessions from an explicit file, falling back to an empty set on
@@ -283,8 +283,7 @@ impl Session {
     /// the read-only `vix --mcp` server (T731).
     #[must_use]
     pub fn load_existing() -> Session {
-        confy::get_configuration_file_path(APP_NAME, Some(SESSION_NAME))
-            .ok()
+        vix_fileops::user_dirs::config_file(APP_NAME, SESSION_NAME)
             .filter(|path| path.is_file())
             .map_or_default(|path| Self::load_existing_from(&path))
     }
@@ -309,8 +308,8 @@ impl Session {
     /// # Errors
     /// Returns a [`confy::ConfyError`] if the file cannot be written/serialized.
     pub fn save(&self) -> Result<(), confy::ConfyError> {
-        confy::store(APP_NAME, Some(SESSION_NAME), self)?;
-        if let Ok(path) = confy::get_configuration_file_path(APP_NAME, Some(SESSION_NAME)) {
+        vix_fileops::user_dirs::store(APP_NAME, SESSION_NAME, self)?;
+        if let Some(path) = vix_fileops::user_dirs::config_file(APP_NAME, SESSION_NAME) {
             vix_fileops::restrict_to_owner(&path);
         }
         Ok(())

@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Tests no longer touch the developer's real `~/.config/vix`: every user-directory lookup (settings, session, DB history and saved queries, and the undo, history, backup, snippet, script and crash directories derived from them) goes through `vix_fileops::user_dirs`, and test builds swap it for a per-process temporary directory through the dev-only `isolated-user-dirs` feature. Normal builds are unchanged.
 - The local gate (`scripts/check`) now runs against throwaway XDG config, data and state directories, so a gate run can no longer rewrite the developer's real `~/.config/vix` settings, session or history (`VIX_HERMETIC_HOME=0` opts out).
 - Fixed: Org priority on a bare `* TODO` or `* DONE` headline no longer produces `* TODO[#A]` without a space, and a column summary of no numeric children no longer renders `-0`.
 - Fixed: in a Git conflict, "next conflict" now moves past the conflict the cursor is in instead of finding it again, and the welcome overlay's `End` key now scrolls to the end.

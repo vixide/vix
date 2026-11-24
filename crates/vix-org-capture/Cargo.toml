@@ -11,6 +11,8 @@ description = "Org-capture: template-driven capture with placeholders and target
 vix-settings = { workspace = true }
 
 [dev-dependencies]
+# Tests never read or write the real ~/.config/vix (crates/vix-fileops user_dirs).
+vix-fileops = { workspace = true, features = ["isolated-user-dirs"] }
 proptest = { workspace = true }
 
 [lints]

@@ -838,7 +838,12 @@ mod tests {
         /// when the config directory is a throwaway one.
         #[test]
         fn the_shell_host_delegates_the_shared_connection_tools_and_refuses_unknown_ones() {
-            let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) else {
+            let root = if vix_fileops::user_dirs::is_isolated() {
+                Some(std::env::temp_dir().into_os_string())
+            } else {
+                std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty())
+            };
+            let Some(xdg) = root else {
                 return;
             };
             if !Settings::config_path().is_some_and(|p| p.starts_with(&xdg)) {

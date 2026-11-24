@@ -231,7 +231,9 @@ fn seed_saved_macro() {
     let (Some(path), Some(home)) = (Settings::macros_path(), std::env::var_os("HOME")) else {
         return;
     };
-    if !path.starts_with(&home) || std::env::var_os(SANDBOX_VAR).is_none() {
+    let inside = path.starts_with(&home)
+        || (vix_fileops::user_dirs::is_isolated() && path.starts_with(std::env::temp_dir()));
+    if !inside || std::env::var_os(SANDBOX_VAR).is_none() {
         return;
     }
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();

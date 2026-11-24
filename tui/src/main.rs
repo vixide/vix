@@ -722,7 +722,12 @@ mod tests {
     /// when the config directory is a throwaway one.
     #[test]
     fn importing_a_bundle_writes_backs_up_and_skips_entries() {
-        let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) else {
+        let root = if vix_fileops::user_dirs::is_isolated() {
+            Some(std::env::temp_dir().into_os_string())
+        } else {
+            std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty())
+        };
+        let Some(xdg) = root else {
             return;
         };
         let Some(macros) = Settings::macros_path().filter(|p| p.starts_with(&xdg)) else {
