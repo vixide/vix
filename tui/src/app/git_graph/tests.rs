@@ -236,6 +236,16 @@ fn a_failing_checkout_is_reported() {
 fn cherry_pick_applies_a_commit_onto_the_current_branch() {
     let (d, mut app) = open("graph-pick");
     select_summary(&mut app, "second");
+    // Read the abbreviation before the pick: afterwards two commits carry this
+    // subject (the original and its copy) and which one comes first depends on
+    // their timestamps, which have one-second resolution.
+    let abbrev = panel(&app)
+        .commits
+        .iter()
+        .find(|c| c.subject == "second")
+        .unwrap()
+        .abbrev
+        .clone();
     app.git_graph_key(ctrl('p'));
     assert!(matches!(
         panel(&app).mode,
@@ -245,13 +255,6 @@ fn cherry_pick_applies_a_commit_onto_the_current_branch() {
         }
     ));
     app.git_graph_key(key(KeyCode::Enter));
-    let abbrev = panel(&app)
-        .commits
-        .iter()
-        .find(|c| c.subject == "second")
-        .unwrap()
-        .abbrev
-        .clone();
     assert_eq!(
         app.status,
         t!("status.git_graph_picked", sha = abbrev).to_string()
