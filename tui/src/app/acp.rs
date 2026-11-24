@@ -1383,3 +1383,527 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// Tests of the ACP host with a do-nothing agent process (`sleep`): protocol
+/// events are fed straight to the host, so nothing talks to a real agent.
+#[cfg(test)]
+#[cfg(unix)]
+mod host_tests {
+    use crate::app::cov4::{app_at, temp};
+    use crate::app::{App, PromptKind, Visible};
+    use crate::settings::Settings;
+    use vix_acp::{Event, OptionKind, PermOption, PlanEntry};
+    use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+
+    fn k(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    /// An app in a trusted temp workspace whose configured agent is `command`.
+    fn agent_app(tag: &str, command: &str) -> App {
+        let dir = temp(tag);
+        let session = dir.join("session.toml");
+        let mut s = vix_session::Session::default();
+        s.set_scripts_trusted(&dir.to_string_lossy(), Some(true));
+        s.save_to(&session).unwrap();
+        let mut settings = Settings::default();
+        settings.ai_agents = vec![command.to_string()];
+        let mut a = crate::app::cov4::app_with(&dir, settings);
+        a.session_path = Some(session);
+        a
+    }
+
+    /// Feed `event` to the running agent as if it had sent it.
+    fn feed(a: &mut App, event: Event) {
+        let mut host = a.acp.take().expect("an agent is running");
+        a.acp_event(&mut host, event);
+        a.acp = Some(host);
+    }
+
+    fn started(tag: &str) -> App {
+        let mut a = agent_app(tag, "sleep 30");
+        a.run_action("ai.agent_start");
+        assert!(a.acp_running(), "{}", a.status);
+        a
+    }
+
+    fn transcript(a: &App) -> String {
+        a.ai_panel
+            .as_ref()
+            .or(a.acp_parked_panel.as_ref())
+            .map_or_default(|p| {
+                p.turns
+                    .iter()
+                    .map(|t| t.text.clone())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+    }
+
+    #[test]
+    fn events_fill_the_transcript_plan_and_tool_list() {
+        let mut a = started("r3-acp-events");
+        feed(
+            &mut a,
+            Event::Ready {
+                session_id: "s-1".into(),
+            },
+        );
+        assert_eq!(a.status, t!("status.acp_ready").to_string());
+        assert_eq!(
+            a.acp_last_session.as_ref().map(|(_, id)| id.as_str()),
+            Some("s-1")
+        );
+        feed(&mut a, Event::Thought("hmm".into()));
+        feed(&mut a, Event::AgentText("Hello ".into()));
+        feed(&mut a, Event::AgentText("world".into()));
+        feed(
+            &mut a,
+            Event::ToolCall {
+                id: "t1".into(),
+                title: "Read file".into(),
+                status: "pending".into(),
+            },
+        );
+        // An update with an empty title keeps the title and changes the status.
+        feed(
+            &mut a,
+            Event::ToolCall {
+                id: "t1".into(),
+                title: String::new(),
+                status: "completed".into(),
+            },
+        );
+        // And one with an empty status keeps the status.
+        feed(
+            &mut a,
+            Event::ToolCall {
+                id: "t1".into(),
+                title: "Read the file".into(),
+                status: String::new(),
+            },
+        );
+        let sections = a.acp_plan_sections().unwrap();
+        assert_eq!(sections[1], vec!["[completed] Read the file".to_string()]);
+        feed(
+            &mut a,
+            Event::Plan(vec![PlanEntry {
+                content: "step one".into(),
+                status: "pending".into(),
+            }]),
+        );
+        assert_eq!(
+            a.acp_plan_sections().unwrap()[0],
+            vec!["[pending] step one".to_string()]
+        );
+        let text = transcript(&a);
+        assert!(text.contains("Hello world"), "{text}");
+        assert!(text.contains("step one"), "{text}");
+        feed(
+            &mut a,
+            Event::TurnEnded {
+                stop_reason: "end_turn".into(),
+            },
+        );
+        assert_eq!(
+            a.status,
+            t!("status.acp_turn_ended", reason = "end_turn").to_string()
+        );
+        feed(&mut a, Event::Failed("boom".into()));
+        assert!(transcript(&a).contains("boom"));
+        // With no chat panel the note falls back to the status line.
+        a.ai_panel = None;
+        a.acp_parked_panel = None;
+        feed(&mut a, Event::Failed("second\nline".into()));
+        assert_eq!(
+            a.status,
+            t!("status.acp_failed", error = "second\nline")
+                .lines()
+                .next()
+                .unwrap()
+        );
+        feed(
+            &mut a,
+            Event::ToolCall {
+                id: "t2".into(),
+                title: "No panel".into(),
+                status: "pending".into(),
+            },
+        );
+        a.run_action("ai.agent_stop");
+        assert!(!a.acp_running());
+        assert_eq!(a.status, t!("status.acp_stopped").to_string());
+        a.run_action("ai.agent_stop");
+        assert_eq!(a.status, t!("status.acp_not_running").to_string());
+    }
+
+    #[test]
+    fn a_permission_request_is_asked_and_defaults_to_deny() {
+        let mut a = started("r3-acp-perm");
+        let options = vec![
+            PermOption {
+                id: "allow".into(),
+                name: "Allow".into(),
+                kind: OptionKind::AllowOnce,
+            },
+            PermOption {
+                id: "no".into(),
+                name: "Reject".into(),
+                kind: OptionKind::RejectOnce,
+            },
+        ];
+        feed(
+            &mut a,
+            Event::Permission {
+                req_id: serde_json::json!(7),
+                title: "Edit main.rs".into(),
+                options,
+            },
+        );
+        a.poll_acp();
+        let p = a.prompt.as_ref().expect("the permission is asked");
+        assert!(p.kind == PromptKind::AcpPermission);
+        assert!(a.acp_parked_panel.is_some(), "the chat panel steps aside");
+        // Esc closes the prompt: the next poll treats it as a denial.
+        a.prompt_key(k(KeyCode::Esc));
+        a.poll_acp();
+        assert!(a.acp.as_ref().unwrap().asking.is_none());
+        assert!(a.ai_panel.is_some(), "the chat panel comes back");
+        // Answering with nothing pending is harmless; a yes goes through.
+        a.submit_acp_permission("y");
+        feed(
+            &mut a,
+            Event::Permission {
+                req_id: serde_json::json!(8),
+                title: "Again".into(),
+                options: vec![PermOption {
+                    id: "allow".into(),
+                    name: "Allow".into(),
+                    kind: OptionKind::AllowOnce,
+                }],
+            },
+        );
+        a.poll_acp();
+        a.submit_acp_permission("YES");
+        assert!(a.acp.as_ref().unwrap().asking.is_none());
+    }
+
+    #[test]
+    fn sending_prompts_needs_a_ready_agent_and_text() {
+        let mut a = agent_app("r3-acp-prompt", "sleep 30");
+        assert!(!a.acp_send_prompt("hi"));
+        assert_eq!(a.status, t!("status.acp_not_running").to_string());
+        a.run_action("ai.agent_prompt");
+        assert_eq!(a.status, t!("status.acp_not_running").to_string());
+        a.run_action("ai.agent_start");
+        a.run_action("ai.agent_start"); // already running: nothing more
+        a.run_action("ai.agent_resume");
+        assert!(!a.acp_send_prompt("   "));
+        assert!(!a.acp_send_prompt("hi"));
+        assert_eq!(a.status, t!("status.acp_not_ready").to_string());
+        // The handshake: `initialize` (request 1), then `session/new` (request 2).
+        for msg in [
+            serde_json::json!({"jsonrpc": "2.0", "id": 1, "result": {}}),
+            serde_json::json!({"jsonrpc": "2.0", "id": 2, "result": {"sessionId": "s"}}),
+        ] {
+            let host = a.acp.as_mut().unwrap();
+            let step = host.client.handle(&msg);
+            for event in step.events {
+                feed(&mut a, event);
+            }
+        }
+        assert_eq!(a.status, t!("status.acp_ready").to_string());
+        a.run_action("ai.agent_prompt");
+        assert!(
+            a.prompt
+                .as_ref()
+                .is_some_and(|p| p.kind == PromptKind::AcpPrompt)
+        );
+        a.prompt_key(k(KeyCode::Char('x')));
+        a.prompt_key(k(KeyCode::Enter));
+        assert!(transcript(&a).contains('x'));
+        assert!(
+            a.acp_parked_panel
+                .as_ref()
+                .or(a.ai_panel.as_ref())
+                .is_some_and(|p| p.busy)
+        );
+    }
+
+    #[test]
+    fn the_plan_tab_follows_the_agent() {
+        let mut a = started("r3-acp-plan");
+        a.run_action("ai.agent_plan");
+        let idx = a.acp_plan_tab().expect("the plan tab opens");
+        assert!(a.editor.tabs[idx].read_only);
+        feed(
+            &mut a,
+            Event::Plan(vec![PlanEntry {
+                content: "first".into(),
+                status: "pending".into(),
+            }]),
+        );
+        assert!(a.editor.tabs[idx].text().contains("first"));
+        a.editor.active = 0;
+        a.run_action("ai.agent_plan");
+        assert_eq!(a.editor.active, idx);
+        assert_eq!(a.acp_terminal_lines().len(), 0);
+        a.run_action("ai.agent_plan_dock");
+        assert!(a.visible.contains(Visible::AGENT_PLAN));
+        a.run_action("ai.agent_stop");
+        a.run_action("ai.agent_plan");
+        assert_eq!(a.status, t!("status.acp_not_running").to_string());
+        assert!(a.acp_plan_sections().is_none());
+    }
+
+    #[test]
+    fn terminals_run_only_after_a_yes_and_unknown_ids_are_refused() {
+        let mut a = started("r3-acp-term");
+        // A command outside the workspace is refused outright.
+        feed(
+            &mut a,
+            Event::TerminalCreate {
+                req_id: serde_json::json!(1),
+                command: "echo".into(),
+                args: vec!["hi".into()],
+                cwd: Some("/".into()),
+                env: Vec::new(),
+                output_limit: None,
+            },
+        );
+        assert_eq!(a.status, t!("status.acp_refused", path = "/").to_string());
+        // A command in the workspace waits for the user.
+        feed(
+            &mut a,
+            Event::TerminalCreate {
+                req_id: serde_json::json!(2),
+                command: "echo".into(),
+                args: vec!["hello".into()],
+                cwd: None,
+                env: Vec::new(),
+                output_limit: Some(1000),
+            },
+        );
+        a.poll_acp();
+        assert!(
+            a.prompt
+                .as_ref()
+                .is_some_and(|p| p.kind == PromptKind::AcpPermission)
+        );
+        a.submit_acp_permission("yes");
+        a.prompt = None;
+        assert!(a.acp.as_ref().unwrap().terminals.contains_key("term-1"));
+        feed(
+            &mut a,
+            Event::TerminalWait {
+                req_id: serde_json::json!(3),
+                terminal_id: "term-1".into(),
+            },
+        );
+        // Wait until the command has exited, then every poll answers waiters.
+        let start = std::time::Instant::now();
+        while !a.acp.as_ref().unwrap().waits.is_empty() && start.elapsed().as_secs() < 10 {
+            a.poll_acp();
+            std::thread::yield_now();
+        }
+        assert_eq!(a.acp.as_ref().unwrap().waits.len(), 0);
+        feed(
+            &mut a,
+            Event::TerminalOutput {
+                req_id: serde_json::json!(4),
+                terminal_id: "term-1".into(),
+            },
+        );
+        assert!(a.acp_terminal_lines().iter().any(|l| l.contains("echo")));
+        feed(
+            &mut a,
+            Event::TerminalKill {
+                req_id: serde_json::json!(5),
+                terminal_id: "term-1".into(),
+            },
+        );
+        feed(
+            &mut a,
+            Event::TerminalRelease {
+                req_id: serde_json::json!(6),
+                terminal_id: "term-1".into(),
+            },
+        );
+        assert!(a.acp.as_ref().unwrap().terminals.is_empty());
+        // A released terminal keeps its final output in the plan view.
+        a.run_action("ai.agent_plan");
+        let idx = a.acp_plan_tab().unwrap();
+        assert!(a.editor.tabs[idx].text().contains("echo"));
+    }
+
+    #[test]
+    fn unknown_terminals_are_refused_and_declined_commands_never_start() {
+        let mut a = started("r3-acp-term2");
+        for ev in [
+            Event::TerminalOutput {
+                req_id: serde_json::json!(9),
+                terminal_id: "nope".into(),
+            },
+            Event::TerminalWait {
+                req_id: serde_json::json!(10),
+                terminal_id: "nope".into(),
+            },
+            Event::TerminalKill {
+                req_id: serde_json::json!(11),
+                terminal_id: "nope".into(),
+            },
+            Event::TerminalRelease {
+                req_id: serde_json::json!(12),
+                terminal_id: "nope".into(),
+            },
+        ] {
+            feed(&mut a, ev);
+        }
+        // A declined command never starts.
+        feed(
+            &mut a,
+            Event::TerminalCreate {
+                req_id: serde_json::json!(13),
+                command: "echo".into(),
+                args: Vec::new(),
+                cwd: None,
+                env: Vec::new(),
+                output_limit: None,
+            },
+        );
+        a.poll_acp();
+        a.submit_acp_permission("n");
+        assert!(a.acp.as_ref().unwrap().terminals.is_empty());
+    }
+
+    #[test]
+    fn the_agent_reads_and_writes_only_inside_the_workspace() {
+        let mut a = started("r3-acp-files");
+        let root = a.root.clone();
+        let at = |name: &str| root.join(name).to_string_lossy().into_owned();
+        std::fs::write(root.join("a.txt"), "one\ntwo\nthree\n").unwrap();
+        std::fs::write(root.join(".env"), "SECRET=1\n").unwrap();
+        assert_eq!(
+            a.acp_read(&at("a.txt"), Some(2), Some(1)).as_deref(),
+            Ok("two\n")
+        );
+        assert!(a.acp_read("/definitely/outside.txt", None, None).is_err());
+        assert_eq!(
+            a.status,
+            t!("status.acp_refused", path = "/definitely/outside.txt").to_string()
+        );
+        assert!(a.acp_read(&at(".env"), None, None).is_err());
+        std::fs::write(root.join("huge.bin"), vec![b'x'; 8 * 1024 * 1024 + 1]).unwrap();
+        assert_eq!(
+            a.acp_read(&at("huge.bin"), None, None),
+            Err("file is too large".into())
+        );
+        assert!(a.acp_read(&at("missing.txt"), None, None).is_err());
+        // An open buffer's unsaved text is what the agent reads.
+        a.open_path(&root.join("a.txt"), false);
+        a.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_content("edited");
+        assert_eq!(
+            a.acp_read(&at("a.txt"), None, None).as_deref(),
+            Ok("edited")
+        );
+        feed(
+            &mut a,
+            Event::ReadFile {
+                req_id: serde_json::json!(20),
+                path: at("a.txt"),
+                line: None,
+                limit: None,
+            },
+        );
+
+        // Writes queue a review; nothing hits the disk.
+        assert!(a.acp_write("/definitely/x.txt", "no").is_some());
+        assert!(a.acp_write(&at("no/such/dir/x.txt"), "no").is_some());
+        std::fs::create_dir(root.join("dir")).unwrap();
+        assert_eq!(
+            a.acp_write(&at("dir"), "x"),
+            Some("only files can be edited".into())
+        );
+        assert_eq!(a.acp_write(&at("new.txt"), "fresh\n"), None);
+        assert!(a.ai_diff.is_some());
+        assert_eq!(
+            a.status,
+            t!("status.acp_edit_pending", path = at("new.txt")).to_string()
+        );
+        assert!(!root.join("new.txt").exists());
+        assert_eq!(
+            a.acp_write(&at("a.txt"), "other"),
+            Some("another edit is awaiting review".into())
+        );
+        a.ai_diff = None;
+        feed(
+            &mut a,
+            Event::WriteFile {
+                req_id: serde_json::json!(21),
+                path: at("a.txt"),
+                content: "z".into(),
+            },
+        );
+        assert!(a.ai_diff.is_some());
+    }
+
+    #[test]
+    fn an_agent_that_exits_is_reported_and_choosers_validate() {
+        let mut exited = agent_app("r3-acp-exit", "true");
+        exited.run_action("ai.agent_start");
+        assert!(exited.acp_running());
+        let start = std::time::Instant::now();
+        while exited.status != t!("status.acp_exited") && start.elapsed().as_secs() < 10 {
+            exited.poll_acp();
+            std::thread::yield_now();
+        }
+        assert_eq!(exited.status, t!("status.acp_exited").to_string());
+        // Resume without exited remembered session, then with an unconfigured one.
+        let mut resumed = agent_app("r3-acp-resume", "sleep 30");
+        resumed.run_action("ai.agent_resume");
+        assert_eq!(resumed.status, t!("status.acp_no_session").to_string());
+        resumed.acp_last_session = Some(("not-configured".into(), "s".into()));
+        resumed.run_action("ai.agent_resume");
+        assert_eq!(resumed.status, t!("status.acp_no_session").to_string());
+        resumed.acp_last_session = Some(("sleep 30".into(), "s9".into()));
+        resumed.run_action("ai.agent_resume");
+        assert!(resumed.acp_running());
+        resumed.run_action("ai.agent_resume"); // already running
+        // The agent chooser: exited bad number starts nothing.
+        let mut chooser = agent_app("r3-acp-choose", "sleep 30");
+        chooser.submit_acp_agent("9");
+        assert_eq!(chooser.status, t!("status.acp_bad_choice").to_string());
+        chooser.submit_acp_agent("x");
+        assert_eq!(chooser.status, t!("status.acp_bad_choice").to_string());
+        chooser.settings.ai_agents = vec!["sleep 30".into(), "sleep 31".into()];
+        chooser.run_action("ai.agent_start");
+        assert!(
+            chooser
+                .prompt
+                .as_ref()
+                .is_some_and(|p| p.kind == PromptKind::AcpAgent)
+        );
+        chooser.submit_acp_agent("2");
+        assert!(chooser.acp_running());
+        // An untrusted workspace never gets exited process; neither does no agent.
+        let mut untrusted = app_at(&temp("r3-acp-untrusted"));
+        untrusted.settings.ai_agents = vec!["sleep 30".into()];
+        untrusted.run_action("ai.agent_start");
+        assert!(!untrusted.acp_running());
+        assert_eq!(untrusted.status, t!("status.acp_untrusted").to_string());
+        untrusted.run_action("ai.agent_resume");
+        assert_eq!(untrusted.status, t!("status.acp_untrusted").to_string());
+        let mut noagent = agent_app("r3-acp-none", "sleep 30");
+        noagent.settings.ai_agents.clear();
+        noagent.run_action("ai.agent_start");
+        assert_eq!(noagent.status, t!("status.acp_no_agent").to_string());
+        noagent.acp_spawn("   ", None);
+        assert_eq!(noagent.status, t!("status.acp_no_agent").to_string());
+        noagent.acp_spawn("definitely-not-exited-program-xyz", None);
+        assert!(!noagent.acp_running());
+    }
+}

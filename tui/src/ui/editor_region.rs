@@ -340,3 +340,106 @@ fn render_image(frame: &mut Frame, area: Rect, proto: &mut crate::editor::ImageP
 fn render_image(_frame: &mut Frame, _area: Rect, proto: &mut crate::editor::ImageProtocol) {
     match *proto {}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Visible;
+    use crate::app::cov4::{app_at, temp};
+    use ratatui::{Terminal, backend::TestBackend, buffer::Buffer};
+
+    fn split_app(tag: &str) -> App {
+        let mut app = app_at(&temp(tag));
+        app.editor
+            .new_tab_with_content(&format!("{}\nshort\n", "w".repeat(120)));
+        app.run_action("view.split_vertical");
+        assert!(app.editor.is_split());
+        app.visible.set(Visible::EXPLORER, false);
+        app.visible.set(Visible::MESSAGES, false);
+        app
+    }
+
+    fn draw(app: &mut App, w: u16, h: u16) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.draw(|f| crate::ui::draw(app, f)).unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    /// Without a scrollbar a split pane keeps its whole width, and the layout
+    /// reports no scrollbar rectangles.
+    #[test]
+    fn split_panes_without_a_scrollbar_use_the_full_width() {
+        let mut with_bar = split_app("r3-split-bar");
+        let mut without = split_app("r3-split-nobar");
+        without.visible.set(Visible::SCROLLBAR, false);
+        draw(&mut with_bar, 100, 24);
+        draw(&mut without, 100, 24);
+        assert!(without.layout.editor.width > with_bar.layout.editor.width);
+        assert_eq!(without.layout.scrollbar, Rect::default());
+        assert_eq!(without.layout.editor_hscrollbar, Rect::default());
+    }
+
+    /// The ruler guide is drawn in split panes over empty cells at the ruler
+    /// column (past the gutter), and not at all once the pane is scrolled
+    /// past it or is too narrow to reach it.
+    #[test]
+    fn the_ruler_guide_is_drawn_in_split_panes_until_scrolled_past() {
+        let mut app = split_app("r3-ruler");
+        app.visible.set(Visible::RULER, false);
+        let off = draw(&mut app, 200, 24);
+        app.visible.set(Visible::RULER, true);
+        let on = draw(&mut app, 200, 24);
+        let changed: Vec<(u16, u16)> = (0..24)
+            .flat_map(|y| (0..200).map(move |x| (x, y)))
+            .filter(|&(x, y)| on[(x, y)].symbol() != off[(x, y)].symbol())
+            .collect();
+        assert!(!changed.is_empty(), "the guide is drawn");
+        assert!(
+            changed
+                .iter()
+                .all(|&(x, y)| on[(x, y)].symbol() == "│" && y > 0)
+        );
+        let columns: std::collections::BTreeSet<u16> = changed.iter().map(|&(x, _)| x).collect();
+        assert_eq!(columns.len(), 2, "one vertical guide per pane: {columns:?}");
+        let gutter = u16::try_from(app.editor.active_tab().unwrap().editor.gutter_width()).unwrap();
+        let focused_guide = usize::from(app.layout.editor.x) + usize::from(gutter) + RULER_COLUMN;
+        assert!(
+            columns.iter().any(|&x| usize::from(x) == focused_guide),
+            "{columns:?} vs {focused_guide}"
+        );
+
+        // Scrolled past the ruler column: on and off look the same.
+        for tab in &mut app.editor.tabs {
+            tab.editor.set_offset_x(RULER_COLUMN + 10);
+        }
+        app.visible.set(Visible::RULER, false);
+        let past_off = draw(&mut app, 200, 24);
+        app.visible.set(Visible::RULER, true);
+        let past_on = draw(&mut app, 200, 24);
+        assert_eq!(past_on, past_off);
+        // A pane too narrow to reach the column draws no guide either.
+        for tab in &mut app.editor.tabs {
+            tab.editor.set_offset_x(0);
+        }
+        let narrow_on = draw(&mut app, 60, 24);
+        app.visible.set(Visible::RULER, false);
+        let narrow_off = draw(&mut app, 60, 24);
+        assert_eq!(narrow_on, narrow_off);
+    }
+
+    /// An image in a split pane renders through its protocol without
+    /// disturbing the pane layout.
+    #[cfg(feature = "image")]
+    #[test]
+    fn an_image_in_a_split_pane_renders_and_returns_its_text_area() {
+        let mut app = split_app("r3-split-image");
+        let picker = ratatui_image::picker::Picker::halfblocks();
+        let proto = picker.new_resize_protocol(image::DynamicImage::new_rgb8(8, 8));
+        app.editor
+            .open_image(std::path::Path::new("/tmp/vix-r3.png"), proto);
+        assert!(app.editor.active_tab().unwrap().is_image());
+        let buf = draw(&mut app, 100, 24);
+        assert!(app.layout.editor.width > 0);
+        assert_eq!(buf.area.width, 100);
+    }
+}

@@ -994,3 +994,152 @@ mod hint_tests {
         assert!(rows.last().unwrap().ends_with("Esc close"), "{rows:?}");
     }
 }
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+    use crate::app::cov4::{app_at, temp};
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn rows(app: &mut App, w: u16, h: u16) -> Vec<String> {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.draw(|f| draw(app, f)).unwrap();
+        let buf = terminal.backend().buffer().clone();
+        (0..h)
+            .map(|y| (0..w).map(|x| buf[(x, y)].symbol().to_string()).collect())
+            .collect()
+    }
+
+    fn has(rows: &[String], needle: &str) -> bool {
+        rows.iter().any(|r| r.contains(needle))
+    }
+
+    /// The query-replace, structural-replace, macro and spelling overlays each
+    /// draw their own bar or list over the editor.
+    #[test]
+    fn the_replace_macro_and_spelling_overlays_draw() {
+        let mut app = app_at(&temp("r3-ui-overlays"));
+        app.editor.new_tab_with_content("alpha beta alpha\n");
+        app.query_replace = Some(crate::app::QueryReplace {
+            re: regex::Regex::new("alpha").unwrap(),
+            template: "omega".into(),
+            regex: false,
+            current: (0, 5),
+            replaced: 3,
+            label: "alpha".into(),
+        });
+        let r = rows(&mut app, 100, 24);
+        assert!(has(&r, &t!("ui.qr_replace")), "{r:?}");
+        app.query_replace = None;
+
+        app.structural_replace = Some(crate::app::StructuralReplace {
+            pattern: vix_structural_replace::Pattern::compile("foo($X)").unwrap(),
+            template: "bar($X)".into(),
+            current: (0, 3),
+            bounds: None,
+            replaced: 2,
+            label: "foo($X)".into(),
+        });
+        let r = rows(&mut app, 100, 24);
+        assert!(has(&r, "«foo($X)»"), "{r:?}");
+        app.structural_replace = None;
+
+        app.chooser = Some(crate::app::chooser::Chooser::Macro(
+            crate::app::MacroChooser {
+                macros: vec![crate::macros::Macro {
+                    name: "wrap-in-quotes".into(),
+                    keys: vec!["\"".into()],
+                }],
+                selected: 0,
+            },
+        ));
+        let r = rows(&mut app, 100, 24);
+        assert!(has(&r, "wrap-in-quotes"), "{r:?}");
+        app.chooser = None;
+
+        app.spell_suggest = Some(crate::app::SpellSuggest {
+            word: "teh".into(),
+            span: (0, 3),
+            suggestions: vec!["the".into(), "tea".into()],
+            selected: 1,
+        });
+        let r = rows(&mut app, 100, 24);
+        assert!(has(&r, "tea"), "{r:?}");
+    }
+
+    /// Scroll-bar position helpers return zero for an empty track or range,
+    /// and a collapsed horizontal bar draws nothing.
+    #[test]
+    fn scrollbar_helpers_handle_empty_tracks() {
+        let area = Rect::new(0, 0, 1, 10);
+        assert_eq!(scrollbar_pos_from_row(area, 5, 0), 0);
+        assert_eq!(scrollbar_pos_from_row(Rect::new(0, 0, 1, 0), 5, 9), 0);
+        assert_eq!(scrollbar_pos_from_row(area, 9, 9), 9);
+        let bar = Rect::new(0, 0, 10, 1);
+        assert_eq!(scrollbar_pos_from_col(bar, 5, 0), 0);
+        assert_eq!(scrollbar_pos_from_col(Rect::new(0, 0, 0, 1), 5, 9), 0);
+        assert_eq!(scrollbar_pos_from_col(bar, 9, 9), 9);
+        let mut terminal = Terminal::new(TestBackend::new(10, 3)).unwrap();
+        terminal
+            .draw(|f| draw_hscrollbar(f, Rect::new(0, 0, 0, 1), 0, 5))
+            .unwrap();
+        terminal
+            .draw(|f| draw_hscrollbar(f, Rect::new(0, 0, 4, 0), 0, 5))
+            .unwrap();
+    }
+
+    /// Menu geometry: an unknown menu index has no dropdown; git badges use a
+    /// distinct color per change kind.
+    #[test]
+    fn menu_dropdown_of_a_missing_menu_is_empty_and_git_badges_have_colors() {
+        use crate::git::Change;
+        let app = app_at(&temp("r3-ui-menu"));
+        let defs = app.menu.defs();
+        let area = Rect::new(0, 0, 100, 30);
+        let bar = Rect::new(0, 0, 100, 1);
+        assert_eq!(
+            menu_dropdown_rect_for(defs, area, bar, defs.len() + 5, false),
+            Rect::default()
+        );
+        let colors: std::collections::BTreeSet<String> = [
+            Change::Added,
+            Change::Modified,
+            Change::Deleted,
+            Change::Renamed,
+            Change::Conflicted,
+        ]
+        .into_iter()
+        .map(|c| format!("{:?}", git_change_color(c)))
+        .collect();
+        assert_eq!(colors.len(), 5);
+        assert_eq!(
+            git_change_color(Change::Untracked),
+            git_change_color(Change::Added)
+        );
+    }
+
+    /// With the menu open and a submenu or sub-submenu showing, a mirrored
+    /// layout right-aligns each dropdown's rows.
+    #[test]
+    fn reflecting_panels_covers_the_open_menu_levels() {
+        let mut app = app_at(&temp("r3-ui-reflect"));
+        app.layout.explorer = Rect::new(0, 1, 20, 10);
+        app.layout.menu_dropdown = Rect::new(0, 1, 20, 6);
+        app.layout.submenu_dropdown = Rect::new(20, 1, 20, 6);
+        app.layout.subsubmenu_dropdown = Rect::new(40, 1, 20, 6);
+        app.menu.open_index(0);
+        app.menu.sub_open = true;
+        app.menu.sub = Some(0);
+        app.menu.subsub_open = true;
+        app.menu.subsub = Some(0);
+        let mut buf = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 80, 12));
+        for x in 21..39 {
+            buf[(x, 2)].set_symbol(if x == 21 { "A" } else { " " });
+        }
+        reflect_panels(&app, &mut buf);
+        // The submenu's row text moved to the right edge of its inner area.
+        assert_eq!(buf[(21, 2)].symbol(), " ");
+        assert_eq!(buf[(38, 2)].symbol(), "A");
+        assert_eq!(buf[(0, 11)].symbol(), " ");
+    }
+}
