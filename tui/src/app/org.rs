@@ -1421,7 +1421,9 @@ impl App {
 
     /// The current local time as an Org timestamp (`YYYY-MM-DD Day HH:MM`).
     fn org_timestamp() -> String {
-        jiff::ZonedDateTime::now().strftime("%Y-%m-%d %a %H:%M").to_string()
+        jiff::ZonedDateTime::now()
+            .strftime("%Y-%m-%d %a %H:%M")
+            .to_string()
     }
 
     /// Org clock-in: insert a `CLOCK: [now]` entry at the cursor.
