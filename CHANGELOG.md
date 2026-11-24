@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-24
+
 ### Changed
 
 - **License:** the Creative Commons option is now CC-BY-SA-4.0 (Attribution-ShareAlike 4.0 International), replacing CC-BY-NC-SA-4.0 (which added NonCommercial). Every one of the seven options now permits commercial use. The SPDX expression is `Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-SA-4.0` in `Cargo.toml`, the crates.io package, `CITATION.cff`, `llms.json`, `LICENSE`, `LICENSE.md` and the docs, and the full text moved from `LICENSES/cc-by-nc-sa-4.0/` to `LICENSES/cc-by-sa-4.0/` (the official text, as SPDX publishes it). Releases already published keep the license options they were published with.
