@@ -7,7 +7,7 @@ Vix™ and Vix IDE™ are licensed under any of:
 - GPL 2.0-only
 - GPL 3.0-only
 - UK Open Government Licence v3.0 (OGL-UK-3.0)
-- Creative Commons Attribution Non Commercial Share Alike 4.0 International (CC-BY-NC-SA-4.0)
+- Creative Commons Attribution Share Alike 4.0 International (CC-BY-SA-4.0)
 
 Vix™ and Vix IDE™ are trademarks.
 
@@ -20,7 +20,7 @@ The seven licenses above apply to Vix's **source code and documentation**: every
 **distributed binary** also contains every third-party crate it links, so it
 can be offered only under those of the first five (Apache-2.0, BSD-3-Clause,
 MIT, GPL-2.0-only, GPL-3.0-only) that all of its linked code allows. The two
-newest licenses, OGL-UK-3.0 and CC-BY-NC-SA-4.0, are information and
+newest licenses, OGL-UK-3.0 and CC-BY-SA-4.0, are information and
 documentation licenses: they are offered for Vix's own source and documentation
 only, and never for a distributed binary, so `scripts/check-binary-licenses`
 does not compute them. Each binary therefore respects the licenses of its framework (the

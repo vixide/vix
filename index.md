@@ -10,7 +10,7 @@ database workbench come built in, so Vix is useful the moment it opens.
 
 [![CI](https://github.com/vixide/vix/actions/workflows/ci.yml/badge.svg)](https://github.com/vixide/vix/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/vix-tui.svg)](https://crates.io/crates/vix-tui)
-[![License: Apache-2.0 / BSD-3-Clause / MIT / GPL / OGL-UK-3.0 / CC-BY-NC-SA-4.0](https://img.shields.io/badge/license-Apache--2.0%20%7C%20BSD--3--Clause%20%7C%20MIT%20%7C%20GPL%20%7C%20OGL--UK--3.0%20%7C%20CC--BY--NC--SA--4.0-blue.svg)](LICENSE.md)
+[![License: Apache-2.0 / BSD-3-Clause / MIT / GPL / OGL-UK-3.0 / CC-BY-SA-4.0](https://img.shields.io/badge/license-Apache--2.0%20%7C%20BSD--3--Clause%20%7C%20MIT%20%7C%20GPL%20%7C%20OGL--UK--3.0%20%7C%20CC--BY--SA--4.0-blue.svg)](LICENSE.md)
 [![GitHub Discussions](https://img.shields.io/github/discussions/vixide/vix?style=social)](https://github.com/vixide/vix/discussions)
 
 [Website](https://vixide.github.io/) ·
@@ -48,7 +48,7 @@ quit. Other ways to install, including Windows, Linux packages and
 | **21 themes**       | Plus a theme editor and your own JSON themes                     |
 | **15 languages**    | The whole interface, from Arabic to Welsh                        |
 | **0 `unsafe`**      | `unsafe` Rust is forbidden in every crate                        |
-| **Your choice of 7 licenses** | Apache-2.0, BSD-3-Clause, MIT, GPL-2.0, GPL-3.0, OGL-UK-3.0 or CC-BY-NC-SA-4.0 |
+| **Your choice of 7 licenses** | Apache-2.0, BSD-3-Clause, MIT, GPL-2.0, GPL-3.0, OGL-UK-3.0 or CC-BY-SA-4.0 |
 
 ## Why Vix
 
@@ -327,8 +327,10 @@ run it on the remote machine as you would any other. Or keep Vix local and
 open the remote folder over SSH (`vix ssh://host/path`); that is
 [experimental](docs/remote-editing/index.md).
 
-**Can my company use it?** Pick whichever of the licenses suits you; the five software licenses
-permit commercial use, and CC-BY-NC-SA-4.0 does not.
+**Can my company use it?** Yes. Pick whichever of the licenses suits you; every one of them
+permits commercial use. The two newer licenses, OGL-UK-3.0 and CC-BY-SA-4.0, cover Vix's
+source code and documentation (not binaries), and CC-BY-SA-4.0 asks that adaptations be shared
+under the same license.
 For locked-down machines, the minimal build makes no network connections
 and starts no other program.
 
@@ -404,8 +406,8 @@ helps other people find it.
 
 Vix's source and documentation are licensed under any of Apache-2.0,
 BSD-3-Clause, MIT, GPL-2.0-only, GPL-3.0-only, OGL-UK-3.0 (UK Open Government
-Licence v3.0), or CC-BY-NC-SA-4.0 (Creative Commons Attribution
-Non Commercial Share Alike 4.0 International), at your option; each
+Licence v3.0), or CC-BY-SA-4.0 (Creative Commons Attribution
+Share Alike 4.0 International), at your option; each
 distributed binary declares the subset of the first five that its linked
 dependencies allow. See [`LICENSE.md`](LICENSE.md).
 
