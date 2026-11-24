@@ -6301,6 +6301,7 @@ name = "vix-editor"
 version = "3.0.0"
 dependencies = [
  "bitflags 2.13.2",
+ "image",
  "proptest",
  "ratatui",
  "ratatui-core",

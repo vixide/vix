@@ -140,4 +140,14 @@ mod tests {
         assert_eq!(to_wire("MSH|a\r\nPID|1\n\nPV1|x\n"), b"MSH|a\rPID|1\rPV1|x");
         assert_eq!(to_wire("\u{0B}MSH|a\r\u{1C}\r"), b"MSH|a");
     }
+
+    #[test]
+    fn too_large_error_has_a_fixed_message() {
+        assert_eq!(
+            MllpError::TooLarge.to_string(),
+            "MLLP frame exceeds the size limit"
+        );
+        let boxed: Box<dyn std::error::Error> = Box::new(MllpError::TooLarge);
+        assert!(boxed.to_string().contains("size limit"));
+    }
 }

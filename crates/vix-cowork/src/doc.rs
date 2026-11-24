@@ -768,4 +768,14 @@ mod tests {
         assert_eq!(buf, "one 2 three");
         assert_eq!(h.replace_all("one 2 three").unwrap(), None);
     }
+
+    #[test]
+    fn debug_reports_chars_and_cap_and_cap_is_the_configured_one() {
+        let doc = SharedDoc::host(A, "héllo", 1234).unwrap();
+        assert_eq!(doc.cap(), 1234);
+        let shown = format!("{doc:?}");
+        assert!(shown.starts_with("SharedDoc"));
+        assert!(shown.contains("chars: 5"), "{shown}");
+        assert!(shown.contains("cap: 1234"), "{shown}");
+    }
 }

@@ -716,4 +716,37 @@ mod tests {
         let c = cli(&[]);
         assert!(!handle_settings_bundle_flags(&c, &Settings::default()));
     }
+
+    /// Importing a bundle writes each recognised entry to the config
+    /// directory (backing up what was there) and skips the rest. Only runs
+    /// when the config directory is a throwaway one.
+    #[test]
+    fn importing_a_bundle_writes_backs_up_and_skips_entries() {
+        let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) else {
+            return;
+        };
+        let Some(macros) = Settings::macros_path().filter(|p| p.starts_with(&xdg)) else {
+            return;
+        };
+        let dir = temp("import-ok");
+        let bundle = dir.join("bundle.json");
+        std::fs::write(
+            &bundle,
+            r#"{"format":1,"entries":{"macros.toml":"","unknown.bin":"x"}}"#,
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(&macros);
+        let backup = macros.with_extension("toml.bak");
+        let _ = std::fs::remove_file(&backup);
+
+        let c = cli(&["--import-settings", bundle.to_str().unwrap()]);
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        assert!(macros.is_file(), "the recognised entry was written");
+        assert!(!backup.exists(), "nothing to back up the first time");
+        // Again: the existing file is backed up first.
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        assert!(backup.is_file(), "the previous file moved aside as .bak");
+        let _ = std::fs::remove_file(&macros);
+        let _ = std::fs::remove_file(&backup);
+    }
 }

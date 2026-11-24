@@ -1448,4 +1448,210 @@ mod tests {
         assert!(ed.has_folds());
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    /// Mark the active tab's current text as the text last synced to the server.
+    fn mark_synced(app: &mut App, file: &Path) {
+        let rev = app.editor.active_tab().unwrap().editor.revision();
+        app.lsp_synced.insert(file.to_path_buf(), rev);
+    }
+
+    #[test]
+    fn lsp_commands_with_no_file_open_change_nothing() {
+        let (mut app, dir, _f) = app_with_file("nofile", "a.rs", "fn a() {}\n");
+        app.editor.tabs.clear();
+        app.status = "sentinel".to_string();
+        let messages = app.messages.items.len();
+        app.apply_semantic_tokens(&[]);
+        app.apply_document_highlights(&[]);
+        app.apply_selection_range(&[]);
+        app.lsp_restart();
+        app.lsp_show_log();
+        app.lsp_hover();
+        app.lsp_complete();
+        app.lsp_format();
+        app.lsp_sync_active();
+        app.goto_diagnostic(true);
+        app.goto_diagnostic(false);
+        app.refresh_diagnostic_marks();
+        assert_eq!(app.status, "sentinel", "no file, no feedback either");
+        assert!(
+            app.editor.tabs.is_empty(),
+            "nothing opened a log or panel tab"
+        );
+        assert_eq!(app.messages.items.len(), messages);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn with_no_language_server_the_lsp_commands_say_it_is_inactive() {
+        type Command = fn(&mut App);
+        let (mut app, dir, _f) = app_with_file("inactive", "a.txt", "hello\n");
+        let inactive = t!("status.lsp_inactive").to_string();
+        let commands: [(&str, Command); 6] = [
+            ("restart", App::lsp_restart),
+            ("log", App::lsp_show_log),
+            ("hover", App::lsp_hover),
+            ("complete", App::lsp_complete),
+            ("format", App::lsp_format),
+            ("signature", App::lsp_signature_help),
+        ];
+        for (name, run) in commands {
+            app.status.clear();
+            run(&mut app);
+            assert_eq!(app.status, inactive, "{name}");
+        }
+        // Closing a file the server never saw does nothing.
+        app.lsp_close(Path::new("/never/opened.rs"));
+        // And so does pushing breakpoints with no debug session.
+        app.push_breakpoints(Path::new("/never/opened.rs"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn with_no_diagnostics_the_issue_commands_and_the_panel_say_so() {
+        let (mut app, dir, _f) = app_with_file("nodiag", "a.rs", "fn a() {}\n");
+        let none = t!("status.no_diagnostics").to_string();
+        for forward in [true, false] {
+            app.status.clear();
+            app.goto_diagnostic(forward);
+            assert_eq!(app.status, none);
+        }
+        app.status.clear();
+        app.open_diagnostics_panel();
+        assert_eq!(app.status, none);
+        assert!(app.workspace_search.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn linking_and_completion_helpers_report_when_the_project_has_nothing_to_offer() {
+        let (mut app, dir, _f) = app_with_file("nothing", "a.rs", "fn a() {}\n");
+        app.open_node_link_completion();
+        assert_eq!(app.status, t!("status.roam_no_nodes").to_string());
+        for mailto in [true, false] {
+            app.status.clear();
+            app.open_org_contact_link_completion(mailto);
+            assert_eq!(app.status, t!("status.org_contacts_no_matches").to_string());
+        }
+        assert!(app.completion.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn formatting_edits_apply_tail_first_to_the_synced_tab_and_stale_ones_are_dropped() {
+        let (mut app, dir, file) = app_with_file("fmt", "a.rs", "fn  a( ) {}\nlet x=1;\n");
+        mark_synced(&mut app, &file);
+        app.status.clear();
+        // Two edits given head-first: `x=1` -> `x = 1` on line 1, then the
+        // doubled space in line 0.
+        app.apply_lsp_edits(
+            &file,
+            &[
+                (range(0, 2, 0, 4), " ".to_string()),
+                (range(1, 4, 1, 7), "x = 1".to_string()),
+            ],
+        );
+        assert_eq!(text(&app), "fn a( ) {}\nlet x = 1;\n");
+        assert_eq!(app.status, t!("status.formatted").to_string());
+        assert!(app.editor.active_tab().unwrap().dirty);
+
+        // The buffer moved on after that sync: a reply computed earlier is stale.
+        app.on_key(crate::app::cov4::key('Z'));
+        app.status.clear();
+        app.apply_lsp_edits(&file, &[(range(0, 0, 0, 2), "XX".to_string())]);
+        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
+        assert!(!text(&app).starts_with("XX"));
+        // A reply for a file that is not open at all is stale as well.
+        app.status.clear();
+        app.apply_lsp_edits(Path::new("/not/open.rs"), &[]);
+        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn format_on_save_writes_the_formatted_buffer_and_a_stale_reply_cancels_it() {
+        let (mut app, dir, file) = app_with_file("fmt-save", "a.rs", "fn  a() {}\n");
+        mark_synced(&mut app, &file);
+        app.format_save_pending = Some(file.clone());
+        app.apply_lsp_edits(&file, &[(range(0, 2, 0, 4), " ".to_string())]);
+        assert!(app.format_save_pending.is_none());
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "fn a() {}\n");
+        assert!(
+            !app.editor.active_tab().unwrap().dirty,
+            "saved after formatting"
+        );
+
+        // A stale reply cancels the pending format-on-save without writing.
+        app.on_key(crate::app::cov4::key('Z'));
+        app.format_save_pending = Some(file.clone());
+        app.apply_lsp_edits(&file, &[(range(0, 0, 0, 1), "F".to_string())]);
+        assert!(app.format_save_pending.is_none());
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "fn a() {}\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn linked_editing_prompts_with_the_shared_text_only_for_the_active_synced_file() {
+        let (mut app, dir, file) = app_with_file("linked", "a.html", "<div></div>\n");
+        // Not synced yet: the linked ranges are stale.
+        app.status.clear();
+        app.begin_linked_edit(&file, &[range(0, 1, 0, 4), range(0, 7, 0, 10)]);
+        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
+        assert!(app.prompt.is_none());
+
+        mark_synced(&mut app, &file);
+        app.begin_linked_edit(&file, &[range(0, 1, 0, 4), range(0, 7, 0, 10)]);
+        assert_eq!(app.linked_ranges, Some(vec![(1, 4), (7, 10)]));
+        let prompt = app.prompt.as_ref().unwrap();
+        assert!(matches!(prompt.kind, PromptKind::LinkedEdit));
+        assert_eq!(prompt.input, "div", "seeded with the first range's text");
+
+        // A different file than the active one is stale too.
+        app.prompt = None;
+        app.status.clear();
+        app.begin_linked_edit(Path::new("/elsewhere.html"), &[range(0, 1, 0, 4)]);
+        assert_eq!(app.status, t!("status.lsp_edits_stale").to_string());
+        assert!(app.prompt.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_workspace_edit_changes_open_buffers_in_memory_and_closed_files_on_disk() {
+        let (mut app, dir, file) = app_with_file("ws-edit", "a.rs", "let old = 1;\n");
+        let closed = dir.join("b.rs");
+        std::fs::write(&closed, "use old;\nold();\n").unwrap();
+        let unchanged = dir.join("c.rs");
+        std::fs::write(&unchanged, "nothing here\n").unwrap();
+        let missing = dir.join("gone.rs");
+        app.apply_workspace_edit(&[
+            (file.clone(), vec![(range(0, 4, 0, 7), "new".to_string())]),
+            (
+                closed.clone(),
+                vec![
+                    (range(0, 4, 0, 7), "new".to_string()),
+                    (range(1, 0, 1, 3), "new".to_string()),
+                ],
+            ),
+            (unchanged.clone(), vec![(range(0, 0, 0, 0), String::new())]),
+            (missing.clone(), vec![(range(0, 0, 0, 1), "x".to_string())]),
+            (dir.join("empty.rs"), Vec::new()),
+        ]);
+        assert_eq!(text(&app), "let new = 1;\n");
+        assert!(
+            app.editor.active_tab().unwrap().dirty,
+            "the open buffer is dirty, not saved"
+        );
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "let old = 1;\n");
+        assert_eq!(
+            std::fs::read_to_string(&closed).unwrap(),
+            "use new;\nnew();\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&unchanged).unwrap(),
+            "nothing here\n"
+        );
+        assert!(!missing.exists());
+        assert_eq!(app.status, t!("status.renamed_in", n = 2).to_string());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -165,4 +165,43 @@ mod tests {
         assert_eq!(p.selected, 0);
         assert!(!p.select_index(999));
     }
+
+    #[test]
+    fn navigation_moves_within_the_filtered_rows_and_clamps() {
+        let mut p = panel();
+        let last = p.len() - 1;
+        p.selected = 0;
+        p.up();
+        assert_eq!(p.selected, 0);
+        p.down();
+        assert_eq!(p.selected, 1);
+        p.page_down(1000);
+        assert_eq!(p.selected, last);
+        p.page_up(1000);
+        assert_eq!(p.selected, 0);
+        assert!(p.select_index(2));
+        assert_eq!(p.selected, 2);
+        assert!(!p.select_index(last + 1));
+        assert_eq!(p.selected, 2, "a miss leaves the highlight alone");
+        p.selected = last;
+        p.ensure_visible(2);
+        assert_eq!(p.scroll, last - 1);
+    }
+
+    #[test]
+    fn filtering_resets_selection_and_an_empty_match_has_no_selected_row() {
+        let mut p = panel();
+        p.selected = 3;
+        p.scroll = 2;
+        p.push('z');
+        p.push('q');
+        p.push('x');
+        assert_eq!((p.selected, p.scroll), (0, 0));
+        assert!(p.is_empty());
+        assert!(p.selected_row().is_none());
+        p.selected = 2;
+        p.scroll = 1;
+        p.backspace();
+        assert_eq!((p.selected, p.scroll), (0, 0));
+    }
 }
