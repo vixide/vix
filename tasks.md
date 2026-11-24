@@ -10388,6 +10388,177 @@ principle, so it waits for a deliberate decision.
   inserted by a click and by Enter on the same day. Include an empty leading
   cell and a month with a sixth row. [Calendar layout](crates/vix-calendar-panel/spec/index.md#layout)
 
+## Run Y — user feedback (2026-11-24)
+
+Seven requests from users. Each starts with its spec section, then the code, as
+every task does; none is started.
+
+- [ ] **T798 — Reopen a remote SSH workspace in its dev container.** Today
+  **OC → Reopen in Dev Container** (`oc.devcontainer_reopen`) works only on a
+  *local* workspace, with Docker and the `devcontainer` CLI on this machine
+  ([`spec/remote-editing`](spec/remote-editing/index.md), Dev containers). The
+  request is the VS Code combination: connect to a host over SSH, find the
+  `devcontainer.json` in the remote workspace, and open the workspace inside
+  that host's container. The `devcontainer up` has to run **on the remote
+  host**, against the remote path, because the workspace is bind-mounted from
+  the host's disk; the SSH authority's `command()` already runs a process
+  there. Then connect to the container id it reports through a transport that
+  chains the two hops (`ssh … HOST ENGINE exec -i [-u U] CTR /bin/sh -c …`):
+  a new `Transport` beside `SshTransport` and `ExecTransport` in
+  [`crates/vix-authority/spec/container`](crates/vix-authority/spec/container/index.md),
+  so the scripts, the remote agent, trust, reconnect, tasks, git, search, LSP
+  and DAP all follow with no second copy. Keep the existing rules: ask before
+  building (the project's Dockerfile and lifecycle commands run; the same
+  250 ms key guard), say so with the install command when the `devcontainer`
+  CLI or the engine is missing **on the host**, trust keyed by host, container
+  and path, and the status bar naming both hops. Specify first how a lost SSH
+  connection and a stopped container are told apart and reconnected
+  separately. Tests: the fake engine behind the fake `ssh` of the existing SSH
+  conformance suite, so the whole path runs without a network; an opt-in real
+  run (`VIX_TEST_SSH` plus a Docker host). Document under
+  [`docs/remote-editing`](docs/remote-editing/index.md).
+- [ ] **T799 — CMake projects: configure, build, and choose the build and
+  launch targets.** `vix-tasks` has no CMake support at all
+  ([`crates/vix-tasks/spec/index.md`](crates/vix-tasks/spec/index.md)). Add a
+  `cmake` project type, detected by `CMakeLists.txt`, with these pieces, each
+  its own slice:
+  1. **Presets and configure.** Read `CMakePresets.json` and
+     `CMakeUserPresets.json` (`cmake --list-presets`), choose the configure
+     preset and the build type, run `cmake --preset …` (or `cmake -S . -B
+     build`), keep the choice per workspace in `.vix/project.toml`.
+  2. **Targets from the CMake File API,** not by scraping `--target help`:
+     write the `codemodel-v2` and `cache-v2` queries under
+     `<build>/.cmake/api/v1/query/`, read the reply, and list targets with their
+     type (executable, library, utility), sources and artifact paths.
+  3. **Select the build target and the launch target.** A picker for each (the
+     build target may be `all`; the launch target is an executable), shown in
+     the status bar, persisted per preset. Per-launch arguments, working
+     directory and environment live in `.vix/project.toml`.
+  4. **Build, clean, install, test.** `cmake --build … --target T` (with `-j`),
+     compiler diagnostics parsed into the Messages dock with jump-to-error,
+     `ctest` with the test list and a run-at-point, all through the existing
+     task runner, so output, cancel and the project lifecycle chords
+     (`C-c p …`) behave as for other project types.
+  5. **Run and debug the launch target:** build first, then start the artifact
+     in the terminal or under the existing DAP client ([`spec/dap`](crates/vix-dap/spec/index.md)).
+  6. **Language server:** set `CMAKE_EXPORT_COMPILE_COMMANDS` and point
+     `clangd` at the build directory's `compile_commands.json`.
+  Menu: **Project → CMake**, with actions and i18n in the 15 locales like any
+  new surface. Tests: a stub `cmake` script that writes a File API reply, so
+  presets, target listing and selection are tested without CMake installed,
+  and an opt-in run against a real `cmake` (skipped when it is not on `PATH`).
+- [ ] **T800 — Git monorepos: scope the work and the commands to where you are.**
+  The request is unspecific, so this begins as **research**: read the editor
+  against a large monorepo (a 100,000-file tree with many subprojects, a
+  sparse checkout, a partial clone, `core.fsmonitor`) and write down what is
+  slow or wrong, ranked, before changing anything. Candidates, from what the
+  specs say exists: subprojects are found and the lifecycle acts on the
+  *nearest* one ([`crates/vix-tasks/spec/index.md`](crates/vix-tasks/spec/index.md),
+  Subprojects) but search, the file finder, git log, blame and status are
+  still workspace-wide; the LSP **multi-root workspace** is listed as
+  deferred ([`crates/vix-lsp/spec/index.md`](crates/vix-lsp/spec/index.md));
+  `git status` should use `--no-optional-locks` and honor `core.untrackedCache`
+  and the file-system monitor; a sparse checkout's out-of-cone paths must not
+  look deleted; and a `CODEOWNERS` file could say who owns the open file. Each
+  finding the research confirms becomes its own task with a measured before
+  and after. The research writes its numbers into `spec/git-monorepos`.
+
+- [ ] **T801 — Remote SSH on Alpine and other musl hosts: give them the agent.**
+  The shell-script layer already runs on BusyBox and Alpine (the conformance
+  suite passes against an `alpine` container and an `alpine:3` pod,
+  [`crates/vix-authority/spec/container`](crates/vix-authority/spec/container/index.md)).
+  What does not is the **remote agent**
+  ([`crates/vix-authority/spec/agent`](crates/vix-authority/spec/agent/index.md)):
+  `Upload` sends only this process's own executable and only when the remote's
+  `uname -sm` names the same operating system and architecture, so a macOS or
+  Windows client never gets an agent on a Linux host, and a glibc Linux client's
+  upload to an Alpine host fails the verification run (the spec notes "a
+  glibc/musl ABI mismatch shows up here") and falls back to the slow scripts.
+  A statically linked musl build runs on glibc and musl hosts alike
+  ([`.cargo/config.toml`](.cargo/config.toml), T670; `musl-alpine-check.yml`),
+  so let the client send **that** to a Linux remote. First decide and write
+  down, in the agent spec, where the binary comes from (the matching-version
+  release asset for the remote's architecture, fetched once and cached) and
+  **why it may be trusted**: the checksum must come from a source the asset
+  itself cannot forge, and with none available the answer is the script
+  fallback, never an unverified binary. Detect musl and the architecture in the
+  existing "find" round trip (`uname -m`, `/etc/alpine-release` or
+  `ls /lib/ld-musl-*`), keep the SHA-256 and `--version --json` checks, and say
+  in the status bar which mode a host is in. Also sweep the scripts for
+  BusyBox/musl differences the container tests cannot see (`find`, `sed`,
+  `readlink`, `stat -L`, `mktemp`, a login shell that is `ash`). Tests: the fake
+  engine for the selection logic; the real `alpine` run extended to the agent
+  (`VIX_TEST_DOCKER=1`), and a GitHub-only job with an `sshd` Alpine container.
+
+- [ ] **T802 — TextMate/VS Code snippet variables.** No variable resolves
+  today: in snippet files `$NAME` is literal text, and in LSP snippet
+  completions a variable becomes its default text or nothing
+  ([`crates/vix-snippets/spec`](crates/vix-snippets/spec/index.md),
+  [`crates/vix-lsp/spec`](crates/vix-lsp/spec/index.md), Snippet completions).
+  Resolve the standard set in the one shared tabstop engine
+  (`vix-snippet-tool`), so both paths get it: `TM_SELECTED_TEXT`,
+  `TM_CURRENT_LINE`, `TM_CURRENT_WORD`, `TM_LINE_INDEX`, `TM_LINE_NUMBER`,
+  `TM_FILENAME`, `TM_FILENAME_BASE`, `TM_DIRECTORY`, `TM_FILEPATH`,
+  `RELATIVE_FILEPATH`, `CLIPBOARD`, `WORKSPACE_NAME`, `WORKSPACE_FOLDER`,
+  `CURSOR_INDEX`, `CURSOR_NUMBER`, the date and time set (`CURRENT_YEAR`,
+  `CURRENT_YEAR_SHORT`, `CURRENT_MONTH`, `CURRENT_MONTH_NAME`,
+  `CURRENT_MONTH_NAME_SHORT`, `CURRENT_DATE`, `CURRENT_DAY_NAME`,
+  `CURRENT_DAY_NAME_SHORT`, `CURRENT_HOUR`, `CURRENT_MINUTE`,
+  `CURRENT_SECOND`, `CURRENT_SECONDS_UNIX`, `CURRENT_TIMEZONE_OFFSET`),
+  `RANDOM`, `RANDOM_HEX`, `UUID`, and the language's `BLOCK_COMMENT_START`,
+  `BLOCK_COMMENT_END` and `LINE_COMMENT`, in the forms `$NAME`, `${NAME}`,
+  `${NAME:default}` (used when the variable is unset or empty) and the
+  conditional forms `${NAME:+text}`, `${NAME:-text}` and `${NAME:?a:b}`, then
+  the transform `${NAME/regex/format/options}` with `$n`, `${n:/upcase}`,
+  `/downcase`, `/capitalize`, `/pascalcase` and `/camelcase`. An unknown
+  variable stays literal text, as VS Code does (and is inserted as a
+  placeholder named after it). The engine takes the values from a trait the
+  host implements, so the pure crate reads no files or clocks and is tested
+  with a fixed one; the App supplies them from the active tab, the workspace
+  and `jiff`. Record in the spec which variables remote workspaces resolve
+  from the remote path. Existing snippet files with a `$NAME` that was meant
+  literally are the one compatibility risk: list them in the CHANGELOG and
+  keep `\$NAME` as the escape.
+- [ ] **T803 — PDF preview.** Add a read-only PDF tab beside the image tab
+  ([`crates/vix-editor/spec`](crates/vix-editor/spec/index.md), the
+  image protocols: kitty, iTerm2, Sixel, half blocks, probed on first use).
+  Render a page to an image and hand it to the existing image path, so the
+  terminal protocol work is not repeated. Decide in the spec how pages are
+  rendered, with the dependency's size, license and maintenance weighed
+  against shelling out to `pdftoppm` or `mutool` when present (the same
+  optional-tool pattern as the formatters): a pure-Rust renderer adds weight
+  to every build and a process adds a runtime requirement. Behavior: open at
+  page 1; `PageDown`/`PageUp` or `n`/`p` change page, `g` goes to a page, `+`
+  and `-` zoom, fit width by default; the page count and number in the status
+  bar; a text extraction view for search (`/`) and copy, since the image
+  holds no selectable text; a password-protected or damaged file says so and
+  opens nothing. Bound the cost: a page over a size limit, a file over a
+  limit, and a time limit on rendering (the preview renders on a worker, not
+  in the draw). Remote files go through the authority like any read, with the
+  size cap. Tests: a small fixture PDF in `tests/`, with the page count, the
+  rendered size and the extracted text asserted; a run with no renderer
+  available shows the install hint instead of failing.
+- [ ] **T804 — Jupyter notebooks (`.ipynb`).** The kernel REPL is done
+  ([`spec/jupyter`](spec/jupyter/index.md)); the spec lists `.ipynb` editing
+  under "Out (later)". Open an `.ipynb` as a notebook: a list of cells, each
+  a code, Markdown or raw cell, with the saved outputs shown beneath the
+  code (text, streams, errors, PNG and JPEG through the existing image path),
+  not as raw JSON. Edit a cell in the editor, add, delete, move, split and
+  merge cells, change a cell's type, run a cell or all cells on the workspace
+  kernel (the existing launch, trust gate and status segment), with the
+  execution count and the output updated in place. **Saving must not damage a
+  notebook**: keep `nbformat` and `nbformat_minor`, the notebook, cell and
+  output metadata and every field it does not understand byte-for-byte
+  (read into `serde_json::Value` and change only the edited parts), write
+  with the indentation and key order Jupyter uses so a diff shows only the
+  change, support nbformat 4.0 to 4.5 (cell `id`s from 4.5) and refuse an
+  older or newer major version rather than guess. Also a clear-outputs command
+  and a plain-text view for `git diff` (an `nbdime`-style cell diff may come
+  later). Tests: round-trip a corpus of real notebooks (with widgets
+  metadata, attachments and large outputs) and assert the saved file equals
+  the original when nothing was edited; edit, run against a stub kernel and
+  save. Size caps on the notebook and on each output come from `Size (T734h)`.
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -10650,6 +10821,16 @@ CI-discovered rounds to get genuinely right on Windows).
 
 24. **Run X (worldwide editing).** T794 covers workspace search. Prioritize
     T795 for other result lists. T796 and T797 can proceed independently.
+
+25. **Run Y (user feedback, 2026-11-24):** T798 (a remote SSH dev container)
+    builds on the container authority and needs no new design for the scripts;
+    T799 (CMake) is the largest, in six slices that each land alone; T800
+    (git monorepos) is research first, its tasks follow the findings; T801
+    (the agent on Alpine and musl hosts) needs its trust decision written
+    before any code. T802 (snippet variables) is the smallest and
+    independent; T803 (PDF preview) needs the renderer decision first; T804
+    (notebooks) builds on the finished kernel REPL and must start with the
+    round-trip corpus, since saving without loss is its hard requirement.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

@@ -902,3 +902,13 @@ flamegraph
 samply
 reexec
 licence
+
+# Run Y (user feedback, 2026-11-24)
+codemodel
+ctest
+fsmonitor
+mutool
+nbdime
+nbformat
+pascalcase
+pdftoppm
