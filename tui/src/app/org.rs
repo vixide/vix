@@ -776,7 +776,7 @@ impl App {
     /// Insert an active `<…>` or inactive `[…]` timestamp for today at the
     /// cursor (Org `C-c .` / `C-c !`).
     fn org_insert_timestamp(&mut self, active: bool) {
-        let today = jiff::Zoned::now().strftime("%Y-%m-%d").to_string();
+        let today = jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string();
         if let Some(stamp) = crate::org::timestamp_for(&today, active) {
             self.insert_content(&stamp);
         }
@@ -792,7 +792,7 @@ impl App {
         } else {
             "prompt.org_deadline"
         };
-        let today = jiff::Zoned::now().strftime("%Y-%m-%d").to_string();
+        let today = jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string();
         self.prompt = Some(Prompt::new(kind, t!(key).to_string()).with_input(today));
     }
 
@@ -1280,7 +1280,7 @@ impl App {
     /// Build the placeholder-expansion [`vix_org_capture::Context`] from the
     /// current date/time, active buffer, selection, and clipboard.
     fn capture_context(&mut self) -> vix_org_capture::Context {
-        let now = jiff::Zoned::now();
+        let now = jiff::ZonedDateTime::now();
         let path = self.active_path();
         let line = self
             .editor
@@ -1421,7 +1421,7 @@ impl App {
 
     /// The current local time as an Org timestamp (`YYYY-MM-DD Day HH:MM`).
     fn org_timestamp() -> String {
-        jiff::Zoned::now().strftime("%Y-%m-%d %a %H:%M").to_string()
+        jiff::ZonedDateTime::now().strftime("%Y-%m-%d %a %H:%M").to_string()
     }
 
     /// Org clock-in: insert a `CLOCK: [now]` entry at the cursor.

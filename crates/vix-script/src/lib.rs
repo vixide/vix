@@ -265,7 +265,7 @@ mod tests {
         };
         assert_eq!(
             state.buffer_text,
-            jiff::Zoned::now().strftime("%Y-%m-%d").to_string()
+            jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string()
         );
     }
 

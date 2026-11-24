@@ -880,7 +880,7 @@ fn format_time_ms(ms: u64) -> String {
         .ok()
         .and_then(|m| jiff::Timestamp::from_millisecond(m).ok())
         .map_or_else(String::new, |ts| {
-            ts.to_zoned(jiff::tz::TimeZone::system())
+            ts.to_zoned_datetime(jiff::tz::TimeZone::system())
                 .strftime("%Y-%m-%d %H:%M:%S")
                 .to_string()
         })

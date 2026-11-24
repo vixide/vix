@@ -42,12 +42,12 @@ extern crate vix_i18n;
 vix_i18n::surface!();
 
 use jiff::civil::Date;
-use jiff::{Span, Zoned};
+use jiff::{Span, ZonedDateTime};
 
 /// Current time in the system's local time zone.
 #[must_use]
-pub fn now_local() -> Zoned {
-    Zoned::now()
+pub fn now_local() -> ZonedDateTime {
+    ZonedDateTime::now()
 }
 
 /// The first day of the month containing `date`.

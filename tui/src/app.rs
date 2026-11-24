@@ -5120,7 +5120,7 @@ impl App {
     /// Today's date as a `(year, month, day)` tuple in the local zone, for
     /// Org column-view `CLOCKSUM_T`/age calculations.
     fn today_ymd() -> (i32, u32, u32) {
-        let now = jiff::Zoned::now();
+        let now = jiff::ZonedDateTime::now();
         (
             i32::from(now.year()),
             u32::from(now.month().unsigned_abs()),

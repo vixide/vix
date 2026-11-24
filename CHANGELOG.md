@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Dependencies updated, including the five major bumps from Dependabot's PR #30: `jiff` 0.2 to 1.0 (`Zoned` is now `ZonedDateTime`, `to_zoned` is `to_zoned_datetime`), `htmd` 0.5 to 0.6, `nix` 0.31 to 0.32, `qrcode` 0.14 to 0.15 and `tree-sitter-c-sharp` 0.23 to 0.24, and 20 more patch and minor updates. The `gui`, `matrix` and `fuzz` lockfiles follow. A release newer than the cargo minimum publish age (`scc` 3.9.3, `htmd` 0.6.1) is left for the next update.
 - Tests no longer touch the developer's real `~/.config/vix`: every user-directory lookup (settings, session, DB history and saved queries, and the undo, history, backup, snippet, script and crash directories derived from them) goes through `vix_fileops::user_dirs`, and test builds swap it for a per-process temporary directory through the dev-only `isolated-user-dirs` feature. Normal builds are unchanged.
 - The local gate (`scripts/check`) now runs against throwaway XDG config, data and state directories, so a gate run can no longer rewrite the developer's real `~/.config/vix` settings, session or history (`VIX_HERMETIC_HOME=0` opts out).
 - Fixed: Org priority on a bare `* TODO` or `* DONE` headline no longer produces `* TODO[#A]` without a space, and a column summary of no numeric children no longer renders `-0`.

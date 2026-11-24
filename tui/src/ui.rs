@@ -598,7 +598,7 @@ fn draw_overlay_3(app: &mut App, frame: &mut Frame, area: Rect, id: OverlayId) {
 fn unix_secs_label(secs: Option<i64>) -> String {
     secs.and_then(|s| jiff::Timestamp::from_second(s).ok())
         .map_or_default(|ts| {
-            ts.to_zoned(jiff::tz::TimeZone::system())
+            ts.to_zoned_datetime(jiff::tz::TimeZone::system())
                 .strftime("%Y-%m-%d %H:%M")
                 .to_string()
         })

@@ -318,7 +318,7 @@ impl App {
             scrolls,
             split,
             visits: 0, // filled/incremented by Session::set_workspace
-            last_visit: jiff::Zoned::now().timestamp().as_second(),
+            last_visit: jiff::ZonedDateTime::now().timestamp().as_second(),
             breakpoints: self.breakpoint_records(),
             function_breakpoints: self
                 .dap
@@ -428,7 +428,7 @@ impl App {
     /// current workspace. Reports when there is nowhere else to switch to.
     pub(super) fn open_workspace_chooser(&mut self) {
         let current = self.session_key();
-        let now = jiff::Zoned::now().timestamp().as_second();
+        let now = jiff::ZonedDateTime::now().timestamp().as_second();
         let roots: Vec<String> = self
             .load_session()
             .frecency_ordered(now)

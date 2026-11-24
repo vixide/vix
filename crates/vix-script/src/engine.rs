@@ -319,7 +319,7 @@ fn register_i18n_fns(engine: &mut Engine, i18n: &Rc<RefCell<I18nState>>) {
 /// signature) turned out to need it and v1 had no clock function at all.
 fn register_clock_fn(engine: &mut Engine) {
     engine.register_fn("now", || {
-        jiff::Zoned::now().strftime("%Y-%m-%d").to_string()
+        jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string()
     });
 }
 

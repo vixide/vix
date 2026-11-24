@@ -34,7 +34,7 @@ use super::ClampFit as _;
 /// `HH:MM` in the system time zone for a UTC millisecond time.
 fn clock(time_utc: i64) -> String {
     jiff::Timestamp::from_millisecond(time_utc).map_or_default(|t| {
-        t.to_zoned(jiff::tz::TimeZone::system())
+        t.to_zoned_datetime(jiff::tz::TimeZone::system())
             .strftime("%H:%M")
             .to_string()
     })

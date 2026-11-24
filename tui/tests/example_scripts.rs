@@ -154,7 +154,7 @@ fn timestamp_signature_inserts_todays_date() {
         vec![],
         HostState::default(),
     ));
-    let today = jiff::Zoned::now().strftime("%Y-%m-%d").to_string();
+    let today = jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string();
     assert_eq!(state.selection_text, format!("-- {today}"));
 }
 
@@ -172,7 +172,7 @@ fn open_scratch_with_template_refuses_a_non_empty_buffer() {
     assert_eq!(state.messages.len(), 1);
 
     let state = ran(runtime.invoke(&script, "on_scratch_template", vec![], HostState::default()));
-    let today = jiff::Zoned::now().strftime("%Y-%m-%d").to_string();
+    let today = jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string();
     assert_eq!(state.buffer_text, format!("# {today}\n\n"));
     assert!(state.buffer_text_written);
 }

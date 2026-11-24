@@ -30,7 +30,7 @@ fn clock(secs: u64) -> String {
         .ok()
         .and_then(|s| jiff::Timestamp::from_second(s).ok())
         .map_or_default(|t| {
-            t.to_zoned(jiff::tz::TimeZone::system())
+            t.to_zoned_datetime(jiff::tz::TimeZone::system())
                 .strftime("%H:%M:%S")
                 .to_string()
         })

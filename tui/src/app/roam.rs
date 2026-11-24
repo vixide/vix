@@ -121,7 +121,7 @@ impl App {
 
     /// Today's date as `YYYY-MM-DD` in the local zone.
     fn roam_today() -> String {
-        jiff::Zoned::now().strftime("%Y-%m-%d").to_string()
+        jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string()
     }
 
     /// Every `.org` file in the project as `(relative-name, content)` pairs.
@@ -281,7 +281,7 @@ impl App {
             return;
         }
         let seed = usize::try_from(
-            jiff::Zoned::now()
+            jiff::ZonedDateTime::now()
                 .timestamp()
                 .subsec_nanosecond()
                 .unsigned_abs(),
@@ -341,7 +341,7 @@ impl App {
             return;
         };
         let path = self.root.join(crate::roam::DAILIES_DIR).join(filename);
-        let time = jiff::Zoned::now().strftime("%H:%M").to_string();
+        let time = jiff::ZonedDateTime::now().strftime("%H:%M").to_string();
         let entry = crate::roam::daily_entry(&time, text);
         let mut content = crate::authority::current()
             .read_to_string(&path)

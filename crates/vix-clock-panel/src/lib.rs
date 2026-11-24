@@ -20,56 +20,56 @@
     )
 )]
 
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 use jiff::tz::{Offset, TimeZone};
 
 /// Current time in the system's local time zone.
 #[must_use]
-pub fn now_local() -> Zoned {
-    Zoned::now()
+pub fn now_local() -> ZonedDateTime {
+    ZonedDateTime::now()
 }
 
 /// `HH:MM:SS` in the local zone.
 #[must_use]
-pub fn local_clock(now: &Zoned) -> String {
+pub fn local_clock(now: &ZonedDateTime) -> String {
     now.strftime("%H:%M:%S").to_string()
 }
 
 /// Local date and time with seconds precision: `YYYY-MM-DD HH:MM:SS` in the
 /// system zone (as opposed to the UTC instant).
 #[must_use]
-pub fn local_datetime(now: &Zoned) -> String {
+pub fn local_datetime(now: &ZonedDateTime) -> String {
     now.strftime("%Y-%m-%d %H:%M:%S").to_string()
 }
 
 /// ISO 8601 instant in UTC: `YYYY-MM-DDTHH:MM:SSZ`.
 #[must_use]
-pub fn utc_iso(now: &Zoned) -> String {
+pub fn utc_iso(now: &ZonedDateTime) -> String {
     now.timestamp().strftime("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
 /// Local ISO 8601 date-time without offset: `YYYY-MM-DDTHH:MM:SS`.
 #[must_use]
-pub fn iso8601(now: &Zoned) -> String {
+pub fn iso8601(now: &ZonedDateTime) -> String {
     now.strftime("%Y-%m-%dT%H:%M:%S").to_string()
 }
 
 /// RFC 3339 date-time with the local UTC offset: `YYYY-MM-DDTHH:MM:SS±HH:MM`.
 #[must_use]
-pub fn rfc3339(now: &Zoned) -> String {
+pub fn rfc3339(now: &ZonedDateTime) -> String {
     now.strftime("%Y-%m-%dT%H:%M:%S%:z").to_string()
 }
 
 /// Unix epoch in whole seconds.
 #[must_use]
-pub fn epoch_seconds(now: &Zoned) -> String {
+pub fn epoch_seconds(now: &ZonedDateTime) -> String {
     now.strftime("%s").to_string()
 }
 
 /// ISO 8601 commercial date: `YYYY-Www-D` (week-numbering year, week 01..53,
 /// day 1=Monday..7=Sunday).
 #[must_use]
-pub fn iso_week_date(now: &Zoned) -> String {
+pub fn iso_week_date(now: &ZonedDateTime) -> String {
     let iso = now.date().iso_week_date();
     format!(
         "{:04}-W{:02}-{}",
@@ -94,7 +94,7 @@ fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
 /// [`ClockError::OffsetOutOfRange`] if `offset_minutes` is not an offset jiff
 /// accepts (more than a day either side of UTC); it is never replaced by UTC or
 /// by the nearest valid offset.
-pub fn datetime_at_offset(now: &Zoned, offset_minutes: i32) -> Result<String, ClockError> {
+pub fn datetime_at_offset(now: &ZonedDateTime, offset_minutes: i32) -> Result<String, ClockError> {
     let offset = offset_minutes
         .checked_mul(60)
         .and_then(|secs| Offset::from_seconds(secs).ok())
@@ -103,7 +103,7 @@ pub fn datetime_at_offset(now: &Zoned, offset_minutes: i32) -> Result<String, Cl
         })?;
     Ok(now
         .timestamp()
-        .to_zoned(TimeZone::fixed(offset))
+        .to_zoned_datetime(TimeZone::fixed(offset))
         .strftime("%Y-%m-%d %H:%M:%S")
         .to_string())
 }
@@ -113,7 +113,7 @@ pub fn datetime_at_offset(now: &Zoned, offset_minutes: i32) -> Result<String, Cl
 ///
 /// # Errors
 /// As [`datetime_at_offset`].
-pub fn active_zone_datetime(now: &Zoned) -> Result<String, ClockError> {
+pub fn active_zone_datetime(now: &ZonedDateTime) -> Result<String, ClockError> {
     datetime_at_offset(now, vix_time_zone_model::active_offset_minutes())
 }
 
@@ -173,7 +173,7 @@ impl Clock {
     /// The rows to display, in order: local date-time, UTC, ISO commercial week
     /// date, and the active time zone's time.
     #[must_use]
-    pub fn rows(&self, now: &Zoned) -> Vec<Row> {
+    pub fn rows(&self, now: &ZonedDateTime) -> Vec<Row> {
         vec![
             Row {
                 key: "local",
@@ -222,7 +222,7 @@ impl Clock {
     /// The highlighted row's value at instant `now` (for insertion): `None` when
     /// no row is highlighted, `Some(Err(..))` when the row cannot be computed.
     #[must_use]
-    pub fn selected_value(&self, now: &Zoned) -> Option<Result<String, ClockError>> {
+    pub fn selected_value(&self, now: &ZonedDateTime) -> Option<Result<String, ClockError>> {
         self.rows(now)
             .into_iter()
             .nth(self.selected)
