@@ -956,7 +956,10 @@ mod tests {
             "changed"
         );
         app.run_helix_command("quit!");
-        assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
+        assert!(
+            !app.flags.contains(AppFlags::SHOULD_QUIT),
+            "quit! closes the tab, not the session"
+        );
         app.flags.remove(AppFlags::SHOULD_QUIT);
         // Unknown names fall through to the Vi command line.
         app.run_helix_command("frobnicate");
@@ -991,7 +994,7 @@ mod tests {
         assert_eq!(app.vim_cmd.as_deref(), Some("quit!"));
         app.on_key(code(KeyCode::Enter));
         assert!(app.vim_cmd.is_none());
-        assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
+        assert!(!app.flags.contains(AppFlags::SHOULD_QUIT));
     }
 
     #[test]

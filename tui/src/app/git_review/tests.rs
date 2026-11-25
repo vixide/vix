@@ -107,7 +107,13 @@ fn commenting_on_a_comment_row_edits_that_comment() {
     assert_eq!(app.prompt.as_ref().unwrap().input, "");
     app.accept_review_comment("why rename?");
     assert_eq!(app.review.as_ref().unwrap().review.comments.len(), 1);
-    assert!(d.join(".vix/review/a..b.json").is_file());
+    assert!(
+        d.join(format!(
+            ".vix/review/{}.json",
+            vix_review::store_name("a..b")
+        ))
+        .is_file()
+    );
 
     // The comment's own row (right under the line) re-opens it for editing.
     app.editor.goto(8, None, app.layout.editor);

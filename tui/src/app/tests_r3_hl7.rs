@@ -192,7 +192,7 @@ fn an_accepted_message_opens_the_reply_in_a_read_only_tab() {
 fn rejections_and_other_replies_are_worded_by_their_code() {
     for (code, key) in [
         ("AE", "status.hl7_reply_nak"),
-        ("CA", "status.hl7_reply_accept"),
+        ("CA", "status.hl7_reply_commit"),
     ] {
         let text: &'static str = Box::leak(
             format!("MSH|^~\\&|D|F|A|F|20260101||ACK|A1|P|2.5\rMSA|{code}|CTRL1\r")

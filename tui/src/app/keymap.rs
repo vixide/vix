@@ -1833,8 +1833,11 @@ mod tests {
         app.vim_cmd_key(key('x'));
         app.vim_cmd_key(code(KeyCode::Backspace));
         assert!(app.vim_cmd.is_none());
-        // `:q!` force-quits.
+        // `:q!` closes the tab; `:qa!` force-quits the session.
         app.vim_cmd = Some(" q! ".into());
+        app.vim_cmd_key(code(KeyCode::Enter));
+        assert!(!app.flags.contains(AppFlags::SHOULD_QUIT));
+        app.vim_cmd = Some(" qa! ".into());
         app.vim_cmd_key(code(KeyCode::Enter));
         assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
     }
@@ -2057,6 +2060,8 @@ mod tests {
         assert_eq!(app.focus, Focus::Explorer);
         assert!(app.visible.contains(Visible::EXPLORER));
         app.run_vim_command("q!");
+        assert!(!app.flags.contains(AppFlags::SHOULD_QUIT));
+        app.run_vim_command("qa!");
         assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
         // `:e path` opens that file, relative to the workspace.
         let dir = temp("km-ex-open");
