@@ -22,10 +22,6 @@ pub enum Status {
 pub struct TestResult {
     /// Test name / path (e.g. `module::it_works`).
     pub name: String,
-    /// The test binary or file the result came from (cargo's `Running …` or
-    /// `Doc-tests …` header); empty when the output names none. Together with
-    /// `name` it identifies the test, so equal names in two targets stay apart.
-    pub target: String,
     /// Pass / fail / ignore.
     pub status: Status,
     /// Source location of a failure, if found: `(file, 1-based line)`.
@@ -77,7 +73,28 @@ pub fn tally(results: &[TestResult]) -> (usize, usize, usize) {
 /// ```
 #[must_use]
 pub fn parse(output: &str) -> Vec<TestResult> {
-    let mut results: Vec<TestResult> = Vec::new();
+    let mut rows = parse_rows(output);
+    // Same name in two targets stays two rows: qualify each with its target.
+    let names: Vec<String> = rows.iter().map(|r| r.result.name.clone()).collect();
+    for row in &mut rows {
+        if !row.target.is_empty() && names.iter().filter(|n| **n == row.result.name).count() > 1 {
+            row.result.name = format!("{} [{}]", row.result.name, row.target);
+        }
+    }
+    rows.into_iter().map(|r| r.result).collect()
+}
+
+/// A result plus the target (test binary) it came from.
+struct Row {
+    /// Cargo's `Running …` / `Doc-tests …` header in force; empty if none.
+    target: String,
+    /// The parsed result.
+    result: TestResult,
+}
+
+/// [`parse`] before target qualification: results keyed by (target, name).
+fn parse_rows(output: &str) -> Vec<Row> {
+    let mut results: Vec<Row> = Vec::new();
     let mut current_failure: Option<String> = None;
     let mut target = String::new();
 
@@ -134,37 +151,39 @@ pub fn parse(output: &str) -> Vec<TestResult> {
         }
     }
 
-    results.sort_by(|a, b| (&a.name, &a.target).cmp(&(&b.name, &b.target)));
+    results.sort_by(|a, b| (&a.result.name, &a.target).cmp(&(&b.result.name, &b.target)));
     // `upsert` already keeps names unique; this is a defensive no-op.
-    results.dedup_by(|a, b| a.name == b.name && a.target == b.target);
+    results.dedup_by(|a, b| a.result.name == b.result.name && a.target == b.target);
     results
 }
 
 /// Insert or update a result by name (a later status wins, e.g. the failure
 /// summary after the run).
-fn upsert(results: &mut Vec<TestResult>, target: &str, name: &str, status: Status) {
+fn upsert(results: &mut Vec<Row>, target: &str, name: &str, status: Status) {
     if let Some(r) = results
         .iter_mut()
-        .find(|r| r.name == name && r.target == target)
+        .find(|r| r.result.name == name && r.target == target)
     {
-        r.status = status;
+        r.result.status = status;
     } else {
-        results.push(TestResult {
-            name: name.to_string(),
+        results.push(Row {
             target: target.to_string(),
-            status,
-            location: None,
+            result: TestResult {
+                name: name.to_string(),
+                status,
+                location: None,
+            },
         });
     }
 }
 
 /// Attach a failure location to the named test.
-fn attach_location(results: &mut [TestResult], target: &str, name: &str, loc: (String, usize)) {
+fn attach_location(results: &mut [Row], target: &str, name: &str, loc: (String, usize)) {
     if let Some(r) = results
         .iter_mut()
-        .find(|r| r.name == name && r.target == target)
+        .find(|r| r.result.name == name && r.target == target)
     {
-        r.location = Some(loc);
+        r.result.location = Some(loc);
     }
 }
 
@@ -293,7 +312,7 @@ test result: FAILED. 1 passed; 1 failed; 1 ignored;
         assert_eq!(tally(&r), (1, 1, 0));
         assert!(
             r.iter()
-                .any(|t| t.status == Status::Fail && t.target == "unittests src/lib.rs")
+                .any(|t| t.status == Status::Fail && t.name.ends_with("[unittests src/lib.rs]"))
         );
     }
 

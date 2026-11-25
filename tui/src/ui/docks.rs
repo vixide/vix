@@ -43,18 +43,12 @@ pub(super) fn draw_test_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         .enumerate()
         .take(view_h)
         .map(|(i, r)| {
-            let dup = app.test_results.iter().filter(|o| o.name == r.name).count() > 1;
-            let label = if dup && !r.target.is_empty() {
-                format!("{}  ({})", r.name, r.target)
-            } else {
-                r.name.clone()
-            };
             let (icon, style) = match r.status {
                 Status::Pass => ("\u{2713} ", Style::default().fg(Color::Green)),
                 Status::Fail => ("\u{2717} ", Style::default().fg(Color::Red)),
                 Status::Ignore => ("\u{25cb} ", theme::dim()),
             };
-            let row = Line::from(vec![Span::styled(icon, style), Span::raw(label)]);
+            let row = Line::from(vec![Span::styled(icon, style), Span::raw(r.name.clone())]);
             if i == app.test_selected {
                 row.style(theme::selected())
             } else {
