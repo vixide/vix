@@ -10525,6 +10525,10 @@ were not exercised.
   all-success (marker, exit status, child name); two packages with identically
   named scripts, repeat while editing the other — same package, diagnostics and
   jump. `crates/vix-tasks/src/run_config.rs`, `tui/src/app.rs`, `tui/src/app/ide_parity.rs`
+  **Partly done (branch `fix/t810-stage-failure`):** POSIX stages keep each
+  child's pid/status, name the failed child on stderr and block dependents,
+  tested by running the rendered plan under `sh`. Still open: Repeat Last Task
+  cwd/matcher, and the Windows renderer's acceptance case.
 - [ ] **T811 — Stable test identity and suite outcome.** Verified: two Cargo
   targets both emitting `tests::round_trip` (one fail, one pass) collapse to a
   single passing row because results key on display name; a pytest line ending

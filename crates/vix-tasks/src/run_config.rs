@@ -323,8 +323,28 @@ impl Plan {
                 match (shell, cmds.len()) {
                     (_, 1) => cmds.into_iter().next().unwrap_or_default(),
                     (Shell::Posix, _) => {
-                        let jobs: Vec<String> = cmds.iter().map(|c| format!("( {c} ) &")).collect();
-                        format!("{{ {} wait; }}", jobs.join(" "))
+                        // Each child's pid is kept so `wait <pid>` yields its own
+                        // exit status; a bare `wait` would discard every failure.
+                        let jobs: Vec<String> = cmds
+                            .iter()
+                            .enumerate()
+                            .map(|(i, c)| format!("( {c} ) & p{i}=$!;"))
+                            .collect();
+                        let waits: Vec<String> = cmds
+                            .iter()
+                            .enumerate()
+                            .map(|(i, c)| {
+                                format!(
+                                    "wait $p{i} || {{ s=$?; echo \"vix: failed ($s): \"{} >&2; }};",
+                                    posix_quote(c)
+                                )
+                            })
+                            .collect();
+                        format!(
+                            "{{ s=0; {} {} [ \"$s\" -eq 0 ]; }}",
+                            jobs.join(" "),
+                            waits.join(" ")
+                        )
                     }
                     (Shell::Cmd, _) => cmds.join(" && "),
                 }
@@ -402,10 +422,40 @@ mod tests {
         assert_eq!(p.stages.len(), 2);
         assert_eq!(p.stages[1].len(), 2);
         let sh = p.shell_command(Shell::Posix);
-        assert!(sh.starts_with("cargo build && { ( cd 'services/api'"));
-        assert!(sh.ends_with("( npm run dev ) & wait; }"));
+        assert!(sh.starts_with("cargo build && { s=0; ( cd 'services/api'"));
+        assert!(sh.ends_with("[ \"$s\" -eq 0 ]; }"));
         let cmd = p.shell_command(Shell::Cmd);
         assert!(cmd.contains("set \"PORT=8080\" && cargo run -p api && npm run dev"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_child_blocks_the_dependent_stage() {
+        let run = |first: &str, last: &str| {
+            let toml = format!(
+                "[[config]]\nname=\"a\"\ncommand=\"{first}\"\n[[config]]\nname=\"b\"\ncommand=\"{last}\"\n\
+                 [[config]]\nname=\"g\"\ncompound=[\"a\",\"b\"]\n\
+                 [[config]]\nname=\"c\"\ncommand=\"echo DEP\"\nbefore=[\"g\"]\n"
+            );
+            let p = plan(&parse(&toml).unwrap(), &[], "c").unwrap();
+            let out = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(p.shell_command(Shell::Posix))
+                .output()
+                .unwrap();
+            (
+                out.status.success(),
+                String::from_utf8_lossy(&out.stdout).into_owned(),
+                String::from_utf8_lossy(&out.stderr).into_owned(),
+            )
+        };
+        let (ok, out, _) = run("true", "true");
+        assert!(ok && out.contains("DEP"));
+        let (ok, out, err) = run("exit 7", "true");
+        assert!(!ok && !out.contains("DEP"), "first child failed");
+        assert!(err.contains("exit 7"), "{err}");
+        let (ok, out, _) = run("true", "exit 7");
+        assert!(!ok && !out.contains("DEP"), "last child failed");
     }
 
     #[test]

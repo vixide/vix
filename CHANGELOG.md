@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A failed run-configuration step stops what depends on it.** When one of several steps run together exited non-zero, the following stage still ran and the whole plan reported success, because the shell `wait` discarded the status. Each step's status is now kept, the failed step is named on stderr, and the dependent stage does not start.
 - **Local History's "restore selection" restores just the selection.** When several lines in a row had all changed, restoring one of them from an earlier save brought back the whole changed block. Lines that changed one for one now come back one for one; only a block that grew or shrank is still restored whole.
 - **The desktop apps open a folder given on the command line too.** `vix-egui ~/src/app` (or any of the GUIs) now works on that folder, as `vix ~/src/app` does, instead of the current directory.
 - **`vix some-folder` opens that folder.** A folder on the command line used to fail with "Open failed" and leave you in the current directory. It now opens as the workspace, as in other editors: `vix .` or `vix ~/src/app`.
