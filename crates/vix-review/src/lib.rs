@@ -795,9 +795,13 @@ impl Review {
         #[derive(Deserialize)]
         struct In {
             #[serde(default)]
+            range: Option<String>,
+            #[serde(default)]
             comments: Vec<Comment>,
         }
         match serde_json::from_str::<In>(json) {
+            // Comments saved for a different range must never load here.
+            Ok(v) if v.range.as_deref().is_some_and(|r| r != self.range) => false,
             Ok(v) => {
                 self.comments = v.comments;
                 true
@@ -869,10 +873,25 @@ fn word_marks(old: &str, new: &str) -> (Marks, Marks) {
 }
 
 /// The file name (without extension) a range's comments are stored under in
-/// `.vix/review/`: every character other than a letter, digit, `.`, `-` or
-/// `_` becomes `_`, and leading dots are dropped so the name never hides.
+/// `.vix/review/`: the readable [`legacy_store_name`] plus a hash of the exact
+/// range, so `main..feature/api` and `main..feature_api` never share a file.
 #[must_use]
 pub fn store_name(range: &str) -> String {
+    // FNV-1a, 64-bit: stable across runs and platforms (unlike `DefaultHasher`).
+    let hash = range.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    });
+    format!("{}-{hash:016x}", legacy_store_name(range))
+}
+
+/// The pre-hash storage name (lossy: distinct ranges can collide). Kept so an
+/// older review file can still be found; [`Review::load_json`] checks its
+/// stored range before accepting it.
+///
+/// Every character other than a letter, digit, `.`, `-` or `_` becomes `_`, and
+/// leading dots are dropped so the name never hides.
+#[must_use]
+pub fn legacy_store_name(range: &str) -> String {
     let s: String = range
         .chars()
         .map(|c| {
@@ -1273,10 +1292,30 @@ mod tests {
 
     #[test]
     fn store_name_is_a_safe_file_name() {
-        assert_eq!(store_name("main..feature/x"), "main..feature_x");
-        assert_eq!(store_name("stash@{0}"), "stash__0_");
-        assert_eq!(store_name("../.."), "_..");
-        assert_eq!(store_name(""), "review");
+        assert_eq!(legacy_store_name("main..feature/x"), "main..feature_x");
+        assert_eq!(legacy_store_name("stash@{0}"), "stash__0_");
+        assert_eq!(legacy_store_name("../.."), "_..");
+        assert_eq!(legacy_store_name(""), "review");
+        let n = store_name("main..feature/x");
+        assert!(n.starts_with("main..feature_x-") && n.len() == "main..feature_x-".len() + 16);
+    }
+
+    #[test]
+    fn ranges_that_sanitize_alike_get_distinct_files_and_comments() {
+        assert_ne!(
+            store_name("main..feature/api"),
+            store_name("main..feature_api")
+        );
+        let mut a = Review::new("main..feature/api", DIFF);
+        assert!(a.set_comment("src/a.rs", Side::New, 2, "new", "for api"));
+        let saved = a.to_json();
+        let mut b = Review::new("main..feature_api", DIFF);
+        assert!(!b.load_json(&saved));
+        assert_eq!(b.comments.len(), 0);
+        let mut again = Review::new("main..feature/api", DIFF);
+        assert!(again.load_json(&saved) && again.comments.len() == 1);
+        // A legacy file with no range still loads.
+        assert!(b.load_json(r#"{"comments":[]}"#));
     }
 
     #[test]

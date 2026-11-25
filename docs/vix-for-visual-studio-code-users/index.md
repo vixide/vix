@@ -35,6 +35,7 @@ With the VS Code keymap active (`Ctrl` stands in for `Cmd` on macOS):
 | `Ctrl+F` / `Ctrl+R` / `Ctrl+Shift+F` | Find / replace / find in files |
 | `Ctrl+/` | Toggle comment |
 | `Ctrl+Shift+K` | Cut line (cuts to clipboard, not a bare delete) |
+| `Ctrl+D` | Add the next occurrence of the word (press again for each more; the Apple keymap keeps `Ctrl+D` as delete-forward) |
 | `Ctrl+Shift+L` | Select all occurrences (multi-cursor) |
 | `Ctrl+\` | Split editor |
 | `Ctrl+]` / `Ctrl+Shift+\` | Match bracket |
@@ -69,9 +70,6 @@ colorization; word-occurrence highlighting; format-on-save and auto-save.
 
 Credit where due:
 
-- **`Ctrl+D`-style incremental multi-select.** Vix has multiple cursors and
-  **Select All Occurrences** (`Ctrl+Shift+L`), but not VS Code's
-  add-one-more-occurrence-at-a-time `Ctrl+D` flow.
 - **One-key run/debug (`F5`).** The debugger itself is real (breakpoints,
   stepping, watches, a REPL), but there's no `F5` binding yet — start it
   from the **Run** menu or the palette. **Move Line Up/Down** is likewise
@@ -84,8 +82,10 @@ Credit where due:
   and render Markdown, within terminal limits.)
 - **Polish under a mouse-first workflow.** Vix supports the mouse well
   (click, drag, wheel, menus), but its center of gravity is the keyboard.
-- **Pair tooling.** Live Share has no terminal equivalent here (tmux sharing
-  is a different beast).
+- **Pair tooling.** Vix has opt-in real-time co-editing (**Cowork**), but it is
+  compiled in only with the `cowork` Cargo feature and is off by default, so it
+  is not a Live Share replacement for a stock build. See the
+  [Cowork specification](../../spec/cowork/index.md).
 
 ## An honest experiment
 

@@ -918,3 +918,16 @@ personalised
 canonicalisation
 replayable
 conv
+licence
+travelling
+underflows
+ilog
+signum
+CONV
+fract
+milli
+newtype
+newtypes
+instalments
+subnormals
+kani

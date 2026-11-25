@@ -30,16 +30,22 @@ impl fmt::Display for MllpError {
 impl std::error::Error for MllpError {}
 
 /// Normalize the segment separators of editor text to `\r` (the HL7 wire
-/// form), dropping blank lines and any framing bytes already present.
+/// form), dropping blank lines and any framing bytes already present. Every
+/// segment, including the last, ends with `\r` (HL7 v2 segment terminator).
 #[must_use]
 pub fn to_wire(text: &str) -> Vec<u8> {
-    text.replace("\r\n", "\n")
+    let mut wire = text
+        .replace("\r\n", "\n")
         .split(['\n', '\r'])
         .map(|l| l.trim_matches(|c| c == '\u{0B}' || c == '\u{1C}'))
         .filter(|l| !l.trim().is_empty())
         .collect::<Vec<_>>()
         .join("\r")
-        .into_bytes()
+        .into_bytes();
+    if !wire.is_empty() {
+        wire.push(CR);
+    }
+    wire
 }
 
 /// Wrap `payload` in an MLLP frame.
@@ -137,7 +143,18 @@ mod tests {
 
     #[test]
     fn to_wire_normalizes_separators() {
-        assert_eq!(to_wire("MSH|a\r\nPID|1\n\nPV1|x\n"), b"MSH|a\rPID|1\rPV1|x");
-        assert_eq!(to_wire("\u{0B}MSH|a\r\u{1C}\r"), b"MSH|a");
+        assert_eq!(
+            to_wire("MSH|a\r\nPID|1\n\nPV1|x\n"),
+            b"MSH|a\rPID|1\rPV1|x\r"
+        );
+        assert_eq!(to_wire("\u{0B}MSH|a\r\u{1C}\r"), b"MSH|a\r");
+        assert_eq!(to_wire("\n\n"), b"");
+    }
+
+    #[test]
+    fn framed_message_ends_segment_then_trailer() {
+        // Independently written expected bytes: VT, segments each CR-terminated, FS, CR.
+        let expected = b"\x0bMSH|^~\\&|A\rPID|1\r\x1c\r".to_vec();
+        assert_eq!(frame(&to_wire("MSH|^~\\&|A\nPID|1")), expected);
     }
 }

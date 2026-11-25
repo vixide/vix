@@ -3,16 +3,18 @@
 **Status:** Shipped. The `path:line[:col]` jump works from both the Open prompt
 and the command palette; Position History (`Alt+Left`/`Alt+Right`) navigates
 back/forward through jump locations; and "Go to Definition" (`F12`) jumps to the
-symbol under the cursor. The definition lookup is a fast, offline heuristic
-(keyword-prefixed declarations like `fn name`, `class name`, `def name`, `#define
-name`) rather than a semantic LSP — a real LSP client could replace it later.
+symbol under the cursor. When a language server handles the file, `F12` asks it
+for the definition (semantic, precise). Otherwise it falls back to a fast,
+offline heuristic (keyword-prefixed declarations like `fn name`, `class name`,
+`def name`, `#define name`); those results are text matches, not semantic ones.
 
 
 Go to Definition: Press `F12`, or use the command palette (Ctrl+P >) and search
 for "Go to Definition", to jump to the definition of the symbol under the cursor.
 A single match jumps directly; multiple matches open a chooser. The lookup scans
 the workspace for declaration-style lines, so it works for any language without a
-language server (but is heuristic, not semantically precise).
+language server (but this fallback is heuristic, not semantically precise, and
+its results are text matches: two modules defining the same name both appear).
 
 Go to Symbol in File: Open the command palette and type `@` (or run the
 "Go to Symbol in File" command) to list the current file's declarations —

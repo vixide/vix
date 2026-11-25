@@ -15,7 +15,7 @@ net = ["dep:vix-http-client"]
 
 [dependencies]
 serde = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
 vix-http-client = { workspace = true, optional = true }
 vix-list-state = { workspace = true }
 

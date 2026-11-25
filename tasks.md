@@ -10465,7 +10465,7 @@ evaluation and a site safety assessment). FHIR R4 is the comparison point.
 - [ ] **T805 — Name `smart_backend` precisely.** It is OAuth
   client-credentials with HTTP Basic client auth; SMART Backend Services 2.2
   needs asymmetric client authentication. Document it as shared-secret OAuth,
-  keep old config readable; prioritise SMART discovery and signed client
+  keep old config readable; prioritize SMART discovery and signed client
   assertions only when a partner server needs them, verified against an
   independent test server (advertised auth method, least-privilege scopes,
   rejection of invalid assertions). [SMART Backend Services 2.2](https://hl7.org/fhir/smart-app-launch/STU2.2/backend-services.html)
@@ -10525,6 +10525,10 @@ were not exercised.
   all-success (marker, exit status, child name); two packages with identically
   named scripts, repeat while editing the other — same package, diagnostics and
   jump. `crates/vix-tasks/src/run_config.rs`, `tui/src/app.rs`, `tui/src/app/ide_parity.rs`
+  **Partly done (branch `fix/t810-stage-failure`):** POSIX stages keep each
+  child's pid/status, name the failed child on stderr and block dependents,
+  tested by running the rendered plan under `sh`. Still open: Repeat Last Task
+  cwd/matcher, and the Windows renderer's acceptance case.
 - [ ] **T811 — Stable test identity and suite outcome.** Verified: two Cargo
   targets both emitting `tests::round_trip` (one fail, one pass) collapse to a
   single passing row because results key on display name; a pytest line ending
@@ -10538,6 +10542,11 @@ were not exercised.
   target+case; pytest progress suffix; collection/compile failure; a runner
   that discovers zero tests; keyboard path from failed row to source to rerun.
   `crates/vix-test-runner/src/lib.rs`, `crates/vix-tasks/src/test_at_point.rs`
+  **Partly done (branch `fix/t811-test-identity`):** results keyed by
+  (target, name) from cargo's `Running`/`Doc-tests` headers, pytest progress
+  suffix stripped, nonzero exit with no parsed failure is a failed suite. Still
+  open: stable ids for rerun-only-that-case, raw-output link, test-at-point and
+  code-lens integration, cancelled/unrecognized outcomes.
 - [ ] **T812 — Report the real outcome of a previewed multi-file edit.**
   The refactor preview diff clears the code-action chooser; applying a
   workspace edit separately writes closed files in a loop and may skip an
@@ -10562,6 +10571,9 @@ were not exercised.
   comments for the two ranges survive close/reopen and export separately;
   advancing a branch keeps the old comment with its context.
   `crates/vix-review/src/lib.rs`, `tui/src/app/git_review.rs`
+  **Partly done (branch `fix/t813-review-key`):** hashed per-range storage name,
+  range check on load, legacy files still load. Still open: binding comments to
+  the reviewed revision, keeping the code excerpt and marking comments outdated.
 
 - [ ] **T814 — Named debug target.** The debugger picks an adapter from the
   active file and runs one session; the named run configuration only drives
@@ -10575,7 +10587,7 @@ were not exercised.
   breakpoint; a failed prerequisite leaves the adapter unstarted; same fixture
   via menu, palette and shortcut; a Python project too. Compound (multi-session)
   debugging only once a real two-process workflow needs it.
-- [ ] **T815 — Correct the VS Code migration guide and navigation spec.** The
+- [x] **T815 — Correct the VS Code migration guide and navigation spec.** The
   guide says incremental Ctrl+D is missing, but the keymap test sends it and
   the editor adds the next occurrence — extend the assertion to the selected
   ranges after two presses. It also calls pair tooling absent although Cowork
@@ -10584,6 +10596,8 @@ were not exercised.
   future work) with F12-via-LSP, and label declaration-search fallback results
   as text matches. `docs/vix-for-visual-studio-code-users/index.md`,
   `tui/tests/integration/keymaps.rs`, [`spec/cowork`](spec/cowork/index.md)
+  Done in docs/spec and the Ctrl+D test; the UI still does not label fallback
+  definition results as text matches (open follow-up).
 - [ ] **T816 — Large-checkout open-time benchmark.** Add a repeatable
   project-opening exercise measuring time to first editable frame, first Quick
   Open result, first semantic definition and first actionable diagnostic;
@@ -10631,7 +10645,7 @@ awareness, not capability. Items marked (stale?) may already exist.
   learning paths (Rust, Python, data science, DevOps, writers); ADRs in
   `docs/adr/` (why Rust, ratatui, no unsafe, crate layout, feature flags);
   patterns library (`docs/patterns/`); a hosted `cargo doc` API site; 20+ new
-  cookbook recipes; 10+ new `tui/examples/` with READMEs; a personalised
+  cookbook recipes; 10+ new `tui/examples/` with READMEs; a personalized
   cheat-sheet generator by keymap; FAQ/troubleshooting; screenshot and theme
   galleries with a theme-submission guide and Rhai API docs; optional
   self-assessment quizzes. Check `docs/coverage.md` first — much is done.
@@ -10665,7 +10679,7 @@ awareness, not capability. Items marked (stale?) may already exist.
   hooks/CI; incident-response playbook from `SECURITY.md`; code signing of
   release artifacts (ties to T806); a sandboxing study for external commands
   (seccomp / App Sandbox / Windows); input-validation and file-system (TOCTOU,
-  canonicalisation) audits; keep the zero-`unsafe`, licence (`cargo-deny`) and
+  canonicalization) audits; keep the zero-`unsafe`, license (`cargo-deny`) and
   i18n-coverage audits green.
 - [ ] **T826 — Code-quality tooling.** Project-specific lints (no `println!`,
   user strings via `t!`, no blocking I/O in async); pre-push and pre-commit
@@ -10679,7 +10693,7 @@ awareness, not capability. Items marked (stale?) may already exist.
   the eight GUIs; a language server for Vix config files; editor-side
   integration for developing Vix itself. Large — design spike first.
 - [ ] **T828 — Interactive web demo.** A WebAssembly build of `vix-tui` or a
-  replayable recorded terminal session on the site; VHS tapes for palette,
+  recorded terminal session that can be replayed on the site; VHS tapes for palette,
   find, git, LSP, DB.
 - [ ] **T829 — Contributor developer-experience docs.** Development-setup guide
   with IDE recommendations, an architecture overview diagram, a crate

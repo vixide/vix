@@ -2020,6 +2020,8 @@ status.project_cache_discarded:
   bn: "প্রজেক্ট কমান্ড ক্যাশে সাফ করা হয়েছে।"
   zh: "项目命令缓存已清除。"
   ja: "プロジェクトコマンドのキャッシュをクリアしました。"
+status.tests_run_failed:
+  en: "Test run failed (exit %{code}); %{pass} passed before it stopped"
 status.tests_done:
   en: "Tests: %{pass} passed, %{fail} failed, %{ignore} ignored"
   es: "Pruebas: %{pass} pasadas, %{fail} fallidas, %{ignore} ignoradas"
@@ -5732,6 +5734,12 @@ status.hl7_busy:
   bn: "একটি HL7 পাঠানো ইতিমধ্যে চলছে"
   zh: "已有 HL7 发送正在进行"
   ja: "HL7 の送信はすでに進行中です"
+status.fhir_busy:
+  en: "A FHIR request is already in progress; wait for its reply"
+status.hl7_reply_mismatch:
+  en: "HL7 reply does not match the message sent (sent %{expected}, reply names %{got})"
+status.hl7_reply_commit:
+  en: "HL7 commit accepted (%{code}); application processing not confirmed"
 status.hl7_reply_accept:
   en: "HL7 acknowledged: %{code}"
   es: "HL7 confirmado: %{code}"

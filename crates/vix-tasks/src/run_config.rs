@@ -323,8 +323,28 @@ impl Plan {
                 match (shell, cmds.len()) {
                     (_, 1) => cmds.into_iter().next().unwrap_or_default(),
                     (Shell::Posix, _) => {
-                        let jobs: Vec<String> = cmds.iter().map(|c| format!("( {c} ) &")).collect();
-                        format!("{{ {} wait; }}", jobs.join(" "))
+                        // Each child's pid is kept so `wait <pid>` yields its own
+                        // exit status; a bare `wait` would discard every failure.
+                        let jobs: Vec<String> = cmds
+                            .iter()
+                            .enumerate()
+                            .map(|(i, c)| format!("( {c} ) & p{i}=$!;"))
+                            .collect();
+                        let waits: Vec<String> = cmds
+                            .iter()
+                            .enumerate()
+                            .map(|(i, c)| {
+                                format!(
+                                    "wait $p{i} || {{ s=$?; echo \"vix: failed ($s): \"{} >&2; }};",
+                                    posix_quote(c)
+                                )
+                            })
+                            .collect();
+                        format!(
+                            "{{ s=0; {} {} [ \"$s\" -eq 0 ]; }}",
+                            jobs.join(" "),
+                            waits.join(" ")
+                        )
                     }
                     (Shell::Cmd, _) => cmds.join(" && "),
                 }
@@ -402,8 +422,8 @@ mod tests {
         assert_eq!(p.stages.len(), 2);
         assert_eq!(p.stages[1].len(), 2);
         let sh = p.shell_command(Shell::Posix);
-        assert!(sh.starts_with("cargo build && { ( cd 'services/api'"));
-        assert!(sh.ends_with("( npm run dev ) & wait; }"));
+        assert!(sh.starts_with("cargo build && { s=0; ( cd 'services/api'"));
+        assert!(sh.ends_with("[ \"$s\" -eq 0 ]; }"));
         let cmd = p.shell_command(Shell::Cmd);
         assert!(cmd.contains("set \"PORT=8080\" && cargo run -p api && npm run dev"));
     }
