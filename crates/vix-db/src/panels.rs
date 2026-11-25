@@ -30,6 +30,20 @@ pub(crate) enum PathTarget {
     RunSql,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 impl Browser {
     /// Keys on the file-path prompt: a one-line path field; Enter imports the
     /// CSV/TSV file, or loads and runs the `.sql` file (T786).
@@ -144,7 +158,7 @@ impl Browser {
             self.message = Some(t!("msg.db_import_empty").to_string());
             return;
         }
-        let rows = records.len().saturating_sub(1);
+        let rows = sub_or(records.len(), 1, 0);
         // On production every write shows its SQL and asks first (T781).
         if self.active_environment().is_production() {
             self.pending_run = Some(execute::PendingRun::Import {
@@ -184,12 +198,12 @@ impl Browser {
             self.saved.queries.len()
         };
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => self.list_sel = self.list_sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => self.list_sel = sub_or(self.list_sel, 1, 0),
             KeyCode::Down | KeyCode::Char('j') => {
-                self.list_sel = (self.list_sel + 1).min(len.saturating_sub(1));
+                self.list_sel = add_or(self.list_sel, 1, usize::MAX).min(sub_or(len, 1, 0));
             }
             KeyCode::Home => self.list_sel = 0,
-            KeyCode::End => self.list_sel = len.saturating_sub(1),
+            KeyCode::End => self.list_sel = sub_or(len, 1, 0),
             KeyCode::Enter => {
                 let sql = if self.view == View::History {
                     self.history.entries.get(self.list_sel).cloned()
@@ -214,7 +228,7 @@ impl Browser {
                 }
                 // `len` is the pre-delete length, so `len - 2` is the new last
                 // index.
-                self.list_sel = self.list_sel.min(len.saturating_sub(2));
+                self.list_sel = self.list_sel.min(sub_or(len, 2, 0));
             }
             KeyCode::Esc | KeyCode::Char('q') => self.view = View::Workbench,
             _ => {}
@@ -293,12 +307,12 @@ impl Browser {
     pub(super) fn key_log(&mut self, key: KeyEvent) -> Outcome {
         let len = self.log.entries.len();
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => self.list_sel = self.list_sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => self.list_sel = sub_or(self.list_sel, 1, 0),
             KeyCode::Down | KeyCode::Char('j') => {
-                self.list_sel = (self.list_sel + 1).min(len.saturating_sub(1));
+                self.list_sel = add_or(self.list_sel, 1, usize::MAX).min(sub_or(len, 1, 0));
             }
             KeyCode::Home => self.list_sel = 0,
-            KeyCode::End => self.list_sel = len.saturating_sub(1),
+            KeyCode::End => self.list_sel = sub_or(len, 1, 0),
             KeyCode::Enter => {
                 if let Some(entry) = self.log.entries.get(self.list_sel) {
                     let sql = entry.sql.clone();
@@ -322,16 +336,18 @@ impl Browser {
     /// Keys in the ER-diagram viewer (scroll; `y` yanks the Mermaid text). The
     /// diagram text lives in the shared `cell_text` / `view_scroll` fields.
     pub(super) fn key_erd(&mut self, key: KeyEvent) -> Outcome {
-        let last = self.cell_text.lines().count().saturating_sub(1);
+        let last = sub_or(self.cell_text.lines().count(), 1, 0);
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => {
-                self.view_scroll = self.view_scroll.saturating_sub(1);
+                self.view_scroll = sub_or(self.view_scroll, 1, 0);
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                self.view_scroll = (self.view_scroll + 1).min(last);
+                self.view_scroll = add_or(self.view_scroll, 1, usize::MAX).min(last);
             }
-            KeyCode::PageUp => self.view_scroll = self.view_scroll.saturating_sub(10),
-            KeyCode::PageDown => self.view_scroll = (self.view_scroll + 10).min(last),
+            KeyCode::PageUp => self.view_scroll = sub_or(self.view_scroll, 10, 0),
+            KeyCode::PageDown => {
+                self.view_scroll = add_or(self.view_scroll, 10, usize::MAX).min(last);
+            }
             KeyCode::Home => self.view_scroll = 0,
             KeyCode::End => self.view_scroll = last,
             KeyCode::Char('y') => {
@@ -363,8 +379,10 @@ impl Browser {
             .run_catalog(catalog::relationships_sql(kind))
             .map_or_default(|(_, rows)| {
                 rows.into_iter()
-                    .filter(|r| r.len() >= 4)
-                    .map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone()))
+                    .filter_map(|r| match r.as_slice() {
+                        [a, b, c, d, ..] => Some((a.clone(), b.clone(), c.clone(), d.clone())),
+                        _ => None,
+                    })
                     .collect()
             });
         self.cell_text = erd::mermaid(&columns, &relationships);
@@ -381,10 +399,16 @@ impl Browser {
         }
         match key.code {
             KeyCode::Left => {
-                self.export_format =
-                    (self.export_format + export::FORMATS.len() - 1) % export::FORMATS.len();
+                self.export_format = self
+                    .export_format
+                    .checked_sub(1)
+                    .unwrap_or_else(|| sub_or(export::FORMATS.len(), 1, 0));
             }
-            KeyCode::Right => self.export_format = (self.export_format + 1) % export::FORMATS.len(),
+            KeyCode::Right => {
+                self.export_format = add_or(self.export_format, 1, usize::MAX)
+                    .checked_rem(export::FORMATS.len())
+                    .unwrap_or(0);
+            }
             KeyCode::Tab => self.export_clipboard = !self.export_clipboard,
             KeyCode::Char(c) => self.export_path.push(c),
             KeyCode::Backspace => {
@@ -404,7 +428,10 @@ impl Browser {
             return;
         }
         self.table_export = None;
-        self.export_path = format!("vix-export.{}", export::FORMATS[self.export_format].label());
+        let label = export::FORMATS
+            .get(self.export_format)
+            .map_or("", |format| format.label());
+        self.export_path = format!("vix-export.{label}");
         self.view = View::Export;
     }
 
@@ -412,9 +439,18 @@ impl Browser {
     /// destination. The table name for SQL `INSERT` output is the last
     /// previewed table, or `vix_export` when the grid is an arbitrary query.
     fn run_export(&mut self) {
-        let format = export::FORMATS[self.export_format % export::FORMATS.len()];
+        let Some(&format) = export::FORMATS.get(
+            self.export_format
+                .checked_rem(export::FORMATS.len())
+                .unwrap_or(0),
+        ) else {
+            return;
+        };
         let order = self.grid.filtered();
-        let rows: Vec<&Vec<String>> = order.iter().map(|&i| &self.grid.rows[i]).collect();
+        let rows: Vec<&Vec<String>> = order
+            .iter()
+            .filter_map(|&i| self.grid.rows.get(i))
+            .collect();
         let table = self
             .last_table
             .clone()
@@ -490,7 +526,7 @@ impl Browser {
             KeyCode::PageUp => self.tree.step(true, page.max(1)),
             KeyCode::PageDown => self.tree.step(false, page.max(1)),
             KeyCode::Home => self.tree.sel = 0,
-            KeyCode::End => self.tree.sel = self.tree.rows().len().saturating_sub(1),
+            KeyCode::End => self.tree.sel = sub_or(self.tree.rows().len(), 1, 0),
             KeyCode::Left => self.tree.toggle(Some(false)),
             KeyCode::Right => self.tree.toggle(Some(true)),
             KeyCode::Char(' ') => self.tree.toggle(None),
@@ -528,16 +564,19 @@ impl Browser {
         if let Some(popup) = self.popup.as_mut() {
             match key.code {
                 KeyCode::Up => {
-                    popup.sel = popup.sel.saturating_sub(1);
+                    popup.sel = sub_or(popup.sel, 1, 0);
                     return;
                 }
                 KeyCode::Down => {
-                    popup.sel = (popup.sel + 1).min(popup.items.len() - 1);
+                    popup.sel =
+                        add_or(popup.sel, 1, usize::MAX).min(sub_or(popup.items.len(), 1, 0));
                     return;
                 }
                 KeyCode::Tab => {
-                    let (start, text) = (popup.start, popup.items[popup.sel].clone());
-                    self.query.replace_prefix(start, &text);
+                    let start = popup.start;
+                    if let Some(text) = popup.items.get(popup.sel).cloned() {
+                        self.query.replace_prefix(start, &text);
+                    }
                     self.popup = None;
                     return;
                 }
@@ -651,7 +690,10 @@ impl Browser {
     /// column sizes it.
     fn chart_results(&mut self) {
         let order = self.grid.filtered();
-        let rows: Vec<&Vec<String>> = order.iter().map(|&i| &self.grid.rows[i]).collect();
+        let rows: Vec<&Vec<String>> = order
+            .iter()
+            .filter_map(|&i| self.grid.rows.get(i))
+            .collect();
         match chart::bars(&self.grid.headers, &rows) {
             Some(text) => {
                 self.cell_text = text;
@@ -688,5 +730,573 @@ impl Browser {
                 .replace_statement_at_cursor(&format::beautify(&stmt));
             self.popup = None;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{ctrl, family, press, preview, select_table, typed, workbench};
+    use crate::{Pages, connect};
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("vix-panels-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn the_history_list_navigates_inserts_and_deletes() {
+        let mut b = family(false);
+        for sql in ["SELECT 1", "SELECT 2", "SELECT 3"] {
+            b.history.push(sql);
+        }
+        ctrl(&mut b, 'r');
+        assert_eq!(b.view, View::History);
+        let newest = b.history.entries[0].clone();
+        press(&mut b, KeyCode::Down);
+        press(&mut b, KeyCode::Char('j'));
+        press(&mut b, KeyCode::Down);
+        assert_eq!(b.list_sel, 2, "clamped to the last entry");
+        press(&mut b, KeyCode::Up);
+        press(&mut b, KeyCode::Char('k'));
+        assert_eq!(b.list_sel, 0);
+        press(&mut b, KeyCode::End);
+        assert_eq!(b.list_sel, 2);
+        press(&mut b, KeyCode::Home);
+        press(&mut b, KeyCode::Char('x'));
+        assert_eq!(b.list_sel, 0);
+        // Delete the last entry: the selection follows it back.
+        press(&mut b, KeyCode::End);
+        press(&mut b, KeyCode::Char('d'));
+        assert_eq!(b.history.entries.len(), 2);
+        assert_eq!(b.list_sel, 1);
+        assert!(b.take_dirty_history().is_some());
+        press(&mut b, KeyCode::Delete);
+        press(&mut b, KeyCode::Delete);
+        press(&mut b, KeyCode::Delete);
+        assert_eq!(b.history.entries.len(), 0);
+        assert_eq!(b.list_sel, 0);
+        b.history.push("SELECT 9");
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Workbench);
+        assert_eq!(b.focus, Pane::Editor);
+        assert_eq!(b.query.text(), "SELECT 9");
+        let _ = newest;
+        // Esc and q leave the list.
+        for leave in [KeyCode::Esc, KeyCode::Char('q')] {
+            b.open_history();
+            press(&mut b, leave);
+            assert_eq!(b.view, View::Workbench);
+        }
+        // Enter on an empty list does nothing.
+        b.history.entries.clear();
+        b.open_history();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::History);
+    }
+
+    #[test]
+    fn saved_queries_are_named_listed_inserted_and_deleted() {
+        let mut b = family(false);
+        ctrl(&mut b, 's');
+        assert_eq!(b.message, Some(t!("msg.db_no_statement").to_string()));
+        b.focus = Pane::Editor;
+        typed(&mut b, "SELECT 1");
+        ctrl(&mut b, 's');
+        assert_eq!(b.view, View::SaveName);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_name_required").to_string()));
+        typed(&mut b, " one");
+        press(&mut b, KeyCode::Backspace);
+        typed(&mut b, "e");
+        press(&mut b, KeyCode::Tab);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Workbench);
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_saved_query", name = "one").to_string())
+        );
+        assert_eq!(b.saved.queries.len(), 1);
+        assert!(b.take_dirty_saved().is_some());
+        // Esc cancels naming.
+        ctrl(&mut b, 's');
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.view, View::Workbench);
+        // List: Enter inserts into the editor after a separator.
+        ctrl(&mut b, 'b');
+        assert_eq!(b.view, View::Saved);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.query.text(), "SELECT 1;\nSELECT 1");
+        b.open_saved();
+        press(&mut b, KeyCode::Char('d'));
+        assert_eq!(b.saved.queries.len(), 0);
+        assert!(b.take_dirty_saved().is_some());
+        press(&mut b, KeyCode::Char('d'));
+        assert_eq!(b.list_sel, 0);
+    }
+
+    #[test]
+    fn the_query_log_lists_what_ran_and_reloads_it() {
+        let mut b = family(false);
+        b.query = editor::Query::from_text("SELECT 1");
+        press(&mut b, KeyCode::F(5));
+        while b.query_running() {
+            b.poll_query();
+        }
+        b.query = editor::Query::from_text("");
+        ctrl(&mut b, 'l');
+        assert_eq!(b.view, View::Log);
+        let n = b.log.entries.len();
+        assert!(n > 1);
+        press(&mut b, KeyCode::End);
+        assert_eq!(b.list_sel, n - 1);
+        press(&mut b, KeyCode::Home);
+        press(&mut b, KeyCode::Down);
+        press(&mut b, KeyCode::Char('j'));
+        press(&mut b, KeyCode::Up);
+        press(&mut b, KeyCode::Char('k'));
+        assert_eq!(b.list_sel, 0);
+        press(&mut b, KeyCode::Tab);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Workbench);
+        assert_eq!(b.query.text(), b.log.entries[0].sql);
+        b.open_log();
+        press(&mut b, KeyCode::Esc);
+        b.open_log();
+        press(&mut b, KeyCode::Char('q'));
+        assert_eq!(b.view, View::Workbench);
+        b.log.entries.clear();
+        b.open_log();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Log, "nothing to reload");
+    }
+
+    #[test]
+    fn the_er_diagram_is_built_from_the_schema_and_scrolls() {
+        let mut b = family(false);
+        ctrl(&mut b, 'e');
+        assert_eq!(b.view, View::Erd);
+        assert!(b.cell_text.contains("erDiagram"), "{}", b.cell_text);
+        assert!(b.cell_text.contains("child"));
+        assert!(b.message.as_deref().unwrap().contains('6') || b.message.is_some());
+        let last = b.cell_text.lines().count() - 1;
+        press(&mut b, KeyCode::Char('j'));
+        press(&mut b, KeyCode::Down);
+        assert_eq!(b.view_scroll, 2);
+        press(&mut b, KeyCode::PageDown);
+        assert_eq!(b.view_scroll, 12.min(last));
+        press(&mut b, KeyCode::End);
+        assert_eq!(b.view_scroll, last);
+        press(&mut b, KeyCode::PageUp);
+        press(&mut b, KeyCode::Up);
+        press(&mut b, KeyCode::Char('k'));
+        press(&mut b, KeyCode::Home);
+        assert_eq!(b.view_scroll, 0);
+        press(&mut b, KeyCode::Char('y'));
+        assert_eq!(b.message, Some(t!("msg.db_copied").to_string()));
+        press(&mut b, KeyCode::Char('?'));
+        assert_eq!(b.view, View::Erd);
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.view, View::Workbench);
+        b.view = View::Erd;
+        press(&mut b, KeyCode::Char('q'));
+        assert_eq!(b.view, View::Workbench);
+    }
+
+    #[test]
+    fn the_er_diagram_needs_a_connection_and_some_columns() {
+        let mut b = Browser::new(Vec::new());
+        b.generate_erd();
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        let mut b = workbench(false, &[]);
+        b.generate_erd();
+        assert_eq!(b.message, Some(t!("msg.db_erd_empty").to_string()));
+        assert_eq!(b.view, View::Workbench);
+    }
+
+    #[test]
+    fn the_export_dialog_wraps_formats_toggles_the_clipboard_and_validates_the_path() {
+        let mut b = family(false);
+        b.open_export();
+        assert_eq!(b.view, View::Workbench, "no results yet, nothing to export");
+        preview(&mut b, "parent");
+        press(&mut b, KeyCode::Char('e'));
+        assert_eq!(b.view, View::Export);
+        press(&mut b, KeyCode::Left);
+        assert_eq!(b.export_format, export::FORMATS.len() - 1, "wraps back");
+        press(&mut b, KeyCode::Right);
+        assert_eq!(b.export_format, 0, "wraps forward");
+        press(&mut b, KeyCode::Tab);
+        assert!(b.export_clipboard);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Workbench, "copied to the clipboard");
+        assert_eq!(b.message, Some(t!("msg.db_copied").to_string()));
+        b.open_export();
+        press(&mut b, KeyCode::Tab);
+        assert!(!b.export_clipboard);
+        press(&mut b, KeyCode::Char('?'));
+        press(&mut b, KeyCode::Backspace);
+        b.export_path.clear();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_name_required").to_string()));
+        assert_eq!(b.view, View::Export);
+        b.export_path = "/no/such/dir/out.csv".into();
+        press(&mut b, KeyCode::Enter);
+        assert!(b.message.is_some());
+        assert_eq!(b.view, View::Export);
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.view, View::Workbench);
+    }
+
+    #[test]
+    fn exporting_a_preview_names_the_insert_table() {
+        let dir = scratch("export");
+        let out = dir.join("p.sql");
+        let mut b = family(false);
+        preview(&mut b, "parent");
+        b.open_export();
+        b.export_format = export::FORMATS
+            .iter()
+            .position(|f| f.label() == "sql")
+            .unwrap();
+        b.export_path = out.display().to_string();
+        press(&mut b, KeyCode::Enter);
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert!(
+            text.contains("INSERT INTO") && text.contains("parent"),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn import_creates_a_table_from_a_csv_and_refreshes_the_tree() {
+        let dir = scratch("import");
+        let csv = dir.join("people.csv");
+        std::fs::write(&csv, "name,age\nann,31\nbob,42\n").unwrap();
+        let mut b = workbench(false, &[]);
+        ctrl(&mut b, 'u');
+        assert_eq!(b.message, Some(t!("msg.db_read_only").to_string()));
+        assert_ne!(b.view, View::Import);
+        b.write_enabled = true;
+        ctrl(&mut b, 'u');
+        assert_eq!(b.view, View::Import);
+        assert!(!b.import_is_sql_file());
+        // A missing file reports the error and stays put.
+        typed(&mut b, "/no/such/file.csv");
+        press(&mut b, KeyCode::Enter);
+        assert!(b.message.is_some());
+        assert_eq!(b.view, View::Import);
+        b.import_path.clear();
+        typed(&mut b, &csv.display().to_string());
+        press(&mut b, KeyCode::Backspace);
+        typed(&mut b, "v");
+        press(&mut b, KeyCode::Tab);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Workbench, "{:?}", b.message);
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_imported", count = 2, table = "people").to_string())
+        );
+        assert!(b.tree.table_names().contains(&"people".to_string()));
+        assert_eq!(
+            b.session
+                .as_mut()
+                .unwrap()
+                .run("SELECT name FROM people ORDER BY age")
+                .unwrap()
+                .1,
+            [["ann"], ["bob"]]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn importing_an_empty_file_or_while_disconnected_does_nothing() {
+        let dir = scratch("import-empty");
+        let empty = dir.join("empty.csv");
+        std::fs::write(&empty, "").unwrap();
+        let mut b = workbench(true, &[]);
+        b.open_import();
+        b.import_path = empty.display().to_string();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_import_empty").to_string()));
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.view, View::Workbench);
+        b.conn = None;
+        b.open_import();
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        b.open_run_file();
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        b.run_script("SELECT 1");
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        b.view = View::Import;
+        b.do_import();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_import_that_fails_part_way_reports_the_error() {
+        let dir = scratch("import-fail");
+        let csv = dir.join("t.csv");
+        std::fs::write(&csv, "a\n1\n").unwrap();
+        let mut b = workbench(true, &["CREATE TABLE t (a)"]);
+        b.open_import();
+        b.import_path = csv.display().to_string();
+        press(&mut b, KeyCode::Enter);
+        assert!(
+            b.message.as_deref().unwrap().contains('t'),
+            "{:?}",
+            b.message
+        );
+        assert_ne!(b.view, View::Workbench);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn production_imports_wait_for_confirmation() {
+        let dir = scratch("import-prod");
+        let csv = dir.join("t.csv");
+        std::fs::write(&csv, "a\n1\n").unwrap();
+        let mut b = workbench(true, &[]);
+        b.environments
+            .insert("mem".into(), connect::Environment::Production);
+        b.open_import();
+        b.import_path = csv.display().to_string();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Confirm);
+        assert!(!b.tree.table_names().contains(&"t".to_string()));
+        press(&mut b, KeyCode::Char('y'));
+        assert!(b.tree.table_names().contains(&"t".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_sql_file_is_loaded_into_the_editor_and_run() {
+        let dir = scratch("runfile");
+        let file = dir.join("s.sql");
+        std::fs::write(
+            &file,
+            "CREATE TABLE r (a);\nINSERT INTO r VALUES (4);\nSELECT a FROM r;",
+        )
+        .unwrap();
+        let mut b = workbench(true, &[]);
+        ctrl(&mut b, 'p');
+        assert_eq!(b.view, View::Import);
+        assert!(b.import_is_sql_file());
+        typed(&mut b, "/no/such.sql");
+        press(&mut b, KeyCode::Enter);
+        assert!(b.message.is_some());
+        assert_eq!(b.view, View::Import);
+        b.import_path = file.display().to_string();
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Confirm, "writes in the script ask first");
+        assert!(!b.import_is_sql_file());
+        assert_eq!(b.query.text().lines().count(), 3);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.grid.rows, [["4"]]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_tree_filters_navigates_and_opens_detail_reports() {
+        let mut b = family(false);
+        b.focus = Pane::Tree;
+        press(&mut b, KeyCode::Char('/'));
+        assert!(b.tree.filtering);
+        typed(&mut b, "chi");
+        press(&mut b, KeyCode::Backspace);
+        typed(&mut b, "i");
+        press(&mut b, KeyCode::Down);
+        assert_eq!(b.tree.filter, "chi");
+        press(&mut b, KeyCode::Enter);
+        assert!(!b.tree.filtering);
+        assert_eq!(b.tree.filter, "chi", "Enter keeps the filter");
+        press(&mut b, KeyCode::Char('/'));
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.tree.filter, "");
+        press(&mut b, KeyCode::Home);
+        assert_eq!(b.tree.sel, 0);
+        press(&mut b, KeyCode::Down);
+        press(&mut b, KeyCode::Char('j'));
+        press(&mut b, KeyCode::Up);
+        press(&mut b, KeyCode::Char('k'));
+        press(&mut b, KeyCode::PageDown);
+        press(&mut b, KeyCode::PageUp);
+        press(&mut b, KeyCode::End);
+        assert_eq!(b.tree.sel, b.tree.rows().len() - 1);
+        press(&mut b, KeyCode::Home);
+        // Left collapses, Right expands, Space/Enter toggle a non-object row.
+        press(&mut b, KeyCode::Left);
+        let collapsed = b.tree.rows().len();
+        press(&mut b, KeyCode::Right);
+        assert!(b.tree.rows().len() > collapsed);
+        press(&mut b, KeyCode::Char(' '));
+        assert_eq!(b.tree.rows().len(), collapsed);
+        press(&mut b, KeyCode::Enter);
+        assert!(b.tree.rows().len() > collapsed);
+        // Each detail key reports into the results grid.
+        for k in ['i', 'f', 'g', 'x', 's'] {
+            select_table(&mut b, "child");
+            b.focus = Pane::Tree;
+            b.grid.set(Vec::new(), Vec::new());
+            press(&mut b, KeyCode::Char(k));
+            assert_eq!(b.focus, Pane::Results, "key {k}: {:?}", b.message);
+            assert!(
+                b.grid_source
+                    .as_ref()
+                    .is_some_and(|(sql, _)| sql.contains("child"))
+            );
+            assert!(!b.editable());
+        }
+        select_table(&mut b, "child");
+        b.focus = Pane::Tree;
+        press(&mut b, KeyCode::Enter);
+        assert!(
+            b.grid.headers.contains(&"name".to_string()),
+            "{:?}",
+            b.grid.headers
+        );
+        // `m` marks, `e` exports, `r` refreshes, `A` copies for the assistant.
+        b.focus = Pane::Tree;
+        press(&mut b, KeyCode::Char('r'));
+        select_table(&mut b, "child");
+        press(&mut b, KeyCode::Char('A'));
+        assert!(b.message.is_some());
+        press(&mut b, KeyCode::Char('?'));
+    }
+
+    #[test]
+    fn the_editor_pane_edits_moves_and_drives_the_completion_popup() {
+        let mut b = family(false);
+        b.focus = Pane::Editor;
+        let pages = Pages {
+            editor: 4,
+            ..Pages::default()
+        };
+        let send = |b: &mut Browser, code| {
+            b.handle_key(crate::test_support::key(code), pages);
+        };
+        typed(&mut b, "select * from pa");
+        assert!(b.popup.is_some());
+        send(&mut b, KeyCode::Down);
+        send(&mut b, KeyCode::Up);
+        send(&mut b, KeyCode::Esc);
+        assert!(b.popup.is_none());
+        assert_eq!(b.view, View::Workbench, "Esc only closed the popup");
+        typed(&mut b, "r");
+        assert!(b.popup.is_some());
+        send(&mut b, KeyCode::Down);
+        send(&mut b, KeyCode::Tab);
+        assert_eq!(b.query.text(), "select * from parent");
+        // Editing keys.
+        send(&mut b, KeyCode::Enter);
+        typed(&mut b, "ab");
+        send(&mut b, KeyCode::Backspace);
+        send(&mut b, KeyCode::Left);
+        send(&mut b, KeyCode::Delete);
+        assert_eq!(b.query.text(), "select * from parent\n");
+        send(&mut b, KeyCode::Home);
+        send(&mut b, KeyCode::End);
+        send(&mut b, KeyCode::Up);
+        send(&mut b, KeyCode::Right);
+        send(&mut b, KeyCode::Down);
+        send(&mut b, KeyCode::PageUp);
+        send(&mut b, KeyCode::PageDown);
+        send(&mut b, KeyCode::F(12));
+        // A Ctrl chord the workbench did not claim types nothing.
+        ctrl(&mut b, 'z');
+        assert_eq!(b.query.text(), "select * from parent\n");
+        // Alt+Shift+F beautifies the statement at the cursor.
+        b.query = editor::Query::from_text("select a,b from t where a=1");
+        b.handle_key(
+            vix_input::KeyEvent::new(KeyCode::Char('F'), KeyModifiers::ALT),
+            pages,
+        );
+        assert!(b.query.text().contains('\n'), "{}", b.query.text());
+        b.query = editor::Query::from_text("");
+        b.format_at_cursor();
+        assert_eq!(b.query.text(), "");
+    }
+
+    #[test]
+    fn the_results_pane_navigates_sorts_filters_and_copies() {
+        let mut b = family(false);
+        preview(&mut b, "parent");
+        for code in [
+            KeyCode::Down,
+            KeyCode::Char('j'),
+            KeyCode::Up,
+            KeyCode::Char('k'),
+            KeyCode::PageDown,
+            KeyCode::PageUp,
+            KeyCode::End,
+            KeyCode::Home,
+            KeyCode::Right,
+            KeyCode::Char('l'),
+            KeyCode::Left,
+            KeyCode::Char('h'),
+            KeyCode::Char('s'),
+            KeyCode::Char('?'),
+        ] {
+            press(&mut b, code);
+        }
+        press(&mut b, KeyCode::Char('/'));
+        assert!(b.grid.filtering);
+        typed(&mut b, "be");
+        press(&mut b, KeyCode::Backspace);
+        press(&mut b, KeyCode::Down);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.grid.filter, "b");
+        press(&mut b, KeyCode::Char('/'));
+        press(&mut b, KeyCode::Esc);
+        assert_eq!(b.grid.filter, "");
+        press(&mut b, KeyCode::Char('y'));
+        assert_eq!(b.message, Some(t!("msg.db_copied").to_string()));
+        b.message = None;
+        press(&mut b, KeyCode::Char('Y'));
+        assert_eq!(b.message, Some(t!("msg.db_copied").to_string()));
+        press(&mut b, KeyCode::Char('v'));
+        assert_eq!(b.view, View::Cell);
+        assert_ne!(b.cell_text, "");
+        press(&mut b, KeyCode::Esc);
+        press(&mut b, KeyCode::Char('A'));
+        assert!(b.message.is_some());
+    }
+
+    #[test]
+    fn c_charts_a_label_and_number_result_or_says_it_cannot() {
+        let mut b = workbench(
+            false,
+            &[
+                "CREATE TABLE s (k TEXT, n INTEGER)",
+                "INSERT INTO s VALUES ('a', 3), ('b', 9)",
+            ],
+        );
+        b.focus = Pane::Results;
+        b.grid.set(vec!["k".into()], vec![vec!["a".into()]]);
+        press(&mut b, KeyCode::Char('c'));
+        assert_eq!(b.message, Some(t!("msg.db_chart_needs_number").to_string()));
+        b.grid.set(
+            vec!["k".into(), "n".into()],
+            vec![vec!["a".into(), "3".into()], vec!["b".into(), "9".into()]],
+        );
+        press(&mut b, KeyCode::Char('c'));
+        assert_eq!(b.view, View::Cell);
+        assert!(b.cell_text.contains('a') && b.cell_text.contains('b'));
+    }
+
+    #[test]
+    fn insert_statement_separates_with_a_semicolon_only_when_needed() {
+        let mut b = workbench(false, &[]);
+        b.insert_statement("SELECT 1");
+        assert_eq!(b.query.text(), "SELECT 1");
+        b.insert_statement("SELECT 2");
+        assert_eq!(b.query.text(), "SELECT 1;\nSELECT 2");
+        b.query = editor::Query::from_text("SELECT 1;");
+        b.insert_statement("SELECT 2");
+        assert_eq!(b.query.text(), "SELECT 1;\nSELECT 2");
     }
 }

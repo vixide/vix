@@ -29,6 +29,12 @@ pub const SIGNATURE_SCHEME: &str = "hmac-sha256";
 /// HMAC-SHA256, the only signature scheme Vix accepts.
 type HmacSha256 = Hmac<Sha256>;
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// An empty key: Jupyter allows one (no authentication), Vix does not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyError;
@@ -88,7 +94,7 @@ impl Signer {
     #[must_use]
     pub fn sign(&self, parts: [&[u8]; 4]) -> String {
         let bytes = self.mac_of(parts).finalize().into_bytes();
-        let mut out = String::with_capacity(bytes.len() * 2);
+        let mut out = String::new();
         for b in bytes {
             out.push(hex_digit(b >> 4));
             out.push(hex_digit(b & 0x0f));
@@ -111,14 +117,16 @@ impl Signer {
 
 /// Lowercase hex digit for the low nibble of `n`.
 fn hex_digit(n: u8) -> char {
-    char::from(b"0123456789abcdef"[usize::from(n & 0x0f)])
+    // The low nibble is 0 to 15, so it always names one of the sixteen digits.
+    let digit = b"0123456789abcdef".get(usize::from(n & 0x0f)).copied();
+    char::from(digit.unwrap_or(b'0'))
 }
 
 /// Value of a lowercase hex digit. Uppercase is rejected on purpose: signatures are produced and compared as lowercase hex, so only that form can be genuine.
 fn hex_value(c: u8) -> Option<u8> {
     match c {
-        b'0'..=b'9' => Some(c - b'0'),
-        b'a'..=b'f' => Some(c - b'a' + 10),
+        b'0'..=b'9' => c.checked_sub(b'0'),
+        b'a'..=b'f' => c.checked_sub(b'a')?.checked_add(10),
         _ => None,
     }
 }
@@ -201,7 +209,7 @@ pub fn encode(message: &Message, signer: &Signer) -> Vec<Vec<u8>> {
     let content = to_bytes(&message.content);
     let signature = signer.sign([&header, &parent, &metadata, &content]);
 
-    let mut frames = Vec::with_capacity(message.identities.len() + 6 + message.buffers.len());
+    let mut frames = Vec::new();
     frames.extend(message.identities.iter().cloned());
     frames.push(DELIMITER.to_vec());
     frames.push(signature.into_bytes());
@@ -238,7 +246,7 @@ pub fn decode<B: AsRef<[u8]>>(
     }
     let mut total = 0usize;
     for frame in frames {
-        total = total.saturating_add(frame.as_ref().len());
+        total = add_or(total, frame.as_ref().len(), usize::MAX);
         if total > limits.max_total_bytes {
             return Err(DecodeError::TooLarge);
         }
@@ -247,17 +255,13 @@ pub fn decode<B: AsRef<[u8]>>(
         .iter()
         .position(|frame| frame.as_ref() == DELIMITER)
         .ok_or(DecodeError::NoDelimiter)?;
-    let rest = &frames[delimiter + 1..];
-    if rest.len() < 5 {
-        return Err(DecodeError::Truncated);
-    }
-    let [signature, header, parent, metadata, content] = [
-        rest[0].as_ref(),
-        rest[1].as_ref(),
-        rest[2].as_ref(),
-        rest[3].as_ref(),
-        rest[4].as_ref(),
-    ];
+    let rest = frames
+        .get(add_or(delimiter, 1, usize::MAX)..)
+        .ok_or(DecodeError::Truncated)?;
+    let ([signature, header, parent, metadata, content], buffers) = rest
+        .split_first_chunk::<5>()
+        .map(|(five, buffers)| (five.each_ref().map(AsRef::as_ref), buffers))
+        .ok_or(DecodeError::Truncated)?;
     if !signer.verify(signature, [header, parent, metadata, content]) {
         return Err(DecodeError::BadSignature);
     }
@@ -279,7 +283,9 @@ pub fn decode<B: AsRef<[u8]>>(
         serde_json::from_slice(content).map_err(|_| DecodeError::Json("content"))?;
 
     Ok(Message {
-        identities: frames[..delimiter]
+        identities: frames
+            .get(..delimiter)
+            .unwrap_or(&[])
             .iter()
             .map(|f| f.as_ref().to_vec())
             .collect(),
@@ -287,7 +293,7 @@ pub fn decode<B: AsRef<[u8]>>(
         parent_header,
         metadata,
         content,
-        buffers: rest[5..].iter().map(|f| f.as_ref().to_vec()).collect(),
+        buffers: buffers.iter().map(|f| f.as_ref().to_vec()).collect(),
     })
 }
 

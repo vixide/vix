@@ -4,11 +4,37 @@
 //! The crate is pure: it parses diff text and renders text. Running `git`
 //! lives in `vix-git`, and reading or writing the comment file is the host's
 //! job (it goes through the filesystem authority). See `spec/index.md`.
+
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
 #![deny(missing_docs)]
 
 use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Which side of the diff a comment is anchored to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -104,13 +130,13 @@ pub fn wrap_text(text: &str, width: usize) -> Vec<(usize, usize)> {
     let (mut start, mut used, mut count) = (0usize, 0usize, 0usize);
     for ch in text.chars() {
         let w = ch.width().unwrap_or(0);
-        if used > 0 && used + w > width {
+        if used > 0 && add_or(used, w, usize::MAX) > width {
             out.push((start, count));
             start = count;
             used = 0;
         }
-        used += w;
-        count += 1;
+        used = add_or(used, w, usize::MAX);
+        count = add_or(count, 1, usize::MAX);
     }
     out.push((start, count));
     out
@@ -201,7 +227,7 @@ impl PaneRow {
         };
         let lines = |c: &Option<Cell>, w: usize| {
             c.as_ref()
-                .map_or(1, |c| wrap_text(&c.text, w.saturating_sub(GUTTER)).len())
+                .map_or(1, |c| wrap_text(&c.text, sub_or(w, GUTTER, 0)).len())
         };
         lines(l, left).max(lines(r, right))
     }
@@ -232,10 +258,10 @@ impl SideBySide {
         let mut top = 0;
         for index in first..self.rows.len() {
             let h = row_height(index).max(1);
-            if y < top + h {
-                return Some((index, y - top));
+            if y < add_or(top, h, usize::MAX) {
+                return Some((index, sub_or(y, top, 0)));
             }
-            top += h;
+            top = add_or(top, h, usize::MAX);
         }
         None
     }
@@ -245,11 +271,13 @@ impl SideBySide {
     #[must_use]
     pub fn last_first(&self, height: usize, row_height: impl Fn(usize) -> usize) -> usize {
         let (mut index, mut used) = (self.rows.len(), 0);
-        while index > 0 && used + row_height(index - 1).max(1) <= height {
-            index -= 1;
-            used += row_height(index).max(1);
+        while let Some(previous) = index.checked_sub(1)
+            && add_or(used, row_height(previous).max(1), usize::MAX) <= height
+        {
+            index = previous;
+            used = add_or(used, row_height(index).max(1), usize::MAX);
         }
-        index.min(self.rows.len().saturating_sub(1))
+        index.min(sub_or(self.rows.len(), 1, 0))
     }
 
     /// Index of the first row that covers inline row `inline` or comes after
@@ -260,16 +288,16 @@ impl SideBySide {
         self.rows
             .iter()
             .position(|r| r.last >= inline)
-            .unwrap_or_else(|| self.rows.len().saturating_sub(1))
+            .unwrap_or_else(|| sub_or(self.rows.len(), 1, 0))
     }
 
     /// The widths of the left and right panes in a view `width` columns wide:
     /// one column goes to the divider, the right pane takes the odd one.
     #[must_use]
     pub fn halves(width: usize) -> (usize, usize) {
-        let usable = width.saturating_sub(1);
-        let left = usable / 2;
-        (left, usable - left)
+        let usable = sub_or(width, 1, 0);
+        let left = usable.div_euclid(2);
+        (left, sub_or(usable, left, 0))
     }
 
     /// The first row to show in a view `height` screen lines tall: the row
@@ -293,10 +321,12 @@ impl SideBySide {
             return first;
         }
         // Screen lines of the rows from `first` down to the cursor's row.
-        let mut used: usize = (first..=selected).map(|i| row_height(i).max(1)).sum();
+        let mut used: usize = (first..=selected).fold(0, |total, i| {
+            add_or(total, row_height(i).max(1), usize::MAX)
+        });
         while used > height && first < selected {
-            used -= row_height(first).max(1);
-            first += 1;
+            used = sub_or(used, row_height(first).max(1), 0);
+            first = add_or(first, 1, usize::MAX);
         }
         first
     }
@@ -311,7 +341,13 @@ impl SideBySide {
         let Some(row) = self.rows.get(index) else {
             return self.rows.last().map_or(0, |r| r.last);
         };
-        let above = self.rows[..index].iter().map(|r| r.last + 1).max();
+        let above = self
+            .rows
+            .get(..index)
+            .unwrap_or(&[])
+            .iter()
+            .map(|r| add_or(r.last, 1, usize::MAX))
+            .max();
         above.map_or(0, |a| a.min(row.last))
     }
 
@@ -386,7 +422,7 @@ impl Rendered {
     #[must_use]
     pub fn hunk_at(&self, row: usize) -> Option<(usize, usize)> {
         let upto = row.min(self.targets.len().checked_sub(1)?);
-        for target in self.targets[..=upto].iter().rev() {
+        for target in self.targets.get(..=upto)?.iter().rev() {
             match target {
                 Target::Hunk(f, h) => return Some((*f, *h)),
                 Target::File(_) => return None,
@@ -576,7 +612,7 @@ impl Review {
                 first: *row,
                 last: *row,
             });
-            *row += 1;
+            *row = add_or(*row, 1, usize::MAX);
         };
         heading(
             &mut rows,
@@ -590,7 +626,7 @@ impl Review {
             ),
         );
         for f in &self.files {
-            row += 1; // the blank row before the file heading
+            row = add_or(row, 1, usize::MAX); // the blank row before the file heading
             heading(&mut rows, &mut row, format!("=== {}", f.path));
             if f.binary {
                 heading(&mut rows, &mut row, "(binary file)".to_string());
@@ -612,7 +648,7 @@ impl Review {
         let mut comments: Vec<(String, usize)> = Vec::new();
         for l in &h.lines {
             let at = *row;
-            *row += 1 + usize::from(l.no_newline);
+            *row = add_or(*row, add_or(1, usize::from(l.no_newline), 0), usize::MAX);
             let (side, n) = match l.kind {
                 LineKind::Removed => (Side::Old, l.old.unwrap_or(0)),
                 _ => (Side::New, l.new.unwrap_or(0)),
@@ -628,7 +664,7 @@ impl Review {
             let mut here = Vec::new();
             for (_, c) in self.comments_at(&f.path, side, n) {
                 here.push((format!("    >> {}", c.text.replace('\n', " ")), *row));
-                *row += 1;
+                *row = add_or(*row, 1, usize::MAX);
             }
             match l.kind {
                 LineKind::Removed => {
@@ -656,7 +692,7 @@ impl Review {
                         },
                         text: String::new(),
                         first: at,
-                        last: at + usize::from(l.no_newline),
+                        last: add_or(at, usize::from(l.no_newline), usize::MAX),
                     });
                     for (text, r) in here {
                         rows.push(PaneRow {
@@ -716,7 +752,12 @@ impl Review {
         self.files
             .iter()
             .filter(|f| !f.binary && !f.hunks.is_empty())
-            .fold((0, 0), |(h, n), f| (h + f.hunks.len(), n + 1))
+            .fold((0, 0), |(h, n), f| {
+                (
+                    add_or(h, f.hunks.len(), usize::MAX),
+                    add_or(n, 1, usize::MAX),
+                )
+            })
     }
 
     /// Replace the diff with a freshly computed one for the same range
@@ -780,11 +821,14 @@ impl Review {
             range: &'a str,
             comments: &'a [Comment],
         }
-        serde_json::to_string_pretty(&Out {
+        // These plain strings always serialize; were it ever not, there is no text.
+        let Ok(json) = serde_json::to_string_pretty(&Out {
             range: &self.range,
             comments: &self.comments,
-        })
-        .unwrap_or_default()
+        }) else {
+            return String::new();
+        };
+        json
     }
 
     /// Load comments saved by [`Review::to_json`] into this review. Text that
@@ -964,7 +1008,7 @@ impl Review {
         last: usize,
     ) -> Result<LineSelection, SelectError> {
         let mut found: Option<LineSelection> = None;
-        for row in first..=last.min(rendered.targets.len().saturating_sub(1)) {
+        for row in first..=last.min(sub_or(rendered.targets.len(), 1, 0)) {
             let Some(Target::Line { file, side, line }) = rendered.targets.get(row) else {
                 continue;
             };
@@ -974,15 +1018,21 @@ impl Review {
             if f != *file {
                 continue;
             }
-            let Some(index) = self.files[f].hunks.get(h).and_then(|hunk| {
-                hunk.lines.iter().position(|l| match side {
-                    Side::Old => l.kind == LineKind::Removed && l.old == Some(*line),
-                    Side::New => l.kind != LineKind::Removed && l.new == Some(*line),
+            let Some((index, kind)) = self
+                .files
+                .get(f)
+                .and_then(|file| file.hunks.get(h))
+                .and_then(|hunk| {
+                    let index = hunk.lines.iter().position(|l| match side {
+                        Side::Old => l.kind == LineKind::Removed && l.old == Some(*line),
+                        Side::New => l.kind != LineKind::Removed && l.new == Some(*line),
+                    })?;
+                    Some((index, hunk.lines.get(index)?.kind))
                 })
-            }) else {
+            else {
                 continue;
             };
-            if self.files[f].hunks[h].lines[index].kind == LineKind::Context {
+            if kind == LineKind::Context {
                 continue;
             }
             match &mut found {
@@ -1035,15 +1085,15 @@ impl Review {
             }
             match kind {
                 LineKind::Context => {
-                    old_count += 1;
-                    new_count += 1;
+                    old_count = add_or(old_count, 1, usize::MAX);
+                    new_count = add_or(new_count, 1, usize::MAX);
                 }
-                LineKind::Removed => old_count += 1,
-                LineKind::Added => new_count += 1,
+                LineKind::Removed => old_count = add_or(old_count, 1, usize::MAX),
+                LineKind::Added => new_count = add_or(new_count, 1, usize::MAX),
             }
             lines.push(DiffLine { kind, ..l.clone() });
         }
-        let header = reduced_header(&h.header, mode, old_count, new_count);
+        let header = reduced_header(&h.header, mode, old_count, new_count)?;
         let reduced = Hunk { header, lines };
         let mut out = patch_header(&f.path, &reduced);
         push_hunk(&mut out, &reduced);
@@ -1056,23 +1106,29 @@ impl Review {
 /// (the old side to stage, the new side to discard) kept; the other start is
 /// derived from it, following git's convention for an empty side (the line
 /// before the change, or 0 for a whole file).
-fn reduced_header(original: &str, mode: LineMode, old_count: usize, new_count: usize) -> String {
+fn reduced_header(
+    original: &str,
+    mode: LineMode,
+    old_count: usize,
+    new_count: usize,
+) -> Result<String, SelectError> {
     let words: Vec<&str> = original.split_whitespace().collect();
-    let start = |w: Option<&&str>, sign: char| -> usize {
-        w.and_then(|w| w.strip_prefix(sign))
-            .and_then(|w| w.split(',').next())
-            .and_then(|n| n.parse().ok())
-            .unwrap_or(0)
+    // A header with no readable `-start` and `+start` is no hunk to rebuild.
+    let start = |w: Option<&&str>, sign: char| -> Option<usize> {
+        w?.strip_prefix(sign)?.split(',').next()?.parse().ok()
     };
-    let (old_start, new_start) = (start(words.get(1), '-'), start(words.get(2), '+'));
+    let (Some(old_start), Some(new_start)) = (start(words.get(1), '-'), start(words.get(2), '+'))
+    else {
+        return Err(SelectError::NoHunk);
+    };
     let (base, base_count, other_count) = match mode {
         LineMode::Stage => (old_start, old_count, new_count),
         LineMode::Discard => (new_start, new_count, old_count),
     };
     let other = if other_count == 0 {
-        base.saturating_sub(1)
+        sub_or(base, 1, 0)
     } else if base_count == 0 {
-        base + 1
+        add_or(base, 1, usize::MAX)
     } else {
         base
     };
@@ -1080,11 +1136,10 @@ fn reduced_header(original: &str, mode: LineMode, old_count: usize, new_count: u
         LineMode::Stage => (base, other),
         LineMode::Discard => (other, base),
     };
-    let suffix = original
-        .match_indices("@@")
-        .nth(1)
-        .map_or("", |(i, _)| &original[i + 2..]);
-    format!("@@ -{o},{old_count} +{n},{new_count} @@{suffix}")
+    let suffix = original.match_indices("@@").nth(1).map_or("", |(i, _)| {
+        original.get(add_or(i, 2, usize::MAX)..).unwrap_or("")
+    });
+    Ok(format!("@@ -{o},{old_count} +{n},{new_count} @@{suffix}"))
 }
 
 /// The marker git prints after a line that has no trailing newline.
@@ -1177,10 +1232,10 @@ pub fn parse(diff: &str) -> Vec<FileDiff> {
                 LineKind::Removed => (Some(old_n), None),
             };
             if old.is_some() {
-                old_n += 1;
+                old_n = add_or(old_n, 1, usize::MAX);
             }
             if new.is_some() {
-                new_n += 1;
+                new_n = add_or(new_n, 1, usize::MAX);
             }
             hunk.lines.push(DiffLine {
                 kind,
@@ -1482,6 +1537,22 @@ mod tests {
             hunk: 0,
             lines: lines.to_vec(),
         }
+    }
+
+    #[test]
+    fn a_hunk_header_without_start_lines_builds_no_patch() {
+        // The start of each side comes from the header; unreadable means no hunk,
+        // not a hunk that starts at line 0.
+        let mut r = Review::new("r", LINES);
+        for file in &mut r.files {
+            for hunk in &mut file.hunks {
+                hunk.header = "@@ nonsense @@".to_string();
+            }
+        }
+        assert_eq!(
+            r.lines_patch(&pick(&[1]), LineMode::Stage),
+            Err(SelectError::NoHunk)
+        );
     }
 
     #[test]

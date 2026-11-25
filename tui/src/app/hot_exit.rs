@@ -9,6 +9,19 @@
 //! local path, its `ssh://` name in a remote workspace, or an untitled
 //! buffer's session id), and the recovery prompt.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -440,7 +453,7 @@ impl App {
                         tab.backup.written_at = Some(Instant::now());
                         tab.backup.session_id = Some(id);
                     }
-                    count += 1;
+                    count = count.plus(1);
                 }
                 self.status = t!("status.hot_exit_recovered_untitled", count = count).to_string();
             }
@@ -501,3 +514,7 @@ impl App {
         !self.hot_exit.pending.is_empty()
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_hot_exit.rs"]
+mod r3_tests;

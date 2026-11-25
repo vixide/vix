@@ -8,6 +8,18 @@
 //! change what Vix does beyond one buffer's layout, is ignored. Spec:
 //! `crates/vix-editorconfig/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Largest tab width or indent size a modeline may set.
 const MAX_WIDTH: usize = 16;
 /// Largest wrap column a modeline may set.
@@ -16,6 +28,14 @@ const MAX_COLUMN: usize = 1000;
 /// Emacs `Local Variables:` block fits (Emacs itself looks at the last 3,000
 /// characters).
 pub const TAIL_LINES: usize = 64;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// The settings a file's modelines ask for. `None` means "not set here".
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -83,14 +103,13 @@ pub fn parse(head: &str, tail: &str, lines: usize) -> Modeline {
     }
     let head_lines: Vec<&str> = head.lines().take(lines).collect();
     let tail_all: Vec<&str> = tail.lines().collect();
-    let tail_lines = &tail_all[tail_all.len().saturating_sub(lines)..];
+    // The last `lines` lines; a shorter file is all of it.
+    let tail_lines = tail_all.iter().skip(sub_or(tail_all.len(), lines, 0));
 
     let vim_top = head_lines
         .iter()
         .fold(Modeline::default(), |acc, l| vim_line(l).or(acc));
-    let vim_bottom = tail_lines
-        .iter()
-        .fold(Modeline::default(), |acc, l| vim_line(l).or(acc));
+    let vim_bottom = tail_lines.fold(Modeline::default(), |acc, l| vim_line(l).or(acc));
     let emacs_top = emacs_first_line(head);
     let emacs_bottom = emacs_local_variables(&tail_all);
 
@@ -159,9 +178,12 @@ fn vim_line(line: &str) -> Modeline {
 fn vim_options(line: &str) -> Option<&str> {
     ["vim:", "Vim:", "vi:", "ex:"].iter().find_map(|marker| {
         line.match_indices(marker).find_map(|(at, _)| {
-            let before = &line[..at];
-            (before.is_empty() || before.ends_with(char::is_whitespace))
-                .then(|| &line[at + marker.len()..])
+            let (before, rest) = line.split_at_checked(at)?;
+            if before.is_empty() || before.ends_with(char::is_whitespace) {
+                rest.strip_prefix(marker)
+            } else {
+                None
+            }
         })
     })
 }
@@ -197,12 +219,16 @@ fn emacs_local_variables(tail: &[&str]) -> Modeline {
     let Some(start) = tail.iter().rposition(|l| l.contains("Local Variables:")) else {
         return Modeline::default();
     };
-    let opener = tail[start];
-    let at = opener.find("Local Variables:").unwrap_or(0);
-    let prefix = &opener[..at];
-    let suffix = opener[at + "Local Variables:".len()..].trim();
+    let mut rest = tail.iter().skip(start);
+    let Some((prefix, after)) = rest
+        .next()
+        .and_then(|opener| opener.split_once("Local Variables:"))
+    else {
+        return Modeline::default();
+    };
+    let suffix = after.trim();
     let mut m = Modeline::default();
-    for line in &tail[start + 1..] {
+    for line in rest {
         let body = line.strip_prefix(prefix).unwrap_or(line);
         let body = body.trim_end();
         let body = body.strip_suffix(suffix).unwrap_or(body).trim();

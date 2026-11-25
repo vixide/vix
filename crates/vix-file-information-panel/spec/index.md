@@ -184,3 +184,11 @@ host glue in `tui/src/app.rs` and `tui/src/ui.rs`:
 The Tools menu lists Workspace Dashboard, System Information, and File
 Information (`crates/vix-menu/src/lib.rs`); the Outline panel is reached by keybinding or the
 command palette; the Welcome panel is reached on first run or from the Help menu.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The time-of-day split uses `checked_div`, `checked_rem` and the `_euclid` variants.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `FILEINFO-F1` | A division or remainder by a constant fails | `0` | The divisors are constants above zero, so this cannot happen. |

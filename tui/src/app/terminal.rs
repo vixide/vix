@@ -1,7 +1,20 @@
 //! Integrated terminals (T631): several PTY shells as tabs of one overlay,
 //! with scrollback, mouse selection and copy, and mouse forwarding.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::{App, Focus, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crate::geo::Geo;
 use crate::terminal::{Selection, Terminal};
 
 /// Lines one mouse-wheel notch scrolls the terminal's scrollback.
@@ -166,13 +179,13 @@ impl App {
             }
             return true;
         }
-        let page = isize::try_from(term.size().0.saturating_sub(1).max(1)).unwrap_or(1);
+        let page = isize::try_from(term.size().0.minus(1).max(1)).unwrap_or(1);
         match key.code {
             KeyCode::PageUp if shift => {
                 term.scroll_by(page);
             }
             KeyCode::PageDown if shift => {
-                term.scroll_by(-page);
+                term.scroll_by(0_isize.minus(page));
             }
             KeyCode::Home if shift => {
                 term.scroll_by(isize::MAX);
@@ -302,7 +315,7 @@ impl App {
         if !super::rect_contains(area, mouse.column, mouse.row) {
             return false;
         }
-        let cell = (mouse.row - area.y, mouse.column - area.x);
+        let cell = (mouse.row.minus(area.y), mouse.column.minus(area.x));
         let shift = mouse.modifiers.contains(KeyModifiers::SHIFT);
         if mouse.kind == MouseEventKind::Down(MouseButton::Left)
             && mouse.modifiers.contains(KeyModifiers::CONTROL)
@@ -440,3 +453,6 @@ fn open_terminal(
     );
     Terminal::open_command(spec.program(), &args, &dir, rows, cols, scrollback)
 }
+
+#[cfg(test)]
+mod tests;

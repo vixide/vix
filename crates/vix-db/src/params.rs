@@ -15,6 +15,28 @@
 
 use super::catalog::quote_literal;
 
+/// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners
+/// stop at the end before reading it).
+fn ch(chars: &[char], i: usize) -> char {
+    chars.get(i).copied().unwrap_or('\0')
+}
+
+/// The chars between `from` and `to`; empty for a range that is not inside `chars`.
+fn span(chars: &[char], from: usize, to: usize) -> &[char] {
+    chars.get(from..to).unwrap_or(&[])
+}
+
+/// `from + step`; an index past the top of `usize` is past any text.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Whether `c` may appear in a parameter name.
 fn is_name_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_'
@@ -42,50 +64,52 @@ pub fn names(sql: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut i = 0;
     while i < chars.len() {
-        match chars[i] {
+        match ch(&chars, i) {
             '\'' => {
                 // Skip a single-quoted string ('' is an escaped quote).
-                i += 1;
+                i = ahead(i, 1);
                 while i < chars.len() {
-                    if chars[i] == '\'' {
-                        if chars.get(i + 1) == Some(&'\'') {
-                            i += 2;
+                    if ch(&chars, i) == '\'' {
+                        if chars.get(ahead(i, 1)) == Some(&'\'') {
+                            i = ahead(i, 2);
                             continue;
                         }
                         break;
                     }
-                    i += 1;
+                    i = ahead(i, 1);
                 }
-                i += 1;
+                i = ahead(i, 1);
             }
-            '-' if chars.get(i + 1) == Some(&'-') => {
-                while i < chars.len() && chars[i] != '\n' {
-                    i += 1;
+            '-' if chars.get(ahead(i, 1)) == Some(&'-') => {
+                while i < chars.len() && ch(&chars, i) != '\n' {
+                    i = ahead(i, 1);
                 }
             }
-            '/' if chars.get(i + 1) == Some(&'*') => {
-                i += 2;
-                while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
-                    i += 1;
+            '/' if chars.get(ahead(i, 1)) == Some(&'*') => {
+                i = ahead(i, 2);
+                while i < chars.len()
+                    && !(ch(&chars, i) == '*' && chars.get(ahead(i, 1)) == Some(&'/'))
+                {
+                    i = ahead(i, 1);
                 }
-                i += 2;
+                i = ahead(i, 2);
             }
-            ':' if chars.get(i + 1) == Some(&':') => i += 2, // `::type` cast
+            ':' if chars.get(ahead(i, 1)) == Some(&':') => i = ahead(i, 2), // `::type` cast
             ':' => {
-                let start = i + 1;
+                let start = ahead(i, 1);
                 let mut j = start;
-                while j < chars.len() && is_name_char(chars[j]) {
-                    j += 1;
+                while j < chars.len() && is_name_char(ch(&chars, j)) {
+                    j = ahead(j, 1);
                 }
                 if j > start {
-                    let name: String = chars[start..j].iter().collect();
+                    let name: String = span(&chars, start, j).iter().collect();
                     if !out.contains(&name) {
                         out.push(name);
                     }
                 }
                 i = j;
             }
-            _ => i += 1,
+            _ => i = ahead(i, 1),
         }
     }
     out
@@ -111,47 +135,49 @@ pub fn substitute(sql: &str, values: &[(String, String)]) -> String {
     let mut out = String::with_capacity(sql.len());
     let mut i = 0;
     while i < chars.len() {
-        match chars[i] {
+        match ch(&chars, i) {
             '\'' => {
                 out.push('\'');
-                i += 1;
+                i = ahead(i, 1);
                 while i < chars.len() {
-                    out.push(chars[i]);
-                    if chars[i] == '\'' {
-                        if chars.get(i + 1) == Some(&'\'') {
+                    out.push(ch(&chars, i));
+                    if ch(&chars, i) == '\'' {
+                        if chars.get(ahead(i, 1)) == Some(&'\'') {
                             out.push('\'');
-                            i += 2;
+                            i = ahead(i, 2);
                             continue;
                         }
-                        i += 1;
+                        i = ahead(i, 1);
                         break;
                     }
-                    i += 1;
+                    i = ahead(i, 1);
                 }
             }
-            '-' if chars.get(i + 1) == Some(&'-') => {
-                while i < chars.len() && chars[i] != '\n' {
-                    out.push(chars[i]);
-                    i += 1;
+            '-' if chars.get(ahead(i, 1)) == Some(&'-') => {
+                while i < chars.len() && ch(&chars, i) != '\n' {
+                    out.push(ch(&chars, i));
+                    i = ahead(i, 1);
                 }
             }
-            '/' if chars.get(i + 1) == Some(&'*') => {
-                while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
-                    out.push(chars[i]);
-                    i += 1;
+            '/' if chars.get(ahead(i, 1)) == Some(&'*') => {
+                while i < chars.len()
+                    && !(ch(&chars, i) == '*' && chars.get(ahead(i, 1)) == Some(&'/'))
+                {
+                    out.push(ch(&chars, i));
+                    i = ahead(i, 1);
                 }
             }
-            ':' if chars.get(i + 1) == Some(&':') => {
+            ':' if chars.get(ahead(i, 1)) == Some(&':') => {
                 out.push_str("::");
-                i += 2;
+                i = ahead(i, 2);
             }
             ':' => {
-                let start = i + 1;
+                let start = ahead(i, 1);
                 let mut j = start;
-                while j < chars.len() && is_name_char(chars[j]) {
-                    j += 1;
+                while j < chars.len() && is_name_char(ch(&chars, j)) {
+                    j = ahead(j, 1);
                 }
-                let name: String = chars[start..j].iter().collect();
+                let name: String = span(&chars, start, j).iter().collect();
                 match values.iter().find(|(n, _)| n == &name) {
                     Some((_, v)) if j > start => {
                         out.push_str(&quote_literal(v));
@@ -159,13 +185,13 @@ pub fn substitute(sql: &str, values: &[(String, String)]) -> String {
                     }
                     _ => {
                         out.push(':');
-                        i += 1;
+                        i = ahead(i, 1);
                     }
                 }
             }
             c => {
                 out.push(c);
-                i += 1;
+                i = ahead(i, 1);
             }
         }
     }
@@ -205,5 +231,36 @@ mod tests {
             "SELECT ':x'"
         );
         assert_eq!(substitute("WHERE a = :missing", &[]), "WHERE a = :missing");
+    }
+
+    #[test]
+    fn names_skip_quoted_and_commented_text_and_stop_at_name_characters() {
+        assert_eq!(
+            names("SELECT 'it''s :no', :a /* :hidden */, :b_2 -- :gone"),
+            ["a", "b_2"]
+        );
+        assert_eq!(names("SELECT '' || :x"), ["x"]);
+        assert!(
+            names("a ::: b : c").is_empty(),
+            "a bare colon names nothing"
+        );
+        assert_eq!(names("/* unterminated :x"), Vec::<String>::new());
+        assert_eq!(names("'unterminated :x"), Vec::<String>::new());
+        assert_eq!(names(":"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn substitution_leaves_strings_comments_casts_and_unknown_names_alone() {
+        let values = [("id".to_string(), "7".to_string())];
+        assert_eq!(
+            substitute(
+                "SELECT 'it''s :id', :id::int /* :id */ -- :id\n, :other, :",
+                &values
+            ),
+            "SELECT 'it''s :id', 7::int /* :id */ -- :id\n, :other, :"
+        );
+        assert_eq!(substitute("a ::int b", &values), "a ::int b");
+        assert_eq!(substitute("'open :id", &values), "'open :id");
+        assert_eq!(substitute("/* open :id", &values), "/* open :id");
     }
 }

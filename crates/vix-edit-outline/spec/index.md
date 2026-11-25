@@ -41,3 +41,7 @@ syncs the scroll window, and persists saves.
 ## Roadmap
 
 - Nothing open.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The outline tree (blocks, siblings, parents, indent and move) reaches items through `get`, `get_mut` and checked steps. **Declared (OUTLINE-F1):** the selection stops at the first and last visible row; moving the selection past the last item stays on it; an item index with no item has an empty block and no parent or sibling; restoring a snapshot brings its selection back inside the list.

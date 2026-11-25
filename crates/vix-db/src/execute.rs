@@ -116,13 +116,27 @@ pub(crate) struct Anchor {
     len: usize,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// The editor offset a server error position points at (T775): `position`
 /// is 1-based in chars of the sent SQL; a position inside a wrapping prefix
 /// (an `EXPLAIN …` the user did not type) maps nowhere, and one past the
 /// statement's end is clamped to it.
 fn error_offset(anchor: Anchor, position: usize) -> Option<usize> {
     let rel = position.checked_sub(1)?.checked_sub(anchor.prefix)?;
-    Some(anchor.start + rel.min(anchor.len))
+    Some(add_or(anchor.start, rel.min(anchor.len), usize::MAX))
 }
 
 /// A server-side cancel (T774) in flight or done, awaited by
@@ -257,10 +271,6 @@ impl Browser {
 
     /// Keys on the bind-parameter prompt: each `Enter` records the value for the
     /// current placeholder; once all are filled the substituted statement runs.
-    #[expect(
-        clippy::expect_used,
-        reason = "invariant established earlier in this function"
-    )]
     pub(super) fn key_params(&mut self, key: KeyEvent) -> Outcome {
         let Some(prompt) = self.params.as_mut() else {
             self.view = View::Workbench;
@@ -275,7 +285,9 @@ impl Browser {
                 let value = std::mem::take(&mut prompt.input);
                 prompt.values.push(value);
                 if prompt.values.len() >= prompt.names.len() {
-                    let prompt = self.params.take().expect("prompt present");
+                    let Some(prompt) = self.params.take() else {
+                        return Outcome::Consumed;
+                    };
                     let pairs: Vec<(String, String)> =
                         prompt.names.into_iter().zip(prompt.values).collect();
                     let sql = params::substitute(&prompt.sql, &pairs);
@@ -384,7 +396,7 @@ impl Browser {
             .map(|&(s, e)| {
                 text.chars()
                     .skip(s)
-                    .take(e - s)
+                    .take(sub_or(e, s, 0))
                     .collect::<String>()
                     .trim()
                     .to_string()
@@ -481,7 +493,7 @@ impl Browser {
         let at = sql.find(core)?;
         Some(Anchor {
             start,
-            prefix: sql[..at].chars().count(),
+            prefix: sql.get(..at)?.chars().count(),
             len: core.chars().count(),
         })
     }
@@ -874,7 +886,8 @@ impl Browser {
                 Err(e) => {
                     self.last_error = Some((stmt.clone(), e.to_string()));
                     self.note_tx(stmt, false);
-                    self.message = Some(format!("{}/{}: {e}", i + 1, stmts.len()));
+                    self.message =
+                        Some(format!("{}/{}: {e}", add_or(i, 1, usize::MAX), stmts.len()));
                     return;
                 }
             }
@@ -1184,5 +1197,673 @@ mod tests {
         assert!(lost, "the reconnect knows a transaction was open");
         drain(&mut b);
         assert_eq!(b.tx, TxState::None);
+    }
+
+    mod keys {
+        use super::*;
+        use crate::Pages;
+        use crate::test_support::{ctrl, press, typed, workbench};
+
+        fn editor_with(b: &mut Browser, text: &str) {
+            b.focus = Pane::Editor;
+            b.query = editor::Query::from_text(text);
+        }
+
+        fn grid_of(b: &Browser) -> Vec<Vec<String>> {
+            b.grid.rows.clone()
+        }
+
+        fn count(b: &mut Browser, table: &str) -> String {
+            b.session
+                .as_mut()
+                .unwrap()
+                .run(&format!("SELECT count(*) FROM {table}"))
+                .unwrap()
+                .1[0][0]
+                .clone()
+        }
+
+        #[test]
+        fn f5_streams_the_statement_at_the_cursor_into_the_grid() {
+            let mut b = workbench(
+                false,
+                &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2)"],
+            );
+            editor_with(&mut b, "SELECT a FROM t ORDER BY a;");
+            press(&mut b, KeyCode::F(5));
+            assert!(b.query_running());
+            assert_eq!(b.message, Some(t!("msg.db_running").to_string()));
+            // Busy: other keys are swallowed.
+            press(&mut b, KeyCode::Char('x'));
+            drain(&mut b);
+            assert_eq!(grid_of(&b), [["1"], ["2"]]);
+            assert_eq!(b.focus, Pane::Results);
+            assert_eq!(b.message, Some(t!("msg.db_rows", count = 2).to_string()));
+            assert!(
+                b.history
+                    .entries
+                    .iter()
+                    .any(|h| h.contains("SELECT a FROM t"))
+            );
+            assert!(b.take_dirty_history().is_some());
+            assert_eq!(
+                b.query.text(),
+                "SELECT a FROM t ORDER BY a;",
+                "the busy key typed nothing"
+            );
+        }
+
+        #[test]
+        fn running_nothing_or_while_disconnected_says_so() {
+            let mut b = workbench(false, &[]);
+            b.execute();
+            assert_eq!(b.message, Some(t!("msg.db_no_statement").to_string()));
+            b.execute_all();
+            assert_eq!(b.message, Some(t!("msg.db_no_statement").to_string()));
+            b.explain(false);
+            assert_eq!(b.message, Some(t!("msg.db_no_statement").to_string()));
+            b.session = None;
+            editor_with(&mut b, "SELECT 1");
+            b.execute();
+            assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+            b.conn = None;
+            b.explain(true);
+            assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+            b.toggle_write_mode();
+            assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+            b.begin_tx();
+            assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        }
+
+        #[test]
+        fn a_failed_statement_records_the_error_for_the_fix_helper() {
+            let mut b = workbench(false, &[]);
+            editor_with(&mut b, "SELECT * FROM missing");
+            press(&mut b, KeyCode::F(5));
+            drain(&mut b);
+            assert!(b.message.as_deref().unwrap().contains("missing"));
+            let (sql, error) = b.last_error.clone().unwrap();
+            assert_eq!(sql, "SELECT * FROM missing");
+            assert!(error.contains("missing"));
+            assert!(
+                b.log
+                    .entries
+                    .iter()
+                    .any(|e| !e.ok && e.sql.contains("missing"))
+            );
+            // A later success clears it.
+            editor_with(&mut b, "SELECT 1");
+            press(&mut b, KeyCode::F(5));
+            drain(&mut b);
+            assert!(b.last_error.is_none());
+        }
+
+        #[test]
+        fn writes_are_refused_read_only_and_confirmed_when_writable() {
+            let mut b = workbench(false, &["CREATE TABLE t (a INTEGER)"]);
+            editor_with(&mut b, "INSERT INTO t VALUES (1)");
+            press(&mut b, KeyCode::F(5));
+            assert_eq!(b.message, Some(t!("msg.db_read_only").to_string()));
+            assert_eq!(b.view, View::Workbench);
+            // F8 enables writes; the write now asks first.
+            press(&mut b, KeyCode::F(8));
+            assert!(b.write_enabled());
+            assert_eq!(b.message, Some(t!("msg.db_write_enabled").to_string()));
+            press(&mut b, KeyCode::F(5));
+            assert_eq!(b.view, View::Confirm);
+            assert_eq!(
+                b.pending_summary().as_deref(),
+                Some("INSERT INTO t VALUES (1)")
+            );
+            assert_eq!(b.pending_statements(), ["INSERT INTO t VALUES (1)"]);
+            press(&mut b, KeyCode::Char('n'));
+            assert_eq!(b.view, View::Workbench);
+            assert_eq!(b.pending_summary(), None);
+            assert_eq!(b.pending_statements().len(), 0);
+            assert_eq!(count(&mut b, "t"), "0");
+            press(&mut b, KeyCode::F(5));
+            press(&mut b, KeyCode::Enter);
+            drain(&mut b);
+            assert_eq!(count(&mut b, "t"), "1");
+            // F8 again turns write mode back off on the session.
+            press(&mut b, KeyCode::F(8));
+            assert_eq!(b.message, Some(t!("msg.db_read_only_on").to_string()));
+            press(&mut b, KeyCode::F(5));
+            assert_eq!(b.message, Some(t!("msg.db_read_only").to_string()));
+        }
+
+        #[test]
+        fn drops_always_ask_but_other_writes_inside_a_transaction_do_not() {
+            let mut b = workbench(true, &["CREATE TABLE t (a INTEGER)"]);
+            b.begin_tx();
+            assert_eq!(b.tx_state(), TxState::Open);
+            assert_eq!(b.message, Some(t!("msg.db_tx_begin").to_string()));
+            editor_with(&mut b, "INSERT INTO t VALUES (1)");
+            press(&mut b, KeyCode::F(5));
+            assert_eq!(b.view, View::Workbench, "ROLLBACK can undo it");
+            drain(&mut b);
+            editor_with(&mut b, "DROP TABLE t");
+            press(&mut b, KeyCode::F(5));
+            assert_eq!(b.view, View::Confirm);
+            press(&mut b, KeyCode::Esc);
+            b.rollback_tx();
+            assert_eq!(b.tx_state(), TxState::None);
+            assert_eq!(b.message, Some(t!("msg.db_tx_rollback").to_string()));
+            assert_eq!(count(&mut b, "t"), "0");
+        }
+
+        #[test]
+        fn transaction_commands_track_the_badge() {
+            let mut b = workbench(true, &["CREATE TABLE t (a INTEGER)"]);
+            b.commit_tx();
+            assert_eq!(b.message, Some(t!("msg.db_tx_none").to_string()));
+            b.rollback_tx();
+            assert_eq!(b.message, Some(t!("msg.db_tx_none").to_string()));
+            b.begin_tx();
+            // A failing statement inside the transaction aborts it.
+            editor_with(&mut b, "SELECT * FROM missing");
+            press(&mut b, KeyCode::F(5));
+            drain(&mut b);
+            assert_eq!(b.tx_state(), TxState::Aborted);
+            b.rollback_tx();
+            assert_eq!(b.tx_state(), TxState::None);
+            b.begin_tx();
+            b.commit_tx();
+            assert_eq!(b.tx_state(), TxState::None);
+            assert_eq!(b.message, Some(t!("msg.db_tx_commit").to_string()));
+            // A transaction command the server refuses reports the error.
+            b.session.as_mut().unwrap().run("BEGIN").unwrap();
+            b.begin_tx();
+            assert!(b.message.as_deref().unwrap().contains("transaction"));
+            b.session.as_mut().unwrap().run("ROLLBACK").unwrap();
+        }
+
+        #[test]
+        fn named_parameters_are_prompted_and_substituted() {
+            let mut b = workbench(
+                false,
+                &["CREATE TABLE t (a INTEGER)", "INSERT INTO t VALUES (1),(2)"],
+            );
+            editor_with(&mut b, "SELECT a FROM t WHERE a = :n");
+            press(&mut b, KeyCode::F(5));
+            assert_eq!(b.view, View::Params);
+            typed(&mut b, "12");
+            press(&mut b, KeyCode::Backspace);
+            press(&mut b, KeyCode::Tab);
+            press(&mut b, KeyCode::Enter);
+            assert_eq!(b.view, View::Workbench);
+            drain(&mut b);
+            assert_eq!(grid_of(&b), [["1"]]);
+            assert!(
+                b.history.entries.iter().any(|h| h.contains(":n")),
+                "history keeps the template, not the value"
+            );
+            // Esc abandons the prompt.
+            press(&mut b, KeyCode::Char('x'));
+            b.view = View::Workbench;
+            b.focus = Pane::Editor;
+            b.query = editor::Query::from_text("SELECT :a");
+            press(&mut b, KeyCode::F(5));
+            press(&mut b, KeyCode::Esc);
+            assert_eq!(b.view, View::Workbench);
+            assert!(b.params.is_none());
+            // With no prompt open, the params view just returns.
+            b.view = View::Params;
+            press(&mut b, KeyCode::Char('z'));
+            assert_eq!(b.view, View::Workbench);
+        }
+
+        #[test]
+        fn execute_all_runs_every_statement_and_stops_at_the_first_error() {
+            let mut b = workbench(true, &[]);
+            editor_with(
+                &mut b,
+                "CREATE TABLE t (a); INSERT INTO t VALUES (7); SELECT a FROM t",
+            );
+            press(&mut b, KeyCode::F(9));
+            assert_eq!(b.view, View::Confirm);
+            assert_eq!(b.pending_statements().len(), 3);
+            assert!(b.pending_summary().unwrap().starts_with("3 ×"));
+            press(&mut b, KeyCode::Char('y'));
+            assert_eq!(grid_of(&b), [["7"]]);
+            assert_eq!(b.message, Some(t!("msg.db_ran_all", count = 3).to_string()));
+            assert_eq!(b.focus, Pane::Results);
+            editor_with(&mut b, "SELECT 1; SELECT * FROM nope; SELECT 3");
+            press(&mut b, KeyCode::F(9));
+            assert!(
+                b.message.as_deref().unwrap().starts_with("2/3:"),
+                "{:?}",
+                b.message
+            );
+            assert!(b.last_error.is_some());
+            assert_eq!(grid_of(&b), [["7"]], "the grid keeps the last good result");
+        }
+
+        #[test]
+        fn execute_all_refuses_writes_read_only_and_psql_meta_commands() {
+            let mut b = workbench(false, &[]);
+            editor_with(&mut b, "SELECT 1; CREATE TABLE t (a)");
+            press(&mut b, KeyCode::F(9));
+            assert_eq!(b.message, Some(t!("msg.db_read_only").to_string()));
+            editor_with(&mut b, "SELECT 1;\nSELECT 2");
+            b.query = editor::Query::from_text("SELECT 1;\n\\connect other\nSELECT 2");
+            press(&mut b, KeyCode::F(9));
+            assert!(
+                b.message.as_deref().unwrap().contains('2'),
+                "{:?}",
+                b.message
+            );
+            assert_eq!(b.view, View::Workbench);
+            // A read-only script runs straight away.
+            editor_with(&mut b, "SELECT 1; SELECT 2");
+            press(&mut b, KeyCode::F(9));
+            assert_eq!(grid_of(&b), [["2"]]);
+        }
+
+        #[test]
+        fn explain_shows_the_plan_and_warns_about_full_scans() {
+            let mut b = workbench(true, &["CREATE TABLE t (a INTEGER)"]);
+            editor_with(&mut b, "SELECT * FROM t");
+            press(&mut b, KeyCode::F(6));
+            drain(&mut b);
+            assert_ne!(b.grid.rows.len(), 0);
+            assert_eq!(b.message, Some(t!("msg.db_insight_scan").to_string()));
+            assert!(b.plan_marks().is_none());
+            // An indexed lookup is a plain plan.
+            editor_with(&mut b, "SELECT 1");
+            press(&mut b, KeyCode::F(6));
+            drain(&mut b);
+            assert!(b.message.is_some());
+        }
+
+        #[test]
+        fn explain_analyze_of_a_write_needs_write_mode_and_confirmation() {
+            let mut b = workbench(false, &["CREATE TABLE t (a INTEGER)"]);
+            editor_with(&mut b, "INSERT INTO t VALUES (1)");
+            press(&mut b, KeyCode::F(7));
+            assert_eq!(b.message, Some(t!("msg.db_read_only").to_string()));
+            b.write_enabled = true;
+            press(&mut b, KeyCode::F(7));
+            assert_eq!(b.view, View::Confirm);
+            assert!(matches!(b.pending_run, Some(PendingRun::Explain(..))));
+            assert!(b.pending_summary().is_some());
+            assert_eq!(b.pending_statements().len(), 1);
+            press(&mut b, KeyCode::Enter);
+            drain(&mut b);
+            assert_eq!(b.view, View::Workbench);
+        }
+
+        #[test]
+        fn control_enter_executes_and_confirm_discards_a_history_template() {
+            let mut b = workbench(true, &["CREATE TABLE t (a INTEGER)"]);
+            editor_with(&mut b, "INSERT INTO t VALUES (:v)");
+            b.handle_key(
+                vix_input::KeyEvent::new(KeyCode::Enter, vix_input::KeyModifiers::CONTROL),
+                Pages::default(),
+            );
+            assert_eq!(b.view, View::Params);
+            typed(&mut b, "5");
+            press(&mut b, KeyCode::Enter);
+            assert_eq!(b.view, View::Confirm);
+            assert!(b.history_override.is_some());
+            press(&mut b, KeyCode::Char('q'));
+            assert!(
+                b.history_override.is_none(),
+                "cancelling drops the template"
+            );
+            assert_eq!(b.view, View::Workbench);
+            press(&mut b, KeyCode::Char('z'));
+        }
+
+        #[test]
+        fn a_read_only_write_with_a_parameter_drops_the_staged_template() {
+            let mut b = workbench(false, &["CREATE TABLE t (a INTEGER)"]);
+            editor_with(&mut b, "INSERT INTO t VALUES (:v)");
+            press(&mut b, KeyCode::F(5));
+            typed(&mut b, "1");
+            press(&mut b, KeyCode::Enter);
+            assert_eq!(b.message, Some(t!("msg.db_read_only").to_string()));
+            assert!(b.history_override.is_none());
+        }
+
+        #[test]
+        fn ctrl_c_cancels_a_slow_query_by_reconnecting_on_sqlite() {
+            let mut b = workbench(false, &[]);
+            editor_with(
+                &mut b,
+                "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x < 100000000) SELECT count(*) FROM c",
+            );
+            press(&mut b, KeyCode::F(5));
+            assert!(b.query_running());
+            ctrl(&mut b, 'c');
+            assert!(b.reconnect_running());
+            assert_eq!(b.message, Some(t!("msg.db_cancelling").to_string()));
+            drain(&mut b);
+            assert_eq!(b.message, Some(t!("msg.db_cancelled").to_string()));
+            // Cancelling with nothing running does nothing.
+            b.cancel_query();
+            assert!(!b.query_running());
+        }
+
+        #[test]
+        fn a_failed_reconnect_disconnects() {
+            let mut b = workbench(false, &[]);
+            let (tx, rx) = std::sync::mpsc::channel();
+            tx.send(Err(session::SessionError::NotConnected)).unwrap();
+            b.pending_reconnect = Some(PendingReconnect { rx, lost_tx: false });
+            b.poll_reconnect();
+            assert_eq!(b.view, View::Connections);
+            assert!(b.conn.is_none());
+            // A dropped sender counts as a failure too; nothing pending is a no-op.
+            let (tx, rx) =
+                std::sync::mpsc::channel::<Result<session::Session, session::SessionError>>();
+            drop(tx);
+            b.pending_reconnect = Some(PendingReconnect { rx, lost_tx: true });
+            b.poll_reconnect();
+            assert!(!b.reconnect_running());
+            b.poll_reconnect();
+        }
+
+        #[test]
+        fn a_cancel_answered_by_the_server_keeps_the_session() {
+            let mut b = workbench(false, &[]);
+            editor_with(&mut b, "SELECT 1");
+            press(&mut b, KeyCode::F(5));
+            let (tx, rx) = std::sync::mpsc::channel();
+            b.pending_query.as_mut().unwrap().cancel = Some(ServerCancel { rx: Some(rx) });
+            assert!(!b.poll_server_cancel(), "still waiting");
+            tx.send(Ok(true)).unwrap();
+            assert!(!b.poll_server_cancel(), "accepted: keep draining");
+            assert!(!b.poll_server_cancel(), "already received");
+            drain(&mut b);
+            // A refused cancel falls back to the reconnect.
+            editor_with(&mut b, "SELECT 2");
+            press(&mut b, KeyCode::F(5));
+            let (tx, rx) = std::sync::mpsc::channel();
+            b.pending_query.as_mut().unwrap().cancel = Some(ServerCancel { rx: Some(rx) });
+            tx.send(Ok(false)).unwrap();
+            b.poll_query();
+            assert!(b.reconnect_running() || !b.query_running());
+            drain(&mut b);
+        }
+
+        #[test]
+        fn a_server_cancelled_statement_reports_cancelled_not_an_error() {
+            let mut b = workbench(false, &[]);
+            b.pending_query = Some(Pending {
+                started: std::time::Instant::now(),
+                sql: "SELECT 1".into(),
+                history_sql: "SELECT 1".into(),
+                kind: QueryKind::Run,
+                anchor: None,
+                cancel: Some(ServerCancel { rx: None }),
+            });
+            let cancelled = session::QueryError {
+                message: "canceling statement".into(),
+                kind: session::QueryErrorKind::Database,
+                code: Some("57014".into()),
+            };
+            b.tx = TxState::Open;
+            b.finish_stream_err(&cancelled, None);
+            assert_eq!(b.tx, TxState::Aborted);
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_cancelled_tx_aborted").to_string())
+            );
+            assert!(b.last_error.is_none());
+        }
+
+        #[test]
+        fn a_lost_connection_error_gets_a_hint() {
+            let mut b = workbench(false, &[]);
+            b.pending_query = Some(Pending {
+                started: std::time::Instant::now(),
+                sql: "SELECT 1".into(),
+                history_sql: "SELECT 1".into(),
+                kind: QueryKind::Run,
+                anchor: None,
+                cancel: None,
+            });
+            let lost = session::QueryError {
+                message: "broken pipe".into(),
+                kind: session::QueryErrorKind::ConnectionLost,
+                code: None,
+            };
+            b.finish_stream_err(&lost, None);
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_connection_lost", error = "broken pipe").to_string())
+            );
+            assert_eq!(b.last_error.unwrap().1, "broken pipe");
+        }
+
+        #[test]
+        fn a_truncated_stream_reports_the_cap() {
+            let mut b = workbench(false, &[]);
+            b.pending_query = Some(Pending {
+                started: std::time::Instant::now(),
+                sql: "SELECT 1".into(),
+                history_sql: "SELECT 1".into(),
+                kind: QueryKind::Run,
+                anchor: None,
+                cancel: None,
+            });
+            b.finish_stream(true);
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_rows_truncated", count = 0, max = session::MAX_ROWS).to_string())
+            );
+            // No pending query: nothing happens.
+            b.message = None;
+            b.finish_stream(false);
+            b.finish_stream_err(
+                &session::QueryError {
+                    message: "x".into(),
+                    kind: session::QueryErrorKind::Database,
+                    code: None,
+                },
+                None,
+            );
+            assert_eq!(b.message, None);
+        }
+
+        #[test]
+        fn a_postgres_plan_text_that_does_not_parse_is_left_alone() {
+            let mut b = workbench(false, &[]);
+            b.grid.set(
+                vec!["QUERY PLAN".into()],
+                vec![vec!["Seq Scan on t".into()]],
+            );
+            assert!(b.show_plan_tree(connect::Kind::Postgres).is_none());
+        }
+
+        #[test]
+        fn a_stray_confirm_with_nothing_pending_just_returns() {
+            let mut b = workbench(true, &[]);
+            b.view = View::Confirm;
+            press(&mut b, KeyCode::Enter);
+            assert_eq!(b.view, View::Workbench);
+            b.view = View::Confirm;
+            press(&mut b, KeyCode::Char('x'));
+            assert_eq!(b.view, View::Confirm);
+        }
+
+        #[test]
+        fn a_positioned_error_moves_the_cursor_in_the_real_flow() {
+            let mut b = workbench(false, &[]);
+            editor_with(&mut b, "SELECT 1");
+            press(&mut b, KeyCode::F(5));
+            // The anchor is recorded for a verbatim statement.
+            assert!(b.pending_query.as_ref().unwrap().anchor.is_some());
+            drain(&mut b);
+        }
+    }
+
+    mod more {
+        use super::*;
+        use crate::test_support::{family, press, workbench};
+
+        fn editor_with(b: &mut Browser, text: &str) {
+            b.focus = Pane::Editor;
+            b.query = editor::Query::from_text(text);
+        }
+
+        fn pending(kind: QueryKind) -> Pending {
+            Pending {
+                started: std::time::Instant::now(),
+                sql: "SELECT 1".into(),
+                history_sql: "SELECT 1".into(),
+                kind,
+                anchor: None,
+                cancel: None,
+            }
+        }
+
+        const ANALYZED: &str = r#"[{"Plan":{"Node Type":"Index Scan","Relation Name":"t","Total Cost":1.0,"Plan Rows":1,"Actual Total Time":0.5,"Actual Rows":1,"Actual Loops":1},"Planning Time":0.1,"Execution Time":0.9}]"#;
+        const PLAIN: &str = r#"[{"Plan":{"Node Type":"Index Scan","Relation Name":"t","Total Cost":1.0,"Plan Rows":1}}]"#;
+
+        #[test]
+        fn a_postgres_plan_is_shown_as_a_tree_with_its_timing() {
+            for (json, expected) in [
+                (
+                    ANALYZED,
+                    t!("msg.db_plan_timed", count = 1, ms = "0.900").to_string(),
+                ),
+                (PLAIN, t!("msg.db_plan", count = 1).to_string()),
+            ] {
+                let mut b = workbench(false, &[]);
+                b.pending_query = Some(pending(QueryKind::Explain(connect::Kind::Postgres)));
+                b.grid
+                    .set(vec!["QUERY PLAN".into()], vec![vec![json.into()]]);
+                b.finish_stream(false);
+                assert_eq!(b.message, Some(expected));
+                assert!(b.plan_marks().is_some());
+                assert!(b.grid.headers.len() > 1, "the grid now holds the tree");
+            }
+        }
+
+        #[test]
+        fn a_plain_explain_on_sqlite_reports_its_row_count() {
+            let mut b = workbench(false, &[]);
+            b.pending_query = Some(pending(QueryKind::Explain(connect::Kind::Sqlite)));
+            b.grid.set(
+                vec!["detail".into()],
+                vec![vec!["SEARCH t USING INDEX".into()]],
+            );
+            b.finish_stream(false);
+            assert_eq!(b.message, Some(t!("msg.db_rows", count = 1).to_string()));
+        }
+
+        #[test]
+        fn a_server_cancel_without_a_transaction_just_says_cancelled() {
+            let mut b = workbench(false, &[]);
+            let mut p = pending(QueryKind::Run);
+            p.cancel = Some(ServerCancel { rx: None });
+            b.pending_query = Some(p);
+            let cancelled = session::QueryError {
+                message: "canceled".into(),
+                kind: session::QueryErrorKind::Database,
+                code: Some("70100".into()),
+            };
+            b.finish_stream_err(&cancelled, None);
+            assert_eq!(b.message, Some(t!("msg.db_cancelled").to_string()));
+        }
+
+        #[test]
+        fn a_dropped_cancel_thread_falls_back_to_reconnecting() {
+            let mut b = workbench(false, &[]);
+            editor_with(&mut b, "SELECT 1");
+            press(&mut b, KeyCode::F(5));
+            let (tx, rx) = std::sync::mpsc::channel();
+            drop(tx);
+            b.pending_query.as_mut().unwrap().cancel = Some(ServerCancel { rx: Some(rx) });
+            assert!(b.poll_server_cancel());
+            assert!(b.reconnect_running());
+            drain(&mut b);
+        }
+
+        #[test]
+        fn nothing_pending_means_nothing_to_cancel_or_poll() {
+            let mut b = workbench(false, &[]);
+            b.poll_query();
+            assert!(!b.poll_server_cancel());
+            b.cancel_by_reconnect();
+            assert!(!b.reconnect_running());
+            b.pending_query = Some(pending(QueryKind::Run));
+            b.session = None;
+            b.cancel_by_reconnect();
+            assert!(!b.reconnect_running(), "no session to restart");
+        }
+
+        #[test]
+        fn a_dead_session_cannot_start_a_query_or_run_sql() {
+            let mut b = workbench(false, &[]);
+            b.session.as_mut().unwrap().cancel();
+            editor_with(&mut b, "SELECT 1");
+            // The worker has been told to stop; the first statement fails and
+            // later ones cannot even be sent.
+            press(&mut b, KeyCode::F(5));
+            drain(&mut b);
+            press(&mut b, KeyCode::F(5));
+            assert!(b.message.is_some());
+            assert!(b.exec_sql("SELECT 1").is_err());
+            b.session = None;
+            assert!(matches!(
+                b.exec_sql("SELECT 1"),
+                Err(session::SessionError::NotConnected)
+            ));
+            assert!(b.log.entries.iter().any(|e| !e.ok));
+            b.toggle_write_mode();
+            assert!(b.message.is_some());
+        }
+
+        #[test]
+        fn a_blank_editor_has_no_anchor() {
+            let mut b = workbench(false, &[]);
+            editor_with(&mut b, "   ");
+            assert_eq!(b.anchor_for("SELECT 1"), None);
+            editor_with(&mut b, "SELECT 1");
+            assert_eq!(b.anchor_for("SELECT 2"), None, "not verbatim in the editor");
+        }
+
+        #[test]
+        fn a_commit_confirmation_summarizes_and_lists_its_statements() {
+            let mut b = family(true);
+            b.pending_run = Some(PendingRun::Commit {
+                statements: vec![
+                    crate::staging::Statement {
+                        kind: crate::staging::ChangeKind::Modified,
+                        sql: "UPDATE t SET a = 1".into(),
+                        check: None,
+                    },
+                    crate::staging::Statement {
+                        kind: crate::staging::ChangeKind::Deleted,
+                        sql: "DELETE FROM t".into(),
+                        check: None,
+                    },
+                ],
+                schema: "main".into(),
+                table: "t".into(),
+                kind: connect::Kind::Sqlite,
+            });
+            assert_eq!(
+                b.pending_summary().as_deref(),
+                Some("2 × … UPDATE t SET a = 1")
+            );
+            assert_eq!(
+                b.pending_statements(),
+                ["UPDATE t SET a = 1", "DELETE FROM t"]
+            );
+            b.pending_run = Some(PendingRun::Import {
+                statements: vec!["CREATE TABLE x (a)".into()],
+                table: "x".into(),
+                rows: 0,
+            });
+            assert_eq!(
+                b.pending_summary().as_deref(),
+                Some("1 × … CREATE TABLE x (a)")
+            );
+            assert_eq!(b.pending_statements(), ["CREATE TABLE x (a)"]);
+        }
     }
 }

@@ -31,3 +31,7 @@ The `test_runner` module parses output into `TestResult { name, status, location
 (`run_tests` sets the `AppFlags::TEST_CAPTURE` flag; `poll_command` buffers lines and calls
 `finish_test_run` on exit), renders the panel with `ui::draw_test_panel`, and
 routes row clicks to `jump_to_test`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). `tally` counts each status with `filter(..).count()`, and the panic location is split with `rsplit_once`, so no slicing or counters remain.

@@ -13,6 +13,18 @@
 //!
 //! All functions are pure so they can be unit-tested without a live editor.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt::Write as _;
 
 /// The contact fields offered in the Insert-Field submenu, in order.
@@ -45,10 +57,12 @@ pub fn field_line(key: &str) -> String {
     format!("  :{}: ", key.to_ascii_uppercase())
 }
 
-/// The number of leading `*` of an Org headline (followed by a space), else `None`.
-fn headline_level(line: &str) -> Option<usize> {
-    let stars = line.len() - line.trim_start_matches('*').len();
-    (stars > 0 && line[stars..].starts_with(' ')).then_some(stars)
+/// The number of leading `*` of an Org headline (followed by a space) and the
+/// text after the stars, else `None`.
+fn headline_level(line: &str) -> Option<(usize, &str)> {
+    let rest = line.trim_start_matches('*');
+    let stars = line.len().checked_sub(rest.len())?;
+    (stars > 0 && rest.starts_with(' ')).then_some((stars, rest))
 }
 
 /// Parse all contacts from one Org document: every headline whose immediately
@@ -58,12 +72,16 @@ pub fn parse(content: &str) -> Vec<Contact> {
     let lines: Vec<&str> = content.lines().collect();
     let mut out = Vec::new();
     for (i, line) in lines.iter().enumerate() {
-        let Some(level) = headline_level(line) else {
+        let Some((_, rest)) = headline_level(line) else {
             continue;
         };
-        let name = line[level..].trim().to_string();
+        let name = rest.trim().to_string();
         // A drawer must start on the next non-blank line.
-        let mut after = lines[i + 1..].iter().skip_while(|l| l.trim().is_empty());
+        let mut after = lines
+            .iter()
+            .skip(i)
+            .skip(1)
+            .skip_while(|l| l.trim().is_empty());
         if after
             .next()
             .is_some_and(|l| l.trim().eq_ignore_ascii_case(":PROPERTIES:"))
@@ -294,12 +312,12 @@ mod tests {
 
     #[test]
     fn headline_needs_a_star_and_a_space() {
-        assert_eq!(headline_level("* A"), Some(1));
-        assert_eq!(headline_level("*** C"), Some(3));
-        assert_eq!(headline_level("*bold* text"), None);
-        assert_eq!(headline_level(" indented"), None);
-        assert_eq!(headline_level("a b"), None);
-        assert_eq!(headline_level("**"), None);
+        assert_eq!(headline_level("* A").map(|(stars, _)| stars), Some(1));
+        assert_eq!(headline_level("*** C").map(|(stars, _)| stars), Some(3));
+        assert_eq!(headline_level("*bold* text").map(|(stars, _)| stars), None);
+        assert_eq!(headline_level(" indented").map(|(stars, _)| stars), None);
+        assert_eq!(headline_level("a b").map(|(stars, _)| stars), None);
+        assert_eq!(headline_level("**").map(|(stars, _)| stars), None);
         // Neither a star-without-space line nor an indented line starts a contact.
         let org = "*NoSpace\n  :PROPERTIES:\n  :EMAIL: a@x\n  :END:\n \
                    indented\n:PROPERTIES:\n:EMAIL: b@x\n:END:\n";

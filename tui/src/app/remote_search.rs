@@ -16,6 +16,19 @@
 //! [`Authority::is_local`]: crate::authority::Authority::is_local
 //! [`Authority::command`]: crate::authority::Authority::command
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::collections::{HashMap, HashSet};
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
@@ -108,7 +121,7 @@ impl App {
                 let line = IndexLine {
                     path,
                     rel: &rel,
-                    number: i + 1,
+                    number: i.plus(1),
                     text,
                 };
                 if visit(&line).is_break() {
@@ -189,11 +202,14 @@ impl App {
             else {
                 continue;
             };
+            let Some(&file_order) = order.get(path) else {
+                continue;
+            };
             let text = tab.text();
             let rel = self.root_rel(path);
             found.extend(text.lines().enumerate().map(|(n, line)| Found {
-                order: order[path],
-                number: n + 1,
+                order: file_order,
+                number: n.plus(1),
                 path: path.to_path_buf(),
                 rel: rel.clone(),
                 text: line.to_string(),
@@ -300,7 +316,7 @@ impl FileCount {
     pub(super) fn enter(&mut self, path: &Path) {
         if self.current.as_deref() != Some(path) {
             if self.current_hit {
-                self.done += 1;
+                self.done = self.done.plus(1);
             }
             self.current = Some(path.to_path_buf());
             self.current_hit = false;
@@ -319,6 +335,7 @@ impl FileCount {
 
     /// The files with hits.
     pub(super) fn total(&self) -> usize {
-        self.done + usize::from(self.current_hit && !self.capped)
+        self.done
+            .plus(usize::from(self.current_hit && !self.capped))
     }
 }

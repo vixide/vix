@@ -2,6 +2,17 @@
 //! (`spec/index.md`, § Progress checks). One hand-written check function per
 //! chapter — deliberately not a generic checker DSL; see the spec for why.
 
+/// Count one more finished task.
+fn tick(done: &mut usize) {
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: done counts the finished tasks of one chapter, at most its handful of tasks"
+    )]
+    {
+        *done += 1;
+    }
+}
+
 /// How many of a chapter's tasks currently verify as complete.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Progress {
@@ -68,12 +79,12 @@ fn moving_around(text: &str, _cursor: usize) -> Progress {
         .lines()
         .any(|l| l.trim_start().starts_with(">>>") && l.trim_end().ends_with("DONE"))
     {
-        done += 1;
+        tick(&mut done);
     }
 
     // Task 2: the stray line is gone.
     if !text.contains("DELETE THIS ENTIRE LINE") {
-        done += 1;
+        tick(&mut done);
     }
 
     // Task 3: the last line still starts with "LAST LINE:" but now has more
@@ -81,7 +92,7 @@ fn moving_around(text: &str, _cursor: usize) -> Progress {
     if let Some(last) = text.lines().last() {
         let last = last.trim_start();
         if last.starts_with("LAST LINE:") && last.trim() != "LAST LINE:" {
-            done += 1;
+            tick(&mut done);
         }
     }
 
@@ -95,7 +106,7 @@ fn editing_basics(text: &str, _cursor: usize) -> Progress {
 
     // Task 1: the greeting line has more on it than just "Hello,".
     if some_line_has_more_than_prefix(text, "Hello,") {
-        done += 1;
+        tick(&mut done);
     }
 
     // Task 2: the original content line (word and all) is gone. Checking
@@ -104,7 +115,7 @@ fn editing_basics(text: &str, _cursor: usize) -> Progress {
     // ("The word REDUNDANT below..."), so a bare substring check could never
     // pass — a real bug T403 caught via its own tests, not eyeballing.
     if !text.contains("This sentence has one REDUNDANT word that needs to go.") {
-        done += 1;
+        tick(&mut done);
     }
 
     Progress { total, done }
@@ -122,14 +133,14 @@ fn find_and_replace(text: &str, _cursor: usize) -> Progress {
     if !text.contains("The cat sat on the cat mat, next to another cat entirely.")
         && text.contains("dog")
     {
-        done += 1;
+        tick(&mut done);
     }
 
     // Task 2: the "teh" typo is fixed (word-bounded, so a legitimate "teh"
     // substring elsewhere — there isn't one in this lesson — wouldn't
     // false-negative the check).
     if !text.contains(" teh ") {
-        done += 1;
+        tick(&mut done);
     }
 
     Progress { total, done }
@@ -147,7 +158,7 @@ fn multi_cursor_and_selection(text: &str, _cursor: usize) -> Progress {
         .iter()
         .all(|marker| text.contains(marker))
     {
-        done += 1;
+        tick(&mut done);
     }
 
     // Task 2: the whole three-line REMOVE block is gone. Checking that exact
@@ -155,7 +166,7 @@ fn multi_cursor_and_selection(text: &str, _cursor: usize) -> Progress {
     // same instructions-leak reason as chapter 2/3 above (this chapter's own
     // instructions say "the whole block of REMOVE lines").
     if !text.contains("REMOVE\nREMOVE\nREMOVE") {
-        done += 1;
+        tick(&mut done);
     }
 
     Progress { total, done }
@@ -173,10 +184,10 @@ fn files_tabs_and_palette(text: &str, _cursor: usize) -> Progress {
     // — not a bare `text.contains("CHECKED")`, since this chapter's own
     // instructions say "type CHECKED" too (same leak as above).
     if some_line_extends_past_marker(text, ">>>") {
-        done += 1;
+        tick(&mut done);
     }
     if some_line_has_more_than_prefix(text, "Another file I opened:") {
-        done += 1;
+        tick(&mut done);
     }
 
     Progress { total, done }
@@ -190,12 +201,12 @@ fn git_basics(text: &str, _cursor: usize) -> Progress {
     let mut done = 0;
 
     if some_line_has_more_than_prefix(text, "What the git status panel showed me:") {
-        done += 1;
+        tick(&mut done);
     }
     // Not a bare `text.to_ascii_lowercase().contains("staged")` — this
     // chapter's own instructions say `"staged"` too (same leak as above).
     if some_line_has_more_than_prefix(text, "Practiced staging a hunk:") {
-        done += 1;
+        tick(&mut done);
     }
 
     Progress { total, done }

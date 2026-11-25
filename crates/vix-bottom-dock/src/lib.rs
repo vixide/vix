@@ -14,8 +14,34 @@
 //!
 //! Spec: `crates/vix-bottom-dock/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Default scrollback: maximum lines retained before the oldest are dropped.
 pub const DEFAULT_SCROLLBACK: usize = 1_000;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// The bottom dock's line buffer and scroll offset.
 pub struct BottomDock {
@@ -70,9 +96,9 @@ impl BottomDock {
     /// (saturating at 0 when the scrolled-to line itself was dropped).
     fn trim(&mut self) {
         if self.lines.len() > self.cap {
-            let drop = self.lines.len() - self.cap;
+            let drop = sub_or(self.lines.len(), self.cap, 0); // DOCK-F1
             self.lines.drain(0..drop);
-            self.scroll = self.scroll.saturating_sub(drop);
+            self.scroll = sub_or(self.scroll, drop, 0); // DOCK-F1: the offset stops at the top
         }
     }
 
@@ -112,7 +138,7 @@ impl BottomDock {
             return;
         }
         self.follow = false;
-        self.scroll = self.scroll.min(self.lines.len()).saturating_sub(n);
+        self.scroll = sub_or(self.scroll.min(self.lines.len()), n, 0); // DOCK-F1
     }
 
     /// Scroll down by `n` lines within a `viewport`-row window. Reaching the
@@ -120,8 +146,9 @@ impl BottomDock {
     pub fn scroll_down(&mut self, n: usize, viewport: usize) {
         let len = self.lines.len();
         // Largest first-visible index that still fills the viewport.
-        let max_start = len.saturating_sub(viewport.max(1));
-        self.scroll = (self.scroll.min(len) + n).min(len);
+        let max_start = sub_or(len, viewport.max(1), 0); // DOCK-F1
+        // DOCK-F2: a step that does not fit is a step to the end.
+        self.scroll = add_or(self.scroll.min(len), n, len).min(len);
         if self.scroll >= max_start {
             // At (or past) the last full window: snap to the bottom sentinel.
             self.scroll = len;
@@ -149,10 +176,15 @@ impl BottomDock {
     pub fn visible(&self, height: usize) -> &[String] {
         let height = height.max(1);
         // Clamp so a bottom-pinned `scroll == len` shows the last full window.
-        let max_start = self.lines.len().saturating_sub(height);
+        let max_start = sub_or(self.lines.len(), height, 0); // DOCK-F1
         let start = self.scroll.min(max_start).min(self.lines.len());
-        let end = (start + height).min(self.lines.len());
-        &self.lines[start..end]
+        let end = add_or(start, height, self.lines.len()).min(self.lines.len()); // DOCK-F2
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: start is at most the line count, and end is at least start (height is at least 1) and at most the line count"
+        )]
+        let window = &self.lines[start..end];
+        window
     }
 }
 

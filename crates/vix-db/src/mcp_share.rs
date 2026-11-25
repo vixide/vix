@@ -64,6 +64,12 @@ pub const REFUSED_KEYWORDS: &[&str] = &["into", "lock", "share", "commit", "roll
 /// The statement that ends every shared read: nothing is ever committed.
 pub const CLOSING_SQL: &str = "ROLLBACK";
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Whether a saved connection is shared with MCP clients: the value of the
 /// connection form's **Share with MCP** row
 /// ([`crate::Browser::form_mcp_sharing`]). Off by default.
@@ -300,7 +306,11 @@ pub fn check_query(sql: &str) -> Result<String, Refusal> {
     let chars: Vec<char> = sql.chars().collect();
     let statements: Vec<String> = editor::statement_spans(sql)
         .into_iter()
-        .map(|(start, end)| chars[start..end].iter().collect::<String>())
+        .filter_map(|(start, end)| {
+            chars
+                .get(start..end)
+                .map(|piece| piece.iter().collect::<String>())
+        })
         .filter(|piece| first_word(piece).is_some())
         .collect();
     let statement = match statements.as_slice() {
@@ -308,7 +318,9 @@ pub fn check_query(sql: &str) -> Result<String, Refusal> {
         [one] => one.trim().to_string(),
         many => return Err(Refusal::Several(many.len())),
     };
-    let first = first_word(&statement).unwrap_or_default();
+    let Some(first) = first_word(&statement) else {
+        return Err(Refusal::Empty);
+    };
     if !READ_STATEMENTS.contains(&first.as_str()) {
         return Err(Refusal::NotARead(first));
     }
@@ -335,22 +347,26 @@ pub fn check_query(sql: &str) -> Result<String, Refusal> {
 fn first_word(sql: &str) -> Option<String> {
     let chars: Vec<char> = sql.chars().collect();
     let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
+    while let Some(&c) = chars.get(i) {
         if c.is_whitespace() || c == '(' {
-            i += 1;
-        } else if c == '-' && chars.get(i + 1) == Some(&'-') {
-            while i < chars.len() && chars[i] != '\n' {
-                i += 1;
+            i = add_or(i, 1, usize::MAX);
+        } else if c == '-' && chars.get(add_or(i, 1, usize::MAX)) == Some(&'-') {
+            while chars.get(i).is_some_and(|&c| c != '\n') {
+                i = add_or(i, 1, usize::MAX);
             }
-        } else if c == '/' && chars.get(i + 1) == Some(&'*') {
-            i += 2;
-            while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
-                i += 1;
+        } else if c == '/' && chars.get(add_or(i, 1, usize::MAX)) == Some(&'*') {
+            i = add_or(i, 2, usize::MAX);
+            while chars
+                .get(i)
+                .is_some_and(|&c| !(c == '*' && chars.get(add_or(i, 1, usize::MAX)) == Some(&'/')))
+            {
+                i = add_or(i, 1, usize::MAX);
             }
-            i += 2;
+            i = add_or(i, 2, usize::MAX);
         } else {
-            let word: String = chars[i..]
+            let word: String = chars
+                .get(i..)
+                .unwrap_or(&[])
                 .iter()
                 .take_while(|c| c.is_ascii_alphanumeric() || **c == '_')
                 .collect();
@@ -444,7 +460,14 @@ pub fn default_schema(kind: Kind, schemas: &[String]) -> String {
         Kind::Postgres if schemas.iter().any(|s| s == "public") || schemas.is_empty() => {
             "public".to_string()
         }
-        _ => schemas.first().cloned().unwrap_or_default(),
+        _ => {
+            // No schema listed is the empty name.
+            let mut name = String::new();
+            if let Some(first) = schemas.first() {
+                name.clone_from(first);
+            }
+            name
+        }
     }
 }
 
@@ -589,8 +612,14 @@ impl ReadOnly {
         } else {
             SERVER_GRACE
         };
-        let deadline =
-            tokio::time::Instant::now() + Duration::from_secs(STATEMENT_TIMEOUT_SECS) + grace;
+        let Some(deadline) = tokio::time::Instant::now()
+            .checked_add(Duration::from_secs(STATEMENT_TIMEOUT_SECS))
+            .and_then(|at| at.checked_add(grace))
+        else {
+            return Err(ShareError::Query(
+                "the statement timeout is out of range".to_string(),
+            ));
+        };
         for sql in opening_sql(conn.kind) {
             let run = live.execute(sql);
             match rt.block_on(async { tokio::time::timeout_at(deadline, run).await }) {
@@ -933,6 +962,96 @@ mod tests {
         assert!(matches!(
             describe(&conn, None, "nope"),
             Err(ShareError::NoSuchTable { .. })
+        ));
+    }
+
+    #[test]
+    fn sharing_toggles_both_ways() {
+        assert_eq!(Sharing::Private.toggled(), Sharing::Shared);
+        assert_eq!(Sharing::Shared.toggled(), Sharing::Private);
+        assert!(Sharing::Shared.is_shared() && !Sharing::Private.is_shared());
+    }
+
+    #[test]
+    fn a_mysql_catalog_without_schemas_uses_the_empty_name() {
+        assert_eq!(default_schema(Kind::Mysql, &[]), "");
+    }
+
+    #[test]
+    fn every_share_error_explains_itself_and_chains_its_cause() {
+        let errors = [
+            (ShareError::from(Refusal::Empty), None),
+            (
+                ShareError::NeedsPassword {
+                    connection: "prod".into(),
+                },
+                Some("connection prod needs a password"),
+            ),
+            (
+                ShareError::Tunnel(tunnel::TunnelError::Timeout),
+                Some("SSH tunnel failed:"),
+            ),
+            (
+                ShareError::Connect("nope".into()),
+                Some("cannot connect: nope"),
+            ),
+            (ShareError::Query("syntax".into()), Some("syntax")),
+            (ShareError::Timeout, Some("ran longer than")),
+            (
+                ShareError::NoSuchTable {
+                    schema: String::new(),
+                    table: "t".into(),
+                },
+                Some("no table or view named t"),
+            ),
+            (
+                ShareError::NoSuchTable {
+                    schema: "s".into(),
+                    table: "t".into(),
+                },
+                Some("no table or view named t in schema s"),
+            ),
+            (
+                ShareError::Runtime(std::io::Error::other("no threads")),
+                Some("cannot start the database runtime: no threads"),
+            ),
+        ];
+        for (error, expected) in &errors {
+            let text = error.to_string();
+            assert_ne!(text, "");
+            if let Some(expected) = expected {
+                assert!(text.contains(expected), "{text}");
+            }
+        }
+        let chained: Vec<bool> = errors
+            .iter()
+            .map(|(e, _)| std::error::Error::source(e).is_some())
+            .collect();
+        assert_eq!(
+            chained,
+            [true, false, true, false, false, false, false, false, true]
+        );
+    }
+
+    #[test]
+    fn an_unopenable_sqlite_file_is_a_connect_error_and_a_refusal_comes_first() {
+        let missing = Connection {
+            name: "gone".into(),
+            kind: Kind::Sqlite,
+            file: "/no/such/dir/app.db".into(),
+            ..Connection::default()
+        };
+        assert!(matches!(
+            query(&missing, "select 1"),
+            Err(ShareError::Connect(_))
+        ));
+        assert!(matches!(
+            tables(&missing, None),
+            Err(ShareError::Connect(_))
+        ));
+        assert!(matches!(
+            query(&missing, "delete from t"),
+            Err(ShareError::Refused(Refusal::NotARead(_)))
         ));
     }
 }

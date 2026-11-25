@@ -87,3 +87,7 @@ Code: `Preview`, `preview_from_bytes`, `preview_from_lines`, `QueryHistory`,
 `Mode::prefix` in this crate; `App::picker_preview`, `App::resume_picker`,
 `App::remember_palette` in `tui/src/app/command_palette.rs`; rendering in
 `tui/src/ui/search.rs`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Fuzzy scoring, history browsing, preview windows and path-target parsing use `get`, iterators and `checked_*`. **Declared (PALETTE-F1):** a relevance score past the top or bottom of the `i32` scale is that extreme; the highlight and history stop at their first and last entries; a preview line past the end of the buffer shows the nearest line (a bound on the display window, not a rewrite of the search result).

@@ -247,16 +247,16 @@ fn read(path: &Path, max: u64, text: bool) -> Reply {
                     message: "the file is too large for one frame".into(),
                 };
             }
-            Ok(_) => max.saturating_add(1),
+            Ok(_) => max.checked_add(1).unwrap_or(max),
         }
     } else {
         max
     }
     .min(MAX_DATA);
-    match auth.read_limited(path, want.saturating_add(1)) {
+    match auth.read_limited(path, want.checked_add(1).unwrap_or(want)) {
         Err(e) => Reply::error(&e),
         Ok(mut bytes) => {
-            let complete = bytes.len() as u64 <= want;
+            let complete = u64::try_from(bytes.len()).is_ok_and(|n| n <= want);
             bytes.truncate(usize::try_from(want).unwrap_or(usize::MAX));
             Reply::Data { bytes, complete }
         }
@@ -285,9 +285,15 @@ fn start_watch(
         return Reply::error(&io::Error::other("too many watches"));
     }
     let stop = Arc::new(AtomicBool::new(false));
-    // Clamp to 0.1–60 s so a client cannot make the agent busy-poll or
-    // effectively never look.
-    let interval = Duration::from_millis(u64::from(interval_ms.clamp(100, 60_000)));
+    // A watch interval outside 0.1 to 60 s is refused, so a client cannot make
+    // the agent busy-poll or effectively never look.
+    if !(100..=60_000).contains(&interval_ms) {
+        return Reply::error(&io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the watch interval must be 100 to 60000 ms",
+        ));
+    }
+    let interval = Duration::from_millis(u64::from(interval_ms));
     let targets: Vec<(Vec<u8>, PathBuf)> =
         paths.iter().map(|b| (b.clone(), local_path(b))).collect();
     let thread_stop = Arc::clone(&stop);

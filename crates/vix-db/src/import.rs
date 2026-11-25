@@ -16,6 +16,12 @@
 use super::catalog::{quote_ident, quote_literal};
 use super::connect::Kind;
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// The field delimiter for `path`: a tab for `.tsv` / `.tab`, else a comma.
 /// The extension match is case-insensitive.
 ///
@@ -31,7 +37,7 @@ pub fn delimiter(path: &str) -> char {
     let ext = std::path::Path::new(path)
         .extension()
         .and_then(|e| e.to_str())
-        .unwrap_or_default()
+        .unwrap_or("")
         .to_ascii_lowercase();
     if ext == "tsv" || ext == "tab" {
         '\t'
@@ -70,7 +76,7 @@ pub fn table_name(path: &str) -> String {
         })
         .collect();
     let name = name.trim_matches('_').to_string();
-    if name.is_empty() || name.as_bytes()[0].is_ascii_digit() {
+    if name.is_empty() || name.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         format!("t_{name}")
     } else {
         name
@@ -191,7 +197,7 @@ pub fn statements(kind: Kind, table: &str, records: &[Vec<String>]) -> Vec<Strin
                 .collect();
             let name = name.trim_matches('_');
             if name.is_empty() {
-                format!("col{}", i + 1)
+                format!("col{}", add_or(i, 1, usize::MAX))
             } else {
                 name.to_string()
             }
@@ -204,7 +210,7 @@ pub fn statements(kind: Kind, table: &str, records: &[Vec<String>]) -> Vec<Strin
         .collect();
     let create = format!("CREATE TABLE {ident} ({})", col_defs.join(", "));
 
-    let data = &records[1..];
+    let data = records.get(1..).unwrap_or(&[]);
     if data.is_empty() {
         return vec![create];
     }
@@ -267,5 +273,36 @@ mod tests {
     fn header_only_creates_an_empty_table() {
         let sql = statements(Kind::Sqlite, "t", &parse("a,b\n", ','));
         assert_eq!(sql.len(), 1, "just the CREATE");
+    }
+
+    #[test]
+    fn crlf_lines_and_an_unterminated_last_record_parse() {
+        assert_eq!(
+            parse("a,b\r\n1,2\r\n3,4", ','),
+            [["a", "b"], ["1", "2"], ["3", "4"]]
+        );
+        assert_eq!(parse("a,\"x\"\"y\"", ','), [["a", "x\"y"]]);
+        assert_eq!(parse("\n\n", ','), Vec::<Vec<String>>::new());
+        assert_eq!(parse(",", ','), [["", ""]]);
+    }
+
+    #[test]
+    fn header_names_are_sanitized_and_blank_ones_numbered() {
+        let records = vec![
+            vec![
+                "first name".to_string(),
+                "!!".to_string(),
+                "ok_1".to_string(),
+            ],
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        ];
+        let sql = statements(Kind::Sqlite, "t", &records);
+        assert!(
+            sql[0].contains("\"first_name\"")
+                && sql[0].contains("\"col2\"")
+                && sql[0].contains("\"ok_1\""),
+            "{}",
+            sql[0]
+        );
     }
 }

@@ -8,7 +8,7 @@
 
 use std::fmt::Write as _;
 
-use super::{headline_level, headline_todo};
+use super::{add_or, headline_level, headline_todo, line_at, next, sub_or};
 
 // ----- Agenda & time tracking -----------------------------------------------
 
@@ -16,13 +16,17 @@ use super::{headline_level, headline_todo};
 fn first_date(s: &str) -> Option<String> {
     let start = s.find(['<', '['])?;
     let date: String = s
-        .get(start + 1..)
+        .get(next(start)..)
         .unwrap_or_default()
         .chars()
         .take(10)
         .collect();
     let b = date.as_bytes();
-    if date.len() == 10 && b[4] == b'-' && b[7] == b'-' && b[..4].iter().all(u8::is_ascii_digit) {
+    if date.len() == 10
+        && b.get(4) == Some(&b'-')
+        && b.get(7) == Some(&b'-')
+        && b.get(..4)?.iter().all(u8::is_ascii_digit)
+    {
         Some(date)
     } else {
         None
@@ -108,16 +112,19 @@ pub fn render_agenda(items: &[AgendaItem]) -> (String, Vec<Option<usize>>) {
 
     // Dated entries, sorted by (date, kind, headline, file) and grouped by date.
     let mut dated: Vec<usize> = (0..items.len())
-        .filter(|&i| items[i].date.is_some())
+        .filter(|&i| items.get(i).is_some_and(|it| it.date.is_some()))
         .collect();
     dated.sort_by(|&a, &b| {
-        let x = &items[a];
-        let y = &items[b];
+        let (Some(x), Some(y)) = (items.get(a), items.get(b)) else {
+            return std::cmp::Ordering::Equal;
+        };
         (&x.date, &x.kind, &x.headline, &x.file).cmp(&(&y.date, &y.kind, &y.headline, &y.file))
     });
     let mut last: Option<&str> = None;
     for &i in &dated {
-        let it = &items[i];
+        let Some(it) = items.get(i) else {
+            continue;
+        };
         let date = it.date.as_deref().unwrap_or_default();
         if last != Some(date) {
             push(&mut buf, &mut map, "", None);
@@ -134,13 +141,15 @@ pub fn render_agenda(items: &[AgendaItem]) -> (String, Vec<Option<usize>>) {
 
     // Unscheduled TODOs, in document order.
     let undated: Vec<usize> = (0..items.len())
-        .filter(|&i| items[i].date.is_none())
+        .filter(|&i| items.get(i).is_some_and(|it| it.date.is_none()))
         .collect();
     if !undated.is_empty() {
         push(&mut buf, &mut map, "", None);
         push(&mut buf, &mut map, "* Unscheduled tasks", None);
         for &i in &undated {
-            let it = &items[i];
+            let Some(it) = items.get(i) else {
+                continue;
+            };
             push(
                 &mut buf,
                 &mut map,
@@ -202,11 +211,11 @@ fn headline_tags(line: &str) -> Vec<String> {
     let Some(sp) = trimmed.rfind(char::is_whitespace) else {
         return Vec::new();
     };
-    let tail = trimmed.get(sp + 1..).unwrap_or_default();
+    let tail = trimmed.get(next(sp)..).unwrap_or_default();
     if tail.len() < 2 || !tail.starts_with(':') || !tail.ends_with(':') {
         return Vec::new();
     }
-    let inner = tail.get(1..tail.len() - 1).unwrap_or_default();
+    let inner = tail.get(1..sub_or(tail.len(), 1, 0)).unwrap_or_default();
     if inner.is_empty()
         || inner.split(':').any(|t| {
             t.is_empty()
@@ -302,11 +311,15 @@ pub fn search(files: &[(String, String)], query: &str) -> Vec<AgendaItem> {
             if headline_level(line).is_none() {
                 continue;
             }
-            let mut end = idx + 1;
-            while end < lines.len() && headline_level(lines[end]).is_none() {
-                end += 1;
+            let mut end = next(idx);
+            while end < lines.len() && headline_level(line_at(&lines, end)).is_none() {
+                end = next(end);
             }
-            let body = lines[idx..end].join("\n").to_ascii_lowercase();
+            let body = lines
+                .get(idx..end)
+                .unwrap_or(&[])
+                .join("\n")
+                .to_ascii_lowercase();
             if words.iter().all(|w| body.contains(w)) {
                 out.push(list_item(line, name, idx));
             }
@@ -330,11 +343,13 @@ pub fn stuck_projects(files: &[(String, String)]) -> Vec<AgendaItem> {
             if headline_todo(line) == Some(true) {
                 continue; // the project itself is already DONE
             }
-            let mut end = idx + 1;
-            while end < lines.len() && headline_level(lines[end]).is_none_or(|l| l > level) {
-                end += 1;
+            let mut end = next(idx);
+            while end < lines.len()
+                && headline_level(line_at(&lines, end)).is_none_or(|l| l > level)
+            {
+                end = next(end);
             }
-            let children = &lines[idx + 1..end];
+            let children = lines.get(next(idx)..end).unwrap_or(&[]);
             let has_child = children.iter().any(|l| headline_level(l).is_some());
             let has_next_action = children.iter().any(|l| headline_todo(l) == Some(false));
             if has_child && !has_next_action {
@@ -373,14 +388,18 @@ pub fn render_list(title: &str, items: &[AgendaItem]) -> (String, Vec<Option<usi
 /// Minutes in a `CLOCK:` line's explicit `=> H:MM` total, if present.
 pub(crate) fn clock_minutes(line: &str) -> Option<u32> {
     let rest = line.trim().strip_prefix("CLOCK:")?;
-    let after = rest.get(rest.find("=>")? + 2..).unwrap_or_default();
+    let after = rest.get(add_or(rest.find("=>")?, 2, usize::MAX)..)?;
     let (h, m) = after.trim().split_once(':')?;
-    Some(h.trim().parse::<u32>().ok()? * 60 + m.trim().parse::<u32>().ok()?)
+    h.trim()
+        .parse::<u32>()
+        .ok()?
+        .checked_mul(60)?
+        .checked_add(m.trim().parse::<u32>().ok()?)
 }
 
 /// Render `minutes` as `H:MM`.
 pub(crate) fn hhmm(minutes: u32) -> String {
-    format!("{}:{:02}", minutes / 60, minutes % 60)
+    format!("{}:{:02}", minutes.div_euclid(60), minutes.rem_euclid(60))
 }
 
 /// Build a **time-tracking report** from `content`: sum each headline's `CLOCK:`
@@ -397,7 +416,8 @@ pub fn time_report(content: &str) -> String {
         }
         if let Some(min) = clock_minutes(line) {
             if let Some(entry) = totals.iter_mut().find(|(h, _)| *h == current) {
-                entry.1 += min;
+                // A total past `u32::MAX` minutes stays at the maximum.
+                entry.1 = entry.1.saturating_add(min);
             } else {
                 totals.push((current.clone(), min));
             }
@@ -407,7 +427,7 @@ pub fn time_report(content: &str) -> String {
     let mut grand = 0;
     for (headline, min) in &totals {
         let _ = writeln!(out, "| {headline} | {} |", hhmm(*min));
-        grand += min;
+        grand = u32::saturating_add(grand, *min);
     }
     let _ = writeln!(out, "| *Total* | {} |", hhmm(grand));
     out
@@ -444,7 +464,7 @@ pub(crate) fn clock_start(line: &str) -> Option<String> {
 
 /// Days since 1970-01-01 for a civil date. Delegates to `vix-civil-date`
 /// (Run H, T520) — see [`civil_from_days`]'s doc comment.
-pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> Option<i64> {
     vix_civil_date::days_from_civil(y, m, d)
 }
 
@@ -458,7 +478,10 @@ fn timestamp_minutes(ts: &str) -> Option<i64> {
     let (h, mi) = ts.rsplit(' ').next()?.split_once(':')?;
     let h: i64 = h.trim().parse().ok()?;
     let mi: i64 = mi.trim().parse().ok()?;
-    Some(days_from_civil(y, m, d) * 1440 + h * 60 + mi)
+    days_from_civil(y, m, d)?
+        .checked_mul(1440)?
+        .checked_add(h.checked_mul(60)?)?
+        .checked_add(mi)
 }
 
 /// Close the most recent open `CLOCK:` entry in `text` with end timestamp `now`,
@@ -468,15 +491,16 @@ fn timestamp_minutes(ts: &str) -> Option<i64> {
 pub fn clock_out(text: &str, now: &str) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
     let idx = lines.iter().rposition(|l| is_open_clock(l))?;
-    let start = clock_start(&lines[idx])?;
-    let minutes = match (timestamp_minutes(now), timestamp_minutes(&start)) {
-        (Some(n), Some(s)) => u32::try_from((n - s).max(0)).unwrap_or(0),
-        _ => 0,
-    };
-    let lead: String = lines[idx]
+    let start = clock_start(lines.get(idx)?)?;
+    // An end that cannot be read, or that is before the start, is not a
+    // duration: nothing is closed.
+    let minutes =
+        u32::try_from(timestamp_minutes(now)?.checked_sub(timestamp_minutes(&start)?)?).ok()?;
+    let lead: String = lines
+        .get(idx)?
         .chars()
         .take_while(|c| c.is_whitespace())
         .collect();
-    lines[idx] = format!("{lead}CLOCK: [{start}]--[{now}] =>  {}", hhmm(minutes));
+    *lines.get_mut(idx)? = format!("{lead}CLOCK: [{start}]--[{now}] =>  {}", hhmm(minutes));
     Some(lines.join("\n"))
 }

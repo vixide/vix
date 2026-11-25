@@ -13,6 +13,18 @@
 //!
 //! Owning spec: `crates/vix-left-dock/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::{Path, PathBuf};
 
 /// A visible row in the flattened tree.
@@ -60,6 +72,14 @@ pub struct Explorer {
     include: Option<regex::Regex>,
     /// Compiled exclude regex: files whose relative path matches are hidden.
     exclude: Option<regex::Regex>,
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
 }
 
 impl Explorer {
@@ -143,7 +163,7 @@ impl Explorer {
         let root = self.root.clone();
         self.walk(&root, 0, &mut nodes);
         if self.selected >= nodes.len() {
-            self.selected = nodes.len().saturating_sub(1);
+            self.selected = sub_or(nodes.len(), 1, 0); // DOCK-F1: an empty tree selects row 0
         }
         self.nodes = nodes;
     }
@@ -228,8 +248,9 @@ impl Explorer {
                 is_symlink,
                 expanded,
             });
-            if expanded {
-                self.walk(&path, depth + 1, out);
+            // DOCK-F2: a depth that cannot grow is not walked any deeper.
+            if expanded && let Some(next) = depth.checked_add(1) {
+                self.walk(&path, next, out);
             }
         }
     }
@@ -267,7 +288,7 @@ impl Explorer {
 
     /// Select the last row.
     pub fn last(&mut self) {
-        self.selected = self.nodes.len().saturating_sub(1);
+        self.selected = sub_or(self.nodes.len(), 1, 0); // DOCK-F1: an empty tree selects row 0
     }
 
     /// Toggle expansion of the selected directory. Returns true if it acted on

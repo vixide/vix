@@ -32,3 +32,12 @@ Fallible conversions return [`ConvertError`] (`#[non_exhaustive]`, hand-written
 
 Every `vix-convert-from-*-tool` crate's `convert` returns it. The Tools →
 Convert action shows it through the translated `status.convert_failed` line.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec: outside tests it
+denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`,
+`as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The one
+arithmetic expression it had, a capacity hint in `json_to_rows`, is gone: the
+hint is `objects.len()` and the header row may grow the vector once. It declares
+no fallbacks, because it computes no figures.

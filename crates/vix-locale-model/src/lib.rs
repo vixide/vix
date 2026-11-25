@@ -6,6 +6,18 @@
 //! `rust_i18n::set_locale` and persists it. Extracted from the former
 //! `vix-locale-chooser` so the data has its own home.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// One selectable UI language.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Locale {
@@ -167,38 +179,64 @@ pub fn is_rtl(code: &str) -> bool {
 /// direction comes from the first strong character. A line with no
 /// right-to-left character comes back as the identity permutation.
 ///
+/// # Errors
+/// [`BidiError::Inconsistent`] if the bidi library returns no paragraph for text
+/// that has a right-to-left character, or a run with no level (a broken library
+/// contract, never expected); no order is guessed.
+///
 /// # Examples
 ///
 /// ```
-/// let order = vix_locale_model::visual_order(&['a', 'b']);
+/// let order = vix_locale_model::visual_order(&['a', 'b']).unwrap();
 /// assert_eq!(order, vec![0, 1]);
 /// ```
-#[must_use]
-pub fn visual_order(chars: &[char]) -> Vec<usize> {
+pub fn visual_order(chars: &[char]) -> Result<Vec<usize>, BidiError> {
     let identity: Vec<usize> = (0..chars.len()).collect();
     if !chars.iter().any(|&c| strong_rtl(c)) {
-        return identity;
+        return Ok(identity);
     }
     let text: String = chars.iter().collect();
     let info = unicode_bidi::BidiInfo::new(&text, None);
-    let Some(para) = info.paragraphs.first() else {
-        return identity;
+    let inconsistent = BidiError::Inconsistent {
+        figure: "bidi levels",
     };
+    let para = info.paragraphs.first().ok_or(inconsistent)?;
     let starts: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
     let (levels, runs) = info.visual_runs(para, para.range.clone());
     let mut out = Vec::with_capacity(chars.len());
     for run in runs {
         let first = starts.partition_point(|&b| b < run.start);
         let end = starts.partition_point(|&b| b < run.end);
-        let odd = levels[run.start].is_rtl();
+        let odd = levels.get(run.start).ok_or(inconsistent)?.is_rtl();
         if odd {
             out.extend((first..end).rev());
         } else {
             out.extend(first..end);
         }
     }
-    out
+    Ok(out)
 }
+
+/// Why a visual order could not be computed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum BidiError {
+    /// The bidi library's answer does not match the text it was given.
+    Inconsistent {
+        /// The figure that is inconsistent.
+        figure: &'static str,
+    },
+}
+
+impl std::fmt::Display for BidiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Inconsistent { figure } => write!(f, "{figure}: inconsistent with the text"),
+        }
+    }
+}
+
+impl std::error::Error for BidiError {}
 
 fn strong_rtl(c: char) -> bool {
     matches!(
@@ -219,21 +257,32 @@ mod bidi_tests {
     #[test]
     fn ltr_line_is_identity() {
         let c: Vec<char> = "hello 42".chars().collect();
-        assert_eq!(visual_order(&c), (0..c.len()).collect::<Vec<_>>());
+        assert_eq!(visual_order(&c).unwrap(), (0..c.len()).collect::<Vec<_>>());
     }
 
     #[test]
     fn rtl_line_reverses_and_keeps_embedded_numbers_ltr() {
         // "ابج 12" : logical ا ب ج space 1 2 ; RTL base, digits stay in order.
         let c: Vec<char> = "ابج 12".chars().collect();
-        assert_eq!(visual_order(&c), vec![4, 5, 3, 2, 1, 0]);
+        assert_eq!(visual_order(&c).unwrap(), vec![4, 5, 3, 2, 1, 0]);
     }
 
     #[test]
     fn is_a_permutation() {
         let c: Vec<char> = "abc ابج def 9 ه".chars().collect();
-        let mut o = visual_order(&c);
+        let mut o = visual_order(&c).unwrap();
         o.sort_unstable();
         assert_eq!(o, (0..c.len()).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_bidi_error_names_the_figure() {
+        assert_eq!(
+            BidiError::Inconsistent {
+                figure: "bidi levels"
+            }
+            .to_string(),
+            "bidi levels: inconsistent with the text"
+        );
     }
 }

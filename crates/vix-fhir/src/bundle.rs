@@ -41,7 +41,8 @@ impl Entry {
         match (self.resource_type.is_empty(), &self.id) {
             (false, Some(id)) => format!("{}/{id}", self.resource_type),
             (false, None) => self.resource_type.clone(),
-            _ => self.full_url.clone().unwrap_or_default(),
+            // FHIR-F1: an absent full URL is the empty string.
+            _ => self.full_url.as_deref().unwrap_or("").to_string(),
         }
     }
 
@@ -119,21 +120,25 @@ fn name_of(resource: &Value) -> Option<String> {
 /// description, type text, status); empty when none apply. Drives the `summary`
 /// column of the Bundle list.
 fn summary_of(resource: &Value) -> String {
-    name_of(resource)
-        .or_else(|| {
-            first_string(
-                resource,
-                &[
-                    &["code", "text"],
-                    &["code", "coding", "0", "display"],
-                    &["title"],
-                    &["description"],
-                    &["type", "text"],
-                    &["status"],
-                ],
-            )
-        })
-        .unwrap_or_default()
+    let found = name_of(resource).or_else(|| {
+        first_string(
+            resource,
+            &[
+                &["code", "text"],
+                &["code", "coding", "0", "display"],
+                &["title"],
+                &["description"],
+                &["type", "text"],
+                &["status"],
+            ],
+        )
+    });
+    // FHIR-F1: no descriptive field is the empty summary. (`unwrap_or_default`
+    // is forbidden, and Clippy rewrites `unwrap_or(String::new())` into it.)
+    let Some(summary) = found else {
+        return String::new();
+    };
+    summary
 }
 
 /// The `url` of the first Bundle `link` whose `relation` matches (`next`,
@@ -153,7 +158,8 @@ fn parse_entry(e: &Value, raw: Option<&str>) -> Entry {
     let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).map(String::from);
     Entry {
         full_url: text(e, "fullUrl"),
-        resource_type: text(&resource, "resourceType").unwrap_or_default(),
+        // FHIR-F1: an absent resource type is the empty string.
+        resource_type: text(&resource, "resourceType").unwrap_or(String::new()),
         id: text(&resource, "id"),
         summary: summary_of(&resource),
         status: e.get("response").and_then(|r| text(r, "status")),
@@ -216,7 +222,7 @@ pub fn parse_bundle(text: &str) -> Result<Bundle, FhirError> {
         bundle_type: value
             .get("type")
             .and_then(Value::as_str)
-            .unwrap_or_default()
+            .unwrap_or("") // FHIR-F1: an absent bundle type is the empty string
             .to_string(),
         total: value.get("total").and_then(Value::as_u64),
         entries: value

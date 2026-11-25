@@ -9,6 +9,20 @@
 
 use std::ops::Range;
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// The cell around a line: its marker line (if any) and its body lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cell {
@@ -49,9 +63,9 @@ pub fn cell_at(text: &str, line: usize, comment: &str) -> Option<Cell> {
     if markers.is_empty() {
         return None;
     }
-    let line = line.min(lines.len().saturating_sub(1));
+    let line = line.min(sub_or(lines.len(), 1, 0));
     let marker = markers.iter().copied().rev().find(|&m| m <= line);
-    let start = marker.map_or(0, |m| m + 1);
+    let start = marker.map_or(0, |m| add_or(m, 1, usize::MAX));
     let end = markers
         .iter()
         .copied()

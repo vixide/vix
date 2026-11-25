@@ -2592,10 +2592,10 @@ fn draw_handles_a_hidden_status_bar() {
 fn unique_copy_name_suffixes() {
     let dir = unique_dir("uniq");
     fs::write(dir.join("a.txt"), "x").unwrap();
-    let got = fileops::unique_copy_name(&dir, &dir.join("a.txt"));
+    let got = fileops::unique_copy_name(&dir, &dir.join("a.txt")).unwrap();
     assert_eq!(got.file_name().unwrap(), "a copy.txt");
     fs::write(dir.join("a copy.txt"), "x").unwrap();
-    let got2 = fileops::unique_copy_name(&dir, &dir.join("a.txt"));
+    let got2 = fileops::unique_copy_name(&dir, &dir.join("a.txt")).unwrap();
     assert_eq!(got2.file_name().unwrap(), "a copy 2.txt");
     fs::remove_dir_all(&dir).ok();
 }

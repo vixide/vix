@@ -18,6 +18,18 @@
 //!   remote cursor is carried as a CRDT-anchored [`Anchor`], which keeps
 //!   pointing at the same character however the text around it changes.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::error::CoworkError;
 use crate::peer::{Action, Peer, PeerId};
 use loro::cursor::{Cursor, Side};
@@ -33,6 +45,20 @@ pub const DEFAULT_CAP_BYTES: usize = 5 * 1024 * 1024;
 
 /// The name of the one text container inside a [`SharedDoc`].
 const TEXT: &str = "text";
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// One splice to replay onto a buffer: delete `delete` characters at `offset`,
 /// then insert `insert` there. Offsets are characters in the buffer as it
@@ -135,6 +161,10 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 /// Turn a text delta (retain / insert / delete runs over the whole text) into
 /// sequentially applicable splices.
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "RCA-EXC-2: the runs of a text delta describe the text, so their running total is at most its length, which fits usize"
+)]
 fn push_edits(deltas: &[TextDelta], out: &mut Vec<BufferEdit>) {
     let mut pos = 0usize;
     for d in deltas {
@@ -281,13 +311,21 @@ impl SharedDoc {
         insert: &str,
     ) -> Result<Option<Vec<u8>>, CoworkError> {
         let len = self.text.len_unicode();
-        if offset > len || delete > len - offset {
+        // The range must lie inside the text: `delete` is at most what remains after `offset`.
+        if len.checked_sub(offset).is_none_or(|room| delete > room) {
             return Err(CoworkError::OutOfRange { offset, len });
         }
         if insert.contains('\0') {
             return Err(CoworkError::Binary);
         }
-        let projected = self.text.len_utf8() + insert.len();
+        let projected =
+            self.text
+                .len_utf8()
+                .checked_add(insert.len())
+                .ok_or(CoworkError::TooLarge {
+                    size: usize::MAX,
+                    cap: self.cap,
+                })?;
         if projected > self.cap {
             return Err(CoworkError::TooLarge {
                 size: projected,
@@ -424,7 +462,13 @@ impl SharedDoc {
         }
         self.doc.commit();
         let edits = std::mem::take(&mut *lock(&self.pending));
-        let update = self.take_update()?.unwrap_or_default();
+        // A revert that left no CRDT update to send carries an empty one.
+        let Some(update) = self.take_update()? else {
+            return Ok(Some(Reverted {
+                update: Vec::new(),
+                edits,
+            }));
+        };
         Ok(Some(Reverted { update, edits }))
     }
 
@@ -455,16 +499,17 @@ impl SharedDoc {
 pub fn transform_offset(mut pos: usize, edits: &[BufferEdit]) -> usize {
     for e in edits {
         if e.delete > 0 {
-            let end = e.offset + e.delete;
+            // A range that ends past the address space ends at its top.
+            let end = add_or(e.offset, e.delete, usize::MAX);
             if pos >= end {
-                pos -= e.delete;
+                pos = sub_or(pos, e.delete, 0);
             } else if pos > e.offset {
                 pos = e.offset;
             }
         }
         let n = e.insert.chars().count();
         if n > 0 && e.offset < pos {
-            pos += n;
+            pos = add_or(pos, n, usize::MAX);
         }
     }
     pos
@@ -722,5 +767,15 @@ mod tests {
         replay(&mut buf, &edits);
         assert_eq!(buf, "one 2 three");
         assert_eq!(h.replace_all("one 2 three").unwrap(), None);
+    }
+
+    #[test]
+    fn debug_reports_chars_and_cap_and_cap_is_the_configured_one() {
+        let doc = SharedDoc::host(A, "héllo", 1234).unwrap();
+        assert_eq!(doc.cap(), 1234);
+        let shown = format!("{doc:?}");
+        assert!(shown.starts_with("SharedDoc"));
+        assert!(shown.contains("chars: 5"), "{shown}");
+        assert!(shown.contains("cap: 1234"), "{shown}");
     }
 }

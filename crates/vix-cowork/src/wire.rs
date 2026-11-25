@@ -430,7 +430,7 @@ impl<'a> Reader<'a> {
         Ok(slice)
     }
     fn u8(&mut self) -> Result<u8, WireProblem> {
-        Ok(self.take(1)?[0])
+        self.take(1)?.first().copied().ok_or(WireProblem::Truncated)
     }
     fn u64(&mut self) -> Result<u64, WireProblem> {
         let mut a = [0u8; 8];
@@ -574,7 +574,7 @@ impl Message {
             Self::ListFiles => w.u8(14),
             Self::FileList { paths } => {
                 w.u8(15);
-                let shown = &paths[..paths.len().min(MAX_LISTED_FILES)];
+                let shown: Vec<_> = paths.iter().take(MAX_LISTED_FILES).collect();
                 // Bounded by MAX_LISTED_FILES, far below u32::MAX.
                 w.u32(u32::try_from(shown.len()).unwrap_or(u32::MAX));
                 for p in shown {
@@ -1186,5 +1186,31 @@ mod tests {
             let m = Message::Chat(ChatLine { from: PeerId(from), time_utc, body, kind });
             prop_assert_eq!(decode(&m.encode()).unwrap(), m);
         }
+    }
+
+    #[test]
+    fn every_error_code_round_trips_and_unassigned_tags_are_refused() {
+        for code in [
+            ErrorCode::PermissionDenied,
+            ErrorCode::TooLarge,
+            ErrorCode::BadPath,
+            ErrorCode::Version,
+            ErrorCode::Removed,
+            ErrorCode::Declined,
+        ] {
+            let msg = Message::Error { code };
+            assert_eq!(decode(&msg.encode()), Ok(msg));
+        }
+        assert_eq!(decode(&[13, 6]), Err(WireProblem::UnknownTag(6).into()));
+    }
+
+    #[test]
+    fn presence_messages_travel_on_the_presence_channel() {
+        let presence = samples()
+            .into_iter()
+            .find(|m| matches!(m, Message::Presence(_)))
+            .expect("a presence sample");
+        assert_eq!(presence.channel(), Channel::Presence);
+        assert_eq!(decode(&presence.encode()), Ok(presence));
     }
 }

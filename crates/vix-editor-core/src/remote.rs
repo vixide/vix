@@ -29,6 +29,20 @@ use crate::editor::Editor;
 use crate::selection::Selection;
 use ratatui_core::style::{Color, Style};
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Another participant's caret, and optionally their selection, as character
 /// offsets in this buffer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,10 +82,10 @@ pub fn transform_offset(mut pos: usize, edits: &[Splice]) -> usize {
     for e in edits {
         // Deletion first, then insertion, mirroring how a splice is applied.
         if e.delete > 0 {
-            let end = e.offset.saturating_add(e.delete);
+            let end = add_or(e.offset, e.delete, usize::MAX);
             if pos >= end {
                 // Wholly after the deleted range: shift left.
-                pos -= e.delete;
+                pos = sub_or(pos, e.delete, 0);
             } else if pos > e.offset {
                 pos = e.offset;
             }
@@ -79,7 +93,7 @@ pub fn transform_offset(mut pos: usize, edits: &[Splice]) -> usize {
         // Offsets are in chars, not bytes.
         let n = e.insert.chars().count();
         if n > 0 && e.offset < pos {
-            pos += n;
+            pos = add_or(pos, n, usize::MAX);
         }
     }
     pos
@@ -93,7 +107,13 @@ fn text_on(bg: Color) -> Color {
     match bg {
         Color::Rgb(r, g, b) => {
             // Rec. 601 luma in integer math: no float casts needed.
-            let luma = (u32::from(r) * 299 + u32::from(g) * 587 + u32::from(b) * 114) / 1000;
+            // 299 + 587 + 114 = 1000, so the weighted sum is at most 255000.
+            let weighted = u32::from(r)
+                .checked_mul(299)
+                .zip(u32::from(g).checked_mul(587))
+                .zip(u32::from(b).checked_mul(114))
+                .and_then(|((a, b), c)| a.checked_add(b)?.checked_add(c));
+            let luma = weighted.map_or(0, |w| w.div_euclid(1000));
             if luma > 140 {
                 Color::Black
             } else {
@@ -349,5 +369,89 @@ mod tests {
         (&e).render(area, &mut buf);
         e.set_remote_carets(Vec::new());
         assert_eq!(e.remote_carets(), &[]);
+    }
+}
+
+#[cfg(test)]
+mod colour_and_edit_tests {
+    use super::{RemoteCaret, Splice, text_on};
+    use crate::editor::Editor;
+    use ratatui_core::buffer::Buffer;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::style::{Color, Modifier};
+    use ratatui_core::widgets::Widget;
+
+    #[test]
+    fn text_colour_contrasts_with_the_background() {
+        // Rec. 601 luma threshold is 140.
+        assert_eq!(text_on(Color::Rgb(255, 255, 255)), Color::Black);
+        assert_eq!(text_on(Color::Rgb(255, 255, 0)), Color::Black);
+        assert_eq!(text_on(Color::Rgb(0, 0, 0)), Color::White);
+        assert_eq!(text_on(Color::Rgb(30, 30, 160)), Color::White);
+        // Named dark colours get white text; every other named colour black.
+        for dark in [
+            Color::Black,
+            Color::DarkGray,
+            Color::Blue,
+            Color::Red,
+            Color::Magenta,
+        ] {
+            assert_eq!(text_on(dark), Color::White, "{dark:?}");
+        }
+        for light in [
+            Color::Yellow,
+            Color::White,
+            Color::Green,
+            Color::Cyan,
+            Color::Indexed(7),
+        ] {
+            assert_eq!(text_on(light), Color::Black, "{light:?}");
+        }
+    }
+
+    #[test]
+    fn remote_carets_and_selections_are_drawn_under_the_local_cursor() {
+        let mut e = Editor::new("text", "hello world", Vec::new()).unwrap();
+        e.show_line_numbers(false);
+        e.set_left_code_padding(0);
+        e.set_remote_carets(vec![RemoteCaret {
+            head: 8,
+            selection: Some((6, 11)),
+            color: Color::Rgb(250, 250, 250),
+        }]);
+        assert_eq!(e.remote_carets().len(), 1);
+        let area = Rect::new(0, 0, 20, 1);
+        let mut buf = Buffer::empty(area);
+        (&e).render(area, &mut buf);
+        // The selected range is reversed in the participant's colour...
+        assert!(buf[(6, 0)].modifier.contains(Modifier::REVERSED));
+        assert_eq!(buf[(6, 0)].fg, Color::Rgb(250, 250, 250));
+        assert!(!buf[(5, 0)].modifier.contains(Modifier::REVERSED));
+        // ...and the caret cell is a solid block with contrasting text.
+        assert_eq!(buf[(8, 0)].bg, Color::Rgb(250, 250, 250));
+        assert_eq!(buf[(8, 0)].fg, Color::Black);
+        // Clearing the list draws nothing.
+        e.set_remote_carets(Vec::new());
+        let mut buf = Buffer::empty(area);
+        (&e).render(area, &mut buf);
+        assert_ne!(buf[(8, 0)].bg, Color::Rgb(250, 250, 250));
+    }
+
+    #[test]
+    fn an_empty_batch_of_remote_edits_changes_nothing() {
+        let mut e = Editor::new("text", "abc", Vec::new()).unwrap();
+        e.set_cursor(2);
+        e.start_edit_log();
+        e.apply_remote_edits(&[]);
+        assert_eq!((e.get_content().as_str(), e.get_cursor()), ("abc", 2));
+        e.apply_remote_edits(&[Splice {
+            offset: 0,
+            delete: 0,
+            insert: "xy".into(),
+        }]);
+        assert_eq!((e.get_content().as_str(), e.get_cursor()), ("xyabc", 4));
+        assert!(e.take_edit_log().is_empty(), "remote edits are not logged");
+        e.stop_edit_log();
+        assert!(!e.is_edit_logging());
     }
 }

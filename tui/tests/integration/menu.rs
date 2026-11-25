@@ -857,3 +857,143 @@ fn menu_bar_click_and_hover_across_menus() {
     app.on_key(esc());
     assert!(!app.menu.is_open(), "Esc closes the menu");
 }
+
+/// Hovering the menu bar switches menus, a click on a dropdown item runs it
+/// and closes the menu, and a click outside everything dismisses it.
+#[test]
+fn menu_pointer_hover_click_and_dismiss() {
+    let mut app = app_at(Path::new("."));
+    app.menu.open_index(0);
+    draw_frame(&mut app, 120, 40);
+    let bar = app.layout.menu;
+    let dd = app.layout.menu_dropdown;
+    assert!(dd.height > 2, "the File dropdown is drawn");
+
+    // Hovering a dropdown row highlights it without closing.
+    app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1));
+    assert_eq!(app.menu.open, Some(0));
+    assert!(app.menu.item.is_some(), "the row under the pointer is lit");
+
+    // Hovering another title on the bar switches to that menu.
+    let second = (bar.x..bar.x + bar.width)
+        .find(|&c| {
+            app.on_mouse(mouse(MouseEventKind::Moved, c, bar.y));
+            app.menu.open != Some(0)
+        })
+        .expect("a second menu title exists on the bar");
+    assert!(second > bar.x);
+    assert_ne!(app.menu.open, Some(0));
+
+    // A click far below every dropdown dismisses the menu.
+    app.on_mouse(click(0, 39));
+    assert_eq!(app.menu.open, None);
+
+    // Clicking a title opens it; clicking the same title again closes it.
+    app.on_mouse(click(bar.x + 1, bar.y));
+    assert!(app.menu.open.is_some());
+    app.on_mouse(click(bar.x + 1, bar.y));
+    assert_eq!(app.menu.open, None);
+}
+
+/// The top-level menu index and item index of the first item named `label`.
+fn top_item(label: &str) -> (usize, usize) {
+    vix::menu::menus()
+        .iter()
+        .enumerate()
+        .find_map(|(mi, m)| {
+            m.items
+                .iter()
+                .position(|it| it.label == label)
+                .map(|ii| (mi, ii))
+        })
+        .unwrap_or_else(|| panic!("a menu item {label}"))
+}
+
+/// Clicking a submenu parent opens its submenu without closing the menu, and
+/// clicking an item in that submenu runs it and closes the menu.
+#[test]
+fn menu_pointer_click_opens_a_submenu_and_runs_its_item() {
+    let mut app = app_at(Path::new("."));
+    let (mi, parent) = top_item("menu.item.edit.find_menu");
+    app.menu.open_index(mi);
+    draw_frame(&mut app, 120, 40);
+    let dd = app.layout.menu_dropdown;
+    app.on_mouse(click(dd.x + 2, dd.y + 1 + parent as u16));
+    assert!(app.menu.submenu_open(), "clicking the parent opens it");
+    assert_eq!(app.menu.item, Some(parent));
+
+    draw_frame(&mut app, 120, 40);
+    let sub = app.layout.submenu_dropdown;
+    assert!(sub.height > 2, "the submenu is drawn");
+    // The border row of the submenu selects nothing and keeps the menu open.
+    app.on_mouse(click(sub.x + 2, sub.y));
+    assert!(app.menu.open.is_some(), "a border click is ignored");
+    app.on_mouse(click(sub.x + 2, sub.y + 1));
+    assert_eq!(app.menu.open, None, "the item ran and the menu closed");
+    assert!(app.search.is_some(), "Find opened the search box");
+}
+
+/// Hovering a submenu parent reveals its submenu, and hovering that
+/// submenu's rows highlights them (including a theme's live preview, which
+/// the next hover elsewhere drops).
+#[test]
+fn menu_pointer_hover_walks_the_submenu_levels() {
+    let mut app = app_at(Path::new("."));
+    let (mi, parent) = top_item("menu.item.view.theme");
+    app.menu.open_index(mi);
+    draw_frame(&mut app, 120, 40);
+    let dd = app.layout.menu_dropdown;
+    app.on_mouse(mouse(
+        MouseEventKind::Moved,
+        dd.x + 2,
+        dd.y + 1 + parent as u16,
+    ));
+    assert!(app.menu.submenu_open(), "hovering the parent reveals it");
+    draw_frame(&mut app, 120, 40);
+    let sub = app.layout.submenu_dropdown;
+    for row in 1..sub.height.saturating_sub(1) {
+        app.on_mouse(mouse(MouseEventKind::Moved, sub.x + 2, sub.y + row));
+        assert!(app.menu.sub.is_some(), "row {row} of the submenu is lit");
+        draw_frame(&mut app, 120, 40);
+    }
+    // Back over the top dropdown: the submenu stays and the preview drops.
+    app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1));
+    app.on_mouse(mouse(MouseEventKind::Moved, 0, 39));
+    assert!(app.menu.open.is_some(), "hovering never closes the menu");
+}
+
+/// A menu with three levels: hovering and clicking through each one.
+#[test]
+fn menu_pointer_reaches_a_third_level() {
+    let found = vix::menu::menus().iter().enumerate().find_map(|(mi, m)| {
+        m.items.iter().enumerate().find_map(|(ii, it)| {
+            let sub = it.submenu?;
+            let si = sub.iter().position(|s| s.submenu.is_some())?;
+            Some((mi, ii, si))
+        })
+    });
+    let Some((mi, ii, si)) = found else {
+        return; // no menu nests three deep in this build
+    };
+    let mut app = app_at(Path::new("."));
+    app.menu.open_index(mi);
+    draw_frame(&mut app, 120, 40);
+    let dd = app.layout.menu_dropdown;
+    app.on_mouse(mouse(MouseEventKind::Moved, dd.x + 2, dd.y + 1 + ii as u16));
+    draw_frame(&mut app, 120, 40);
+    let sub = app.layout.submenu_dropdown;
+    app.on_mouse(mouse(
+        MouseEventKind::Moved,
+        sub.x + 2,
+        sub.y + 1 + si as u16,
+    ));
+    assert!(app.menu.subsubmenu_open(), "hovering opens the third level");
+    draw_frame(&mut app, 120, 40);
+    let subsub = app.layout.subsubmenu_dropdown;
+    app.on_mouse(mouse(MouseEventKind::Moved, subsub.x + 2, subsub.y + 1));
+    assert!(app.menu.subsub.is_some(), "the third-level row is lit");
+    // A click on a third-level row runs it and closes the menu (or opens a
+    // further level, which the menus never nest).
+    app.on_mouse(click(subsub.x + 2, subsub.y + 1));
+    assert_eq!(app.menu.open, None, "the third-level item ran");
+}

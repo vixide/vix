@@ -57,6 +57,36 @@ const CLAUSE_STARTERS: &[&str] = &[
 /// Keywords that continue a clause on an indented line of their own.
 const CONTINUATIONS: &[&str] = &["and", "or"];
 
+/// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners
+/// stop at the end before reading it).
+fn ch(chars: &[char], i: usize) -> char {
+    chars.get(i).copied().unwrap_or('\0')
+}
+
+/// The chars between `from` and `to`; empty for a range that is not inside `chars`.
+fn span(chars: &[char], from: usize, to: usize) -> &[char] {
+    chars.get(from..to).unwrap_or(&[])
+}
+
+/// `from + step`; an index past the top of `usize` is past any text.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// Reformat one SQL statement (no trailing semicolon required or added).
 ///
 /// Keywords from [`crate::highlight::KEYWORDS`] are uppercased; other words
@@ -107,8 +137,8 @@ pub fn beautify(sql: &str) -> String {
             FTok::Comment(c, _) => (c.clone(), false, 0),
             FTok::Punct(c) => {
                 match c {
-                    '(' => depth += 1,
-                    ')' => depth = depth.saturating_sub(1),
+                    '(' => depth = ahead(depth, 1),
+                    ')' => depth = sub_or(depth, 1, 0),
                     _ => {}
                 }
                 (c.to_string(), false, 0)
@@ -120,10 +150,10 @@ pub fn beautify(sql: &str) -> String {
             line_len = indent;
         } else if needs_space(&out, &text) {
             out.push(' ');
-            line_len += 1;
+            line_len = ahead(line_len, 1);
         }
         out.push_str(&text);
-        line_len += text.chars().count();
+        line_len = ahead(line_len, text.chars().count());
         first = false;
         prev_starter = starter_word;
         if let FTok::Comment(_, line_comment) = &tok
@@ -161,40 +191,45 @@ fn scan(sql: &str) -> Vec<FTok> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < chars.len() {
-        let c = chars[i];
+        let c = ch(&chars, i);
         if c.is_whitespace() {
-            i += 1;
-        } else if c == '-' && chars.get(i + 1) == Some(&'-') {
+            i = ahead(i, 1);
+        } else if c == '-' && chars.get(ahead(i, 1)) == Some(&'-') {
             let start = i;
-            while i < chars.len() && chars[i] != '\n' {
-                i += 1;
+            while i < chars.len() && ch(&chars, i) != '\n' {
+                i = ahead(i, 1);
             }
-            out.push(FTok::Comment(chars[start..i].iter().collect(), true));
-        } else if c == '/' && chars.get(i + 1) == Some(&'*') {
+            out.push(FTok::Comment(span(&chars, start, i).iter().collect(), true));
+        } else if c == '/' && chars.get(ahead(i, 1)) == Some(&'*') {
             let start = i;
-            i += 2;
-            while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
-                i += 1;
+            i = ahead(i, 2);
+            while i < chars.len() && !(ch(&chars, i) == '*' && chars.get(ahead(i, 1)) == Some(&'/'))
+            {
+                i = ahead(i, 1);
             }
-            i = (i + 2).min(chars.len());
-            out.push(FTok::Comment(chars[start..i].iter().collect(), false));
+            i = ahead(i, 2).min(chars.len());
+            out.push(FTok::Comment(
+                span(&chars, start, i).iter().collect(),
+                false,
+            ));
         } else if c == '\'' || c == '"' {
             let start = i;
-            i += 1;
-            while i < chars.len() && chars[i] != c {
-                i += 1;
+            i = ahead(i, 1);
+            while i < chars.len() && ch(&chars, i) != c {
+                i = ahead(i, 1);
             }
-            i = (i + 1).min(chars.len());
-            out.push(FTok::Str(chars[start..i].iter().collect()));
+            i = ahead(i, 1).min(chars.len());
+            out.push(FTok::Str(span(&chars, start, i).iter().collect()));
         } else if c.is_ascii_alphanumeric() || c == '_' {
             let start = i;
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
-                i += 1;
+            while i < chars.len() && (ch(&chars, i).is_ascii_alphanumeric() || ch(&chars, i) == '_')
+            {
+                i = ahead(i, 1);
             }
-            out.push(FTok::Word(chars[start..i].iter().collect()));
+            out.push(FTok::Word(span(&chars, start, i).iter().collect()));
         } else {
             out.push(FTok::Punct(c));
-            i += 1;
+            i = ahead(i, 1);
         }
     }
     out
@@ -241,5 +276,17 @@ mod tests {
     fn joins_break_before_the_join_phrase() {
         let got = beautify("select * from a left join b on a.id=b.id");
         assert!(got.contains("\nLEFT JOIN b ON a.id = b.id"), "{got}");
+    }
+
+    #[test]
+    fn line_comments_end_their_line_and_trailing_blanks_are_trimmed() {
+        let out = beautify("select 1 -- note\nfrom t");
+        assert_eq!(out.lines().next(), Some("SELECT 1 -- note"));
+        assert!(out.contains("FROM t"), "{out}");
+        assert!(!out.ends_with('\n') && !out.ends_with(' '));
+        let tail = beautify("select 1 -- only a comment at the end");
+        assert!(tail.ends_with("end"), "{tail}");
+        assert_eq!(beautify(""), "");
+        assert_eq!(beautify("   "), "");
     }
 }

@@ -17,6 +17,18 @@
 //!
 //! Owning spec: `crates/vix-unit-converter-tool/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// A measurable quantity. Conversions are only defined within one dimension.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dimension {
@@ -273,6 +285,35 @@ pub enum Focus {
     To,
 }
 
+/// Why the unit selection could not be changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ConverterError {
+    /// The selected unit index is past the last unit.
+    OutOfRange {
+        /// The figure that is out of range.
+        figure: &'static str,
+        /// The number of units.
+        len: usize,
+    },
+    /// The step does not fit.
+    Overflow {
+        /// The figure that overflowed.
+        figure: &'static str,
+    },
+}
+
+impl std::fmt::Display for ConverterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OutOfRange { figure, len } => write!(f, "{figure}: must be below {len}"),
+            Self::Overflow { figure } => write!(f, "{figure}: the step does not fit"),
+        }
+    }
+}
+
+impl std::error::Error for ConverterError {}
+
 /// The Unit Converter dialog's editing state: the typed number, the chosen input
 /// and output units (indices into [`UNITS`]), and the focused element.
 #[derive(Debug, Clone)]
@@ -346,19 +387,33 @@ impl Converter {
 
     /// Cycle the focused selector by `delta` (wrapping); a no-op when the value
     /// field is focused.
-    pub fn cycle(&mut self, delta: i32) {
+    ///
+    /// # Errors
+    /// [`ConverterError::OutOfRange`] if the focused index (a public field) is
+    /// already past the last unit, and [`ConverterError::Overflow`] if the step
+    /// does not fit; the selection is left unchanged either way.
+    pub fn cycle(&mut self, delta: i32) -> Result<(), ConverterError> {
         let slot = match self.focus {
             Focus::From => &mut self.from,
             Focus::To => &mut self.to,
-            Focus::Value => return,
+            Focus::Value => return Ok(()),
         };
-        let count = i64::try_from(UNITS.len()).unwrap_or(i64::MAX);
-        if count == 0 {
-            return;
+        let len = UNITS.len();
+        if *slot >= len {
+            return Err(ConverterError::OutOfRange {
+                figure: "unit",
+                len,
+            });
         }
-        let current = i64::try_from(*slot).unwrap_or(0);
-        let next = (current + i64::from(delta)).rem_euclid(count);
-        *slot = usize::try_from(next).unwrap_or(0);
+        let overflow = ConverterError::Overflow { figure: "unit" };
+        let count = i64::try_from(len).map_err(|_| overflow)?;
+        let current = i64::try_from(*slot).map_err(|_| overflow)?;
+        let next = current
+            .checked_add(i64::from(delta))
+            .and_then(|sum| sum.checked_rem_euclid(count))
+            .ok_or(overflow)?;
+        *slot = usize::try_from(next).map_err(|_| overflow)?;
+        Ok(())
     }
 
     /// The converted output value, if the typed number parses and the units are
@@ -376,20 +431,15 @@ impl Converter {
         self.output().map_or_else(|| "—".to_string(), format_number)
     }
 
-    /// The text inserted into the editor: `"<output> <unit>"`, or empty when
-    /// there is no valid output.
-    ///
-    /// # Panics
-    /// If the public [`to`](Self::to) index is out of range of [`UNITS`]
-    /// (cannot happen when it is only changed via [`Converter::cycle`]); an
-    /// out-of-range `from`/`to` makes [`Converter::output`] `None` first, so
-    /// the indexing is reached only for valid output.
+    /// The text a click inserts: the converted value and the output unit's label,
+    /// or the empty string when there is nothing to convert (no valid number, or
+    /// either unit index outside [`UNITS`]).
     #[must_use]
     pub fn insert_text(&self) -> String {
-        match self.output() {
-            Some(v) => format!("{} {}", format_number(v), UNITS[self.to].label),
-            None => String::new(),
-        }
+        let (Some(value), Some(unit)) = (self.output(), UNITS.get(self.to)) else {
+            return String::new();
+        };
+        format!("{} {}", format_number(value), unit.label)
     }
 }
 
@@ -466,9 +516,43 @@ mod tests {
         let mut c = Converter::new();
         c.focus = Focus::From;
         c.from = 0;
-        c.cycle(-1);
+        c.cycle(-1).unwrap();
         assert_eq!(c.from, UNITS.len() - 1);
-        c.cycle(1);
+        c.cycle(1).unwrap();
         assert_eq!(c.from, 0);
+    }
+
+    #[test]
+    fn cycle_refuses_a_bad_index_and_an_overflowing_step() {
+        let mut c = Converter::new();
+        c.focus = Focus::To;
+        c.to = UNITS.len();
+        assert_eq!(
+            c.cycle(1),
+            Err(ConverterError::OutOfRange {
+                figure: "unit",
+                len: UNITS.len()
+            })
+        );
+        assert_eq!(c.to, UNITS.len(), "left unchanged, not moved to a unit");
+        c.to = 0;
+        // A step of i32::MIN still fits i64 and wraps within the list.
+        assert!(c.cycle(i32::MIN).is_ok());
+        assert!(c.to < UNITS.len());
+        assert_eq!(
+            ConverterError::OutOfRange {
+                figure: "unit",
+                len: 3
+            }
+            .to_string(),
+            "unit: must be below 3"
+        );
+        assert_eq!(
+            ConverterError::Overflow { figure: "unit" }.to_string(),
+            "unit: the step does not fit"
+        );
+        c.to = UNITS.len();
+        c.from = 0;
+        assert_eq!(c.insert_text(), "", "an unknown output unit has no text");
     }
 }

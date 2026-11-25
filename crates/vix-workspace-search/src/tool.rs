@@ -231,20 +231,24 @@ pub fn parse_rg_json(line: &str) -> Option<ToolLine> {
 pub fn parse_grep(line: &str, known: &dyn Fn(&str) -> bool) -> Option<ToolLine> {
     let line = strip_eol(line);
     for (i, _) in line.match_indices(':') {
-        let rest = &line[i + 1..];
+        let Some(rest) = line.get(i..).and_then(|from| from.strip_prefix(':')) else {
+            continue;
+        };
         let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
         if digits == 0 || rest.as_bytes().get(digits) != Some(&b':') {
             continue;
         }
-        let rel = strip_dot(&line[..i]);
+        let Some(rel) = line.get(..i).map(strip_dot) else {
+            continue;
+        };
         if !known(rel) {
             continue;
         }
-        let number = rest[..digits].parse().ok()?;
+        let number = rest.get(..digits)?.parse().ok()?;
         return Some(ToolLine {
             rel: rel.to_string(),
             line: number,
-            text: rest[digits + 1..].to_string(),
+            text: rest.get(digits..)?.strip_prefix(':')?.to_string(),
         });
     }
     None

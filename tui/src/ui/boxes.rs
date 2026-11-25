@@ -2,6 +2,19 @@
 //! calendar (Tools → Calendar…), the clock (Tools → Clock…), and the
 //! workspace dashboard (Tools → Workspace Dashboard…).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph};
 
@@ -24,8 +37,8 @@ pub(super) fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     let width = 28u16.min(area.width);
     let height = 11u16.min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width + 1),
-        y: area.y + 2,
+        x: area.x.plus(area.width.minus(width.plus(1))),
+        y: area.y.plus(2),
         width,
         height,
     };
@@ -55,14 +68,14 @@ pub(super) fn draw_calendar(app: &mut App, frame: &mut Frame, area: Rect) {
     // (`◀`/`▶`). The arrows are clickable (see `App::calendar_mouse`) and mirror
     // the Left/Right keys.
     let header = Line::from(format!("{CAL_PREV}{:^19}{CAL_NEXT}", app.calendar.title()));
-    frame.render_widget(Paragraph::new(header), rows[0]);
-    frame.render_widget(Paragraph::new(month_lines(&app.calendar)), rows[1]);
+    frame.render_widget(Paragraph::new(header), chunk(&rows, 0));
+    frame.render_widget(Paragraph::new(month_lines(&app.calendar)), chunk(&rows, 1));
 
     let help = Line::from(Span::styled(
         t!("ui.calendar_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(help), rows[2]);
+    frame.render_widget(Paragraph::new(help), chunk(&rows, 2));
 }
 
 /// Draw the clock box (Tools -> Clock...) in the top-right corner: one row per
@@ -73,10 +86,12 @@ pub(super) fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
     let zone = crate::time_zone_model::active_name();
 
     let width = 38u16.min(area.width);
-    let height = (u16::try_from(rows_data.len()).unwrap_or(u16::MAX) + 3).min(area.height);
+    let height = (u16::try_from(rows_data.len()).unwrap_or(u16::MAX))
+        .plus(3)
+        .min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width + 1),
-        y: area.y + 2,
+        x: area.x.plus(area.width.minus(width.plus(1))),
+        y: area.y.plus(2),
         width,
         height,
     };
@@ -104,17 +119,19 @@ pub(super) fn draw_clock(app: &mut App, frame: &mut Frame, area: Rect) {
                 "iso_week" => t!("ui.clock_iso_week").to_string(),
                 _ => t!("ui.clock_zone", zone = zone).to_string(),
             };
-            ListItem::new(Line::from(format!(" {label:<10} {}", r.value)))
+            // An uncomputable value reads as unknown ("—"), never as a time.
+            let value = r.value.as_deref().unwrap_or("—");
+            ListItem::new(Line::from(format!(" {label:<10} {value}")))
         })
         .collect();
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
     state.select(Some(app.clock.selected));
-    frame.render_stateful_widget(list, rows[0], &mut state);
-    app.layout.clock = rows[0];
+    frame.render_stateful_widget(list, chunk(&rows, 0), &mut state);
+    app.layout.clock = chunk(&rows, 0);
 
     let help = Line::from(Span::styled(t!("ui.clock_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(help), rows[1]);
+    frame.render_widget(Paragraph::new(help), chunk(&rows, 1));
 }
 
 /// Draw the workspace dashboard overlay. Figures still being computed in the
@@ -136,10 +153,12 @@ pub(super) fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
         (t!("ui.dashboard_commits"), num(d.commit_count)),
     ];
     let width = 52u16.min(area.width);
-    let height = (u16::try_from(rows.len()).unwrap_or(u16::MAX) + 4).min(area.height);
+    let height = (u16::try_from(rows.len()).unwrap_or(u16::MAX))
+        .plus(4)
+        .min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -167,13 +186,13 @@ pub(super) fn draw_dashboard(app: &App, frame: &mut Frame, area: Rect) {
             ])
         })
         .collect();
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
 
     let hint = Line::from(Span::styled(
         t!("ui.dashboard_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 }
 
 /// Render a month grid as styled lines: a weekday header, then one line per

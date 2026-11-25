@@ -7,6 +7,18 @@
 //! accepted choices. Pure data over `split_inclusive('\n')` lines, so the result
 //! is an exact reconstruction (no line-ending guessing) and unit-testable.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// One segment of the proposed diff.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Seg {
@@ -32,30 +44,64 @@ pub struct Review {
     pub selected: usize,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// Why a review could not be built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ReviewError {
+    /// The diff library named lines outside the text it diffed.
+    RangeOutsideText {
+        /// The figure that is out of range.
+        figure: &'static str,
+    },
+}
+
+impl std::fmt::Display for ReviewError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RangeOutsideText { figure } => write!(f, "{figure}: outside the text"),
+        }
+    }
+}
+
+impl std::error::Error for ReviewError {}
+
 impl Review {
-    /// Build a review of the change from `old` to `new`, or `None` when they are
-    /// identical (nothing to review).
-    #[must_use]
-    pub fn from_texts(old: &str, new: &str) -> Option<Review> {
+    /// Build a review of the change from `old` to `new`, or `Ok(None)` when they
+    /// are identical (nothing to review).
+    ///
+    /// # Errors
+    /// [`ReviewError::RangeOutsideText`] if the diff library names lines outside
+    /// the texts it was given (a broken contract, never expected); no partial
+    /// review is returned.
+    pub fn from_texts(old: &str, new: &str) -> Result<Option<Review>, ReviewError> {
         use similar::{Algorithm, DiffOp, TextDiff};
         let diff = TextDiff::configure()
             .algorithm(Algorithm::Myers)
             .diff_lines(old, new);
         let old_lines: Vec<&str> = old.split_inclusive('\n').collect();
         let new_lines: Vec<&str> = new.split_inclusive('\n').collect();
-        let take = |src: &[&str], i: usize, n: usize| -> Vec<String> {
-            src.get(i..i + n)
-                .unwrap_or_default()
-                .iter()
-                .map(|s| (*s).to_string())
-                .collect()
+        let take = |src: &[&str], i: usize, n: usize| -> Result<Vec<String>, ReviewError> {
+            let lines = i.checked_add(n).and_then(|end| src.get(i..end)).ok_or(
+                ReviewError::RangeOutsideText {
+                    figure: "diff range",
+                },
+            )?;
+            Ok(lines.iter().map(|s| (*s).to_string()).collect())
         };
         let mut segs: Vec<Seg> = Vec::new();
         let mut any = false;
         for op in diff.ops() {
             match *op {
                 DiffOp::Equal { old_index, len, .. } => {
-                    segs.push(Seg::Equal(take(&old_lines, old_index, len)));
+                    segs.push(Seg::Equal(take(&old_lines, old_index, len)?));
                 }
                 DiffOp::Insert {
                     old_index: _,
@@ -63,7 +109,7 @@ impl Review {
                     new_len,
                 } => {
                     any = true;
-                    push_change(&mut segs, Vec::new(), take(&new_lines, new_index, new_len));
+                    push_change(&mut segs, Vec::new(), take(&new_lines, new_index, new_len)?);
                 }
                 DiffOp::Delete {
                     old_index,
@@ -71,7 +117,7 @@ impl Review {
                     new_index: _,
                 } => {
                     any = true;
-                    push_change(&mut segs, take(&old_lines, old_index, old_len), Vec::new());
+                    push_change(&mut segs, take(&old_lines, old_index, old_len)?, Vec::new());
                 }
                 DiffOp::Replace {
                     old_index,
@@ -82,16 +128,16 @@ impl Review {
                     any = true;
                     push_change(
                         &mut segs,
-                        take(&old_lines, old_index, old_len),
-                        take(&new_lines, new_index, new_len),
+                        take(&old_lines, old_index, old_len)?,
+                        take(&new_lines, new_index, new_len)?,
                     );
                 }
             }
         }
         if !any {
-            return None;
+            return Ok(None);
         }
-        Some(Review { segs, selected: 0 })
+        Ok(Some(Review { segs, selected: 0 }))
     }
 
     /// Document-order indices of the change segments.
@@ -116,14 +162,16 @@ impl Review {
 
     /// Move the highlight to the next change (saturating).
     pub fn next(&mut self) {
-        if self.selected.saturating_add(1) < self.change_count() {
-            self.selected += 1;
+        if let Some(next) = self.selected.checked_add(1)
+            && next < self.change_count()
+        {
+            self.selected = next;
         }
     }
 
     /// Move the highlight to the previous change (saturating).
     pub fn prev(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        self.selected = sub_or(self.selected, 1, 0); // AID-F2: stop at the first change
     }
 
     /// Toggle acceptance of the highlighted change.
@@ -195,12 +243,24 @@ mod tests {
 
     #[test]
     fn identical_texts_have_no_review() {
-        assert!(Review::from_texts("a\nb\n", "a\nb\n").is_none());
+        assert!(
+            Review::from_texts(
+                "a
+b
+", "a
+b
+"
+            )
+            .unwrap()
+            .is_none()
+        );
     }
 
     #[test]
     fn accept_keeps_new_reject_keeps_old() {
-        let mut r = Review::from_texts("one\ntwo\nthree\n", "one\nTWO\nthree\n").unwrap();
+        let mut r = Review::from_texts("one\ntwo\nthree\n", "one\nTWO\nthree\n")
+            .unwrap()
+            .unwrap();
         assert_eq!(r.change_count(), 1);
         assert_eq!(r.result(), "one\nTWO\nthree\n");
         r.toggle();
@@ -210,7 +270,9 @@ mod tests {
 
     #[test]
     fn per_hunk_selection() {
-        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n").unwrap();
+        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n")
+            .unwrap()
+            .unwrap();
         assert_eq!(r.change_count(), 2);
         // Reject only the second hunk.
         r.next();
@@ -220,7 +282,7 @@ mod tests {
 
     #[test]
     fn set_all_toggles_everything() {
-        let mut r = Review::from_texts("a\nb\n", "A\nB\n").unwrap();
+        let mut r = Review::from_texts("a\nb\n", "A\nB\n").unwrap().unwrap();
         r.set_all(false);
         assert_eq!(r.result(), "a\nb\n");
         r.set_all(true);
@@ -229,7 +291,9 @@ mod tests {
 
     #[test]
     fn next_stops_at_the_last_change() {
-        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n").unwrap();
+        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n")
+            .unwrap()
+            .unwrap();
         r.next();
         assert_eq!(r.selected, 1);
         r.next(); // already on the last of two changes
@@ -238,14 +302,16 @@ mod tests {
 
     #[test]
     fn next_on_a_single_change_stays_put() {
-        let mut r = Review::from_texts("a\n", "A\n").unwrap();
+        let mut r = Review::from_texts("a\n", "A\n").unwrap().unwrap();
         r.next();
         assert_eq!(r.selected, 0);
     }
 
     #[test]
     fn prev_moves_back_and_stops_at_the_first() {
-        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n").unwrap();
+        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n")
+            .unwrap()
+            .unwrap();
         r.next();
         r.prev();
         assert_eq!(r.selected, 0);
@@ -255,9 +321,22 @@ mod tests {
 
     #[test]
     fn accepted_count_counts_accepted_changes() {
-        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n").unwrap();
+        let mut r = Review::from_texts("a\nb\nc\nd\n", "A\nb\nC\nd\n")
+            .unwrap()
+            .unwrap();
         assert_eq!(r.accepted_count(), 2);
         r.toggle();
         assert_eq!(r.accepted_count(), 1);
+    }
+
+    #[test]
+    fn a_review_error_names_the_figure() {
+        assert_eq!(
+            ReviewError::RangeOutsideText {
+                figure: "diff range"
+            }
+            .to_string(),
+            "diff range: outside the text"
+        );
     }
 }

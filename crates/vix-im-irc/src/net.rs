@@ -6,6 +6,18 @@
 //! Nothing here logs: not message text, not credentials. Reconnecting is
 //! left to the App (v1).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::io::{self, ErrorKind as IoKind, Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
@@ -334,7 +346,12 @@ fn session(
             Err(e) if e.kind() == IoKind::Interrupted => continue,
             Err(e) => return Err(e),
         };
-        for &byte in &buf[..n] {
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most buf.len()"
+        )]
+        let received = &buf[..n];
+        for &byte in received {
             if byte == b'\n' {
                 if !overlong {
                     let text = String::from_utf8_lossy(&pending);
@@ -352,5 +369,121 @@ fn session(
                 overlong = true;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::Password;
+    use std::net::TcpListener;
+
+    fn config(nick: &str) -> Config {
+        Config {
+            nick: nick.into(),
+            user: "ana".into(),
+            realname: "Ana".into(),
+            channels: Vec::new(),
+            sasl: Some(crate::client::Sasl {
+                user: "ana".into(),
+                password: Password::new("pw".into()),
+            }),
+        }
+    }
+
+    fn local_options(listener: &TcpListener, nick: &str) -> ConnectOptions {
+        let port = listener.local_addr().unwrap().port();
+        let mut o = ConnectOptions::new("127.0.0.1", port, false, config(nick));
+        o.connect_timeout = Duration::from_secs(2);
+        o.poll_interval = Duration::from_millis(20);
+        o
+    }
+
+    #[test]
+    fn request_debug_names_only_the_variant() {
+        let cmd = Request::Command(Command::Privmsg {
+            target: "#vix".into(),
+            text: "secret words".into(),
+        });
+        assert_eq!(format!("{cmd:?}"), "Command");
+        assert_eq!(format!("{:?}", Request::Close), "Close");
+    }
+
+    #[test]
+    fn session_with_unusable_nick_fails_before_writing() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let opts = local_options(&listener, "bad nick");
+        let (_tx, rx) = mpsc::channel();
+        let (events, _events_rx) = mpsc::channel();
+        let err = session(opts, &rx, &events).unwrap_err();
+        assert_eq!(err.kind(), IoKind::InvalidInput);
+    }
+
+    #[test]
+    fn session_ends_when_the_app_drops_its_event_receiver() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let opts = local_options(&listener, "ana");
+        let server = thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            sock.write_all(b":srv 001 ana :hi\r\n").unwrap();
+            // Hold the socket open until the client hangs up.
+            let mut sink = Vec::new();
+            let _ = sock.read_to_end(&mut sink);
+        });
+        let (_tx, rx) = mpsc::channel();
+        let (events, events_rx) = mpsc::channel();
+        drop(events_rx);
+        let reason = session(opts, &rx, &events).unwrap();
+        assert_eq!(reason, "closed");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn session_ends_when_a_command_event_cannot_be_delivered() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let opts = local_options(&listener, "ana");
+        let server = thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut sink = Vec::new();
+            let _ = sock.read_to_end(&mut sink);
+        });
+        let (tx, rx) = mpsc::channel();
+        // Refused before registration, so it yields an Error event to deliver.
+        tx.send(Request::Command(Command::Privmsg {
+            target: "#vix".into(),
+            text: "hi".into(),
+        }))
+        .unwrap();
+        let (events, events_rx) = mpsc::channel();
+        drop(events_rx);
+        let reason = session(opts, &rx, &events).unwrap();
+        assert_eq!(reason, "closed");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn overlong_server_lines_are_dropped_not_parsed() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let opts = local_options(&listener, "ana");
+        let server = thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut junk = vec![b'x'; MAX_RECV_LINE + 100];
+            junk.extend_from_slice(b"\r\n:srv 001 ana :hi\r\n");
+            sock.write_all(&junk).unwrap();
+            let mut sink = Vec::new();
+            let _ = sock.read_to_end(&mut sink);
+        });
+        let (tx, rx) = mpsc::channel();
+        let (events, events_rx) = mpsc::channel();
+        let h = thread::spawn(move || session(opts, &rx, &events));
+        // The only event is the welcome that follows the dropped overlong line.
+        assert_eq!(
+            events_rx.recv().unwrap(),
+            Event::Connected { nick: "ana".into() }
+        );
+        drop(events_rx);
+        drop(tx);
+        let _ = h.join().unwrap();
+        server.join().unwrap();
     }
 }

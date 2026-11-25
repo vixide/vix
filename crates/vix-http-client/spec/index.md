@@ -35,3 +35,7 @@ Not yet: `$aadToken` blocks the UI thread for the CLI call (about a second); the
 The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `msg.http_error` line is unchanged.
 
 See `spec/index/index.md` for the project overview and `crates/vix-editor-core/spec/index.md` for the full action catalog.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Request-block splitting, `{{variable}}` expansion, JSON and XPath lookups and the date variables use `split_once`, `get`, `checked_*` and `div_euclid`. **Changed:** an XPath position of 0 (`[0]`, positions count from 1) selects nothing; it used to subtract below zero. An offset or instant that overflows (`{{$timestamp}}`, `{{$datetime}}`, `{{$randomInt}}`) is `BadArguments`. The date helpers return `None` rather than wrapping for a day count too large for the calendar. **Declared (HTTP-F1):** a stray `]` in an XPath step with nothing open leaves the depth at 0; a failed OS random source still degrades to a fixed value rather than aborting a send.

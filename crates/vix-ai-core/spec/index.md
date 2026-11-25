@@ -96,3 +96,11 @@ marker. The same `complete` call carries it, so every provider works.
 `fim::clean` strips a Markdown fence, drops an echo of the already-typed
 line prefix, trims leading newlines and trailing blanks, and keeps at most 8
 lines and 400 characters; a reply that is empty after that is no suggestion.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The code-fence parser splits at the first newline instead of slicing, and the prefix window uses a subtraction with a declared fallback.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `FIM-F1` | The text before the cursor is shorter than the prefix window | skip nothing | A short prefix is sent whole. |

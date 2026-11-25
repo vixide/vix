@@ -16,7 +16,7 @@
 //! ```
 //! use vix_im::{reanchor, Anchor, Thread};
 //! let before = ["a", "b", "c", "d"];
-//! let thread = Thread::new("t1", "x.rs", &before, 3, 3);
+//! let thread = Thread::new("t1", "x.rs", &before, 3, 3).unwrap();
 //! // Two lines were inserted above: the anchor is found again, now at 5.
 //! let after = ["new", "new", "a", "b", "c", "d"];
 //! assert_eq!(reanchor(&thread, &after), Anchor::Exact(5));
@@ -32,6 +32,35 @@ pub const CONTEXT_LINES: usize = 3;
 /// How far (in lines) the end of an edited anchor may move when it is
 /// re-found by context.
 const MAX_STRETCH: usize = 20;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero.
+fn sub_u32(a: u32, b: u32, fallback: u32) -> u32 {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit.
+fn add_u32_or(a: u32, b: u32, fallback: u32) -> u32 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a + b`; line numbers stop at the top of their type (`u32::MAX`).
+fn add_u32(a: u32, b: u32) -> u32 {
+    add_u32_or(a, b, u32::MAX)
+}
 
 /// A thread of messages attached to a line range in a file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,9 +126,9 @@ pub fn is_valid_id(id: &str) -> bool {
 
 impl Thread {
     /// A new, empty thread on `start_line..=end_line` (1-based) of
-    /// `file_lines`, capturing the anchored text and its context. Lines past
-    /// the end of the file are clamped; `end_line` before `start_line` is
-    /// taken as `start_line`.
+    /// `file_lines`, capturing the anchored text and its context. `None` when
+    /// the range is not inside the file: a line of 0 or past the last line,
+    /// `end_line` before `start_line`, or a file with no lines.
     #[must_use]
     pub fn new<S: AsRef<str>>(
         id: impl Into<String>,
@@ -107,14 +136,20 @@ impl Thread {
         file_lines: &[S],
         start_line: u32,
         end_line: u32,
-    ) -> Thread {
+    ) -> Option<Thread> {
         let len = file_lines.len();
-        let start = (to_index(start_line)).min(len.saturating_sub(1));
-        let end = to_index(end_line).max(start).min(len.saturating_sub(1));
+        if start_line == 0 || end_line < start_line {
+            return None;
+        }
+        let (start, end) = (to_index(start_line), to_index(end_line));
+        if end >= len {
+            return None;
+        }
+        let after = add_or(end, 1, usize::MAX);
         let get = |range: std::ops::Range<usize>| -> Vec<String> {
             file_lines
                 .get(range)
-                .unwrap_or_default()
+                .unwrap_or(&[])
                 .iter()
                 .map(|l| l.as_ref().to_string())
                 .collect()
@@ -122,19 +157,19 @@ impl Thread {
         let anchor = if len == 0 {
             Vec::new()
         } else {
-            get(start..end + 1)
+            get(start..after)
         };
-        Thread {
+        Some(Thread {
             id: id.into(),
             path: path.into(),
             anchor_text: anchor.join("\n"),
-            context_before: get(start.saturating_sub(CONTEXT_LINES)..start),
-            context_after: get((end + 1).min(len)..(end + 1 + CONTEXT_LINES).min(len)),
+            context_before: get(sub_or(start, CONTEXT_LINES, 0)..start),
+            context_after: get(after.min(len)..add_or(after, CONTEXT_LINES, usize::MAX).min(len)),
             start_line: to_line(start),
             end_line: to_line(end),
             resolved: false,
             messages: Vec::new(),
-        }
+        })
     }
 
     /// The thread as pretty-printed JSON, for `.vix/im/threads/<id>.json`.
@@ -179,9 +214,9 @@ impl Thread {
     /// An outdated anchor changes nothing.
     pub fn apply(&mut self, anchor: Anchor) {
         if let Some(line) = anchor.line() {
-            let span = self.end_line.saturating_sub(self.start_line);
+            let span = sub_u32(self.end_line, self.start_line, 0);
             self.start_line = line;
-            self.end_line = line.saturating_add(span);
+            self.end_line = add_u32(line, span);
         }
     }
 
@@ -207,8 +242,13 @@ pub fn new_id(time_utc_ms: i64, taken: impl Fn(&str) -> bool) -> String {
     let mut n = time_utc_ms.unsigned_abs();
     let mut digits = Vec::new();
     loop {
-        digits.push(char::from(DIGITS[usize::try_from(n % 36).unwrap_or(0)]));
-        n /= 36;
+        let digit = usize::try_from(n.rem_euclid(36))
+            .ok()
+            .and_then(|i| DIGITS.get(i));
+        if let Some(&digit) = digit {
+            digits.push(char::from(digit));
+        }
+        n = n.div_euclid(36);
         if n == 0 {
             break;
         }
@@ -246,12 +286,12 @@ pub fn step(lines: &[u32], from: u32, forward: bool) -> Option<u32> {
 
 /// A 1-based line to a 0-based index (0 is treated as line 1).
 fn to_index(line: u32) -> usize {
-    usize::try_from(line.max(1) - 1).unwrap_or(usize::MAX)
+    usize::try_from(sub_u32(line.max(1), 1, 0)).unwrap_or(usize::MAX)
 }
 
 /// A 0-based index to a 1-based line, saturating at `u32::MAX`.
 fn to_line(index: usize) -> u32 {
-    u32::try_from(index).map_or(u32::MAX, |i| i.saturating_add(1))
+    u32::try_from(index).map_or(u32::MAX, |i| add_u32(i, 1))
 }
 
 /// Where `thread`'s anchor is in the file's current lines.
@@ -272,9 +312,13 @@ pub fn reanchor<S: AsRef<str>>(thread: &Thread, file_lines: &[S]) -> Anchor {
     let n = anchor.len();
     // Pass 1: the anchored text verbatim (trailing whitespace ignored, so
     // an editor stripping it does not orphan threads).
-    if n <= lines.len()
+    if let Some(room) = lines.len().checked_sub(n)
         && let Some(at) = nearest(
-            (0..=lines.len() - n).filter(|&i| lines[i..i + n] == anchor[..]),
+            (0..=room).filter(|&i| {
+                lines
+                    .get(i..add_or(i, n, usize::MAX))
+                    .is_some_and(|window| window == anchor.as_slice())
+            }),
             old,
         )
     {
@@ -312,11 +356,11 @@ fn by_context(thread: &Thread, lines: &[&str], n: usize, old: usize) -> Option<u
     // inside the anchor can grow or shrink it by up to `MAX_STRETCH` lines.
     for start in 0..=lines.len() {
         let above = matching(lines, &before, start.checked_sub(before.len()));
-        let below = (n.saturating_sub(stretch)..=n + stretch)
-            .map(|len| matching(lines, &after, Some(start + len)))
+        let below = (sub_or(n, stretch, 0)..=add_or(n, stretch, usize::MAX))
+            .map(|len| matching(lines, &after, Some(add_or(start, len, usize::MAX))))
             .max()
             .unwrap_or(0);
-        let score = above + below;
+        let score = add_or(above, below, usize::MAX);
         // `start == lines.len()` is a legal position for scoring but not a
         // real line to anchor on.
         if score < needed || start >= lines.len() {
@@ -342,7 +386,9 @@ fn matching(lines: &[&str], context: &[&str], from: Option<usize>) -> usize {
     context
         .iter()
         .enumerate()
-        .filter(|&(k, want)| !want.trim().is_empty() && lines.get(from + k) == Some(want))
+        .filter(|&(k, want)| {
+            !want.trim().is_empty() && lines.get(add_or(from, k, usize::MAX)) == Some(want)
+        })
         .count()
 }
 
@@ -361,7 +407,7 @@ mod tests {
     ];
 
     fn thread() -> Thread {
-        Thread::new("t1", "src/main.rs", FILE, 4, 4)
+        Thread::new("t1", "src/main.rs", FILE, 4, 4).unwrap()
     }
 
     #[test]
@@ -371,9 +417,17 @@ mod tests {
         assert_eq!(t.context_before, FILE[0..3]);
         assert_eq!(t.context_after, FILE[4..7]);
         assert_eq!((t.start_line, t.end_line), (4, 4));
-        let edge = Thread::new("t2", "a", FILE, 1, 99);
+        let edge = Thread::new("t2", "a", FILE, 1, 7).unwrap();
         assert_eq!((edge.start_line, edge.end_line), (1, 7));
         assert!(edge.context_before.is_empty() && edge.context_after.is_empty());
+        // A range that is not inside the file is no thread, not a moved one.
+        for (start, end) in [(0, 1), (1, 8), (8, 8), (3, 2)] {
+            assert!(
+                Thread::new("t3", "a", FILE, start, end).is_none(),
+                "{start}..{end}"
+            );
+        }
+        assert!(Thread::new("t4", "a", &[] as &[&str], 1, 1).is_none());
     }
 
     #[test]
@@ -428,7 +482,7 @@ mod tests {
 
     #[test]
     fn apply_moves_range() {
-        let mut t = Thread::new("t", "a", FILE, 2, 3);
+        let mut t = Thread::new("t", "a", FILE, 2, 3).unwrap();
         t.apply(Anchor::Exact(5));
         assert_eq!((t.start_line, t.end_line), (5, 6));
         t.apply(Anchor::Outdated);
@@ -458,7 +512,7 @@ mod tests {
 
     #[test]
     fn covers_its_range() {
-        let t = Thread::new("t", "a", FILE, 2, 4);
+        let t = Thread::new("t", "a", FILE, 2, 4).unwrap();
         assert!(!t.covers(1));
         assert!(t.covers(2) && t.covers(3) && t.covers(4));
         assert!(!t.covers(5));

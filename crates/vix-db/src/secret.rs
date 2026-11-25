@@ -295,4 +295,13 @@ mod tests {
         };
         assert_eq!(resolve(&c).as_deref(), Some("s3cret"));
     }
+
+    #[test]
+    fn the_keyring_account_is_the_connection_name() {
+        let conn = Connection {
+            name: "prod db".into(),
+            ..Connection::default()
+        };
+        assert_eq!(account(&conn), "prod db");
+    }
 }

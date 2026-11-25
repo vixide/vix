@@ -28,6 +28,26 @@
 //!
 //! Spec: `crates/vix-keybinding-editor-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// Where a row's effective binding currently comes from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {
@@ -134,6 +154,10 @@ impl Panel {
             // `sort_by` is stable, so rows equal on both columns keep their
             // natural (source) order.
             out.sort_by(|&a, &b| {
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "RCA-EXC-2: a and b are indexes from enumerating self.rows in matches()"
+                )]
                 let (ra, rb) = (&self.rows[a], &self.rows[b]);
                 let key = |r: &Row| match col {
                     Column::Action => (r.action_title.to_lowercase(), r.key_display.to_lowercase()),
@@ -163,7 +187,13 @@ impl Panel {
     /// nothing).
     #[must_use]
     pub fn selected_row(&self) -> Option<&Row> {
-        self.matches().get(self.selected).map(|&i| &self.rows[i])
+        let index = *self.matches().get(self.selected)?;
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: matches() returns indexes from enumerating self.rows"
+        )]
+        let row = &self.rows[index];
+        Some(row)
     }
 
     /// A header click: sort `col` ascending, or flip to descending when
@@ -195,13 +225,14 @@ impl Panel {
 
     /// Move the selection up by `n` rows, stopping at the top.
     pub fn select_up(&mut self, n: usize) {
-        self.selected = self.selected.saturating_sub(n);
+        self.selected = sub_or(self.selected, n, 0); // BINDING-F1: stop at the top
     }
 
     /// Move the selection down by `n` rows, stopping at the last match.
     pub fn select_down(&mut self, n: usize) {
-        let last = self.len().saturating_sub(1);
-        self.selected = (self.selected + n).min(last);
+        let last = sub_or(self.len(), 1, 0); // BINDING-F1: no rows, row 0
+        // BINDING-F2: a step that does not fit is a step to the last row.
+        self.selected = self.selected.checked_add(n).unwrap_or(last).min(last);
     }
 
     /// Keep the scroll within the filtered list for a `view_h`-row
@@ -212,11 +243,21 @@ impl Panel {
         // Scroll the minimum distance that brings the selection into view...
         if self.selected < self.scroll {
             self.scroll = self.selected;
-        } else if self.selected >= self.scroll + view_h {
-            self.scroll = self.selected + 1 - view_h;
+        } else if self
+            .scroll
+            .checked_add(view_h)
+            .is_some_and(|end| self.selected >= end)
+        {
+            // selected >= scroll + view_h >= view_h, so this cannot go below 0.
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: selected is at least scroll + view_h, so selected + 1 - view_h is positive and selected + 1 fits (selected is a row index)"
+            )]
+            let top = self.selected + 1 - view_h;
+            self.scroll = top;
         }
         // ...then never leave blank rows below the last match.
-        self.scroll = self.scroll.min(self.len().saturating_sub(view_h));
+        self.scroll = self.scroll.min(sub_or(self.len(), view_h, 0)); // BINDING-F1: short list, no scroll
     }
 }
 

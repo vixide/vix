@@ -38,7 +38,7 @@ fn ident(name: &str) -> String {
         .collect();
     if out.is_empty() {
         out.push('_');
-    } else if out.as_bytes()[0].is_ascii_digit() {
+    } else if out.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         out.insert(0, '_');
     }
     out
@@ -176,5 +176,13 @@ mod tests {
     fn missing_type_falls_back_to_unknown() {
         let out = mermaid(&[col("t", "c", "")], &[]);
         assert!(out.contains("        unknown c\n"), "{out}");
+    }
+
+    #[test]
+    fn names_are_made_into_identifiers() {
+        assert_eq!(ident(""), "_");
+        assert_eq!(ident("9lives"), "_9lives");
+        assert_eq!(ident("a b-c"), "a_b_c");
+        assert_eq!(ident("ok_name"), "ok_name");
     }
 }

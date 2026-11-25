@@ -105,6 +105,33 @@ pub const KEYWORDS: &[&str] = &[
     "with",
 ];
 
+/// The char at `i`, or NUL past the end: the end-of-text sentinel (the scanners
+/// stop at the end before reading it).
+fn ch(chars: &[char], i: usize) -> char {
+    chars.get(i).copied().unwrap_or('\0')
+}
+
+/// The chars between `from` and `to`; empty for a range that is not inside `chars`.
+fn span(chars: &[char], from: usize, to: usize) -> &[char] {
+    chars.get(from..to).unwrap_or(&[])
+}
+
+/// The chars from `from` on; empty past the end.
+fn span_from(chars: &[char], from: usize) -> &[char] {
+    chars.get(from..).unwrap_or(&[])
+}
+
+/// `from + step`; an index past the top of `usize` is past any text.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A highlight class for one span of text.
 ///
 /// Each class maps to a theme token in [`style`].
@@ -183,44 +210,63 @@ pub fn highlight_line(line: &str, in_block: bool) -> (Vec<(Tok, String)>, bool) 
             // Inside a block comment: consume to the closing `*/` or the end
             // of the line, whichever comes first (the flag carries over).
             let start = i;
-            while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
-                i += 1;
+            while i < chars.len() && !(ch(&chars, i) == '*' && chars.get(ahead(i, 1)) == Some(&'/'))
+            {
+                i = ahead(i, 1);
             }
             if i < chars.len() {
-                i += 2;
+                i = ahead(i, 2);
                 block = false;
             }
-            push(&mut spans, Tok::Comment, chars[start..i].iter().collect());
+            push(
+                &mut spans,
+                Tok::Comment,
+                span(&chars, start, i).iter().collect(),
+            );
             continue;
         }
-        let c = chars[i];
-        if c == '-' && chars.get(i + 1) == Some(&'-') {
-            push(&mut spans, Tok::Comment, chars[i..].iter().collect());
+        let c = ch(&chars, i);
+        if c == '-' && chars.get(ahead(i, 1)) == Some(&'-') {
+            push(
+                &mut spans,
+                Tok::Comment,
+                span_from(&chars, i).iter().collect(),
+            );
             i = chars.len();
-        } else if c == '/' && chars.get(i + 1) == Some(&'*') {
+        } else if c == '/' && chars.get(ahead(i, 1)) == Some(&'*') {
             block = true;
             push(&mut spans, Tok::Comment, "/*".to_string());
-            i += 2;
+            i = ahead(i, 2);
         } else if c == '\'' || c == '"' {
             let start = i;
-            i += 1;
-            while i < chars.len() && chars[i] != c {
-                i += 1;
+            i = ahead(i, 1);
+            while i < chars.len() && ch(&chars, i) != c {
+                i = ahead(i, 1);
             }
-            i = (i + 1).min(chars.len());
-            push(&mut spans, Tok::Str, chars[start..i].iter().collect());
+            i = ahead(i, 1).min(chars.len());
+            push(
+                &mut spans,
+                Tok::Str,
+                span(&chars, start, i).iter().collect(),
+            );
         } else if c.is_ascii_digit() {
             let start = i;
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '.') {
-                i += 1;
+            while i < chars.len() && (ch(&chars, i).is_ascii_alphanumeric() || ch(&chars, i) == '.')
+            {
+                i = ahead(i, 1);
             }
-            push(&mut spans, Tok::Num, chars[start..i].iter().collect());
+            push(
+                &mut spans,
+                Tok::Num,
+                span(&chars, start, i).iter().collect(),
+            );
         } else if c.is_ascii_alphabetic() || c == '_' {
             let start = i;
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
-                i += 1;
+            while i < chars.len() && (ch(&chars, i).is_ascii_alphanumeric() || ch(&chars, i) == '_')
+            {
+                i = ahead(i, 1);
             }
-            let word: String = chars[start..i].iter().collect();
+            let word: String = span(&chars, start, i).iter().collect();
             let tok = if is_keyword(&word) {
                 Tok::Keyword
             } else {
@@ -229,7 +275,7 @@ pub fn highlight_line(line: &str, in_block: bool) -> (Vec<(Tok, String)>, bool) 
             push(&mut spans, tok, word);
         } else {
             push(&mut spans, Tok::Plain, c.to_string());
-            i += 1;
+            i = ahead(i, 1);
         }
     }
     (spans, block)
@@ -298,5 +344,27 @@ mod tests {
             "spec promises 70+ keywords, have {}",
             KEYWORDS.len()
         );
+    }
+
+    #[test]
+    fn styles_fall_back_to_the_documented_palette_without_a_theme() {
+        crate::test_support::without_theme(|| {
+            assert_eq!(style(Tok::Keyword).fg, Some(Color::Cyan));
+            assert_eq!(style(Tok::Str).fg, Some(Color::Green));
+            assert_eq!(style(Tok::Num).fg, Some(Color::Yellow));
+            assert_eq!(style(Tok::Comment).fg, Some(Color::DarkGray));
+            assert_eq!(style(Tok::Plain), vix_theme::base());
+        });
+    }
+
+    #[test]
+    fn a_theme_overrides_the_syntax_colors_it_sets() {
+        let json = r#"{"name":"t","syntax":{"keyword":[1,2,3],"string":[4,5,6],"number":[7,8,9],"comment":[10,11,12]}}"#;
+        crate::test_support::with_theme(json, || {
+            assert_eq!(style(Tok::Keyword).fg, Some(Color::Rgb(1, 2, 3)));
+            assert_eq!(style(Tok::Str).fg, Some(Color::Rgb(4, 5, 6)));
+            assert_eq!(style(Tok::Num).fg, Some(Color::Rgb(7, 8, 9)));
+            assert_eq!(style(Tok::Comment).fg, Some(Color::Rgb(10, 11, 12)));
+        });
     }
 }

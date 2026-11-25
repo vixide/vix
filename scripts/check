@@ -13,23 +13,37 @@
 # a wrapper made it pass or fail spuriously; VIX_CLEAN_ROOM=0 opts out. See
 # scripts/clean-room.sh and spec/local-ci "Build caching".
 #
-# Usage: scripts/check [--tier fast|push|full]      (T760; default: full)
+# Usage: scripts/check [--tier fast|push|full] [--scope all|changed]   (T760; default: full, changed)
 #   fast  fmt + clippy + tests of the crates changed since the merge base with main
 #   push  clippy and tests on the whole workspace, plus build, doc, the generated
 #         reference docs and man page, check-docs
 #   full  push plus feature combinations, headless examples, chaos smoke,
 #         semver, packaging and license checks -- the bar a landing needs
+#   --scope changed  (the default; push/full) runs `cargo doc` and semver only on
+#         the crates changed since the merge base with main plus the workspace
+#         crates that depend on them; everything else still runs on the whole
+#         workspace. A change to a root, toolchain or lint file, or no `main`,
+#         widens it to the whole workspace. The final line says "scope changed".
+#   --scope all  runs doc and semver on the whole workspace: what CI, the
+#         attestation and a release run (they pass it explicitly).
+# The independent slow steps (feature combinations, examples and generated docs;
+# `cargo doc`; semver) run concurrently, each on its own target directory, unless
+# VIX_PARALLEL=0, which runs them one after another. Semver keeps its baselines
+# in a persistent cache (VIX_SEMVER_TARGET). See spec/local-ci "Faster gate".
 # Every step prints its wall-clock time and a summary table closes the run.
 set -e
 
 usage() {
-	echo "usage: scripts/check [--tier fast|push|full]" >&2
+	echo "usage: scripts/check [--tier fast|push|full] [--scope all|changed]" >&2
 	echo "  fast  fmt + clippy + tests of changed crates" >&2
 	echo "  push  adds build, full tests, doc, generated docs, check-docs" >&2
 	echo "  full  adds feature combinations, examples, semver, packaging, licenses (default)" >&2
+	echo "  --scope changed|all  doc and semver on changed crates + dependents (default) or the whole workspace" >&2
 }
 
 tier=full
+scope_mode=${VIX_SCOPE:-changed}
+parallel=${VIX_PARALLEL:-1}
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--tier)
@@ -45,6 +59,19 @@ while [ $# -gt 0 ]; do
 		tier=${1#--tier=}
 		shift
 		;;
+	--scope)
+		if [ $# -lt 2 ]; then
+			echo "scripts/check: --scope needs a value" >&2
+			usage
+			exit 2
+		fi
+		scope_mode=$2
+		shift 2
+		;;
+	--scope=*)
+		scope_mode=${1#--scope=}
+		shift
+		;;
 	-h | --help)
 		usage
 		exit 0
@@ -56,6 +83,14 @@ while [ $# -gt 0 ]; do
 		;;
 	esac
 done
+case "$scope_mode" in
+all | changed) ;;
+*)
+	echo "scripts/check: unknown scope '$scope_mode'" >&2
+	usage
+	exit 2
+	;;
+esac
 case "$tier" in
 fast) want=1 ;;
 push) want=2 ;;
@@ -70,6 +105,50 @@ esac
 # shellcheck source=scripts/clean-room.sh
 . "$(dirname "$0")/clean-room.sh"
 vix_clean_room
+
+# Hermetic user directories: the tests build an App that persists settings, the
+# session and history under the user's config and data directories, so an
+# ordinary run used to rewrite the developer's real ~/.config/vix. The whole run
+# gets throwaway XDG directories instead (VIX_HERMETIC_HOME=0 opts out). Cargo
+# and rustup keep their own homes (CARGO_HOME, RUSTUP_HOME) and are unaffected.
+hermetic_home=""
+if [ "${VIX_HERMETIC_HOME:-1}" != 0 ]; then
+	hermetic_home=$(mktemp -d "${TMPDIR:-/tmp}/vix-check-home.XXXXXX")
+	mkdir -p "$hermetic_home/config" "$hermetic_home/data" "$hermetic_home/state"
+	XDG_CONFIG_HOME=$hermetic_home/config
+	XDG_DATA_HOME=$hermetic_home/data
+	XDG_STATE_HOME=$hermetic_home/state
+	export XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME
+	echo "    hermetic user dirs: $hermetic_home (the real config dir is not touched)"
+fi
+
+# vix_seed_target DEST SRC: make DEST a copy of SRC (copy-on-write where the
+# filesystem has it) so a new target directory starts warm; an existing DEST is
+# kept (its warm state is the point), and a failed copy leaves an empty one.
+vix_seed_target() {
+	[ -d "$1" ] && return 0
+	mkdir -p "$(dirname "$1")"
+	if [ -d "$2" ]; then
+		cp -cR "$2" "$1" 2>/dev/null || cp --reflink=auto -R "$2" "$1" 2>/dev/null || {
+			rm -rf "$1"
+			mkdir -p "$1"
+		}
+	else
+		mkdir -p "$1"
+	fi
+}
+
+# VIX_PRIVATE_TARGET=1: gate in a target directory private to this worktree
+# (${XDG_CACHE_HOME:-~/.cache}/vix-target/<worktree name>), seeded as a
+# copy-on-write clone of the directory it replaces (CARGO_TARGET_DIR, else
+# ./target) so it starts warm. A target shared with another running gate makes
+# cargo queue on the build lock; this removes that wait.
+if [ "${VIX_PRIVATE_TARGET:-0}" = 1 ]; then
+	private_target=${XDG_CACHE_HOME:-$HOME/.cache}/vix-target/$(basename "$(pwd)")
+	vix_seed_target "$private_target" "${CARGO_TARGET_DIR:-$(pwd)/target}"
+	CARGO_TARGET_DIR=$private_target
+	export CARGO_TARGET_DIR
+fi
 
 # A step runs when its tier is at or below the chosen one.
 in_tier() {
@@ -113,6 +192,9 @@ on_exit() {
 "
 		fi
 		print_summary
+	fi
+	if [ -n "$hermetic_home" ]; then
+		rm -rf "$hermetic_home"
 	fi
 	exit "$status"
 }
@@ -191,12 +273,21 @@ fi
 step_end
 
 step_begin "cargo test"
-# T604: nextest (VIX_NEXTEST=1) is parallel across binaries and isolates each
-# test in its own process -- a win on Linux CI, but on macOS every one of the
+# T604: nextest runs each test in its own process, in parallel across all test
+# binaries. That is a clear win on Linux (spawning a process is cheap) and is
+# the default there when cargo-nextest is installed. On macOS every one of the
 # ~2000 process spawns is scanned by XProtect/syspolicyd and it measured ~2x
-# *slower* than `cargo test` (2117 s vs 1026 s), so it is opt-in here.
+# *slower* than `cargo test` (2117 s vs 1026 s), so there it is opt-in.
+# VIX_NEXTEST=1 forces it on, VIX_NEXTEST=0 forces `cargo test`; unset means
+# "on for Linux". Doctests always run with `cargo test --doc` (nextest has none).
+if [ -z "${VIX_NEXTEST:-}" ]; then
+	case "$(uname -s)" in
+	Darwin) VIX_NEXTEST=0 ;;
+	*) VIX_NEXTEST=1 ;;
+	esac
+fi
 if in_tier push; then
-	if [ "${VIX_NEXTEST:-0}" = 1 ] && command -v cargo-nextest >/dev/null 2>&1; then
+	if [ "$VIX_NEXTEST" = 1 ] && command -v cargo-nextest >/dev/null 2>&1; then
 		cargo nextest run --workspace
 		cargo test --workspace --doc # nextest does not run doctests
 	else
@@ -210,6 +301,100 @@ else
 fi
 step_end
 
+# ---- the slow, independent groups -------------------------------------------
+# Each group is a function so it can run in the foreground (VIX_PARALLEL=0) or in
+# the background on its own target directory. A step inside records its time as
+# usual; a background group's output is captured and printed when it finishes.
+main_target=${CARGO_TARGET_DIR:-$(pwd)/target}
+
+# The workspace packages named in "-p a -p b" form, plus every workspace package
+# that depends on one of them (the closure a change can reach), as -p flags;
+# prints ALL when the change is not crate-shaped and nothing for no crate.
+scoped_flags() {
+	changed=$(changed_crates)
+	if [ "$changed" = ALL ]; then
+		echo ALL
+		return
+	fi
+	[ -n "$changed" ] || return 0
+	cargo metadata --no-deps --format-version 1 | python3 -c '
+import json, sys
+meta = json.load(sys.stdin)
+names = {p["name"] for p in meta["packages"]}
+deps = {p["name"]: {d["name"] for d in p["dependencies"] if d["name"] in names} for p in meta["packages"]}
+want = set(sys.argv[1].split())
+want.discard("-p")
+grow = True
+while grow:
+    grow = False
+    for n, ds in deps.items():
+        if n not in want and ds & want:
+            want.add(n)
+            grow = True
+print(" ".join("-p " + n for n in sorted(want)))
+' "$changed"
+}
+
+semver_target=${VIX_SEMVER_TARGET:-${XDG_CACHE_HOME:-$HOME/.cache}/vix/semver-target}
+semver_excludes="--exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-authority --exclude vix-large-file --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp"
+
+# Run cargo-semver-checks on the whole workspace (minus the crates that have no
+# release yet) or, with --scope changed, only on the changed crates and their
+# dependents. The baselines (published releases never change) live in a
+# persistent target so they are built once, not every run.
+semver_run() {
+	mkdir -p "$semver_target"
+	if [ "$scope_mode" = changed ]; then
+		flags=$(scoped_flags)
+		if [ "$flags" = ALL ] || [ -z "$flags" ]; then
+			[ -n "$flags" ] || {
+				echo "    (scope changed: no crate changed -- semver skipped)"
+				return 0
+			}
+			# shellcheck disable=SC2086 # a word list of --exclude flags
+			CARGO_TARGET_DIR=$semver_target cargo semver-checks --workspace $semver_excludes
+		else
+			keep=""
+			for w in $flags; do
+				[ "$w" = -p ] && continue
+				case " $semver_excludes " in
+				*" --exclude $w "*) ;;
+				*) keep="$keep --package $w" ;;
+				esac
+			done
+			if [ -n "$keep" ]; then
+				# shellcheck disable=SC2086 # $keep is a word list of --package flags
+				CARGO_TARGET_DIR=$semver_target cargo semver-checks $keep
+			else
+				echo "    (scope changed: only crates without a release changed -- semver skipped)"
+			fi
+		fi
+	else
+		# shellcheck disable=SC2086 # a word list of --exclude flags
+			CARGO_TARGET_DIR=$semver_target cargo semver-checks --workspace $semver_excludes
+	fi
+}
+
+# `cargo doc` with warnings denied: the whole workspace, or with --scope changed
+# only the changed crates and their dependents.
+doc_run() {
+	docflags=--workspace
+	if [ "$scope_mode" = changed ]; then
+		docflags=$(scoped_flags)
+		if [ "$docflags" = ALL ]; then
+			docflags=--workspace
+		elif [ -z "$docflags" ]; then
+			echo "    (scope changed: no crate changed -- doc skipped)"
+			return 0
+		fi
+	fi
+	# shellcheck disable=SC2086 # a word list of -p flags
+	RUSTDOCFLAGS="-D warnings" cargo doc $docflags --no-deps
+}
+
+# Feature combinations, headless examples, generated reference docs and man
+# page: all use the main target directory.
+grp_main() {
 if in_tier full; then
 	step_begin "feature combinations (T587)"
 	cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
@@ -250,10 +435,6 @@ if in_tier full; then
 fi
 
 if in_tier push; then
-	step_begin "cargo doc (warnings denied)"
-	RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
-	step_end
-
 	step_begin "generated reference docs current? (T305)"
 	cargo run --example list_commands -- --write >/dev/null
 	git diff --exit-code -- docs/reference/ || {
@@ -270,27 +451,91 @@ if in_tier push; then
 	}
 	step_end
 fi
+}
+
+# `cargo doc` with warnings denied (own target in parallel mode).
+grp_doc() {
+	if in_tier push; then
+		if [ "$parallel" = 1 ]; then
+			CARGO_TARGET_DIR="$main_target.par-doc"
+			export CARGO_TARGET_DIR
+		fi
+		step_begin "cargo doc (warnings denied)"
+		doc_run
+		step_end
+	fi
+}
+
+# semver (full tier only).
+grp_semver() {
+	if in_tier full; then
+		step_begin "semver (T602)"
+		# Older cargo-semver-checks can't read the rustdoc JSON of a current toolchain
+		# (0.47 stops at format v57, rustc 1.99 writes v61), so require 0.51 or newer.
+		semver_ok=no
+		if command -v cargo-semver-checks >/dev/null 2>&1; then
+			semver_v=$(cargo semver-checks --version | awk '{print $2}')
+			if [ "$(printf '%s\n0.51.0\n' "$semver_v" | sort -V | head -n1)" = "0.51.0" ]; then
+				semver_ok=yes
+			fi
+		fi
+		if [ "$semver_ok" = yes ]; then
+			# A crate with no crates.io release yet has no baseline to compare against:
+			# add `--exclude <crate>` until its first publish.
+			semver_run
+		else
+			echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
+		fi
+		step_end
+	fi
+}
+
+# run_groups NAME...: run grp_NAME for each, concurrently when VIX_PARALLEL=1.
+run_groups() {
+	if [ "$parallel" != 1 ]; then
+		for g in "$@"; do "grp_$g"; done
+		return
+	fi
+	vix_seed_target "$main_target.par-doc" "$main_target"
+	par_tmp=$(mktemp -d)
+	par_pids=""
+	for g in "$@"; do
+		(
+			# Only this group's own steps belong in its timings.
+			# shellcheck disable=SC2030 # deliberate: the group has its own copy
+			timings=""
+			trap 'printf "%s" "$timings" >"$par_tmp/$g.timings"' EXIT
+			exec >"$par_tmp/$g.log" 2>&1
+			"grp_$g"
+		) &
+		par_pids="$par_pids $!"
+	done
+	par_fail=0
+	for pid in $par_pids; do
+		if ! wait "$pid"; then par_fail=1; fi
+	done
+	for g in "$@"; do
+		echo "==> group $g"
+		cat "$par_tmp/$g.log"
+		if [ -f "$par_tmp/$g.timings" ]; then
+			# shellcheck disable=SC2031 # the group handed its copy back in a file
+			timings="${timings}$(cat "$par_tmp/$g.timings")
+"
+		fi
+	done
+	rm -rf "$par_tmp"
+	[ "$par_fail" = 0 ] || exit 1
+}
+
+if in_tier push; then
+	run_groups main doc semver
+fi
+# Test hook (scripts/test-check-groups): stop once the groups have run.
+if [ -n "${VIX_CHECK_STOP_AFTER_GROUPS:-}" ]; then
+	exit 0
+fi
 
 if in_tier full; then
-	step_begin "semver (T602)"
-	# Older cargo-semver-checks can't read the rustdoc JSON of a current toolchain
-	# (0.47 stops at format v57, rustc 1.99 writes v61), so require 0.51 or newer.
-	semver_ok=no
-	if command -v cargo-semver-checks >/dev/null 2>&1; then
-		semver_v=$(cargo semver-checks --version | awk '{print $2}')
-		if [ "$(printf '%s\n0.51.0\n' "$semver_v" | sort -V | head -n1)" = "0.51.0" ]; then
-			semver_ok=yes
-		fi
-	fi
-	if [ "$semver_ok" = yes ]; then
-		# A crate with no crates.io release yet has no baseline to compare against:
-		# add `--exclude <crate>` until its first publish.
-		cargo semver-checks --workspace --exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-authority --exclude vix-large-file --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp
-	else
-		echo "    (skipping: needs cargo-semver-checks >= 0.51.0 -- 'cargo install cargo-semver-checks --locked'; also needs network for the crates.io baseline)"
-	fi
-	step_end
-
 	step_begin "packaging templates (T742)"
 	python3 "$(dirname "$0")/packaging" check
 	step_end
@@ -328,6 +573,10 @@ if in_tier push; then
 	step_begin "scripts/test-clean-room (T764)"
 	sh "$(dirname "$0")/test-clean-room"
 	step_end
+
+	step_begin "scripts/test-check-groups (faster gate)"
+	sh "$(dirname "$0")/test-check-groups"
+	step_end
 fi
 
 if in_tier full; then
@@ -337,6 +586,16 @@ if in_tier full; then
 fi
 
 print_summary
+if [ "$scope_mode" = changed ] && [ "$tier" != fast ] && [ "$(changed_crates)" = ALL ]; then
+	# A root, toolchain, lint or gate file changed (or there is no main): the
+	# scoped steps ran on the whole workspace, so this is a full pass.
+	echo "OK (scope changed, tier $tier): a root, toolchain or lint file changed, so doc and semver ran on the whole workspace -- full pass"
+	exit 0
+fi
+if [ "$scope_mode" = changed ] && [ "$tier" != fast ]; then
+	echo "OK (scope changed, tier $tier): doc and semver ran on the changed crates and their dependents only; CI runs the whole workspace (--scope all)"
+	exit 0
+fi
 case "$tier" in
 full) echo "OK: build + clippy + tests + doc + docs all passed" ;;
 push) echo "OK (tier push): build + clippy + tests + doc + docs passed; feature combinations, examples, semver, packaging and licenses NOT run -- not a full pass" ;;

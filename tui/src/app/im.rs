@@ -15,6 +15,19 @@
 //! and, when the notify policy allows, a status-line note. Only the user's
 //! own actions open the panel.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr as _;
@@ -162,10 +175,12 @@ pub(crate) fn history_file_name(id: &ConversationId) -> String {
             out.push(char::from(b));
         } else {
             // Upper-case hex digits for percent-escaping the bytes that are not file-name safe.
-            const HEX: &[u8; 16] = b"0123456789ABCDEF";
+            let digit = |nibble: u8| {
+                char::from_digit(u32::from(nibble), 16).map_or('0', |c| c.to_ascii_uppercase())
+            };
             out.push('%');
-            out.push(char::from(HEX[usize::from(b >> 4)]));
-            out.push(char::from(HEX[usize::from(b & 0xF)]));
+            out.push(digit(b >> 4));
+            out.push(digit(b & 0xF));
         }
     }
     format!("{out}.jsonl")
@@ -227,7 +242,7 @@ impl ImState {
         };
         let mut messages = vix_im::history::decode(&text);
         let pruned = vix_im::history::prune(&mut messages, now_ms(), days);
-        let excess = messages.len().saturating_sub(vix_im::DEFAULT_MESSAGE_LIMIT);
+        let excess = messages.len().minus(vix_im::DEFAULT_MESSAGE_LIMIT);
         messages.drain(..excess);
         if pruned > 0 || excess > 0 {
             write_history(&path, &messages);
@@ -466,7 +481,10 @@ impl App {
             return Some(route.account.clone());
         }
         let names = self.im_link_names();
-        (names.len() == 1).then(|| names[0].clone())
+        match names.as_slice() {
+            [only] => Some(only.clone()),
+            _ => None,
+        }
     }
 
     /// Whether `account` is a `protocol = "matrix"` account.
@@ -692,8 +710,10 @@ impl App {
             return;
         };
         let (line, column) = (
-            reference.line as usize,
-            reference.column.map(|c| c as usize),
+            usize::try_from(reference.line).unwrap_or(usize::MAX),
+            reference
+                .column
+                .map(|c| usize::try_from(c).unwrap_or(usize::MAX)),
         );
         self.with_jump(|s| {
             s.open_path(&path, false);
@@ -741,8 +761,8 @@ impl App {
                 return None;
             }
             let code = t.editor.code_ref();
-            let start = code.char_to_line(s) + 1;
-            let end = code.char_to_line(e.saturating_sub(1).max(s)) + 1;
+            let start = code.char_to_line(s).plus(1);
+            let end = (code.char_to_line(e.minus(1).max(s))).plus(1);
             let path = t.path.clone()?;
             Some((
                 path,
@@ -756,7 +776,7 @@ impl App {
             self.status = t!("status.im_no_selection").to_string();
             return;
         };
-        if end + 1 - start > MAX_SNIPPET_LINES {
+        if end.plus(1).minus(start) > MAX_SNIPPET_LINES {
             self.status = t!("status.im_snippet_too_long", max = MAX_SNIPPET_LINES).to_string();
             return;
         }
@@ -887,12 +907,12 @@ impl App {
             ImDialog::Accounts { names, selected } => match key.code {
                 KeyCode::Up => {
                     self.im_dialog = Some(ImDialog::Accounts {
-                        selected: selected.saturating_sub(1),
+                        selected: selected.minus(1),
                         names,
                     });
                 }
                 KeyCode::Down => {
-                    let selected = (selected + 1).min(names.len().saturating_sub(1));
+                    let selected = selected.plus(1).min(names.len().minus(1));
                     self.im_dialog = Some(ImDialog::Accounts { names, selected });
                 }
                 KeyCode::Enter => self.im_connect_account(selected),
@@ -965,7 +985,7 @@ impl App {
                 self.focus = Focus::Im;
                 let list = self.layout.im_list;
                 if rect_contains(list, mouse.column, mouse.row) {
-                    let index = self.im.list_top + usize::from(mouse.row - list.y);
+                    let index = self.im.list_top.plus(usize::from(mouse.row.minus(list.y)));
                     if let Some(id) = self
                         .im
                         .inbox
@@ -1014,3 +1034,6 @@ impl App {
         self.im.load_history(&notes, self.settings.im.history_days);
     }
 }
+
+#[cfg(test)]
+mod tests;

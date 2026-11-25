@@ -169,7 +169,7 @@ impl Saved {
 /// Load the query history from the config directory (default when missing).
 #[must_use]
 pub fn load_history() -> History {
-    confy::load(APP_NAME, Some(HISTORY_NAME)).unwrap_or_default()
+    vix_fileops::user_dirs::load(APP_NAME, HISTORY_NAME).unwrap_or_default()
 }
 
 /// Persist the query history. `db_history.toml` can carry literal sensitive
@@ -185,7 +185,7 @@ pub fn load_history() -> History {
 /// Returns a [`confy::ConfyError`] if the config directory cannot be
 /// determined or the file cannot be written.
 pub fn save_history(history: &History) -> Result<(), confy::ConfyError> {
-    confy::store(APP_NAME, Some(HISTORY_NAME), history)?;
+    vix_fileops::user_dirs::store(APP_NAME, HISTORY_NAME, history)?;
     restrict_store_file(HISTORY_NAME);
     Ok(())
 }
@@ -193,7 +193,7 @@ pub fn save_history(history: &History) -> Result<(), confy::ConfyError> {
 /// Load the saved queries from the config directory (default when missing).
 #[must_use]
 pub fn load_saved() -> Saved {
-    confy::load(APP_NAME, Some(SAVED_NAME)).unwrap_or_default()
+    vix_fileops::user_dirs::load(APP_NAME, SAVED_NAME).unwrap_or_default()
 }
 
 /// Persist the saved queries. Same T133 owner-only narrowing as
@@ -205,7 +205,7 @@ pub fn load_saved() -> Saved {
 /// Returns a [`confy::ConfyError`] if the config directory cannot be
 /// determined or the file cannot be written.
 pub fn save_saved(saved: &Saved) -> Result<(), confy::ConfyError> {
-    confy::store(APP_NAME, Some(SAVED_NAME), saved)?;
+    vix_fileops::user_dirs::store(APP_NAME, SAVED_NAME, saved)?;
     restrict_store_file(SAVED_NAME);
     Ok(())
 }
@@ -215,7 +215,7 @@ pub fn save_saved(saved: &Saved) -> Result<(), confy::ConfyError> {
 /// ignored: the save itself already succeeded, and tightening permissions is
 /// defense in depth, not a precondition.
 fn restrict_store_file(name: &str) {
-    if let Ok(path) = confy::get_configuration_file_path(APP_NAME, Some(name)) {
+    if let Some(path) = vix_fileops::user_dirs::config_file(APP_NAME, name) {
         vix_fileops::restrict_to_owner(&path);
     }
 }
@@ -274,5 +274,11 @@ mod tests {
         assert_eq!(s.queries[0].sql, "select id from users");
         s.upsert("orders", "select * from orders");
         assert_eq!(s.queries.len(), 2);
+    }
+
+    #[test]
+    fn origins_have_short_log_tags() {
+        assert_eq!(Origin::User.label(), "user");
+        assert_eq!(Origin::App.label(), "app");
     }
 }

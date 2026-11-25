@@ -44,10 +44,13 @@ impl Lsp {
     /// Pull `uri`'s diagnostics from `lang` once [`PULL_DEBOUNCE`] has passed
     /// without a further change.
     pub(crate) fn schedule_pull(&mut self, lang: &str, uri: &str) {
-        self.pull_due.insert(
-            (lang.to_string(), uri.to_string()),
-            Instant::now() + PULL_DEBOUNCE,
-        );
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: PULL_DEBOUNCE is the constant 250 ms, so now plus it cannot overflow an Instant"
+        )]
+        let due = Instant::now() + PULL_DEBOUNCE;
+        self.pull_due
+            .insert((lang.to_string(), uri.to_string()), due);
     }
 
     /// Pull every document open on `lang` (after `initialize`, and on

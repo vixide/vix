@@ -221,7 +221,7 @@ impl Authority for AgentAuthority {
     }
 
     fn walk_files(&self, root: &Path, opts: &WalkOptions) -> Vec<PathBuf> {
-        self.client.walk(root, opts).unwrap_or_default()
+        self.client.walk(root, opts).unwrap_or_else(|_| Vec::new())
     }
 
     fn which(&self, name: &str) -> Option<PathBuf> {

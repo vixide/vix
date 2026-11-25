@@ -8,6 +8,19 @@
 //! a long line wraps within its pane and the shorter side is padded, so the
 //! panes stay row-aligned.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthChar;
@@ -102,7 +115,7 @@ fn cell_spans(
         return blank();
     };
     let (from, to) = if wrap {
-        match wrap_text(&c.text, width.saturating_sub(GUTTER)).get(k) {
+        match wrap_text(&c.text, width.minus(GUTTER)).get(k) {
             Some(&range) => range,
             None => return blank(),
         }
@@ -134,10 +147,10 @@ fn cell_spans(
         .chars()
         .enumerate()
         .skip(from)
-        .take(to - from.min(to))
+        .take(to.minus(from.min(to)))
     {
         let w = ch.width().unwrap_or(0);
-        if used + w > width {
+        if used.plus(w) > width {
             break;
         }
         let marked = c.marks.iter().any(|&(a, b)| a <= i && i < b);
@@ -149,12 +162,12 @@ fn cell_spans(
         }
         run_marked = marked;
         run.push(ch);
-        used += w;
+        used = used.plus(w);
     }
     if !run.is_empty() {
         spans.push(Span::styled(run, if run_marked { strong } else { base }));
     }
-    spans.push(Span::styled(" ".repeat(width - used), base));
+    spans.push(Span::styled(" ".repeat(width.minus(used)), base));
     spans
 }
 
@@ -163,7 +176,7 @@ fn cell_spans(
 fn fit(text: &str, width: usize) -> String {
     let mut out = cut(text, width);
     let used: usize = out.chars().map(|ch| ch.width().unwrap_or(0)).sum();
-    out.push_str(&" ".repeat(width - used));
+    out.push_str(&" ".repeat(width.minus(used)));
     out
 }
 
@@ -173,11 +186,11 @@ fn cut(text: &str, width: usize) -> String {
     let mut used = 0;
     for ch in text.chars() {
         let w = ch.width().unwrap_or(0);
-        if used + w > width {
+        if used.plus(w) > width {
             break;
         }
         out.push(ch);
-        used += w;
+        used = used.plus(w);
     }
     out
 }

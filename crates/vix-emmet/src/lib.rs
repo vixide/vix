@@ -27,6 +27,18 @@
 //! Parsing builds a small arena tree (`Node`); `>` descends, `+` adds a
 //! sibling of the previous element. Spec: `crates/vix-emmet/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Upper bound on the total number of elements a single abbreviation may expand
 /// to. A multiply operator (`*N`) — and nested multiplies, which compound —
 /// would otherwise let a tiny input (e.g. `div*900000000` or `a*1e5>b*1e5`)
@@ -103,13 +115,24 @@ impl Parser {
         self.chars.get(self.pos).copied()
     }
 
+    /// Step past the char just peeked.
+    fn advance(&mut self) {
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: callers advance only after peek returned a char, so pos is below chars.len() and cannot overflow"
+        )]
+        {
+            self.pos += 1;
+        }
+    }
+
     /// Read a run of identifier characters (`[A-Za-z0-9_-$]`).
     fn read_name(&mut self) -> String {
         let mut s = String::new();
         while let Some(c) = self.peek() {
             if c.is_alphanumeric() || matches!(c, '-' | '_' | '$') {
                 s.push(c);
-                self.pos += 1;
+                self.advance();
             } else {
                 break;
             }
@@ -128,7 +151,7 @@ impl Parser {
             } else {
                 match self.peek() {
                     Some(c @ ('>' | '+')) => {
-                        self.pos += 1;
+                        self.advance();
                         Some(c)
                     }
                     _ => break,
@@ -139,11 +162,11 @@ impl Parser {
             let parent = match op {
                 None => None,
                 Some('>') => last,
-                _ => last.and_then(|l| self.nodes[l].parent), // '+': sibling of last
+                _ => last.and_then(|l| self.nodes.get(l).and_then(|n| n.parent)), // '+': sibling of last
             };
             self.nodes.push(Node { parent, ..node });
             match parent {
-                Some(p) => self.nodes[p].children.push(idx),
+                Some(p) => self.nodes.get_mut(p)?.children.push(idx),
                 None => roots.push(idx),
             }
             last = Some(idx);
@@ -168,18 +191,18 @@ impl Parser {
         loop {
             match self.peek() {
                 Some('#') => {
-                    self.pos += 1;
+                    self.advance();
                     node.id = Some(self.read_name());
                 }
                 Some('.') => {
-                    self.pos += 1;
+                    self.advance();
                     node.classes.push(self.read_name());
                 }
                 Some('{') => {
-                    self.pos += 1;
+                    self.advance();
                     let mut t = String::new();
                     while let Some(c) = self.peek() {
-                        self.pos += 1;
+                        self.advance();
                         if c == '}' {
                             break;
                         }
@@ -188,7 +211,7 @@ impl Parser {
                     node.text = Some(t);
                 }
                 Some('*') => {
-                    self.pos += 1;
+                    self.advance();
                     let n = self.read_name();
                     node.count = n.parse().ok()?;
                     // Reject an obviously explosive per-node count up front; the
@@ -212,7 +235,7 @@ impl Parser {
     /// is exhausted, bounding the compounded cost of nested multiplies.
     fn render(&self, idx: usize, depth: usize, out: &mut String, budget: &mut usize) -> Option<()> {
         use std::fmt::Write as _;
-        let node = &self.nodes[idx];
+        let node = self.nodes.get(idx)?;
         for i in 1..=node.count.max(1) {
             *budget = budget.checked_sub(1)?;
             let indent = "  ".repeat(depth);
@@ -239,7 +262,7 @@ impl Parser {
             } else {
                 let _ = writeln!(out, "{indent}{open}");
                 for &c in &node.children {
-                    self.render(c, depth + 1, out, budget)?;
+                    self.render(c, depth.checked_add(1)?, out, budget)?;
                 }
                 let _ = writeln!(out, "{indent}</{}>", node.tag);
             }

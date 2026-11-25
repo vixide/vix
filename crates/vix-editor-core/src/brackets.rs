@@ -17,6 +17,20 @@ const PAIRS: [(char, char); 3] = [('(', ')'), ('[', ']'), ('{', '}')];
 /// bracket has no partner).
 const SCAN_LIMIT: usize = 50_000;
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 impl Editor {
     /// Public accessor for the matching bracket offset, used by the host to jump
     /// the cursor to a bracket's partner (`Ctrl+]` / the palette).
@@ -38,9 +52,9 @@ impl Editor {
         {
             return Some(m);
         }
-        if cur > 0
-            && let Some(c) = self.char_at(cur - 1)
-            && let Some(m) = self.bracket_partner(cur - 1, c)
+        if let Some(before) = cur.checked_sub(1)
+            && let Some(c) = self.char_at(before)
+            && let Some(m) = self.bracket_partner(before, c)
         {
             return Some(m);
         }
@@ -53,7 +67,7 @@ impl Editor {
         if i >= code.len_chars() {
             return None;
         }
-        code.char_slice(i, i + 1).chars().next()
+        code.char_slice(i, add_or(i, 1, usize::MAX)).chars().next()
     }
 
     /// Partner of the bracket `c` found at `pos`: scan forward for an opener,
@@ -73,21 +87,21 @@ impl Editor {
     /// nesting depth; gives up after [`SCAN_LIMIT`] characters.
     fn scan_forward(&self, pos: usize, open: char, close: char) -> Option<usize> {
         // Clamp to the buffer so the loop bound is also the end-of-text guard.
-        let end = (pos + SCAN_LIMIT).min(self.code_ref().len_chars());
+        let end = add_or(pos, SCAN_LIMIT, usize::MAX).min(self.code_ref().len_chars());
         let mut depth = 1usize;
-        let mut i = pos + 1;
+        let mut i = add_or(pos, 1, usize::MAX);
         while i < end {
             match self.char_at(i) {
-                Some(ch) if ch == open => depth += 1,
+                Some(ch) if ch == open => depth = add_or(depth, 1, usize::MAX),
                 Some(ch) if ch == close => {
-                    depth -= 1;
+                    depth = sub_or(depth, 1, 0);
                     if depth == 0 {
                         return Some(i);
                     }
                 }
                 _ => {}
             }
-            i += 1;
+            i = add_or(i, 1, usize::MAX);
         }
         None
     }
@@ -95,15 +109,15 @@ impl Editor {
     /// Mirror of [`Self::scan_forward`]: scan left from the closer at `pos`
     /// for its balanced `open`.
     fn scan_backward(&self, pos: usize, close: char, open: char) -> Option<usize> {
-        let start = pos.saturating_sub(SCAN_LIMIT);
+        let start = sub_or(pos, SCAN_LIMIT, 0);
         let mut depth = 1usize;
         let mut i = pos;
         while i > start {
-            i -= 1;
+            i = sub_or(i, 1, 0);
             match self.char_at(i) {
-                Some(ch) if ch == close => depth += 1,
+                Some(ch) if ch == close => depth = add_or(depth, 1, usize::MAX),
                 Some(ch) if ch == open => {
-                    depth -= 1;
+                    depth = sub_or(depth, 1, 0);
                     if depth == 0 {
                         return Some(i);
                     }

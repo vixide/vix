@@ -12,6 +12,12 @@
 /// (`org-babel-min-lines-for-block-output`).
 pub const MIN_LINES_FOR_BLOCK: usize = 10;
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A result to write.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResultValue {
@@ -93,49 +99,44 @@ fn is_results_line(line: &str) -> bool {
 #[must_use]
 pub fn find_results(buffer: &str, end_src: usize) -> Option<(usize, usize)> {
     let lines: Vec<&str> = buffer.split('\n').collect();
-    let mut i = end_src + 1;
-    while i < lines.len() && lines[i].trim().is_empty() {
-        i += 1;
-    }
-    if i >= lines.len() || !is_results_line(lines[i]) {
+    let after_src = add_or(end_src, 1, usize::MAX);
+    // The first line after `#+end_src` that is not blank.
+    let mut i = lines
+        .iter()
+        .enumerate()
+        .skip(after_src)
+        .find(|(_, l)| !l.trim().is_empty())
+        .map_or(lines.len(), |(k, _)| k);
+    if !lines.get(i).is_some_and(|l| is_results_line(l)) {
         return None;
     }
     let start = i;
-    i += 1;
+    i = add_or(i, 1, usize::MAX);
     let Some(first) = lines.get(i).map(|l| l.trim_start().to_ascii_lowercase()) else {
         return Some((start, i.min(lines.len())));
     };
     if let Some(kind) = first.strip_prefix("#+begin_") {
-        let kind = kind
-            .split_whitespace()
-            .next()
-            .unwrap_or_default()
-            .to_owned();
+        let kind = kind.split_whitespace().next().unwrap_or("").to_owned();
         let close = format!("#+end_{kind}");
-        let mut j = i + 1;
-        while j < lines.len() {
-            if lines[j]
-                .trim_start()
-                .to_ascii_lowercase()
-                .starts_with(&close)
-            {
-                return Some((start, j + 1));
-            }
-            j += 1;
+        let closing = lines
+            .iter()
+            .enumerate()
+            .skip(add_or(i, 1, usize::MAX))
+            .find(|(_, l)| l.trim_start().to_ascii_lowercase().starts_with(&close));
+        if let Some((j, _)) = closing {
+            return Some((start, add_or(j, 1, usize::MAX)));
         }
         // Unclosed: take only the opening line rather than the rest of the file.
-        return Some((start, i + 1));
+        return Some((start, add_or(i, 1, usize::MAX)));
     }
     if first.starts_with("[[") {
-        return Some((start, i + 1));
+        return Some((start, add_or(i, 1, usize::MAX)));
     }
-    while i < lines.len() {
-        let t = lines[i].trim_start();
-        if t.starts_with(": ") || t == ":" || t.starts_with('|') {
-            i += 1;
-        } else {
-            break;
-        }
+    while lines.get(i).is_some_and(|line| {
+        let t = line.trim_start();
+        t.starts_with(": ") || t == ":" || t.starts_with('|')
+    }) {
+        i = add_or(i, 1, usize::MAX);
     }
     Some((start, i))
 }
@@ -153,18 +154,18 @@ pub fn results_edit(buffer: &str, end_src: usize, block: Option<&str>) -> Result
         },
         // Clearing also removes the blank lines Org put before the results.
         (Some((_, end)), None) => ResultsEdit {
-            start: end_src + 1,
+            start: add_or(end_src, 1, usize::MAX),
             end,
             text: String::new(),
         },
         (None, Some(block)) => ResultsEdit {
-            start: end_src + 1,
-            end: end_src + 1,
+            start: add_or(end_src, 1, usize::MAX),
+            end: add_or(end_src, 1, usize::MAX),
             text: format!("\n{block}"),
         },
         (None, None) => ResultsEdit {
-            start: end_src + 1,
-            end: end_src + 1,
+            start: add_or(end_src, 1, usize::MAX),
+            end: add_or(end_src, 1, usize::MAX),
             text: String::new(),
         },
     }
@@ -191,13 +192,13 @@ pub fn results_append_edit(buffer: &str, end_src: usize, block: &str) -> Results
 
 /// Byte offset of the start of 0-based `line` in `buffer`; the buffer length when `line` is past the end.
 fn line_offset(buffer: &str, line: usize) -> usize {
-    if line == 0 {
+    let Some(before) = line.checked_sub(1) else {
         return 0;
-    }
+    };
     buffer
         .match_indices('\n')
-        .nth(line - 1)
-        .map_or(buffer.len(), |(i, _)| i + 1)
+        .nth(before)
+        .map_or(buffer.len(), |(i, _)| add_or(i, 1, usize::MAX))
 }
 
 /// `buffer` with `edit` applied.
@@ -205,8 +206,8 @@ fn line_offset(buffer: &str, line: usize) -> usize {
 pub fn apply(buffer: &str, edit: &ResultsEdit) -> String {
     let start = line_offset(buffer, edit.start);
     let end = line_offset(buffer, edit.end).max(start);
-    let mut out = String::with_capacity(buffer.len() + edit.text.len() + 1);
-    out.push_str(&buffer[..start]);
+    let mut out = String::new();
+    out.push_str(buffer.get(..start).unwrap_or(""));
     if start == buffer.len()
         && !buffer.is_empty()
         && !buffer.ends_with('\n')
@@ -215,7 +216,7 @@ pub fn apply(buffer: &str, edit: &ResultsEdit) -> String {
         out.push('\n');
     }
     out.push_str(&edit.text);
-    out.push_str(&buffer[end..]);
+    out.push_str(buffer.get(end..).unwrap_or(""));
     out
 }
 

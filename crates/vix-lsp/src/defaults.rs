@@ -91,7 +91,10 @@ pub fn available(user: &[LspServer], on_path: impl Fn(&str) -> bool) -> Vec<LspS
         .iter()
         .filter(|b| !b.extensions.iter().any(|e| covered(e)))
         .filter_map(|b| {
-            let command = b.candidates.iter().find(|c| on_path(c[0]))?;
+            let command = b
+                .candidates
+                .iter()
+                .find(|c| c.first().is_some_and(|program| on_path(program)))?;
             Some(LspServer {
                 language_id: b.language_id.to_string(),
                 extensions: b.extensions.iter().map(|e| (*e).to_string()).collect(),

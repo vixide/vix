@@ -266,7 +266,7 @@ fn picking_a_color_applies_it_to_the_selected_slot_and_returns_to_the_editor() {
     // Pick whatever the picker's own default selection is - this is about
     // the theme editor's slot actually changing, not which color it is.
     let picked = {
-        let c = app.x11_panel.as_ref().unwrap().selected_color();
+        let c = app.x11_panel.as_ref().unwrap().selected_color().unwrap();
         [c.r, c.g, c.b]
     };
     app.on_key(keycode(KeyCode::Enter)); // choose it (routes to x11_key)

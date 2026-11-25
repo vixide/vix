@@ -42,6 +42,18 @@
 //! assert_eq!(Engine::from_name("Docker"), Some(Engine::Docker));
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod argv;
 pub mod devcontainer;
 pub mod parse;
@@ -237,6 +249,9 @@ pub fn run(
         })
     }
 }
+
+#[cfg(test)]
+mod tests_r4;
 
 #[cfg(test)]
 mod tests {

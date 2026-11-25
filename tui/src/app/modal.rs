@@ -17,7 +17,20 @@
 //! (Visual mode's own motion vocabulary, still just `h j k l` per T112) keeps
 //! working exactly as it did before the engine existed.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::ModalPending;
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 use vix_modal::motion::MotionKind::{self, Exclusive, Inclusive, Linewise};
 
@@ -192,7 +205,7 @@ impl App {
         if key.code == KeyCode::Char(op) {
             let count = self.modal_effective_count();
             self.apply_modal_motion(Linewise, move |t, p| {
-                vix_modal::motion::line_down(t, p, count.saturating_sub(1))
+                vix_modal::motion::line_down(t, p, count.minus(1))
             });
             return true;
         }
@@ -594,8 +607,16 @@ impl App {
             let is_digit = |k: &KeyEvent| matches!(k.code, KeyCode::Char(c) if c.is_ascii_digit());
             let (before, after) = match recorded.iter().position(is_digit) {
                 Some(start) => {
-                    let len = recorded[start..].iter().take_while(|k| is_digit(k)).count();
-                    (recorded[..start].to_vec(), recorded[start + len..].to_vec())
+                    let len = recorded
+                        .get(start..)
+                        .unwrap_or_default()
+                        .iter()
+                        .take_while(|k| is_digit(k))
+                        .count();
+                    (
+                        recorded.get(..start).unwrap_or_default().to_vec(),
+                        recorded.get(start.plus(len)..).unwrap_or_default().to_vec(),
+                    )
                 }
                 None => (recorded.clone(), Vec::new()),
             };
@@ -679,8 +700,7 @@ impl App {
     /// multiplied by whatever count was typed after it (`3` in `2d3w`) —
     /// the spec's own `{count1}{operator}{count2}{motion}` rule.
     fn modal_effective_count(&self) -> usize {
-        self.modal_operator_count
-            .saturating_mul(self.modal_count.value())
+        self.modal_operator_count.times(self.modal_count.value())
     }
 
     /// Clear both count slots back to "nothing typed" — every
@@ -727,6 +747,12 @@ impl App {
         let Some(step) = step else {
             return false;
         };
+        if self.modal_mode == vix_modal::Mode::VisualLine
+            && step == KeyCode::Down
+            && self.extend_visual_line_onto_final_line()
+        {
+            return true;
+        }
         // The real shift-extend mechanism: the editor's own selection model
         // already tracks a stable anchor across repeated extends/shrinks
         // (`Ctrl+Shift+Right`/`Left` already relies on the same plumbing —
@@ -791,6 +817,33 @@ impl App {
         }
     }
 
+    /// `j` in Visual Line mode when the selection ends just above the buffer's
+    /// final line: select that line too, and report whether it did.
+    /// A whole-line selection's end is exclusive, so the cursor already sits at
+    /// the start of the next line; when that line is the last one the native
+    /// shift-down has no line below to move to and would leave it out. (With
+    /// a line after it, the cursor moves onto that line and the snap includes
+    /// this one.) The final line, with no line break after it, ends at the end
+    /// of the buffer. An empty final line (the buffer ends in a newline) is
+    /// left to the native motion, which reaches it.
+    fn extend_visual_line_onto_final_line(&mut self) -> bool {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return false;
+        };
+        let Some(sel) = tab.editor.get_selection() else {
+            return false;
+        };
+        let cursor = tab.editor.get_cursor();
+        let code = tab.editor.code_ref();
+        let final_start = code.line_to_char(code.len_lines().minus(1));
+        let end = code.len_chars();
+        if sel.end != final_start || final_start >= end || cursor != sel.end {
+            return false;
+        }
+        tab.editor.set_selection_range(sel.start, end);
+        true
+    }
+
     /// Re-snap the active tab's selection to whole lines, keeping the
     /// cursor on whichever end the selection is currently growing toward.
     /// `Editor::select_line` can't do this itself — it always selects just
@@ -809,15 +862,17 @@ impl App {
         // `sel.end` is exclusive, so back it up one character before asking
         // which line it's on -- otherwise a selection ending right at a
         // line break would misreport itself as reaching into the next line.
-        let end_row = code.char_to_line(sel.end.saturating_sub(1).max(sel.start));
+        let end_row = code.char_to_line(sel.end.minus(1).max(sel.start));
         let line_start = code.line_to_char(start_row);
-        let line_end = if end_row + 1 < code.len_lines() {
-            code.line_to_char(end_row + 1)
+        // The end of the last selected line: the start of the next line, or --
+        // when the selection reaches the buffer's final line, which has no line
+        // break after it -- the end of the buffer. (Summing the lines' lengths
+        // instead left out the line breaks between them, so a selection of two
+        // or more lines ending on the last line fell short.)
+        let line_end = if end_row.plus(1) < code.len_lines() {
+            code.line_to_char(end_row.plus(1))
         } else {
-            line_start
-                + (start_row..=end_row)
-                    .map(|r| code.line_len(r))
-                    .sum::<usize>()
+            code.len_chars()
         };
         // Keep the cursor on the same end the native shift-motion just left
         // it on, so growing the selection downward keeps the caret visually
@@ -830,3 +885,7 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_modal.rs"]
+mod r3_tests;

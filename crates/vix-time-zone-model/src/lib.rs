@@ -24,6 +24,18 @@
 //! assert!(vix_time_zone_model::index_of("Europe/Paris").is_some());
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 mod zones;
@@ -57,8 +69,14 @@ pub fn format_offset(minutes: i32) -> String {
     let sign = if minutes < 0 { '-' } else { '+' };
     // Sign is printed separately so a negative sub-hour offset (e.g. -00:30)
     // keeps its minus sign, which `minutes / 60` alone would lose.
-    let m = minutes.abs();
-    format!("UTC{sign}{:02}:{:02}", m / 60, m % 60)
+    // `unsigned_abs` has no overflow at `i32::MIN`, unlike `abs`.
+    let m = minutes.unsigned_abs();
+    #[expect(
+        clippy::integer_division,
+        reason = "RCA-EXC-2: the divisor is the constant 60"
+    )]
+    let (hours, rest) = (m / 60, m % 60);
+    format!("UTC{sign}{hours:02}:{rest:02}")
 }
 
 /// Index of `name` in [`ZONES`] (exact match), if present.
@@ -116,9 +134,12 @@ pub fn set_active(name: &str) -> bool {
 #[must_use]
 pub fn active() -> &'static Zone {
     let idx = read().unwrap_or_else(utc_index);
-    // The `min` is belt-and-braces: `set_active` only stores valid indexes, but
-    // clamping keeps this indexing infallible if the table ever shrinks.
-    &ZONES[idx.min(ZONES.len() - 1)]
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "RCA-EXC-2: the stored index only comes from `set_active`, which stores `index_of` results, and `utc_index` is an `index_of` result or 0; ZONES is a constant, non-empty table"
+    )]
+    let zone = &ZONES[idx];
+    zone
 }
 
 /// The active zone's canonical name.
@@ -180,5 +201,14 @@ mod tests {
 
         // Restore for any other test ordering.
         assert!(set_active("UTC"));
+    }
+
+    #[test]
+    fn format_offset_handles_the_extremes() {
+        // `i32::MIN.abs()` overflows; `unsigned_abs` does not.
+        assert_eq!(format_offset(i32::MIN), "UTC-35791394:08");
+        assert_eq!(format_offset(i32::MAX), "UTC+35791394:07");
+        assert_eq!(format_offset(-30), "UTC-00:30");
+        assert_eq!(format_offset(0), "UTC+00:00");
     }
 }

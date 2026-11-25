@@ -28,11 +28,25 @@ pub const MAX_FRAME: usize = 64 * 1024 * 1024;
 /// The most file bytes one request or reply carries. A larger read or write
 /// is refused with [`ErrorCode::TooBig`] (the SSH authority then uses its
 /// shell scripts for that one operation).
-pub const MAX_DATA: u64 = (MAX_FRAME - 64 * 1024) as u64;
+pub const MAX_DATA: u64 = 64 * 1024 * 1024 - 64 * 1024;
 
 /// The most operations in one [`Op::Batch`], paths in one [`Op::Watch`], or
 /// items in any list other than a directory listing or a walk.
 pub const MAX_BATCH: usize = 4096;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Write one frame holding `payload`.
 ///
@@ -61,21 +75,25 @@ pub fn read_frame(r: &mut impl Read) -> io::Result<Option<Vec<u8>>> {
     let mut head = [0u8; 4];
     let mut got = 0;
     while got < head.len() {
-        match r.read(&mut head[got..]) {
+        let Some(room) = head.get_mut(got..) else {
+            break;
+        };
+        match r.read(room) {
             Ok(0) if got == 0 => return Ok(None),
             Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
-            Ok(n) => got += n,
+            Ok(n) => got = add_or(got, n, usize::MAX),
             Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(e) => return Err(e),
         }
     }
-    let len = u32::from_be_bytes(head) as usize;
+    let len = usize::try_from(u32::from_be_bytes(head)).map_err(|_| bad("frame too large"))?;
     if len > MAX_FRAME {
         return Err(bad("frame too large"));
     }
     // Read through `take`, so a lying length allocates only what arrives.
     let mut payload = Vec::new();
-    r.take(len as u64).read_to_end(&mut payload)?;
+    r.take(u64::try_from(len).map_err(|_| bad("frame too large"))?)
+        .read_to_end(&mut payload)?;
     if payload.len() < len {
         return Err(io::ErrorKind::UnexpectedEof.into());
     }
@@ -586,14 +604,14 @@ impl Enc {
                 match opts.max_depth {
                     Some(d) => {
                         self.u8(1);
-                        self.u64(d as u64);
+                        self.u64(u64::try_from(d).unwrap_or(u64::MAX));
                     }
                     None => self.u8(0),
                 }
                 self.bool(opts.skip_hidden);
                 self.bool(opts.honor_ignore_files);
                 self.list(&opts.prune_dirs, |e, d| e.str(d));
-                self.u64(opts.limit as u64);
+                self.u64(u64::try_from(opts.limit).unwrap_or(u64::MAX));
             }
             Op::Which { name } => {
                 self.u8(17);
@@ -731,7 +749,7 @@ type R<T> = Result<T, &'static str>;
 impl<'a> Dec<'a> {
     /// Bytes not yet consumed.
     fn left(&self) -> usize {
-        self.buf.len() - self.pos
+        sub_or(self.buf.len(), self.pos, 0)
     }
     /// Consume exactly `n` bytes, or fail with `"truncated"` without
     /// advancing. Every length-prefixed read goes through here, so a lying
@@ -740,12 +758,13 @@ impl<'a> Dec<'a> {
         if n > self.left() {
             return Err("truncated");
         }
-        let s = &self.buf[self.pos..self.pos + n];
-        self.pos += n;
+        let end = self.pos.checked_add(n).ok_or("truncated")?;
+        let s = self.buf.get(self.pos..end).ok_or("truncated")?;
+        self.pos = end;
         Ok(s)
     }
     fn u8(&mut self) -> R<u8> {
-        Ok(self.take(1)?[0])
+        self.take(1)?.first().copied().ok_or("truncated")
     }
     /// A strict bool: only 0 and 1 are valid.
     fn bool(&mut self) -> R<bool> {
@@ -756,17 +775,15 @@ impl<'a> Dec<'a> {
         }
     }
     fn u32(&mut self) -> R<u32> {
-        let b = self.take(4)?;
-        Ok(u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+        let b: [u8; 4] = self.take(4)?.try_into().map_err(|_| "truncated")?;
+        Ok(u32::from_be_bytes(b))
     }
     fn u64(&mut self) -> R<u64> {
-        let b = self.take(8)?;
-        let mut a = [0u8; 8];
-        a.copy_from_slice(b);
-        Ok(u64::from_be_bytes(a))
+        let b: [u8; 8] = self.take(8)?.try_into().map_err(|_| "truncated")?;
+        Ok(u64::from_be_bytes(b))
     }
     fn bytes(&mut self) -> R<Vec<u8>> {
-        let n = self.u32()? as usize;
+        let n = usize::try_from(self.u32()?).map_err(|_| "bad length")?;
         Ok(self.take(n)?.to_vec())
     }
     fn str(&mut self) -> R<String> {
@@ -775,8 +792,8 @@ impl<'a> Dec<'a> {
     /// A list count, checked against the bytes left (each item takes at
     /// least `min` bytes) and against `cap`.
     fn count(&mut self, min: usize, cap: usize) -> R<usize> {
-        let n = self.u32()? as usize;
-        if n > cap || n.saturating_mul(min) > self.left() {
+        let n = usize::try_from(self.u32()?).map_err(|_| "bad count")?;
+        if n > cap || n.checked_mul(min).is_none_or(|need| need > self.left()) {
             return Err("bad count");
         }
         Ok(n)
@@ -942,7 +959,7 @@ impl<'a> Dec<'a> {
         let tag = self.u8()?;
         Ok(match tag {
             0 => {
-                let code = *CODES.get(self.u8()? as usize).ok_or("bad code")?;
+                let code = *CODES.get(usize::from(self.u8()?)).ok_or("bad code")?;
                 Reply::Err {
                     code,
                     message: self.str()?,
@@ -1034,7 +1051,7 @@ pub fn decode_stream(input: &[u8]) -> usize {
         if decode(&payload).is_err() {
             break;
         }
-        n += 1;
+        n = add_or(n, 1, usize::MAX);
     }
     n
 }
@@ -1327,5 +1344,195 @@ mod tests {
             let n = cut.index(bytes.len());
             prop_assert!(decode(&bytes[..n]).is_err());
         }
+    }
+}
+
+/// Hand-built byte strings: the decoder's refusals, one reason each, and the
+/// reader's handling of interrupted and failing input.
+#[cfg(test)]
+mod refusals {
+    use super::*;
+
+    const REQUEST: u8 = 2;
+    const REPLY: u8 = 3;
+
+    fn be64(n: u64) -> Vec<u8> {
+        n.to_be_bytes().to_vec()
+    }
+
+    fn be32(n: u32) -> Vec<u8> {
+        n.to_be_bytes().to_vec()
+    }
+
+    fn cat(parts: &[&[u8]]) -> Vec<u8> {
+        parts.concat()
+    }
+
+    /// A request with id 1 around the op bytes.
+    fn request(op: &[u8]) -> Vec<u8> {
+        cat(&[&[REQUEST], &be64(1), op])
+    }
+
+    /// A reply with id 1 around the reply bytes.
+    fn reply(body: &[u8]) -> Vec<u8> {
+        cat(&[&[REPLY], &be64(1), body])
+    }
+
+    fn refused(payload: &[u8], why: &str) {
+        let e = decode(payload).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(e.to_string(), why, "payload {payload:?}");
+    }
+
+    /// A stat reply body with a caller-chosen kind byte and time bytes.
+    fn stat_reply(kind: u8, modified: &[u8], tail: &[u8]) -> Vec<u8> {
+        reply(&cat(&[&[2, kind], &be64(0), modified, &[0], tail]))
+    }
+
+    #[test]
+    fn a_bool_other_than_zero_or_one_is_refused() {
+        // Stat { path: "", follow: 2 }
+        refused(&request(&cat(&[&[1], &be32(0), &[2]])), "bad bool");
+    }
+
+    #[test]
+    fn an_unknown_file_kind_is_refused() {
+        refused(&stat_reply(9, &[0], &[0, 0]), "bad kind");
+    }
+
+    #[test]
+    fn impossible_times_are_refused() {
+        // Nanoseconds of a full second or more.
+        let nanos = cat(&[&[1], &be64(0), &be32(1_000_000_000)]);
+        refused(&stat_reply(0, &nanos, &[0, 0]), "bad time");
+        // An unknown time tag.
+        let tag = cat(&[&[3], &be64(0), &be32(0)]);
+        refused(&stat_reply(0, &tag, &[0, 0]), "bad time");
+        // After the epoch by more than SystemTime can hold.
+        let far = cat(&[&[1], &be64(u64::MAX), &be32(0)]);
+        refused(&stat_reply(0, &far, &[0, 0]), "bad time");
+        // A time before the epoch is fine.
+        let before = cat(&[&[2], &be64(7), &be32(0)]);
+        assert!(decode(&stat_reply(0, &before, &[0, 0])).is_ok());
+    }
+
+    #[test]
+    fn an_unknown_mode_flag_is_refused() {
+        refused(&stat_reply(0, &[0], &[0, 2]), "bad mode");
+        // Mode present: the four bytes are read.
+        let ok = decode(&stat_reply(0, &[0], &cat(&[&[0, 1], &be32(0o644)]))).unwrap();
+        match ok {
+            Message::Reply {
+                reply: Reply::Stat(s),
+                ..
+            } => assert_eq!(s.mode, Some(0o644)),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_unknown_expectation_is_refused() {
+        // WriteAtomic { path: "", data: "", expect: 3 }
+        let op = cat(&[&[5], &be32(0), &be32(0), &[3]]);
+        refused(&request(&op), "bad expect");
+    }
+
+    #[test]
+    fn an_unknown_walk_depth_flag_is_refused() {
+        let op = cat(&[&[16], &be32(0), &[2]]);
+        refused(&request(&op), "bad depth");
+    }
+
+    #[test]
+    fn an_unknown_optional_path_flag_is_refused() {
+        refused(&reply(&[8, 2]), "bad option");
+        assert_eq!(
+            decode(&reply(&[8, 0])).unwrap(),
+            Message::Reply {
+                id: 1,
+                reply: Reply::MaybePath(None)
+            }
+        );
+    }
+
+    #[test]
+    fn unknown_and_nested_replies_are_refused() {
+        refused(&reply(&[99]), "bad reply");
+        // A batch inside a batch.
+        let nested = cat(&[&[9], &be32(1), &[9], &be32(0)]);
+        refused(&reply(&nested), "bad reply");
+        // An error code that does not exist.
+        refused(&reply(&cat(&[&[0, 200], &be32(0)])), "bad code");
+        // An unknown message tag, an unknown op tag, and a bad magic.
+        refused(&[77], "bad message");
+        refused(&request(&[250]), "bad op");
+        refused(&cat(&[&[1], b"NOTVIXAG", &be32(1), &be32(0)]), "bad magic");
+    }
+
+    #[test]
+    fn an_unbounded_walk_round_trips() {
+        let m = Message::Request {
+            id: 4,
+            op: Op::Walk {
+                root: b"/".to_vec(),
+                opts: WalkOptions {
+                    max_depth: None,
+                    skip_hidden: false,
+                    honor_ignore_files: true,
+                    prune_dirs: vec![],
+                    limit: 3,
+                },
+            },
+        };
+        assert_eq!(decode(&encode(&m)).unwrap(), m);
+    }
+
+    #[test]
+    fn decode_stream_counts_the_frames_before_the_first_bad_one() {
+        let hello = encode(&Message::Hello {
+            protocol: PROTOCOL,
+            version: "x".into(),
+        });
+        let mut input = Vec::new();
+        write_frame(&mut input, &hello).unwrap();
+        write_frame(&mut input, &hello).unwrap();
+        write_frame(&mut input, &[0xff]).unwrap();
+        write_frame(&mut input, &hello).unwrap();
+        assert_eq!(decode_stream(&input), 2);
+        assert_eq!(decode_stream(&[]), 0);
+    }
+
+    /// A reader that fails with `first` once, then serves `rest`.
+    struct Flaky<'a> {
+        first: Option<io::ErrorKind>,
+        rest: &'a [u8],
+    }
+
+    impl Read for Flaky<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if let Some(kind) = self.first.take() {
+                return Err(kind.into());
+            }
+            self.rest.read(buf)
+        }
+    }
+
+    #[test]
+    fn an_interrupted_read_is_retried_and_other_errors_surface() {
+        let mut framed = Vec::new();
+        write_frame(&mut framed, b"abc").unwrap();
+        let mut r = Flaky {
+            first: Some(io::ErrorKind::Interrupted),
+            rest: &framed,
+        };
+        assert_eq!(read_frame(&mut r).unwrap().unwrap(), b"abc");
+        let mut r = Flaky {
+            first: Some(io::ErrorKind::BrokenPipe),
+            rest: &framed,
+        };
+        assert_eq!(
+            read_frame(&mut r).unwrap_err().kind(),
+            io::ErrorKind::BrokenPipe
+        );
     }
 }

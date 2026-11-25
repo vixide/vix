@@ -7,6 +7,18 @@
 //! data types (`FileStatus`, `LogPanel`, `Change`, …) live there and `App`'s
 //! fields use them, but nothing here ever calls into its process-spawning code.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::chooser::ChooserSlot;
 use std::path::Path;
 

@@ -41,3 +41,11 @@ builders (`local_clock`, `local_datetime`, `utc_iso`, `iso_week_date`,
 (`rows`, `up`/`down`/`select`, `selected_value`). The host owns the `Visible::CLOCK` flag, the
 `Clock` state, the `tools.clock` toggle, key/mouse routing, and `draw_clock`. See
 `crates/vix-clock-panel/spec/index.md`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Fixed-offset clocks use `checked_mul`. An offset jiff rejects is an input error: `datetime_at_offset` and `active_zone_datetime` return `Result<String, ClockError>` (`ClockError::OffsetOutOfRange { figure }`) instead of showing UTC or clamping, and `Row::value` is that `Result`, so the host shows a row that cannot be computed as unknown ("—") and never inserts it. A test checks that every zone in the time-zone table has a valid offset. Row selection uses `checked_*`.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `CLK-F1` | A row step goes below the first or past the last row | the first or last row | Row selection stops at either end, like a list. |

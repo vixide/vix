@@ -32,6 +32,18 @@
 //!
 //! Owning spec: `crates/vix-dap/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::collections::HashMap;
 use std::io::{Read, Write};
 #[cfg(feature = "process")]
@@ -1007,7 +1019,13 @@ impl Dap {
         if let Some(s) = self.session.as_mut() {
             let mut args = json!({ "expression": expr, "context": "repl" });
             if let Some(frame) = s.frame_id {
-                args["frameId"] = json!(frame);
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "RCA-EXC-2: args is the object literal built above, and assigning to a key of an object inserts it"
+                )]
+                {
+                    args["frameId"] = json!(frame);
+                }
             }
             s.request("evaluate", &args, Pending::Evaluate(expr.to_string()));
         }
@@ -1153,8 +1171,8 @@ impl Dap {
                 if s.frame_id != Some(frame_id) {
                     return;
                 }
-                if let Some(i) = auto_expand_scope(&scopes) {
-                    s.request_variables(scopes[i].variables_reference);
+                if let Some(scope) = auto_expand_scope(&scopes).and_then(|i| scopes.get(i)) {
+                    s.request_variables(scope.variables_reference);
                 }
                 events.push(DapEvent::Scopes { frame_id, scopes });
             }
@@ -1222,7 +1240,13 @@ impl Session {
     /// Send a DAP request, recording its `Pending` kind by sequence number.
     fn request(&mut self, command: &str, arguments: &Value, pending: Pending) {
         let seq = self.seq;
-        self.seq += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: seq counts the requests of one debug session, one per message sent, so it cannot reach the top of its type"
+        )]
+        {
+            self.seq += 1;
+        }
         self.pending.insert(seq, pending);
         let msg =
             json!({ "seq": seq, "type": "request", "command": command, "arguments": arguments });
@@ -1551,7 +1575,12 @@ fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
                     return;
                 }
                 Ok(n) => {
-                    decoder.push(&chunk[..n]);
+                    #[expect(
+                        clippy::indexing_slicing,
+                        reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most chunk.len()"
+                    )]
+                    let received = &chunk[..n];
+                    decoder.push(received);
                     while let Some(msg) = decoder.pop() {
                         if tx.send(Incoming::Message(msg)).is_err() {
                             return;
@@ -1766,5 +1795,55 @@ mod tests {
                 Variable::new("p", "Point").with_reference(9)
             ]
         );
+    }
+
+    #[test]
+    fn an_idle_client_ignores_every_session_command() {
+        let mut dap = Dap::new();
+        assert!(!dap.is_active() && !dap.is_stopped() && !dap.busy());
+        dap.continue_();
+        dap.step_over();
+        dap.step_into();
+        dap.step_out();
+        dap.pause();
+        dap.select_thread(7);
+        dap.select_frame(11);
+        dap.variables(5);
+        dap.variables(0);
+        dap.evaluate("x");
+        dap.set_breakpoints("/a.rs", &[SourceBreakpoint::new(3)]);
+        dap.stop();
+        assert_eq!((dap.thread_id(), dap.frame_id()), (None, None));
+        assert!(dap.capabilities().is_none());
+        assert_eq!(dap.data_breakpoints().len(), 0);
+        assert_eq!(dap.poll().len(), 0);
+        assert!(!dap.set_variable(5, "x", "1"), "no session, nothing sent");
+        assert!(!dap.data_breakpoint_info(5, "x"));
+        assert!(!dap.set_data_breakpoints(vec![DataBreakpoint::new("d", "x")]));
+    }
+
+    #[test]
+    fn idle_breakpoints_and_exception_filters_are_kept_for_the_next_session() {
+        let mut dap = Dap::new();
+        assert_eq!(dap.exception_filters().len(), 0, "no choice, no session");
+        dap.set_exception_filters(&["raised".to_string()]);
+        assert_eq!(dap.exception_filters(), ["raised"]);
+        dap.set_function_breakpoints(vec![FunctionBreakpoint::new("main")]);
+        assert_eq!(dap.function_breakpoints().len(), 1);
+        assert_eq!(dap.function_breakpoints()[0].name, "main");
+        let ib = InstructionBreakpoint::new("0x4005d0");
+        assert!(dap.set_instruction_breakpoints(vec![ib]));
+        assert_eq!(dap.instruction_breakpoints().len(), 1);
+        assert_eq!(dap.instruction_breakpoints()[0].reference, "0x4005d0");
+    }
+
+    #[test]
+    fn a_workdir_is_stored_and_an_adapter_with_no_command_does_not_start() {
+        let mut dap = Dap::new();
+        dap.set_workdir(Some(std::path::PathBuf::from("/work")));
+        let adapter = DebugAdapter::new("none", vec!["rs".into()], Vec::new());
+        assert!(!dap.start(&adapter, "/a.rs", HashMap::new(), StartMode::Launch));
+        assert!(!dap.is_active());
+        assert!(!dap.start(&adapter, "/a.rs", HashMap::new(), StartMode::Attach));
     }
 }

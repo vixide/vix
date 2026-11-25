@@ -8,8 +8,8 @@ This software is licensed under any one of the following, at your option:
   - GNU General Public License, version 2   (see docs/licenses/gpl-2.txt)
   - GNU General Public License, version 3   (see docs/licenses/gpl-3.txt)
   - UK Open Government Licence v3.0         (https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/)
-  - Creative Commons Attribution Non Commercial Share Alike 4.0 International
-                                            (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Creative Commons Attribution Share Alike 4.0 International
+                                            (https://creativecommons.org/licenses/by-sa/4.0/)
 
 The last two apply to Vix's own source code and documentation, not to
 distributed binaries; see LICENSE.md and spec/license/index.md.

@@ -7,7 +7,20 @@
 //! source ranges bundled into one module for symmetry with the app-side
 //! `picker_panels.rs` state module.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::info_panel::InfoSlot;
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -22,14 +35,14 @@ pub(super) fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(p) = app.info.nerd_palette() else {
         return;
     };
-    let grid_w = u16::try_from(COLS).unwrap_or(u16::MAX) * NERD_CELL_W;
-    let width = (grid_w + 2).min(area.width);
+    let grid_w = u16::try_from(COLS).unwrap_or(u16::MAX).times(NERD_CELL_W);
+    let width = grid_w.plus(2).min(area.width);
     let grid_rows = u16::try_from(p.rows()).unwrap_or(u16::MAX);
     // Borders (2) + glyph rows + the selected-name row (1) + the hint row (1).
-    let height = (grid_rows + 4).min(area.height);
+    let height = grid_rows.plus(4).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -59,12 +72,12 @@ pub(super) fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
     for row in 0..p.rows() {
         let mut spans = Vec::with_capacity(COLS);
         for col in 0..COLS {
-            let idx = row * COLS + col;
-            if idx >= GLYPHS.len() {
-                spans.push(Span::raw(" ".repeat(NERD_CELL_W as usize)));
+            let idx = row.times(COLS).plus(col);
+            let Some(glyph) = GLYPHS.get(idx) else {
+                spans.push(Span::raw(" ".repeat(usize::from(NERD_CELL_W))));
                 continue;
-            }
-            let cell = format!(" {}  ", GLYPHS[idx].ch);
+            };
+            let cell = format!(" {}  ", glyph.ch);
             if idx == p.selected {
                 spans.push(Span::styled(cell, theme::selected()));
             } else {
@@ -73,23 +86,24 @@ pub(super) fn draw_nerd_palette(app: &mut App, frame: &mut Frame, area: Rect) {
         }
         lines.push(Line::from(spans));
     }
-    frame.render_widget(Paragraph::new(lines), chunks[0]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
 
-    let name = Line::from(Span::raw(format!("  {}", p.selected_name())));
-    frame.render_widget(Paragraph::new(name), chunks[1]);
+    // A selection past the end names nothing (it is never shown as another glyph).
+    let name = Line::from(Span::raw(format!("  {}", p.selected_name().unwrap_or(""))));
+    frame.render_widget(Paragraph::new(name), chunk(&chunks, 1));
 
     let hint = Line::from(Span::styled(
         t!("ui.nerd_palette_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[2]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
 
     // Record just the glyph rows for mouse hit-testing.
     app.layout.nerd_palette = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
-        width: grid_w.min(chunks[0].width),
-        height: grid_rows.min(chunks[0].height),
+        x: chunk(&chunks, 0).x,
+        y: chunk(&chunks, 0).y,
+        width: grid_w.min(chunk(&chunks, 0).width),
+        height: grid_rows.min(chunk(&chunks, 0).height),
     };
 }
 
@@ -101,12 +115,12 @@ pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let width = 26u16.min(area.width);
     // Borders (2) + header (1) + rows + hint (1); cap rows so the box fits.
-    let max_rows = area.height.saturating_sub(4).max(1);
+    let max_rows = area.height.minus(4).max(1);
     let rows = u16::try_from(LEN).unwrap_or(u16::MAX).min(max_rows);
-    let height = (rows + 4).min(area.height);
+    let height = rows.plus(4).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -133,10 +147,10 @@ pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         t!("ui.ascii_header").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(header), chunks[0]);
+    frame.render_widget(Paragraph::new(header), chunk(&chunks, 0));
 
     // Sync the scroll window to the highlighted row, then render that window.
-    let view_h = chunks[1].height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.info.ascii_panel_mut() {
         p.ensure_visible(view_h);
     }
@@ -144,7 +158,7 @@ pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for idx in p.scroll..(p.scroll + view_h).min(LEN) {
+    for idx in p.scroll..p.scroll.plus(view_h).min(LEN) {
         let code = u8::try_from(idx).unwrap_or(u8::MAX);
         let text = format!(
             "  {:>3}  {:>2}   {}",
@@ -158,19 +172,19 @@ pub(super) fn draw_ascii_panel(app: &mut App, frame: &mut Frame, area: Rect) {
             lines.push(Line::from(Span::raw(text)));
         }
     }
-    frame.render_widget(Paragraph::new(lines), chunks[1]);
+    frame.render_widget(Paragraph::new(lines), chunk(&chunks, 1));
 
     let hint = Line::from(Span::styled(t!("ui.ascii_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), chunks[2]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
 
     // Record just the row window for mouse hit-testing.
     app.layout.ascii_panel = Rect {
-        x: chunks[1].x,
-        y: chunks[1].y,
-        width: chunks[1].width,
+        x: chunk(&chunks, 1).x,
+        y: chunk(&chunks, 1).y,
+        width: chunk(&chunks, 1).width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[1].height),
+            .min(chunk(&chunks, 1).height),
     };
 }
 
@@ -182,11 +196,16 @@ pub(super) fn draw_qrcode(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let lines: Vec<&str> = art.lines().collect();
     let art_w = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0);
-    let width = (u16::try_from(art_w).unwrap_or(u16::MAX) + 2).min(area.width);
-    let height = (u16::try_from(lines.len()).unwrap_or(u16::MAX) + 3).min(area.height);
+    let width = u16::try_from(art_w)
+        .unwrap_or(u16::MAX)
+        .plus(2)
+        .min(area.width);
+    let height = (u16::try_from(lines.len()).unwrap_or(u16::MAX))
+        .plus(3)
+        .min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -210,13 +229,13 @@ pub(super) fn draw_qrcode(app: &mut App, frame: &mut Frame, area: Rect) {
         .iter()
         .map(|l| Line::from(Span::styled((*l).to_string(), qr_style)))
         .collect();
-    frame.render_widget(Paragraph::new(body), chunks[0]);
+    frame.render_widget(Paragraph::new(body), chunk(&chunks, 0));
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             t!("ui.qrcode_hint").to_string(),
             theme::dim(),
         ))),
-        chunks[1],
+        chunk(&chunks, 1),
     );
 }
 
@@ -229,12 +248,12 @@ pub(super) fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     let width = 36u16.min(area.width);
-    let max_rows = area.height.saturating_sub(4).max(1);
+    let max_rows = area.height.minus(4).max(1);
     let rows = u16::try_from(total).unwrap_or(u16::MAX).min(max_rows);
-    let height = (rows + 4).min(area.height);
+    let height = rows.plus(4).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -258,9 +277,9 @@ pub(super) fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         .split(inner);
 
     let header = Line::from(Span::styled(t!("ui.x11_header").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(header), chunks[0]);
+    frame.render_widget(Paragraph::new(header), chunk(&chunks, 0));
 
-    let view_h = chunks[1].height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.x11_panel.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -268,10 +287,13 @@ pub(super) fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for c in &colors[p.scroll..(p.scroll + view_h).min(total)] {
+    for c in colors
+        .get(p.scroll..p.scroll.plus(view_h).min(total))
+        .unwrap_or(&[])
+    {
         let swatch = Span::styled("██", Style::default().fg(Color::Rgb(c.r, c.g, c.b)));
         let text = format!(" {:7} {}", c.hex, c.name);
-        let idx = p.scroll + lines.len();
+        let idx = p.scroll.plus(lines.len());
         let label = if idx == p.selected {
             Span::styled(text, theme::selected())
         } else {
@@ -280,34 +302,34 @@ pub(super) fn draw_x11_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         lines.push(Line::from(vec![Span::raw(" "), swatch, label]));
     }
     // Reserve a one-column gutter for the scrollbar when the table overflows.
-    let show_bar = total > view_h && chunks[1].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 1).width > 1;
     let row_area = if show_bar {
         Rect {
-            width: chunks[1].width - 1,
-            ..chunks[1]
+            width: chunk(&chunks, 1).width.minus(1),
+            ..chunk(&chunks, 1)
         }
     } else {
-        chunks[1]
+        chunk(&chunks, 1)
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[1].x + chunks[1].width - 1,
-            ..chunks[1]
+            x: chunk(&chunks, 1).x.plus(chunk(&chunks, 1).width).minus(1),
+            ..chunk(&chunks, 1)
         };
-        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }
 
     let hint = Line::from(Span::styled(t!("ui.x11_hint").to_string(), theme::dim()));
-    frame.render_widget(Paragraph::new(hint), chunks[2]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
 
     app.layout.x11_panel = Rect {
-        x: chunks[1].x,
-        y: chunks[1].y,
+        x: chunk(&chunks, 1).x,
+        y: chunk(&chunks, 1).y,
         width: row_area.width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[1].height),
+            .min(chunk(&chunks, 1).height),
     };
 }
 
@@ -321,12 +343,12 @@ pub(super) fn draw_theme_editor(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let total = editor.len();
     let width = 40u16.min(area.width);
-    let max_rows = area.height.saturating_sub(4).max(1);
+    let max_rows = area.height.minus(4).max(1);
     let rows = u16::try_from(total).unwrap_or(u16::MAX).min(max_rows);
-    let height = (rows + 4).min(area.height);
+    let height = rows.plus(4).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -349,7 +371,7 @@ pub(super) fn draw_theme_editor(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunks[0].height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(p) = app.theme_editor.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -379,37 +401,37 @@ pub(super) fn draw_theme_editor(app: &mut App, frame: &mut Frame, area: Rect) {
         };
         lines.push(Line::from(vec![Span::raw(" "), swatch, label]));
     }
-    let show_bar = total > view_h && chunks[0].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 0).width > 1;
     let row_area = if show_bar {
         Rect {
-            width: chunks[0].width - 1,
-            ..chunks[0]
+            width: chunk(&chunks, 0).width.minus(1),
+            ..chunk(&chunks, 0)
         }
     } else {
-        chunks[0]
+        chunk(&chunks, 0)
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[0].x + chunks[0].width - 1,
-            ..chunks[0]
+            x: chunk(&chunks, 0).x.plus(chunk(&chunks, 0).width).minus(1),
+            ..chunk(&chunks, 0)
         };
-        draw_scrollbar(frame, sb_area, editor.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, editor.selected, total.minus(1));
     }
 
     let hint = Line::from(Span::styled(
         t!("ui.theme_editor_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[1]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
 
     app.layout.theme_editor = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
+        x: chunk(&chunks, 0).x,
+        y: chunk(&chunks, 0).y,
         width: row_area.width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[0].height),
+            .min(chunk(&chunks, 0).height),
     };
 }
 
@@ -420,10 +442,10 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
     }
     let table = crate::media_type::all();
     let width = 64u16.min(area.width);
-    let height = (area.height.saturating_sub(4)).max(6).min(area.height);
+    let height = (area.height.minus(4)).max(6).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 4,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(4)),
         width,
         height,
     };
@@ -461,9 +483,9 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
             Span::raw(p.query.clone()),
         ])
     };
-    frame.render_widget(Paragraph::new(filter), chunks[0]);
+    frame.render_widget(Paragraph::new(filter), chunk(&chunks, 0));
 
-    let view_h = chunks[1].height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.info.media_type_panel_mut() {
         p.ensure_visible(view_h);
     }
@@ -473,8 +495,8 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
     let filtered = p.matches();
     let total = filtered.len();
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
-    for (row, &idx) in filtered.iter().enumerate().skip(p.scroll).take(view_h) {
-        let m = &table[idx];
+    let shown = filtered.iter().enumerate().skip(p.scroll).take(view_h);
+    for (row, m) in shown.filter_map(|(row, &idx)| Some((row, table.get(idx)?))) {
         let tag = if m.is_text() { "txt" } else { "bin" };
         let text = format!(
             " {:30} {:8} {tag}  {}",
@@ -489,37 +511,37 @@ pub(super) fn draw_media_type_panel(app: &mut App, frame: &mut Frame, area: Rect
         };
         lines.push(line);
     }
-    let show_bar = total > view_h && chunks[1].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 1).width > 1;
     let row_area = if show_bar {
         Rect {
-            width: chunks[1].width - 1,
-            ..chunks[1]
+            width: chunk(&chunks, 1).width.minus(1),
+            ..chunk(&chunks, 1)
         }
     } else {
-        chunks[1]
+        chunk(&chunks, 1)
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[1].x + chunks[1].width - 1,
-            ..chunks[1]
+            x: chunk(&chunks, 1).x.plus(chunk(&chunks, 1).width).minus(1),
+            ..chunk(&chunks, 1)
         };
-        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }
 
     let hint = Line::from(Span::styled(
         t!("ui.media_types_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[2]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
 
     app.layout.media_type_panel = Rect {
-        x: chunks[1].x,
-        y: chunks[1].y,
+        x: chunk(&chunks, 1).x,
+        y: chunk(&chunks, 1).y,
         width: row_area.width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[1].height),
+            .min(chunk(&chunks, 1).height),
     };
 }
 
@@ -534,7 +556,9 @@ fn todo_tree_row_text(p: &crate::todo_tree::Panel, row: &crate::todo_tree::Row) 
             collapsed,
         } => format!("{} {label} ({count})", if *collapsed { '▸' } else { '▾' }),
         Row::Item(i) => {
-            let it = &p.items[*i];
+            let Some(it) = p.items.get(*i) else {
+                return String::new();
+            };
             match p.group_by {
                 GroupBy::Tag => format!("    {}:{}  {}", it.file, it.line, it.text),
                 GroupBy::File => format!("    {:>5}  {}", it.line, it.text),
@@ -551,10 +575,10 @@ pub(super) fn draw_todo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     let width = 90u16.min(area.width);
-    let height = (area.height.saturating_sub(4)).max(6).min(area.height);
+    let height = (area.height.minus(4)).max(6).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 4,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(4)),
         width,
         height,
     };
@@ -584,7 +608,7 @@ pub(super) fn draw_todo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunks[0].height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(p) = app.todo_tree.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -593,16 +617,16 @@ pub(super) fn draw_todo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let rows = p.rows();
     let total = rows.len();
-    let show_bar = total > view_h && chunks[0].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 0).width > 1;
     let row_area = if show_bar {
         Rect {
-            width: chunks[0].width - 1,
-            ..chunks[0]
+            width: chunk(&chunks, 0).width.minus(1),
+            ..chunk(&chunks, 0)
         }
     } else {
-        chunks[0]
+        chunk(&chunks, 0)
     };
-    let text_w = row_area.width as usize;
+    let text_w = usize::from(row_area.width);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (row, r) in rows.iter().enumerate().skip(p.scroll).take(view_h) {
         let text = todo_tree_row_text(p, r);
@@ -619,24 +643,28 @@ pub(super) fn draw_todo_tree(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[0].x + chunks[0].width - 1,
-            ..chunks[0]
+            x: chunk(&chunks, 0).x.plus(chunk(&chunks, 0).width).minus(1),
+            ..chunk(&chunks, 0)
         };
-        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             t!("ui.todo_tree_hint").to_string(),
             theme::dim(),
         ))),
-        chunks[1],
+        chunk(&chunks, 1),
     );
     app.layout.todo_tree = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
+        x: chunk(&chunks, 0).x,
+        y: chunk(&chunks, 0).y,
         width: row_area.width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[0].height),
+            .min(chunk(&chunks, 0).height),
     };
 }
+
+#[cfg(test)]
+#[path = "tests_r3_picker_panels.rs"]
+mod r3_tests;

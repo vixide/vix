@@ -211,7 +211,7 @@ fn on_uppercase() {
 | `set_selection_text(text)` | replace the selection; with no selection, insert at the cursor |
 | `current_line() -> String` | the line the cursor is on |
 | `cursor_offset() -> int` | cursor position, as a character offset |
-| `set_cursor_offset(n)` | move the cursor to character offset `n` (clamped in range) |
+| `set_cursor_offset(n)` | move the cursor to character offset `n`; `n` outside `0..=len` is a script error naming the figure and range, never moved to the nearest end |
 
 These are the whole surface for v1 — enough for a script to read text,
 transform it in Rhai, and write it back, which is what "run textops-style
@@ -565,3 +565,7 @@ everywhere else in this repo (`spec/test/index.md`).
 | `Read { message }` | the file could not be read (used by `load_dir`) |
 
 The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `status.convert_failed` line is unchanged.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The plugin spec parser and the locale-tag fallback use `split_at_checked`, `strip_prefix` and `rsplit_once` instead of slicing, and the content digest uses `u64::try_from` for lengths. `set_cursor_offset(n)` no longer clamps `n` to the buffer (a bound for an out-of-range input, which `RCA-DECL-6` forbids): an offset outside `0..=len` raises a script error, `set_cursor_offset: <n> is not an offset in 0..=<len>`, and the cursor does not move. This is a behavior change, decided by the project owner, and `cursor_offset()` raises an error rather than returning a value if the offset does not fit an integer.

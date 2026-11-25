@@ -128,7 +128,7 @@ impl History {
             active_child: None,
             at: now_secs(),
         }));
-        if let Some(cur) = self.nodes[self.current].as_mut() {
+        if let Some(cur) = self.node_mut(self.current) {
             cur.children.push(new);
             cur.active_child = Some(new);
         }
@@ -136,15 +136,25 @@ impl History {
         self.prune();
     }
 
+    /// The live state at `i`, if there is one.
+    fn node(&self, i: usize) -> Option<&Node> {
+        self.nodes.get(i).and_then(Option::as_ref)
+    }
+
+    /// The live state at `i`, to change, if there is one.
+    fn node_mut(&mut self, i: usize) -> Option<&mut Node> {
+        self.nodes.get_mut(i).and_then(Option::as_mut)
+    }
+
     /// Step back to the parent state, returning the batch to invert (or `None` at
     /// the root). The branch just left becomes the parent's active redo branch.
     pub fn undo(&mut self) -> Option<EditBatch> {
         // `?` on the root (no parent/batch) makes undo-at-root a clean `None`.
-        let node = self.nodes[self.current].as_ref()?;
+        let node = self.node(self.current)?;
         let parent = node.parent?;
         let batch = node.batch.clone()?;
         let left = self.current;
-        if let Some(p) = self.nodes[parent].as_mut() {
+        if let Some(p) = self.node_mut(parent) {
             p.active_child = Some(left);
         }
         self.current = parent;
@@ -154,8 +164,8 @@ impl History {
     /// Step forward into the active child branch, returning the batch to apply (or
     /// `None` if the current state is a tip).
     pub fn redo(&mut self) -> Option<EditBatch> {
-        let active = self.nodes[self.current].as_ref()?.active_child?;
-        let batch = self.nodes[active].as_ref()?.batch.clone()?;
+        let active = self.node(self.current)?.active_child?;
+        let batch = self.node(active)?.batch.clone()?;
         self.current = active;
         Some(batch)
     }
@@ -163,16 +173,23 @@ impl History {
     /// Cycle which child branch `redo` will follow from the current state. Returns
     /// `true` when the current state has more than one branch to choose between.
     pub fn switch_branch(&mut self) -> bool {
-        let Some(node) = self.nodes[self.current].as_mut() else {
+        let Some(node) = self.node_mut(self.current) else {
             return false;
         };
         if node.children.len() < 2 {
             return false;
         }
         // With no explicit active child, start the cycle from the first one.
-        let active = node.active_child.unwrap_or(node.children[0]);
+        let Some(&first) = node.children.first() else {
+            return false;
+        };
+        let active = node.active_child.unwrap_or(first);
         let pos = node.children.iter().position(|&c| c == active).unwrap_or(0);
-        let next = node.children[(pos + 1) % node.children.len()];
+        // After the last branch comes the first.
+        let next_pos = pos.checked_add(1).filter(|p| *p < node.children.len());
+        let Some(&next) = node.children.get(next_pos.unwrap_or(0)) else {
+            return false;
+        };
         node.active_child = Some(next);
         true
     }
@@ -220,7 +237,7 @@ impl History {
     /// `false` (and changes nothing) when `child` is not a child of the
     /// current state.
     pub fn select_redo_branch(&mut self, child: usize) -> bool {
-        let Some(node) = self.nodes[self.current].as_mut() else {
+        let Some(node) = self.node_mut(self.current) else {
             return false;
         };
         if !node.children.contains(&child) {
@@ -237,7 +254,7 @@ impl History {
         let mut cur = Some(self.current);
         while let Some(i) = cur {
             set.insert(i);
-            cur = self.nodes[i].as_ref().and_then(|n| n.parent);
+            cur = self.node(i).and_then(|n| n.parent);
         }
         set
     }
@@ -264,8 +281,8 @@ impl History {
             // Everything left is on the current path or has children: the cap
             // is soft, so give up rather than break the tree.
             let Some(v) = victim else { return };
-            if let Some(parent) = self.nodes[v].as_ref().and_then(|n| n.parent)
-                && let Some(p) = self.nodes[parent].as_mut()
+            if let Some(parent) = self.node(v).and_then(|n| n.parent)
+                && let Some(p) = self.node_mut(parent)
             {
                 p.children.retain(|&c| c != v);
                 // Keep `active_child` pointing at a live node.
@@ -273,7 +290,9 @@ impl History {
                     p.active_child = p.children.last().copied();
                 }
             }
-            self.nodes[v] = None;
+            if let Some(slot) = self.nodes.get_mut(v) {
+                *slot = None;
+            }
         }
     }
 }
@@ -386,5 +405,56 @@ mod tests {
         }
         // The current path is protected; undo still works and never panics.
         assert_eq!(h.undo().map(|b| first_text(&b)), Some("d".into()));
+    }
+
+    #[test]
+    fn pruning_drops_the_oldest_off_path_leaf_and_repairs_the_parent() {
+        // Cap of 3 live states. Chain 0 -> 1 -> 2, then step back to the root
+        // and branch to 3: four states, so the oldest off-path leaf (2) goes.
+        let mut h = History::new(3);
+        h.push(batch("a")); // 1
+        h.push(batch("b")); // 2
+        h.undo();
+        h.undo();
+        h.push(batch("c")); // 3, root's active branch
+        let seqs: Vec<usize> = h.nodes().iter().map(|n| n.seq).collect();
+        assert_eq!(seqs, vec![0, 1, 3], "state 2 was pruned, leaving a gap");
+        let nodes = h.nodes();
+        assert!(nodes[1].children.is_empty(), "its parent forgot it");
+        assert_eq!(nodes[0].children, vec![1, 3]);
+        assert_eq!(h.path_to(2), None, "a pruned state is not live");
+        // Walking the surviving history still works.
+        assert_eq!(h.undo().map(|b| first_text(&b)), Some("c".into()));
+        assert_eq!(h.redo().map(|b| first_text(&b)), Some("c".into()));
+    }
+
+    #[test]
+    fn pruning_repoints_an_active_branch_at_a_live_node() {
+        // The root's active branch is the pruned leaf's chain: after the prune
+        // the parent's active child must not dangle.
+        let mut h = History::new(2);
+        h.push(batch("a")); // 1
+        h.undo();
+        h.push(batch("b")); // 2 (current), root children [1, 2]
+        // 3 states > cap 2: leaf 1 is the oldest off-path leaf and goes.
+        assert_eq!(
+            h.nodes().iter().map(|n| n.seq).collect::<Vec<_>>(),
+            vec![0, 2]
+        );
+        h.undo();
+        assert_eq!(h.redo().map(|b| first_text(&b)), Some("b".into()));
+    }
+
+    #[test]
+    fn a_zero_cap_never_prunes_and_branch_switching_needs_two_branches() {
+        let mut h = History::new(0);
+        for c in ["a", "b", "c", "d", "e"] {
+            h.push(batch(c));
+        }
+        assert_eq!(h.nodes().len(), 6);
+        assert!(!h.switch_branch(), "a tip has no branches");
+        h.undo();
+        assert!(!h.switch_branch(), "one child is not a choice");
+        assert!(!h.select_redo_branch(99));
     }
 }

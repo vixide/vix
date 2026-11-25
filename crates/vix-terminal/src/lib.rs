@@ -34,6 +34,18 @@
 //!
 //! Spec: `crates/vix-terminal/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -51,6 +63,33 @@ pub const DEFAULT_SCROLLBACK: usize = 2000;
 /// `vt100` cell is about 36 bytes, so a full 200-column scrollback at this cap
 /// is roughly 360 MB; the default is a twenty-fifth of that.
 pub const MAX_SCROLLBACK: usize = 50_000;
+
+/// No arguments to a spawned program.
+const NO_ARGS: &[&str] = &[];
+
+/// `a + b` for cell columns; a column past the top of the type is the top.
+fn add_u16(a: u16, b: u16) -> u16 {
+    add_u16_or(a, b, u16::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit.
+fn add_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// `n` as the non-zero size `vt100` takes (0 becomes 1).
 fn nonzero(n: u16) -> std::num::NonZeroU16 {
@@ -170,7 +209,12 @@ fn spawn_pty(
                 Ok(n) => {
                     // Scan before parsing; `vt100` ignores OSC 7 itself, so this is
                     // the only place the announced directory is seen.
-                    if let Some(dir) = osc.feed(&buf[..n]) {
+                    #[expect(
+                        clippy::indexing_slicing,
+                        reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most buf.len()"
+                    )]
+                    let received = &buf[..n];
+                    if let Some(dir) = osc.feed(received) {
                         *reader_cwd
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(dir);
@@ -178,7 +222,7 @@ fn spawn_pty(
                     // `Ok` only: on a poisoned lock the output is dropped rather
                     // than panicking the reader and silently killing the terminal.
                     if let Ok(mut p) = reader_parser.lock() {
-                        p.process(&buf[..n]);
+                        p.process(received);
                     }
                 }
             }
@@ -218,7 +262,7 @@ impl Terminal {
         cols: u16,
         scrollback: usize,
     ) -> std::io::Result<Terminal> {
-        Terminal::open_command(shell, &[] as &[&str], cwd, rows, cols, scrollback)
+        Terminal::open_command(shell, NO_ARGS, cwd, rows, cols, scrollback)
     }
 
     /// Spawn `program` with `args` on a new PTY of `rows`×`cols`, rooted at
@@ -592,14 +636,18 @@ pub fn word_in(line: &str, col: usize) -> Option<String> {
         return None;
     }
     let mut start = col;
-    while start > 0 && !chars[start - 1].is_whitespace() {
-        start -= 1;
+    while let Some(before) = start.checked_sub(1)
+        && chars.get(before).is_some_and(|c| !c.is_whitespace())
+    {
+        start = before;
     }
     let mut end = col;
-    while end + 1 < chars.len() && !chars[end + 1].is_whitespace() {
-        end += 1;
+    while let Some(after) = end.checked_add(1)
+        && chars.get(after).is_some_and(|c| !c.is_whitespace())
+    {
+        end = after;
     }
-    let word: String = chars[start..=end].iter().collect();
+    let word: String = chars.get(start..=end).unwrap_or(&[]).iter().collect();
     let word = word.trim_matches(|c| {
         matches!(
             c,
@@ -646,31 +694,31 @@ impl Osc7Scanner {
         let mut found = None;
         let mut pos = 0;
         loop {
-            let rest = &self.carry[pos..];
+            let rest = self.carry.get(pos..).unwrap_or(&[]);
             let Some(at) = find_sub(rest, OSC7) else {
                 // Keep a possible start of the marker split across chunks (the
                 // longest proper prefix of `OSC7` that ends the data), discard the rest.
                 let keep = (1..OSC7.len())
                     .rev()
-                    .find(|&k| rest.ends_with(&OSC7[..k]))
+                    .find(|&k| OSC7.get(..k).is_some_and(|prefix| rest.ends_with(prefix)))
                     .unwrap_or(0);
-                pos = self.carry.len() - keep;
+                pos = sub_or(self.carry.len(), keep, 0);
                 break;
             };
-            let body_at = pos + at + OSC7.len();
-            let body = &self.carry[body_at..];
+            let body_at = add_or(add_or(pos, at, usize::MAX), OSC7.len(), usize::MAX);
+            let body = self.carry.get(body_at..).unwrap_or(&[]);
             if let Some((len, term)) = osc_end(body) {
-                if let Some(dir) = parse_file_uri(&body[..len]) {
+                if let Some(dir) = body.get(..len).and_then(parse_file_uri) {
                     found = Some(dir);
                 }
-                pos = body_at + len + term;
+                pos = add_or(add_or(body_at, len, usize::MAX), term, usize::MAX);
             } else {
                 // Unterminated: wait for more, unless it is hopeless. Past
                 // `OSC7_MAX` the sequence is junk; drop it all so `carry` stays bounded.
                 pos = if body.len() > OSC7_MAX {
                     self.carry.len()
                 } else {
-                    pos + at
+                    add_or(pos, at, usize::MAX)
                 };
                 break;
             }
@@ -682,6 +730,10 @@ impl Osc7Scanner {
 
 /// Index of the first occurrence of `needle` in `hay`.
 fn find_sub(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    // An empty needle has no windows to find.
+    if needle.is_empty() {
+        return None;
+    }
     hay.windows(needle.len()).position(|w| w == needle)
 }
 
@@ -689,7 +741,7 @@ fn find_sub(hay: &[u8], needle: &[u8]) -> Option<usize> {
 fn osc_end(body: &[u8]) -> Option<(usize, usize)> {
     body.iter().enumerate().find_map(|(i, &b)| match b {
         0x07 => Some((i, 1)),
-        0x1b if body.get(i + 1) == Some(&b'\\') => Some((i, 2)),
+        0x1b if body.get(add_or(i, 1, usize::MAX)) == Some(&b'\\') => Some((i, 2)),
         _ => None,
     })
 }
@@ -701,28 +753,29 @@ fn parse_file_uri(uri: &[u8]) -> Option<std::path::PathBuf> {
     let rest = uri.strip_prefix("file://")?;
     // Everything before the first `/` after the scheme is the host; ignored,
     // since the terminal is always local to this process.
-    let path = &rest[rest.find('/')?..];
+    let path = rest.get(rest.find('/')?..)?;
     // Percent-decode into raw bytes first and validate UTF-8 once at the end, so
     // multi-byte characters encoded as `%XX%XX` decode correctly.
-    let mut bytes = Vec::with_capacity(path.len());
+    let mut bytes = Vec::new();
     let raw = path.as_bytes();
     let mut i = 0;
-    while i < raw.len() {
-        if raw[i] == b'%'
-            && let Some(hex) = path.get(i + 1..i + 3)
+    while let Some(&byte) = raw.get(i) {
+        if byte == b'%'
+            && let Some(hex) = path.get(add_or(i, 1, usize::MAX)..add_or(i, 3, usize::MAX))
             && let Ok(v) = u8::from_str_radix(hex, 16)
         {
             bytes.push(v);
-            i += 3;
+            i = add_or(i, 3, usize::MAX);
         } else {
-            bytes.push(raw[i]);
-            i += 1;
+            bytes.push(byte);
+            i = add_or(i, 1, usize::MAX);
         }
     }
     let mut text = String::from_utf8(bytes).ok()?;
     // `file:///C:/x` is the Windows path `C:/x`.
-    let b = text.as_bytes();
-    if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b':' {
+    let mut b = text.bytes();
+    if matches!((b.next(), b.next(), b.next()), (Some(b'/'), Some(letter), Some(b':')) if letter.is_ascii_alphabetic())
+    {
         text.remove(0);
     }
     Some(std::path::PathBuf::from(text))
@@ -734,9 +787,14 @@ fn parse_file_uri(uri: &[u8]) -> Option<std::path::PathBuf> {
 /// actually holds, so the returned value is read back rather than computed.
 pub fn scroll_parser(parser: &mut vt100::Parser, delta: isize) -> usize {
     let now = parser.screen().scrollback();
-    parser
-        .screen_mut()
-        .set_scrollback(now.saturating_add_signed(delta));
+    // A step past either end of the range goes to that end; `vt100` then
+    // limits it to the lines it holds.
+    let target = match now.checked_add_signed(delta) {
+        Some(target) => target,
+        None if delta < 0 => 0,
+        None => usize::MAX,
+    };
+    parser.screen_mut().set_scrollback(target);
     parser.screen().scrollback()
 }
 
@@ -789,13 +847,17 @@ impl Selection {
     #[must_use]
     pub fn text(&self, screen: &vt100::Screen) -> String {
         let ((r0, c0), (r1, c1)) = self.ordered();
-        screen.contents_between(r0, c0, r1, c1.saturating_add(1))
+        screen.contents_between(r0, c0, r1, add_u16(c1, 1))
     }
 }
 
 /// Encode a mouse event at screen cell (`col`, `row`) for a child that set
 /// `mode` and `encoding` (xterm's protocol: the legacy bytes, UTF-8, or SGR).
 /// Empty when the mode does not report this kind of event.
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "RCA-EXC-2: the button code is at most 67 plus the 28 of the modifier bits, and x and y are a u16 plus 1 in a u32, so no sum below leaves u32"
+)]
 #[must_use]
 pub fn encode_mouse(
     mode: vt100::MouseProtocolMode,
@@ -896,8 +958,18 @@ pub fn encode_key(key: KeyEvent) -> Vec<u8> {
                 // Control combos collapse to the low control byte (Ctrl-A = 0x01).
                 // The `as u8` truncation is only meaningful for ASCII letters and
                 // `@[\]^_`; other characters produce an arbitrary control byte.
-                let b = (c.to_ascii_uppercase() as u8).wrapping_sub(b'@') & 0x7f;
-                vec![b]
+                // Only `@` through `_` (and so the letters) have a control byte; any
+                // other character is sent as itself, not as an arbitrary byte.
+                if let Some(b) = u8::try_from(c.to_ascii_uppercase())
+                    .ok()
+                    .and_then(|upper| upper.checked_sub(b'@'))
+                    .filter(|b| *b < 0x20)
+                {
+                    vec![b]
+                } else {
+                    let mut s = [0u8; 4];
+                    c.encode_utf8(&mut s).as_bytes().to_vec()
+                }
             } else {
                 let mut s = [0u8; 4];
                 c.encode_utf8(&mut s).as_bytes().to_vec()
@@ -1211,5 +1283,334 @@ mod tests {
         assert_eq!(paste_bytes("ls\n", false), b"ls\r");
         assert_eq!(paste_bytes("a\nb\r\nc", false), b"a\rb\rc\r");
         assert_eq!(paste_bytes("a\nb", true), b"\x1b[200~a\nb\x1b[201~\r");
+    }
+
+    #[test]
+    fn control_keys_outside_the_control_range_send_the_character() {
+        let ctrl = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+        // Letters and `[` map to their control bytes.
+        assert_eq!(encode_key(ctrl('a')), vec![1]);
+        assert_eq!(encode_key(ctrl('[')), vec![0x1b]);
+        // A digit or a non-ASCII character has no control byte: it is sent as itself.
+        assert_eq!(encode_key(ctrl('1')), b"1".to_vec());
+        assert_eq!(encode_key(ctrl('é')), "é".as_bytes().to_vec());
+    }
+}
+
+#[cfg(all(test, unix))]
+mod pty_tests {
+    use super::*;
+    use std::path::Path;
+    use std::time::{Duration, Instant};
+
+    /// A `cat` on a PTY: it never exits by itself and echoes what it is sent.
+    fn cat(rows: u16, cols: u16, scrollback: usize) -> Terminal {
+        match Terminal::open("/bin/cat", Path::new("/"), rows, cols, scrollback) {
+            Ok(t) => t,
+            Err(e) => panic!("spawn cat: {e}"),
+        }
+    }
+
+    /// Poll (bounded) until the screen satisfies `pred`.
+    fn wait_until(term: &Terminal, pred: impl Fn(&str) -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let text = term.lock().screen().contents();
+            if pred(&text) {
+                return;
+            }
+            assert!(Instant::now() < deadline, "screen never matched: {text:?}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn size_capture_and_resize_are_clamped_and_clear_the_selection() {
+        let mut t = cat(5, 20, 0);
+        assert_eq!(t.size(), (5, 20));
+        assert!(t.capture());
+        t.set_capture(false);
+        assert!(!t.capture());
+        t.set_selection(Some(Selection::at((1, 1))));
+        assert_eq!(t.selection(), Some(Selection::at((1, 1))));
+        // Same size: nothing changes, the selection survives.
+        t.resize(5, 20);
+        assert_eq!(t.selection(), Some(Selection::at((1, 1))));
+        t.resize(8, 30);
+        assert_eq!(t.size(), (8, 30));
+        assert_eq!(t.selection(), None);
+        assert_eq!(t.lock().screen().size(), (nonzero(8), nonzero(30)));
+        t.resize(0, 0);
+        assert_eq!(t.size(), (1, 1));
+        assert_eq!(t.lock().screen().size(), (nonzero(1), nonzero(1)));
+    }
+
+    #[test]
+    fn typed_text_reaches_the_shell_and_echoes() {
+        let mut t = cat(5, 40, 0);
+        t.send_text("pasted line");
+        wait_until(&t, |s| s.contains("pasted line"));
+        t.send_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
+        t.send_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        wait_until(&t, |s| s.contains("zq"));
+        // Keys without a sequence and empty byte strings send nothing.
+        t.send_key(KeyEvent::new(KeyCode::Null, KeyModifiers::NONE));
+        t.send_bytes(b"");
+        t.send_bytes(b"!!");
+        wait_until(&t, |s| s.contains("zq!!"));
+    }
+
+    #[test]
+    fn text_queries_read_the_view() {
+        let mut t = cat(5, 40, 0);
+        t.lock()
+            .process(b"first row\r\nerror at (src/main.rs:12:5), see\r\n");
+        assert_eq!(t.row_text(0), "first row");
+        assert_eq!(t.row_text(1), "error at (src/main.rs:12:5), see");
+        assert_eq!(t.word_at(1, 12).as_deref(), Some("src/main.rs:12:5"));
+        assert_eq!(t.word_at(1, 5), None);
+        // Without a selection (or an empty one) the whole view is copied.
+        assert!(t.copy_text().contains("first row"));
+        t.set_selection(Some(Selection::at((0, 2))));
+        assert!(t.copy_text().contains("error at"));
+        t.set_selection(Some(Selection {
+            anchor: (0, 0),
+            head: (0, 4),
+        }));
+        assert_eq!(t.copy_text(), "first");
+    }
+
+    #[test]
+    fn scrolling_back_clears_selection_and_live_screen_ignores_it() {
+        let mut t = cat(5, 20, 100);
+        for i in 1..=30 {
+            t.lock().process(format!("line {i}\r\n").as_bytes());
+        }
+        assert_eq!(t.scroll_offset(), 0);
+        t.set_selection(Some(Selection::at((0, 0))));
+        assert_eq!(t.scroll_by(3), 3);
+        assert_eq!(t.scroll_offset(), 3);
+        assert_eq!(t.selection(), None);
+        assert_ne!(t.row_text(0), t.live_screen().contents_between(0, 0, 0, 20));
+        assert_eq!(t.live_screen().scrollback(), 0);
+        t.set_selection(Some(Selection::at((0, 0))));
+        t.scroll_to_bottom();
+        assert_eq!(t.scroll_offset(), 0);
+        assert_eq!(t.selection(), None);
+        // Already at the bottom: the selection is left alone.
+        t.set_selection(Some(Selection::at((0, 0))));
+        t.scroll_to_bottom();
+        assert!(t.selection().is_some());
+        assert_eq!(t.scroll_by(-5), 0);
+    }
+
+    #[test]
+    fn mouse_reports_follow_what_the_child_asked_for() {
+        let mut t = cat(5, 20, 0);
+        let down = MouseEventKind::Down(MouseButton::Left);
+        assert!(!t.wants_mouse());
+        assert!(!t.send_mouse(down, 1, 1, KeyModifiers::NONE));
+        t.lock().process(b"\x1b[?1000h\x1b[?1006h");
+        assert!(t.wants_mouse());
+        assert!(t.send_mouse(down, 1, 1, KeyModifiers::NONE));
+        let up = MouseEventKind::Up(MouseButton::Left);
+        assert!(t.send_mouse(up, 1, 1, KeyModifiers::NONE));
+        // Press-only mode (9) ignores releases.
+        t.lock().process(b"\x1b[?1000l\x1b[?9h");
+        assert!(t.wants_mouse());
+        assert!(t.send_mouse(down, 1, 1, KeyModifiers::NONE));
+        assert!(!t.send_mouse(up, 1, 1, KeyModifiers::NONE));
+    }
+
+    #[test]
+    fn cwd_follows_osc7_and_exit_is_reported_once() {
+        let mut t = cat(5, 20, 0);
+        assert_eq!(t.cwd(), Path::new("/"));
+        *t.osc_cwd.lock().unwrap() = Some("/tmp".into());
+        assert_eq!(t.cwd(), Path::new("/tmp"));
+        assert!(t.alive());
+        assert!(!t.take_exit_notice());
+        t.alive.store(false, Ordering::SeqCst);
+        assert!(t.take_exit_notice());
+        assert!(!t.take_exit_notice());
+    }
+
+    #[test]
+    fn restart_keeps_the_transcript_and_resets_modes() {
+        let mut t = cat(5, 40, 50);
+        t.lock().process(b"before\r\n\x1b[?1049h\x1b[?1000h");
+        assert!(t.wants_mouse());
+        t.alive.store(false, Ordering::SeqCst);
+        assert!(t.take_exit_notice());
+        t.set_selection(Some(Selection::at((0, 0))));
+        *t.osc_cwd.lock().unwrap() = Some("/tmp".into());
+        t.restart("--- restarted ---\x1b[31m\n").expect("restart");
+        assert!(!t.wants_mouse());
+        assert!(!t.lock().screen().alternate_screen());
+        let text = t.lock().screen().contents();
+        assert!(text.contains("before"), "{text:?}");
+        assert!(text.contains("--- restarted ---"), "{text:?}");
+        assert!(!text.contains('\x1b'));
+        assert_eq!(t.selection(), None);
+        assert_eq!(t.cwd(), Path::new("/"));
+        assert!(t.alive());
+        // A revived shell can be reported dead again.
+        t.alive.store(false, Ordering::SeqCst);
+        assert!(t.take_exit_notice());
+    }
+
+    #[test]
+    fn a_failed_restart_leaves_the_terminal_as_it_was() {
+        let mut t = cat(5, 40, 0);
+        t.lock().process(b"keep me");
+        t.spawn.program = "/definitely/not/a/program".into();
+        assert!(t.restart("x").is_err());
+        assert!(t.alive());
+        assert!(t.lock().screen().contents().contains("keep me"));
+    }
+}
+
+#[cfg(test)]
+mod encode_cov_tests {
+    use super::*;
+    use vt100::{MouseProtocolEncoding as Enc, MouseProtocolMode as Mode};
+
+    fn key(code: KeyCode) -> Vec<u8> {
+        encode_key(KeyEvent::new(code, KeyModifiers::NONE))
+    }
+
+    #[test]
+    fn every_special_key_has_its_xterm_sequence() {
+        let cases: [(KeyCode, &[u8]); 15] = [
+            (KeyCode::Tab, b"\t"),
+            (KeyCode::BackTab, b"\x1b[Z"),
+            (KeyCode::Esc, b"\x1b"),
+            (KeyCode::Down, b"\x1b[B"),
+            (KeyCode::Right, b"\x1b[C"),
+            (KeyCode::Left, b"\x1b[D"),
+            (KeyCode::Home, b"\x1b[H"),
+            (KeyCode::End, b"\x1b[F"),
+            (KeyCode::PageUp, b"\x1b[5~"),
+            (KeyCode::PageDown, b"\x1b[6~"),
+            (KeyCode::Delete, b"\x1b[3~"),
+            (KeyCode::Insert, b"\x1b[2~"),
+            (KeyCode::F(1), b"\x1bOP"),
+            (KeyCode::F(5), b"\x1b[15~"),
+            (KeyCode::F(12), b"\x1b[24~"),
+        ];
+        for (code, bytes) in cases {
+            assert_eq!(key(code), bytes, "{code:?}");
+        }
+        for (n, bytes) in [
+            (2u8, &b"\x1bOQ"[..]),
+            (3, b"\x1bOR"),
+            (4, b"\x1bOS"),
+            (6, b"\x1b[17~"),
+            (7, b"\x1b[18~"),
+            (8, b"\x1b[19~"),
+            (9, b"\x1b[20~"),
+            (10, b"\x1b[21~"),
+            (11, b"\x1b[23~"),
+        ] {
+            assert_eq!(key(KeyCode::F(n)), bytes, "F{n}");
+        }
+        assert_eq!(key(KeyCode::F(13)), Vec::<u8>::new());
+        assert_eq!(key(KeyCode::Null), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn mouse_buttons_wheel_motion_and_modifiers_encode_per_xterm() {
+        let mods = KeyModifiers::NONE;
+        let sgr = |mode, kind, m| encode_mouse(mode, Enc::Sgr, kind, 0, 0, m);
+        assert_eq!(
+            sgr(
+                Mode::PressRelease,
+                MouseEventKind::Down(MouseButton::Middle),
+                mods
+            ),
+            b"\x1b[<1;1;1M"
+        );
+        assert_eq!(
+            sgr(
+                Mode::PressRelease,
+                MouseEventKind::Down(MouseButton::Right),
+                mods
+            ),
+            b"\x1b[<2;1;1M"
+        );
+        assert_eq!(
+            sgr(Mode::Press, MouseEventKind::ScrollUp, mods),
+            b"\x1b[<64;1;1M"
+        );
+        assert_eq!(
+            sgr(Mode::Press, MouseEventKind::ScrollDown, mods),
+            b"\x1b[<65;1;1M"
+        );
+        assert_eq!(
+            sgr(
+                Mode::PressRelease,
+                MouseEventKind::Up(MouseButton::Left),
+                mods
+            ),
+            b"\x1b[<0;1;1m"
+        );
+        assert_eq!(
+            sgr(
+                Mode::ButtonMotion,
+                MouseEventKind::Drag(MouseButton::Left),
+                mods
+            ),
+            b"\x1b[<32;1;1M"
+        );
+        assert_eq!(
+            sgr(Mode::AnyMotion, MouseEventKind::Moved, mods),
+            b"\x1b[<35;1;1M"
+        );
+        // Motion without a motion mode is not reported.
+        assert_eq!(
+            sgr(Mode::PressRelease, MouseEventKind::Moved, mods),
+            Vec::<u8>::new()
+        );
+        assert_eq!(
+            sgr(
+                Mode::PressRelease,
+                MouseEventKind::Drag(MouseButton::Left),
+                mods
+            ),
+            Vec::<u8>::new()
+        );
+        // Shift 4, Alt 8, Control 16 add up.
+        let all = KeyModifiers::SHIFT | KeyModifiers::ALT | KeyModifiers::CONTROL;
+        assert_eq!(
+            sgr(
+                Mode::PressRelease,
+                MouseEventKind::Down(MouseButton::Left),
+                all
+            ),
+            b"\x1b[<28;1;1M"
+        );
+        // Legacy encoding reports every release as button 3.
+        let legacy = encode_mouse(
+            Mode::PressRelease,
+            Enc::Default,
+            MouseEventKind::Up(MouseButton::Right),
+            0,
+            0,
+            mods,
+        );
+        assert_eq!(legacy, vec![0x1b, b'[', b'M', 32 + 3, 33, 33]);
+    }
+
+    #[test]
+    fn find_sub_handles_empty_and_missing_needles() {
+        assert_eq!(find_sub(b"abc", b""), None);
+        assert_eq!(find_sub(b"abc", b"bc"), Some(1));
+        assert_eq!(find_sub(b"abc", b"x"), None);
+    }
+
+    #[test]
+    fn pty_errors_become_io_errors_with_their_message() {
+        let e = to_io(&anyhow::anyhow!("no pty"));
+        assert_eq!(e.to_string(), "no pty");
     }
 }

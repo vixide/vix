@@ -10,6 +10,18 @@
 //!
 //! Owning spec: `crates/vix-checksum-tool/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use sha2::{Digest, Sha256, Sha512};
 
 /// SHA-256 digest of `text` (UTF-8 bytes) as a 64-character lowercase hex string.
@@ -54,7 +66,8 @@ pub fn crc32_hex(text: &str) -> String {
 /// Render bytes as a lowercase hex string (two characters per byte).
 #[expect(clippy::expect_used, reason = "a nibble is always below 16")]
 fn to_hex(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
+    let mut s = // TOOL-F1: the capacity is only a hint, so an unrepresentable size is 0.
+    String::with_capacity(bytes.len().checked_mul(2).unwrap_or(0));
     for b in bytes {
         s.push(char::from_digit(u32::from(b >> 4), 16).expect("nibble"));
         s.push(char::from_digit(u32::from(b & 0x0f), 16).expect("nibble"));

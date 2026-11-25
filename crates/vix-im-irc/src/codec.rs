@@ -5,6 +5,18 @@
 //! writes one line without its CRLF and refuses CR, LF and NUL anywhere, so no
 //! text can smuggle in a second command.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt;
 
 /// One IRCv3 message tag: a key and an optional, already-unescaped value.
@@ -312,7 +324,8 @@ impl Line {
             return Err(EncodeError::BadCommand);
         }
         out.push_str(&self.command);
-        let last = self.params.len().saturating_sub(1);
+        // The index of the final parameter; with none the loop does not run.
+        let last = self.params.len().checked_sub(1);
         for (i, param) in self.params.iter().enumerate() {
             if has_forbidden(param) {
                 return Err(EncodeError::ForbiddenChar);
@@ -320,7 +333,7 @@ impl Line {
             out.push(' ');
             let needs_colon = param.is_empty() || param.contains(' ') || param.starts_with(':');
             if needs_colon {
-                if i != last {
+                if Some(i) != last {
                     return Err(EncodeError::BadMiddleParam);
                 }
                 out.push(':');
@@ -366,8 +379,15 @@ pub fn server_time_millis(value: &str) -> Option<i64> {
         }
         Some(_) => return None,
     };
-    let days = vix_civil_date::days_from_civil(year, month, day);
-    Some(((days * 24 + hour) * 60 + minute) * 60_000 + second * 1000 + millis)
+    let days = vix_civil_date::days_from_civil(year, month, day)?;
+    // A date whose millisecond count does not fit is not a valid server time.
+    days.checked_mul(24)?
+        .checked_add(hour)?
+        .checked_mul(60)?
+        .checked_add(minute)?
+        .checked_mul(60_000)?
+        .checked_add(second.checked_mul(1000)?)?
+        .checked_add(millis)
 }
 
 /// Parse exactly `width` ASCII digits (no sign, no whitespace) as a number; `None` otherwise. Used for the fixed-width fields of `server-time` timestamps.
@@ -456,6 +476,12 @@ mod tests {
     }
 
     #[test]
+    fn a_server_time_too_large_to_count_is_rejected() {
+        // A year so large that its millisecond count overflows i64 is not a server time.
+        assert_eq!(server_time_millis("99999999999-01-01T00:00:00.000Z"), None);
+    }
+
+    #[test]
     fn server_time() {
         assert_eq!(server_time_millis("1970-01-01T00:00:00.000Z"), Some(0));
         assert_eq!(
@@ -473,5 +499,70 @@ mod tests {
         assert_eq!(server_time_millis("2011-10-19 16:40:51Z"), None);
         assert_eq!(server_time_millis("2011-13-19T16:40:51Z"), None);
         assert_eq!(server_time_millis("garbage"), None);
+    }
+}
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn prefix_display_round_trips_each_shape() {
+        for text in ["ana!a@host", "ana@host", "ana!a", "irc.example"] {
+            assert_eq!(Prefix::parse(text).to_string(), text);
+        }
+    }
+
+    #[test]
+    fn error_messages_are_distinct_and_nonempty() {
+        let all = [
+            ParseError::NoCommand.to_string(),
+            EncodeError::ForbiddenChar.to_string(),
+            EncodeError::BadCommand.to_string(),
+            EncodeError::BadMiddleParam.to_string(),
+        ];
+        for (i, a) in all.iter().enumerate() {
+            assert_ne!(a, "");
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(a, b);
+            }
+        }
+    }
+
+    #[test]
+    fn escape_drops_nul_and_escapes_breaks() {
+        assert_eq!(escape_tag_value("a\0b\r\nc"), "ab\\r\\nc");
+    }
+
+    #[test]
+    fn to_wire_rejects_bad_tag_prefix_and_command() {
+        let mut l = Line::new("PING", &["x"]);
+        l.tags.push(Tag {
+            key: "a b".into(),
+            value: None,
+        });
+        assert_eq!(l.to_wire(), Err(EncodeError::ForbiddenChar));
+
+        let mut l = Line::new("PING", &["x"]);
+        l.prefix = Some(Prefix::parse("bad nick"));
+        assert_eq!(l.to_wire(), Err(EncodeError::ForbiddenChar));
+
+        let mut l = Line::new("PING", &["x"]);
+        l.prefix = Some(Prefix::parse("ana!a@h"));
+        assert_eq!(l.to_wire().unwrap(), ":ana!a@h PING x");
+
+        let l = Line::new("PI\nNG", &[]);
+        assert_eq!(l.to_wire(), Err(EncodeError::ForbiddenChar));
+        let l = Line::new("", &[]);
+        assert_eq!(l.to_wire(), Err(EncodeError::BadCommand));
+        let l = Line::new("A B", &[]);
+        assert_eq!(l.to_wire(), Err(EncodeError::BadCommand));
+    }
+
+    #[test]
+    fn server_time_rejects_non_digit_fraction() {
+        assert_eq!(server_time_millis("2024-01-02T03:04:05.xyzZ"), None);
+        assert_eq!(server_time_millis("2024-01-02T03:04:05.Z"), None);
+        assert_eq!(server_time_millis("1970-01-01T00:00:00.5Z"), Some(500));
     }
 }

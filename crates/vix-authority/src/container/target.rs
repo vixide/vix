@@ -179,18 +179,17 @@ impl ContainerTarget {
             .ok_or(TargetError::NotRemote)?;
         let (target, path) = if kind == ExecKind::Kubernetes {
             let mut parts = rest.splitn(4, '/');
-            let ns = parts.next().unwrap_or_default();
-            let pod = parts.next().unwrap_or_default();
-            let ctr = parts.next().unwrap_or_default();
+            // A missing namespace, pod or container is empty, which `kubernetes`
+            // then rejects.
+            let ns = parts.next().unwrap_or("");
+            let pod = parts.next().unwrap_or("");
+            let ctr = parts.next().unwrap_or("");
             let path = parts.next().map_or_default(|p| format!("/{p}"));
             (Self::kubernetes(ns, pod, ctr)?, path)
         } else {
-            let (login, path) = match rest.find('/') {
-                Some(i) => (&rest[..i], &rest[i..]),
-                None => (rest, ""),
-            };
-            let (user, name) = match login.rfind('@') {
-                Some(i) => (Some(&login[..i]), &login[i + 1..]),
+            let (login, path) = rest.find('/').map_or((rest, ""), |i| rest.split_at(i));
+            let (user, name) = match login.rsplit_once('@') {
+                Some((user, name)) => (Some(user), name),
                 None => (None, login),
             };
             let mut target = Self::new(kind, name)?;

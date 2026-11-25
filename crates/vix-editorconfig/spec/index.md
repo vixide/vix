@@ -80,3 +80,7 @@ else 4, in spaces; a size with no style means spaces) and soft wrap.
 `.editorconfig`, and **Wrap Text** uses the modeline's wrap column. A tab
 width alone does not change how Vix draws tabs (that is not per buffer); it
 only sizes a spaces indent.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Modeline and comment parsing use `split_once`, `split_at_checked`, `strip_prefix` and iterator `skip` instead of slicing. **Declared:** a file shorter than the modeline window scans all of its lines (the window start is 0).

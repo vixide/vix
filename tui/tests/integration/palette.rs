@@ -208,7 +208,7 @@ fn nerd_palette_inserts_glyph_with_keyboard() {
 
     // Move one cell right, capture the highlighted glyph, then insert it.
     app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-    let expected = app.info.nerd_palette().unwrap().selected_glyph();
+    let expected = app.info.nerd_palette().unwrap().selected_glyph().unwrap();
     app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     // Enter inserts but keeps the palette open for picking more glyphs.
@@ -242,7 +242,7 @@ fn nerd_palette_click_inserts_glyph() {
         app.info.nerd_palette().is_some(),
         "a click keeps the palette open"
     );
-    let expected = app.info.nerd_palette().unwrap().selected_glyph();
+    let expected = app.info.nerd_palette().unwrap().selected_glyph().unwrap();
     let text = app.editor.active_tab().unwrap().text();
     assert!(
         text.contains(expected),

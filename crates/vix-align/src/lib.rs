@@ -17,6 +17,18 @@
 //! assert_eq!(out, "a   = 1\nbbb = 2\n");
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Align every line of `text` that contains `delim` so the (first) delimiter sits
 /// in a common column. Preserves a trailing newline if present.
 ///
@@ -53,7 +65,10 @@ pub fn on_delimiter(text: &str, delim: char) -> String {
         match part {
             Some((left, right)) => {
                 let left = left.trim_end();
-                // `width` is the max over all split lines, so this never underflows.
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: width is the maximum of these same trimmed lengths, so the difference is not negative"
+                )]
                 let pad = " ".repeat(width - left.chars().count());
                 out.push(format!("{left}{pad} {delim} {}", right.trim_start()));
             }

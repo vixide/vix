@@ -14,6 +14,18 @@
 //! fields borrow straight from the binary with no per-row allocation. Spec:
 //! `crates/vix-html-character-picker/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::sync::OnceLock;
 
 /// One HTML named character reference.
@@ -144,19 +156,19 @@ impl Panel {
             vix_list_state::ensure_visible(self.selected, self.scroll, height, self.len());
     }
 
-    /// The highlighted entity.
+    /// The highlighted entity, or `None` when the public [`selected`](Self::selected)
+    /// field was set past the last entity (the navigation methods never do): an
+    /// out-of-range selection is not moved to the nearest entity.
     #[must_use]
-    pub fn selected_entity(&self) -> &'static Entity {
-        // Clamp defensively: `selected` is a public field and could be set past the end.
-        let i = self.selected.min(self.len().saturating_sub(1));
-        &entities()[i]
+    pub fn selected_entity(&self) -> Option<&'static Entity> {
+        entities().get(self.selected)
     }
 
-    /// The highlighted entity's reference string (what insertion uses), e.g.
-    /// `&Aacute;`.
+    /// The highlighted entity as an HTML reference, e.g. `&Aacute;`, or `None`
+    /// when nothing valid is highlighted.
     #[must_use]
-    pub fn selected_reference(&self) -> String {
-        self.selected_entity().reference()
+    pub fn selected_reference(&self) -> Option<String> {
+        self.selected_entity().map(Entity::reference)
     }
 }
 
@@ -176,7 +188,7 @@ mod tests {
     #[test]
     fn reference_prepends_ampersand() {
         let p = Panel::open();
-        assert_eq!(p.selected_reference(), "&Aacute;");
+        assert_eq!(p.selected_reference().as_deref(), Some("&Aacute;"));
     }
 
     #[test]
@@ -225,5 +237,15 @@ mod tests {
         p.selected = 3;
         p.ensure_visible(10);
         assert_eq!(p.scroll, 3);
+    }
+
+    #[test]
+    fn a_selection_past_the_end_is_none_not_the_last_entity() {
+        let mut p = Panel::open();
+        p.selected = entities().len();
+        assert!(p.selected_entity().is_none());
+        assert_eq!(p.selected_reference(), None);
+        p.selected = entities().len() - 1;
+        assert!(p.selected_entity().is_some(), "the last entity is valid");
     }
 }

@@ -108,8 +108,10 @@ impl StderrTail {
     fn push(&self, chunk: &[u8]) {
         if let Ok(mut buf) = self.0.lock() {
             buf.extend_from_slice(chunk);
-            let excess = buf.len().saturating_sub(STDERR_TAIL_BYTES);
-            buf.drain(..excess);
+            // Below the cap there is nothing to drop.
+            if let Some(excess) = buf.len().checked_sub(STDERR_TAIL_BYTES) {
+                buf.drain(..excess);
+            }
         }
     }
 
@@ -161,7 +163,12 @@ pub(crate) fn spawn_kernel(
                     if n == 0 {
                         break;
                     }
-                    sink.push(&buf[..n]);
+                    #[expect(
+                        clippy::indexing_slicing,
+                        reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most buf.len()"
+                    )]
+                    let received = &buf[..n];
+                    sink.push(received);
                 }
             });
     }
@@ -309,5 +316,171 @@ impl Drop for KernelHandle {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vix_jupyter_core::Transport as Tr;
+
+    fn spec(json: &str) -> KernelSpec {
+        KernelSpec::parse("t", Path::new("/nonexistent"), json).unwrap()
+    }
+
+    #[test]
+    fn default_options_are_private_and_local() {
+        let o = LaunchOptions::default();
+        assert_eq!(o.runtime_base, std::env::temp_dir());
+        assert_eq!(o.cwd, None);
+        assert_eq!(o.transport, if cfg!(unix) { Tr::Ipc } else { Tr::Tcp });
+        assert_eq!(o.start_timeout, Duration::from_secs(30));
+        assert_eq!(o.shutdown_grace, Duration::from_secs(2));
+        assert_eq!(o.username, "vix");
+    }
+
+    #[test]
+    fn launch_errors_name_the_failed_step() {
+        let io = || io::Error::other("boom");
+        assert_eq!(
+            LaunchError::Io(io()).to_string(),
+            "cannot prepare the kernel's runtime directory: boom"
+        );
+        assert_eq!(
+            LaunchError::Spawn(io()).to_string(),
+            "cannot start the kernel: boom"
+        );
+        assert_eq!(
+            LaunchError::Runtime(io()).to_string(),
+            "cannot start the kernel client: boom"
+        );
+        assert_eq!(
+            LaunchError::Connection(ConnectionError::Malformed).to_string(),
+            ConnectionError::Malformed.to_string()
+        );
+        assert_eq!(
+            LaunchError::NotLocal.to_string(),
+            "the kernel is not on this machine"
+        );
+    }
+
+    #[test]
+    fn an_empty_key_is_a_connection_error() {
+        let signer_err = vix_jupyter_core::Signer::new(b"").unwrap_err();
+        assert!(matches!(
+            LaunchError::from(signer_err),
+            LaunchError::Connection(ConnectionError::EmptyKey)
+        ));
+        let info = ConnectionInfo::new(Tr::Tcp, "127.0.0.1", [1, 2, 3, 4, 5], "", "x");
+        assert!(matches!(
+            KernelHandle::connect(info, &LaunchOptions::default()),
+            Err(LaunchError::Connection(ConnectionError::EmptyKey))
+        ));
+    }
+
+    #[test]
+    fn stderr_tail_keeps_only_the_last_bytes_and_strips_ansi() {
+        let tail = StderrTail::default();
+        assert_eq!(tail.text(), "");
+        tail.push(b"\x1b[31mred\x1b[0m ");
+        assert_eq!(tail.text(), "red ");
+        tail.push(&vec![b'a'; STDERR_TAIL_BYTES]);
+        tail.push(b"END");
+        let text = tail.text();
+        assert_eq!(text.len(), STDERR_TAIL_BYTES);
+        assert!(text.ends_with("aaEND"));
+        assert!(!text.contains("red"));
+    }
+
+    #[test]
+    fn launch_fails_when_the_runtime_base_is_missing() {
+        let options = LaunchOptions {
+            runtime_base: std::env::temp_dir()
+                .join(format!("vix-jn-nobase-{}", std::process::id())),
+            ..LaunchOptions::default()
+        };
+        let err = KernelHandle::launch(&spec(r#"{"argv": ["true"]}"#), &options).unwrap_err();
+        assert!(matches!(err, LaunchError::Io(_)), "{err}");
+    }
+
+    #[test]
+    fn launch_refuses_an_ipc_path_too_long_for_a_socket() {
+        let base = std::env::temp_dir();
+        let long = base.join("a".repeat(100));
+        std::fs::create_dir_all(&long).unwrap();
+        let options = LaunchOptions {
+            runtime_base: long.clone(),
+            transport: Tr::Ipc,
+            ..LaunchOptions::default()
+        };
+        let err = KernelHandle::launch(&spec(r#"{"argv": ["true"]}"#), &options).unwrap_err();
+        assert!(matches!(err, LaunchError::Io(_)), "{err}");
+        let _ = std::fs::remove_dir_all(&long);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn spawn_kernel_runs_in_its_cwd_with_the_spec_env_and_keeps_stderr() {
+        let dir = std::env::temp_dir().join(format!("vix-jn-cwd-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let s = spec(
+            r#"{"argv": ["sh", "-c", "echo \"$VIXJN:$(pwd -P)\" >&2; echo $2 >&2", "sh", "{connection_file}"], "env": {"VIXJN": "hello"}}"#,
+        );
+        let (mut child, tail) = spawn_kernel(&s, Path::new("/conn.json"), Some(&dir)).unwrap();
+        assert!(child.wait().unwrap().success());
+        // The stderr reader is a separate thread; wait for its pipe to drain.
+        let mut text = tail.text();
+        for _ in 0..500 {
+            if text.contains("/conn.json") {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+            text = tail.text();
+        }
+        let canonical = std::fs::canonicalize(&dir).unwrap();
+        assert!(
+            text.contains(&format!("hello:{}", canonical.display())),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spawn_kernel_reports_a_missing_program() {
+        let s = spec(r#"{"argv": ["vix-no-such-kernel-binary"]}"#);
+        let err = spawn_kernel(&s, Path::new("/c.json"), None).err().unwrap();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn handle_debug_shows_only_the_session() {
+        let info = ConnectionInfo::new(Tr::Tcp, "127.0.0.1", [1, 2, 3, 4, 5], "key", "x");
+        let options = LaunchOptions {
+            start_timeout: Duration::from_millis(1),
+            ..LaunchOptions::default()
+        };
+        let handle = KernelHandle::connect(info, &options).unwrap();
+        let text = format!("{handle:?}");
+        assert!(text.starts_with("KernelHandle { session: \""), "{text}");
+        assert!(!text.contains("key"));
+    }
+
+    #[test]
+    fn request_ids_are_unique_and_prefixed_by_the_session() {
+        let info = ConnectionInfo::new(Tr::Tcp, "127.0.0.1", [1, 2, 3, 4, 5], "key", "x");
+        let options = LaunchOptions {
+            start_timeout: Duration::from_millis(1),
+            ..LaunchOptions::default()
+        };
+        let handle = KernelHandle::connect(info, &options).unwrap();
+        let a = handle.execute("1");
+        let b = handle.execute("2");
+        assert_ne!(a, b);
+        assert!(a.0.starts_with(&handle.session));
+        assert!(a.0.ends_with("_1") && b.0.ends_with("_2"));
+        // The handle's other requests never block or panic on a dead worker.
+        handle.interrupt();
+        handle.restart();
+        handle.shutdown();
     }
 }

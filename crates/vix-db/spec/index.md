@@ -741,7 +741,7 @@ supported; **MySQL** is not (the workbench says so). The module tree is
 **Opening it.** `Ctrl+D` in the workbench, or **DB → Schema Compare…**
 (`db.schema_compare`). The first screen lists the candidate targets
 (`↑`/`↓`) and the schema name, typed in place: on PostgreSQL it starts as the
-schema of the tree selection, else `public`; on SQLite it is `main`. `Enter`
+schema of the tree selection, else `public`; on SQLite it is `main`, and `main` is the only schema SQLite compares (its migrations name no schema, so they always act on `main`): any other name is refused with `msg.db_compare_sqlite_main_only` rather than read as `main`. `Enter`
 reads the source schema on the workbench session, then connects to the
 target on a background thread through the normal credential waterfall
 (`password_command`, the OS keyring, then a masked password prompt) and
@@ -933,3 +933,7 @@ The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no
 so the workbench status lines are unchanged. `Browser::run_sql` and
 `run_catalog` return it too; the workbench turns it into text only at the
 point it shows a message.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, the whole crate denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Code reads through `get`, iterators, `split_once` and small `checked_*` helpers instead of indexing and slicing. Declared fallbacks, each the correct answer to a failed operation on valid data: movement stops at the first and last row or column; a counter or index that would pass the top of `usize` stays at the top; a tunnel readiness timeout too long to be a deadline never expires; a cell, row or column that is absent from the grid reads as empty; a history or saved-query file that is missing or unreadable loads as an empty list. The editor cursor never leaves the buffer: a cursor row outside it makes an edit do nothing.

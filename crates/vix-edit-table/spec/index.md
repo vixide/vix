@@ -32,3 +32,7 @@ syncs the visible scroll window, and acts on the returned outcome.
 ## Roadmap
 
 - Nothing open.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Cursor, scroll and search arithmetic uses `checked_*` through small helpers. **Declared (TABLE-F1):** cursor movement and paging stop at the first and last row and column, the last index of an empty list is 0, and the body scroll is kept between row 1 and the last full window; a search that cannot compute its start cell does nothing.

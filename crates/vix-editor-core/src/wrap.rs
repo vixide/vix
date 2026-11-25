@@ -61,6 +61,40 @@ struct RowCtx<'a> {
     bracket: Option<usize>,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a + b` for screen columns; a column past the top of `u16` is past the right edge.
+fn add_u16(a: u16, b: u16) -> u16 {
+    add_u16_or(a, b, u16::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit.
+fn add_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b` for screen columns; below zero is zero columns.
+fn sub_u16(a: u16, b: u16) -> u16 {
+    sub_u16_or(a, b, 0)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero.
+fn sub_u16_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// Display width of one grapheme for soft-wrap layout. Tabs render as a single
 /// cell, so they count as width 1.
 fn gwidth(g: RopeSlice) -> usize {
@@ -80,10 +114,13 @@ impl Editor {
         let total_lines = code.len_lines();
         let line_number_digits = total_lines.max(1).to_string().len().max(5);
         let line_number_width = self.get_line_number_width();
-        let text_x0 = area.left() + u16::try_from(line_number_width).unwrap_or(u16::MAX);
+        let text_x0 = add_u16(
+            area.left(),
+            u16::try_from(line_number_width).unwrap_or(u16::MAX),
+        );
         let right = area.right();
-        let text_width = (area.width as usize).saturating_sub(line_number_width);
-        let height = area.height as usize;
+        let text_width = sub_or(usize::from(area.width), line_number_width, 0);
+        let height = usize::from(area.height);
         let default_text_style = self.text_style;
 
         // One layout pass shared by every row; rows beyond `height` are never
@@ -95,7 +132,7 @@ impl Editor {
         let caret_sels = self.caret_selections();
 
         for (i, vr) in rows.iter().enumerate() {
-            let draw_y = area.top() + u16::try_from(i).unwrap_or(u16::MAX);
+            let draw_y = add_u16(area.top(), u16::try_from(i).unwrap_or(u16::MAX));
             if draw_y >= area.bottom() {
                 break;
             }
@@ -137,7 +174,7 @@ impl Editor {
 
         if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
             let s = if is_first {
-                format!("{:>line_number_digits$}", vr.line + 1)
+                format!("{:>line_number_digits$}", add_or(vr.line, 1, usize::MAX))
             } else {
                 " ".repeat(line_number_digits)
             };
@@ -150,7 +187,10 @@ impl Editor {
         // wrapped line is marked once, at its start.
         if is_first {
             let sign_x = if self.flags.contains(Flags::SHOW_LINE_NUMBERS) {
-                area.left() + u16::try_from(line_number_digits).unwrap_or(u16::MAX)
+                add_u16(
+                    area.left(),
+                    u16::try_from(line_number_digits).unwrap_or(u16::MAX),
+                )
             } else {
                 area.left()
             };
@@ -190,7 +230,8 @@ impl Editor {
 
         // Caret at the segment end is shown only at the logical line's end;
         // at a wrap boundary it belongs to the next visual row's column 0.
-        if caret.is_none() && self.cursor == vr.end && vr.end == line_start + line_len {
+        let line_end = add_or(line_start, line_len, usize::MAX);
+        if caret.is_none() && self.cursor == vr.end && vr.end == line_end {
             caret = Some(vx);
         }
         if caret.is_none() && vr.start == vr.end && self.cursor == vr.start {
@@ -198,23 +239,94 @@ impl Editor {
         }
         // End-of-line virtual text (T614) after the line's last visual row,
         // and a folded line's `...` before it.
-        if vr.end == line_start + line_len {
-            let mut end = usize::from(text_x0) + usize::from(vx);
+        if vr.end == line_end {
+            let mut end = add_or(usize::from(text_x0), usize::from(vx), usize::MAX);
             if self.fold_marker(vr.line) == Some(true) {
                 let x = u16::try_from(end).unwrap_or(u16::MAX);
                 if x < right {
-                    let shown: String = "...".chars().take(usize::from(right - x)).collect();
+                    let shown: String =
+                        "...".chars().take(usize::from(sub_u16(right, x))).collect();
                     buf.set_string(x, draw_y, &shown, default_text_style);
                 }
-                end += 3;
+                end = add_or(end, 3, usize::MAX);
             }
             self.draw_eol_texts(buf, vr.line, end, right, draw_y);
         }
         if let (Some(cvx), Some(cursor_style)) = (caret, self.cursor_style) {
-            let cx = text_x0 + cvx;
+            let cx = add_u16(text_x0, cvx);
             if cx < right && draw_y < area.bottom() {
                 buf[(cx, draw_y)].set_style(cursor_style);
             }
+        }
+    }
+
+    /// Paint the mark layers (highlight, spell, word-occurrence and diagnostic
+    /// marks) that cover character offset `ch` onto the cell at `cell_x`.
+    fn paint_mark_layers(
+        &self,
+        buf: &mut Buffer,
+        cell_x: u16,
+        gw: u16,
+        right: u16,
+        draw_y: u16,
+        ch: usize,
+    ) {
+        if let Some(marks) = self.marks.as_ref()
+            && marks.iter().any(|&(s, e, _)| s <= ch && ch < e)
+        {
+            paint(
+                buf,
+                cell_x,
+                gw,
+                right,
+                draw_y,
+                Style::default().add_modifier(Modifier::UNDERLINED),
+            );
+        }
+        if let Some(spell) = self.spell_marks.as_ref()
+            && spell.iter().any(|&(s, e)| s <= ch && ch < e)
+        {
+            paint(
+                buf,
+                cell_x,
+                gw,
+                right,
+                draw_y,
+                Style {
+                    fg: Some(Color::Red),
+                    ..Style::default().add_modifier(Modifier::UNDERLINED)
+                },
+            );
+        }
+        // Passive word-occurrence marks, as in the unwrapped view.
+        if let Some(words) = self.word_marks.as_ref()
+            && words.iter().any(|&(s, e)| s <= ch && ch < e)
+        {
+            paint(
+                buf,
+                cell_x,
+                gw,
+                right,
+                draw_y,
+                Style::default().add_modifier(Modifier::REVERSED | Modifier::DIM),
+            );
+        }
+        // LSP diagnostic underlines, coloured per severity, on their own
+        // channel so they coexist with spell marks.
+        if let Some(diags) = self.diagnostic_marks.as_ref()
+            && let Some(&(_, _, color)) = diags.iter().find(|&&(s, e, _)| s <= ch && ch < e)
+        {
+            paint(
+                buf,
+                cell_x,
+                gw,
+                right,
+                draw_y,
+                Style {
+                    fg: Some(color),
+                    ..Style::default().add_modifier(Modifier::UNDERLINED)
+                },
+            );
         }
     }
 
@@ -252,7 +364,7 @@ impl Editor {
             } else {
                 u16::try_from(w).unwrap_or(u16::MAX)
             };
-            let cell_x = text_x0 + vx;
+            let cell_x = add_u16(text_x0, vx);
 
             if self.flags.contains(Flags::SHOW_WHITESPACE)
                 && matches!(g.chars().next(), Some('\t' | ' ' | '\r'))
@@ -269,33 +381,7 @@ impl Editor {
             if caret_sels.iter().any(|&(ss, se)| ss <= ch && ch < se) {
                 paint(buf, cell_x, gw, right, draw_y, self.selection_style);
             }
-            if let Some(marks) = self.marks.as_ref()
-                && marks.iter().any(|&(s, e, _)| s <= ch && ch < e)
-            {
-                paint(
-                    buf,
-                    cell_x,
-                    gw,
-                    right,
-                    draw_y,
-                    Style::default().add_modifier(Modifier::UNDERLINED),
-                );
-            }
-            if let Some(spell) = self.spell_marks.as_ref()
-                && spell.iter().any(|&(s, e)| s <= ch && ch < e)
-            {
-                paint(
-                    buf,
-                    cell_x,
-                    gw,
-                    right,
-                    draw_y,
-                    Style {
-                        fg: Some(Color::Red),
-                        ..Style::default().add_modifier(Modifier::UNDERLINED)
-                    },
-                );
-            }
+            self.paint_mark_layers(buf, cell_x, gw, right, draw_y, ch);
             if bracket == Some(ch) {
                 paint(buf, cell_x, gw, right, draw_y, self.bracket_style);
             }
@@ -305,16 +391,16 @@ impl Editor {
                 // Extra carets are painted inline (only the primary uses the
                 // end-of-line caret handling below).
                 if self.carets.iter().any(|c| c.pos == ch) {
-                    let cx = text_x0 + vx;
+                    let cx = add_u16(text_x0, vx);
                     if cx < right && draw_y < area.bottom() {
                         buf[(cx, draw_y)].set_style(cs);
                     }
                 }
             }
 
-            vx = vx.saturating_add(gw);
-            ch += g_chars;
-            byte += g_bytes;
+            vx = add_u16(vx, gw);
+            ch = add_or(ch, g_chars, usize::MAX);
+            byte = add_or(byte, g_bytes, usize::MAX);
         }
         (caret, vx)
     }
@@ -332,7 +418,7 @@ impl Editor {
         while line < total_lines && rows.len() < max_rows {
             // A folded range's body takes no rows, as in the unwrapped view.
             if self.is_line_hidden(line) {
-                line += 1;
+                line = add_or(line, 1, usize::MAX);
                 continue;
             }
             let line_start = code.line_to_char(line);
@@ -356,12 +442,15 @@ impl Editor {
                     end: line_start,
                     lens: false,
                 });
-                line += 1;
+                line = add_or(line, 1, usize::MAX);
                 continue;
             }
             let mut col = 0usize;
             while col < line_len && rows.len() < max_rows {
-                let slice = code.char_slice(line_start + col, line_start + line_len);
+                let slice = code.char_slice(
+                    add_or(line_start, col, usize::MAX),
+                    add_or(line_start, line_len, usize::MAX),
+                );
                 let mut width = 0usize;
                 let mut seg_chars = 0usize;
                 for g in RopeGraphemes::new(&slice) {
@@ -369,11 +458,11 @@ impl Editor {
                     let gw = gwidth(g);
                     // `seg_chars > 0` guarantees progress: a single grapheme
                     // wider than the view still gets a row of its own.
-                    if width + gw > tw && seg_chars > 0 {
+                    if add_or(width, gw, usize::MAX) > tw && seg_chars > 0 {
                         break;
                     }
-                    width += gw;
-                    seg_chars += g_chars;
+                    width = add_or(width, gw, usize::MAX);
+                    seg_chars = add_or(seg_chars, g_chars, usize::MAX);
                     if width >= tw {
                         break;
                     }
@@ -382,16 +471,16 @@ impl Editor {
                 if seg_chars == 0 {
                     seg_chars = 1;
                 }
-                let seg_end = (col + seg_chars).min(line_len);
+                let seg_end = add_or(col, seg_chars, usize::MAX).min(line_len);
                 rows.push(VRow {
                     line,
-                    start: line_start + col,
-                    end: line_start + seg_end,
+                    start: add_or(line_start, col, usize::MAX),
+                    end: add_or(line_start, seg_end, usize::MAX),
                     lens: false,
                 });
                 col = seg_end;
             }
-            line += 1;
+            line = add_or(line, 1, usize::MAX);
         }
         rows
     }
@@ -401,7 +490,7 @@ impl Editor {
 /// `right` (so a wide grapheme at the edge is styled only as far as it fits).
 fn paint(buf: &mut Buffer, x: u16, width: u16, right: u16, y: u16, style: Style) {
     for dx in 0..width {
-        let cx = x + dx;
+        let cx = add_u16(x, dx);
         if cx < right {
             buf[(cx, y)].set_style(style);
         }
@@ -468,5 +557,165 @@ mod tests {
         let row = |y: u16| (0..14).map(|x| buf[(x, y)].symbol()).collect::<String>();
         assert!(row(0).contains("\u{25be}head"), "{:?}", row(0));
         assert!(!row(1).contains('\u{25be}'), "{:?}", row(1));
+    }
+}
+
+#[cfg(test)]
+mod wrap_layer_tests {
+    //! Soft-wrap layout and per-row painting at the edges.
+
+    use crate::editor::Editor;
+    use ratatui_core::buffer::Buffer;
+    use ratatui_core::layout::Rect;
+    use ratatui_core::style::{Color, Style};
+    use ratatui_core::widgets::Widget;
+
+    fn bare(lang: &str, text: &str) -> Editor {
+        let mut e = Editor::new(lang, text, Vec::new()).unwrap();
+        e.show_line_numbers(false);
+        e.set_left_code_padding(0);
+        e.set_soft_wrap(true);
+        e
+    }
+
+    fn draw(e: &Editor, w: u16, h: u16) -> Buffer {
+        let area = Rect::new(0, 0, w, h);
+        let mut buf = Buffer::empty(area);
+        e.render(area, &mut buf);
+        buf
+    }
+
+    fn row(buf: &Buffer, y: u16) -> String {
+        (0..buf.area.width)
+            .map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' '))
+            .collect()
+    }
+
+    #[test]
+    fn syntax_colours_follow_the_text_across_wrapped_rows() {
+        let mut e = bare("rust", "let a = 1; let b = 2;");
+        e.set_syntax_theme(&[("keyword", "ff0000")]);
+        // Ten columns: "let a = 1;" / " let b = 2" / ";".
+        let b = draw(&e, 10, 3);
+        assert_eq!(row(&b, 0), "let a = 1;");
+        assert_eq!(b[(0, 0)].fg, Color::Rgb(255, 0, 0));
+        assert_eq!(b[(2, 0)].fg, Color::Rgb(255, 0, 0));
+        assert_ne!(b[(4, 0)].fg, Color::Rgb(255, 0, 0));
+        assert_eq!(b[(1, 1)].fg, Color::Rgb(255, 0, 0), "second `let`");
+    }
+
+    #[test]
+    fn the_caret_block_follows_the_cursor_at_row_ends_and_on_empty_lines() {
+        let red = Style::default().bg(Color::Red);
+        let mut e = bare("text", "abcd\n\nef");
+        e.set_cursor_style(Some(red));
+        // Cursor at the end of a line that exactly fills the row: the block
+        // sits just past the text only at the logical line's end...
+        e.set_cursor(4);
+        let b = draw(&e, 4, 4);
+        assert_eq!(row(&b, 0), "abcd");
+        assert!(
+            (0..4).all(|x| b[(x, 0)].bg != Color::Red),
+            "no cell fits it"
+        );
+        let b = draw(&e, 6, 4);
+        assert_eq!(b[(4, 0)].bg, Color::Red, "end of line");
+        // ...and an empty line shows it in column 0.
+        e.set_cursor(5);
+        let b = draw(&e, 6, 4);
+        assert_eq!(b[(0, 1)].bg, Color::Red);
+        // At a wrap boundary the caret belongs to the next row's column 0.
+        let mut e = bare("text", "abcdef");
+        e.set_cursor_style(Some(red));
+        e.set_cursor(3);
+        let b = draw(&e, 3, 3);
+        assert_eq!(b[(0, 1)].bg, Color::Red);
+        assert_ne!(b[(2, 0)].bg, Color::Red);
+        // Extra carets paint inline, clipped to the view.
+        e.add_caret_at(1);
+        let b = draw(&e, 3, 3);
+        assert_eq!(b[(1, 0)].bg, Color::Red);
+        assert_eq!(b[(0, 1)].bg, Color::Red);
+    }
+
+    #[test]
+    fn a_folded_line_ellipsis_is_clipped_at_the_right_edge() {
+        let mut e = bare("text", "head\nbody\nmore\ntail\n");
+        e.set_fold_ranges(vec![(0, 2)]);
+        assert!(e.fold(0));
+        let b = draw(&e, 6, 2);
+        // No gutter, so there is no column for the chevron; the ellipsis is
+        // cut off at the edge rather than overflowing.
+        assert_eq!(row(&b, 0), "head..");
+        let b = draw(&e, 8, 2);
+        assert_eq!(row(&b, 0).trim_end(), "head...");
+        assert!(row(&b, 1).starts_with("tail"));
+    }
+
+    #[test]
+    fn a_grapheme_wider_than_the_view_gets_a_row_of_its_own() {
+        let e = bare("text", "\u{4e2d}\u{6587}x");
+        let rows = e.visual_rows(1, 10);
+        let spans: Vec<(usize, usize)> = rows.iter().map(|r| (r.start, r.end)).collect();
+        assert_eq!(spans, vec![(0, 1), (1, 2), (2, 3)]);
+        // A zero-width view wraps at one column rather than looping forever.
+        assert_eq!(e.visual_rows(0, 10).len(), 3);
+        // Rows stop at the requested maximum.
+        assert_eq!(e.visual_rows(1, 2).len(), 2);
+        // Width two fits one wide character per row, plus the narrow tail.
+        let spans: Vec<(usize, usize)> = e
+            .visual_rows(2, 10)
+            .iter()
+            .map(|r| (r.start, r.end))
+            .collect();
+        assert_eq!(spans, vec![(0, 1), (1, 2), (2, 3)]);
+        let b = draw(&e, 2, 3);
+        assert_eq!(row(&b, 0).chars().next(), Some('\u{4e2d}'));
+        assert_eq!(row(&b, 2).chars().next(), Some('x'));
+    }
+
+    #[test]
+    fn a_wide_grapheme_at_the_edge_is_clipped_not_overflowed() {
+        let mut e = bare("text", "a\u{4e2d}");
+        e.set_selection_range(0, 2);
+        e.set_selection_style(Style::default().bg(Color::Blue));
+        // Two columns wide: "a" fits, the wide char wraps to the next row.
+        let b = draw(&e, 2, 2);
+        assert_eq!(row(&b, 0).chars().next(), Some('a'));
+        assert_eq!(b[(0, 1)].bg, Color::Blue);
+        // Three columns hold both.
+        let b = draw(&e, 3, 1);
+        assert_eq!(b[(1, 0)].bg, Color::Blue);
+        assert_eq!(b[(2, 0)].bg, Color::Blue);
+    }
+
+    #[test]
+    fn whitespace_glyphs_and_bracket_match_in_wrapped_rows() {
+        let mut e = bare("text", "(a\tb)");
+        e.show_whitespace(true);
+        e.set_whitespace_style(Style::default().fg(Color::Green));
+        e.set_bracket_style(Style::default().bg(Color::Magenta));
+        e.set_cursor(0);
+        let b = draw(&e, 8, 1);
+        assert_eq!(row(&b, 0).trim_end(), "(a\u{2192}b)");
+        assert_eq!(b[(2, 0)].fg, Color::Green);
+        assert_eq!(
+            b[(4, 0)].bg,
+            Color::Magenta,
+            "the partner of the cursor's `(`"
+        );
+    }
+
+    #[test]
+    fn rows_past_the_area_are_not_drawn_and_lens_rows_precede_their_line() {
+        let mut e = bare("text", "one\ntwo\nthree\nfour");
+        e.set_code_lenses(vec![(1, "refs".to_string())]);
+        let b = draw(&e, 8, 3);
+        assert_eq!(row(&b, 0).trim_end(), "one");
+        assert_eq!(row(&b, 1).trim_end(), "refs");
+        assert_eq!(row(&b, 2).trim_end(), "two");
+        // The viewport is only as tall as the area: nothing is clipped wrongly.
+        let b = draw(&e, 8, 1);
+        assert_eq!(row(&b, 0).trim_end(), "one");
     }
 }

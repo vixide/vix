@@ -37,6 +37,18 @@
 //!
 //! Spec: `crates/vix-column-view/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 use vix_org::{
@@ -44,6 +56,20 @@ use vix_org::{
     governing_subtree, headline_level, move_subtree_down, move_subtree_up, set_property,
     todo_keywords,
 };
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// What the host should do after the overlay handled a key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,12 +270,18 @@ impl ColumnView {
                     .map(|v| v.chars().count())
                     .max()
                     .unwrap_or(0);
-                i32::try_from(header_len.max(content_max).clamp(3, 40)).unwrap_or(10)
+                // The auto width: the longer of header and content, held to the
+                // declared 3..=40 band (a bound of a computed result, not of input).
+                let auto = header_len.max(content_max).clamp(3, 40);
+                i32::try_from(auto).unwrap_or(10)
             },
             i32::from,
         );
         let over = self.width_overrides.get(i).copied().unwrap_or(0);
-        usize::try_from((base + over).max(3)).unwrap_or(3)
+        // A sum that does not fit is the minimum width.
+        base.checked_add(over)
+            .and_then(|width| usize::try_from(width.max(3)).ok())
+            .unwrap_or(3)
     }
 
     /// Adjust the vertical scroll so the selected row stays within a body
@@ -263,10 +295,10 @@ impl ColumnView {
         }
         if self.row < self.row_scroll {
             self.row_scroll = self.row;
-        } else if self.row >= self.row_scroll + height {
-            self.row_scroll = self.row + 1 - height;
+        } else if self.row >= add_or(self.row_scroll, height, usize::MAX) {
+            self.row_scroll = sub_or(add_or(self.row, 1, usize::MAX), height, 0);
         }
-        self.row_scroll = self.row_scroll.min(count.saturating_sub(height));
+        self.row_scroll = self.row_scroll.min(sub_or(count, height, 0));
     }
 
     /// Take (clear) the pending status message, if any, for the host to show.
@@ -358,22 +390,25 @@ impl ColumnView {
             KeyCode::Down if alt => self.move_row(text, false),
             KeyCode::Right if shift => self.cycle_allowed(text, true),
             KeyCode::Left if shift => self.cycle_allowed(text, false),
-            KeyCode::Left => self.col = self.col.saturating_sub(1),
+            KeyCode::Left => self.col = sub_or(self.col, 1, 0),
             KeyCode::Right => {
-                if self.col + 1 < self.spec.columns.len() {
-                    self.col += 1;
+                let next = add_or(self.col, 1, usize::MAX);
+                if next < self.spec.columns.len() {
+                    self.col = next;
                 }
             }
-            KeyCode::Up => self.row = self.row.saturating_sub(1),
+            KeyCode::Up => self.row = sub_or(self.row, 1, 0),
             KeyCode::Down => {
-                if self.row + 1 < self.rows.len() {
-                    self.row += 1;
+                let next = add_or(self.row, 1, usize::MAX);
+                if next < self.rows.len() {
+                    self.row = next;
                 }
             }
             KeyCode::Char(c) if c.is_ascii_digit() => {
                 // `0` selects the 10th entry, mirroring Org's `1`..`9`,`0`.
-                let n = c.to_digit(10).unwrap_or(0);
-                self.jump_allowed(text, if n == 0 { 10 } else { n as usize });
+                if let Some(n) = c.to_digit(10).and_then(|n| usize::try_from(n).ok()) {
+                    self.jump_allowed(text, if n == 0 { 10 } else { n });
+                }
             }
             KeyCode::Char('n') => self.cycle_allowed(text, true),
             KeyCode::Char('p') => self.cycle_allowed(text, false),
@@ -418,8 +453,7 @@ impl ColumnView {
         self.rows
             .get(self.row)
             .and_then(|r| r.values.get(self.col))
-            .cloned()
-            .unwrap_or_default()
+            .map_or_else(String::new, Clone::clone)
     }
 
     /// Seed the edit buffer with the current field's raw value and enter
@@ -438,14 +472,14 @@ impl ColumnView {
     /// `<`: narrow the current column by one.
     fn narrow(&mut self) {
         if let Some(w) = self.width_overrides.get_mut(self.col) {
-            *w -= 1;
+            *w = w.checked_sub(1).unwrap_or(*w);
         }
     }
 
     /// `>`: widen the current column by one.
     fn widen(&mut self) {
         if let Some(w) = self.width_overrides.get_mut(self.col) {
-            *w += 1;
+            *w = w.checked_add(1).unwrap_or(*w);
         }
     }
 
@@ -478,11 +512,13 @@ impl ColumnView {
         // A current value not in the list starts the cycle at the first entry
         // in either direction.
         let next = match idx {
-            Some(i) if forward => (i + 1) % list.len(),
-            Some(i) => (i + list.len() - 1) % list.len(),
+            Some(i) if forward => i.checked_add(1).filter(|n| *n < list.len()).unwrap_or(0),
+            Some(i) => i.checked_sub(1).unwrap_or_else(|| sub_or(list.len(), 1, 0)),
             None => 0,
         };
-        let value = list[next].clone();
+        let Some(value) = list.get(next).cloned() else {
+            return;
+        };
         self.commit_value(text, &value);
     }
 
@@ -490,7 +526,7 @@ impl ColumnView {
     /// allowed value. No-op with no list or fewer entries.
     fn jump_allowed(&mut self, text: &mut String, n: usize) {
         let list = self.allowed_values_for_current();
-        let Some(value) = list.get(n.saturating_sub(1)).cloned() else {
+        let Some(value) = list.get(sub_or(n, 1, 0)).cloned() else {
             return;
         };
         self.commit_value(text, &value);
@@ -580,7 +616,7 @@ impl ColumnView {
         }
         self.spec.columns.remove(self.col);
         self.width_overrides.remove(self.col);
-        self.col = self.col.min(self.spec.columns.len().saturating_sub(1));
+        self.col = self.col.min(sub_or(self.spec.columns.len(), 1, 0));
         self.rebuild_rows(text);
     }
 
@@ -591,7 +627,9 @@ impl ColumnView {
         let other = if left {
             self.col.checked_sub(1)
         } else {
-            (self.col + 1 < n).then_some(self.col + 1)
+            add_or(self.col, 1, usize::MAX)
+                .lt(&n)
+                .then(|| add_or(self.col, 1, usize::MAX))
         };
         let Some(other) = other else {
             return;
@@ -641,8 +679,8 @@ impl ColumnView {
             self.file_name.as_deref(),
         );
         self.rows = rows;
-        self.row = self.row.min(self.rows.len().saturating_sub(1));
-        self.col = self.col.min(self.spec.columns.len().saturating_sub(1));
+        self.row = self.row.min(sub_or(self.rows.len(), 1, 0));
+        self.col = self.col.min(sub_or(self.spec.columns.len(), 1, 0));
     }
 
     /// Re-locate [`Self::anchor_line`] in `new_text` after an edit that may
@@ -734,28 +772,31 @@ fn write_file_level_property(text: &str, name: &str, value: &str) -> String {
     // `:PROPERTIES:` drawer; update the property in place if present, else
     // insert it before `:END:`. With no drawer, one is created at the top of
     // the headline boundary below.
-    let mut i = 0;
-    while i < first_headline {
-        if lines[i].trim().eq_ignore_ascii_case(":PROPERTIES:")
-            && let Some(end_rel) = lines[i + 1..first_headline]
-                .iter()
-                .position(|l| l.trim().eq_ignore_ascii_case(":END:"))
-        {
-            let end = i + 1 + end_rel;
-            let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
-            if let Some(pi) = (i + 1..end).find(|&k| {
-                lines[k]
-                    .trim_start()
-                    .to_ascii_lowercase()
-                    .starts_with(&needle)
-            }) {
-                out[pi] = entry;
-            } else {
-                out.insert(end, entry);
-            }
-            return out.join("\n");
+    let preamble = lines.get(..first_headline).unwrap_or(&[]);
+    for (i, line) in preamble.iter().enumerate() {
+        if !line.trim().eq_ignore_ascii_case(":PROPERTIES:") {
+            continue;
         }
-        i += 1;
+        let Some(end) = preamble
+            .iter()
+            .enumerate()
+            .skip(add_or(i, 1, usize::MAX))
+            .find(|(_, l)| l.trim().eq_ignore_ascii_case(":END:"))
+            .map(|(k, _)| k)
+        else {
+            continue;
+        };
+        let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
+        let existing = (add_or(i, 1, usize::MAX)..end).find(|&k| {
+            lines
+                .get(k)
+                .is_some_and(|l| l.trim_start().to_ascii_lowercase().starts_with(&needle))
+        });
+        match existing.and_then(|pi| out.get_mut(pi)) {
+            Some(slot) => *slot = entry,
+            None => out.insert(end, entry),
+        }
+        return out.join("\n");
     }
     let mut out: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
     out.splice(
@@ -995,5 +1036,336 @@ mod tests {
             view.handle_key(code(KeyCode::Esc), &mut buf),
             Outcome::Close
         );
+    }
+
+    fn open_doc(doc: &str) -> (ColumnView, String) {
+        (
+            ColumnView::open(doc, 0, (2026, 8, 12), None),
+            doc.to_string(),
+        )
+    }
+
+    #[test]
+    fn escape_abandons_a_free_text_edit_without_touching_the_buffer() {
+        let (mut view, mut buf) = open_doc(DOC);
+        let original = buf.clone();
+        view.handle_key(code(KeyCode::Down), &mut buf);
+        view.col = 2;
+        view.handle_key(key('e'), &mut buf);
+        view.handle_key(key('x'), &mut buf);
+        view.handle_key(code(KeyCode::Tab), &mut buf);
+        assert_eq!(view.edit_buffer(), "1hx", "other keys are ignored");
+        assert_eq!(
+            view.handle_key(code(KeyCode::Esc), &mut buf),
+            Outcome::Consumed,
+            "Esc in edit mode does not close the view"
+        );
+        assert!(!view.is_editing());
+        assert_eq!(view.edit_buffer(), "");
+        assert_eq!(buf, original);
+    }
+
+    #[test]
+    fn allowed_list_editor_backspaces_cancels_and_quotes_spaces() {
+        let (mut view, mut buf) = open_doc(DOC);
+        view.col = 3; // Owner, with `Tammy Mark` declared
+        view.handle_key(key('a'), &mut buf);
+        assert_eq!(view.edit_buffer(), "Tammy Mark", "seeded with the list");
+        view.handle_key(code(KeyCode::Backspace), &mut buf);
+        view.handle_key(code(KeyCode::Down), &mut buf);
+        assert_eq!(view.edit_buffer(), "Tammy Mar");
+        view.handle_key(code(KeyCode::Esc), &mut buf);
+        assert!(!view.is_editing_allowed());
+        assert_eq!(buf, DOC, "cancel leaves the text alone");
+        // Re-edit: a quoted entry containing a space survives the round trip.
+        view.handle_key(key('a'), &mut buf);
+        for _ in 0.."Tammy Mark".len() {
+            view.handle_key(code(KeyCode::Backspace), &mut buf);
+        }
+        for c in "\"Big Tammy\" Mark".chars() {
+            view.handle_key(key(c), &mut buf);
+        }
+        view.handle_key(code(KeyCode::Enter), &mut buf);
+        assert!(buf.contains(":Owner_ALL: \"Big Tammy\" Mark"), "{buf}");
+        view.handle_key(key('1'), &mut buf);
+        assert_eq!(
+            view.cell(0, 3),
+            "Big Tammy",
+            "entry one applied to the selected row"
+        );
+    }
+
+    #[test]
+    fn allowed_list_for_a_file_without_headings_creates_a_file_level_drawer() {
+        let doc = "#+COLUMNS: %ITEM %Status\n* Top\n";
+        let mut view = ColumnView::open(doc, 0, (2026, 8, 12), None);
+        let mut buf = doc.to_string();
+        view.col = 1;
+        view.handle_key(key('a'), &mut buf);
+        for c in "A B".chars() {
+            view.handle_key(key(c), &mut buf);
+        }
+        view.handle_key(code(KeyCode::Enter), &mut buf);
+        assert!(buf.contains(":Status_ALL: A B"), "{buf}");
+        assert!(buf.contains(":PROPERTIES:"), "{buf}");
+    }
+
+    #[test]
+    fn file_level_property_updates_in_place_or_extends_an_existing_drawer() {
+        let with_drawer = ":PROPERTIES:\n:Owner_ALL: old\n:END:\n#+COLUMNS: %ITEM\n* Top\n";
+        let out = write_file_level_property(with_drawer, "Owner_ALL", "new vals");
+        assert_eq!(
+            out,
+            ":PROPERTIES:\n:Owner_ALL: new vals\n:END:\n#+COLUMNS: %ITEM\n* Top\n"
+        );
+        let other = ":PROPERTIES:\n:OTHER: x\n:END:\n* Top\n";
+        let out = write_file_level_property(other, "Owner_ALL", "a b");
+        assert_eq!(
+            out,
+            ":PROPERTIES:\n:OTHER: x\n:Owner_ALL: a b\n:END:\n* Top\n"
+        );
+        let unterminated = ":PROPERTIES:\n:OTHER: x\n* Top\n";
+        let out = write_file_level_property(unterminated, "K", "v");
+        assert_eq!(
+            out, ":PROPERTIES:\n:OTHER: x\n:PROPERTIES:\n:K: v\n:END:\n* Top\n",
+            "an unterminated drawer is skipped; a fresh one goes before the first heading"
+        );
+        let none = "intro";
+        assert_eq!(
+            write_file_level_property(none, "K", "v"),
+            "intro\n:PROPERTIES:\n:K: v\n:END:"
+        );
+    }
+
+    #[test]
+    fn quoting_round_trips_and_tokenizes_loosely() {
+        assert_eq!(
+            tokenize_quoted("  a \"b c\"  \"\" d\"x"),
+            vec!["a", "b c", "", "d\"x"]
+        );
+        assert_eq!(
+            tokenize_quoted("\"unterminated tail"),
+            vec!["unterminated tail"]
+        );
+        assert_eq!(tokenize_quoted("   "), Vec::<String>::new());
+        let vals: Vec<String> = ["plain", "two words", ""].map(String::from).to_vec();
+        assert_eq!(join_quoted(&vals), "plain \"two words\" \"\"");
+        assert_eq!(tokenize_quoted(&join_quoted(&vals)), vals);
+    }
+
+    #[test]
+    fn show_value_reports_the_raw_cell_once() {
+        let (mut view, mut buf) = open_doc(DOC);
+        view.handle_key(code(KeyCode::Down), &mut buf);
+        view.col = 2;
+        assert_eq!(view.take_status(), None);
+        view.handle_key(key('v'), &mut buf);
+        assert_eq!(view.take_status().as_deref(), Some("1h"));
+        assert_eq!(view.take_status(), None, "taken once");
+    }
+
+    #[test]
+    fn cursor_clamps_at_every_edge() {
+        let (mut view, mut buf) = open_doc(DOC);
+        view.handle_key(code(KeyCode::Left), &mut buf);
+        assert_eq!(view.col(), 0);
+        for _ in 0..10 {
+            view.handle_key(code(KeyCode::Right), &mut buf);
+            view.handle_key(code(KeyCode::Down), &mut buf);
+        }
+        assert_eq!((view.row(), view.col()), (1, 3));
+        view.handle_key(key('z'), &mut buf);
+        assert_eq!((view.row(), view.col()), (1, 3), "unbound key is inert");
+    }
+
+    #[test]
+    fn column_width_follows_declared_title_content_and_bounds() {
+        let (mut view, _) = open_doc(DOC);
+        assert_eq!(view.column_width(2), 25, "declared width wins");
+        assert_eq!(view.column_width(99), 3, "unknown column");
+        // Header "Owner" (5) vs content "Tammy" (5).
+        assert_eq!(view.column_width(3), 5);
+        assert_eq!(view.column_width(1), 4, "TODO header");
+        for _ in 0..30 {
+            view.col = 2;
+            view.narrow();
+        }
+        assert_eq!(view.column_width(2), 3, "never narrower than three");
+        view.col = 99;
+        view.widen();
+        view.narrow();
+        assert_eq!(view.column_width(2), 3, "out-of-range column is ignored");
+        let long = format!("* {}\n", "x".repeat(80));
+        let long_view = ColumnView::open(&long, 0, (2026, 8, 12), None);
+        assert_eq!(long_view.column_width(0), 40, "auto width tops out at 40");
+    }
+
+    #[test]
+    fn scrolling_keeps_the_selected_row_inside_the_window() {
+        let mut doc = String::from("\n");
+        for i in 0..20 {
+            std::fmt::Write::write_fmt(&mut doc, format_args!("* H{i}\n")).unwrap();
+        }
+        let mut view = ColumnView::open(&doc, 0, (2026, 8, 12), None);
+        let mut buf = doc.clone();
+        assert_eq!(view.row_count(), 20);
+        view.ensure_row_visible(0);
+        assert_eq!(view.row_scroll(), 0, "height clamps to at least one");
+        for _ in 0..12 {
+            view.handle_key(code(KeyCode::Down), &mut buf);
+        }
+        view.ensure_row_visible(5);
+        assert_eq!(view.row(), 12);
+        assert_eq!(view.row_scroll(), 8, "row is the last visible one");
+        for _ in 0..10 {
+            view.handle_key(code(KeyCode::Up), &mut buf);
+        }
+        view.ensure_row_visible(5);
+        assert_eq!(view.row_scroll(), 2);
+        view.ensure_row_visible(100);
+        assert_eq!(view.row_scroll(), 0, "everything fits");
+        let (mut empty, _) = open_doc("");
+        empty.ensure_row_visible(5);
+        assert_eq!(empty.row_scroll(), 0);
+    }
+
+    #[test]
+    fn column_moves_stop_at_the_ends_and_the_last_column_cannot_be_deleted() {
+        let (mut view, mut buf) = open_doc("* Top\n");
+        let n = view.col_count();
+        view.handle_key(alt(KeyCode::Left), &mut buf);
+        assert_eq!(view.col(), 0, "cannot move left of the first column");
+        view.col = n - 1;
+        let last = view.columns()[n - 1].property.clone();
+        view.handle_key(alt(KeyCode::Right), &mut buf);
+        assert_eq!(view.col(), n - 1);
+        assert_eq!(view.columns()[n - 1].property, last, "order unchanged");
+        // Swap moves the property along with the cursor.
+        view.col = 1;
+        let (a, b) = (
+            view.columns()[0].property.clone(),
+            view.columns()[1].property.clone(),
+        );
+        view.handle_key(alt(KeyCode::Left), &mut buf);
+        assert_eq!(view.col(), 0);
+        assert_eq!(
+            (
+                view.columns()[0].property.clone(),
+                view.columns()[1].property.clone()
+            ),
+            (b, a)
+        );
+        // Delete columns until one remains; the last cannot go.
+        for _ in 0..(n + 2) {
+            view.handle_key(alt_shift(KeyCode::Left), &mut buf);
+        }
+        assert_eq!(view.col_count(), 1);
+    }
+
+    #[test]
+    fn inserting_a_blank_column_name_is_ignored_and_names_are_trimmed() {
+        let (mut view, buf) = open_doc("* Top\n");
+        let n = view.col_count();
+        view.insert_column_before("   ", &buf);
+        assert_eq!(view.col_count(), n);
+        view.insert_column_before("  Cost ", &buf);
+        assert_eq!(view.col_count(), n + 1);
+        assert_eq!(view.columns()[view.col()].property, "Cost");
+    }
+
+    #[test]
+    fn cycling_handles_unlisted_values_digits_beyond_the_list_and_wraps_back() {
+        let (mut view, mut buf) = open_doc(DOC);
+        view.handle_key(code(KeyCode::Down), &mut buf);
+        view.col = 3;
+        view.handle_key(key('9'), &mut buf);
+        assert_eq!(view.cell(1, 3), "Tammy", "digit past the list does nothing");
+        view.handle_key(key('0'), &mut buf);
+        assert_eq!(view.cell(1, 3), "Tammy", "0 means entry ten");
+        view.handle_key(key('p'), &mut buf);
+        assert_eq!(
+            view.cell(1, 3),
+            "Mark",
+            "backward from the first wraps to the last"
+        );
+        view.handle_key(shift(KeyCode::Right), &mut buf);
+        assert_eq!(view.cell(1, 3), "Tammy", "S-Right goes forward");
+        // A column with no allowed list never changes.
+        view.col = 2;
+        let before = buf.clone();
+        view.handle_key(key('n'), &mut buf);
+        view.handle_key(key('1'), &mut buf);
+        assert_eq!(buf, before);
+        // A value outside the list starts the cycle at the first entry.
+        view.col = 3;
+        view.handle_key(key('e'), &mut buf);
+        for _ in 0..5 {
+            view.handle_key(code(KeyCode::Backspace), &mut buf);
+        }
+        for c in "Zed".chars() {
+            view.handle_key(key(c), &mut buf);
+        }
+        view.handle_key(code(KeyCode::Enter), &mut buf);
+        assert_eq!(view.cell(1, 3), "Zed");
+        view.handle_key(key('p'), &mut buf);
+        assert_eq!(view.cell(1, 3), "Tammy");
+    }
+
+    #[test]
+    fn an_empty_checkbox_summary_cell_toggles_on() {
+        let doc = "#+COLUMNS: %ITEM %Done{X/}\n* Top\n** Child\n";
+        let mut view = ColumnView::open(doc, 0, (2026, 8, 12), None);
+        let mut buf = doc.to_string();
+        view.handle_key(code(KeyCode::Down), &mut buf);
+        view.handle_key(code(KeyCode::Right), &mut buf);
+        view.handle_key(ctrl_c(), &mut buf);
+        view.handle_key(ctrl_c(), &mut buf);
+        assert!(buf.contains(":Done: [X]"), "{buf}");
+        assert_eq!(view.cell(1, 1), "[X]");
+    }
+
+    #[test]
+    fn a_non_chord_key_disarms_the_pending_ctrl_c() {
+        let doc = "* Task\n";
+        let (mut view, mut buf) = open_doc(doc);
+        view.handle_key(ctrl_c(), &mut buf);
+        view.handle_key(key('z'), &mut buf);
+        assert_eq!(
+            view.handle_key(ctrl_c(), &mut buf),
+            Outcome::Consumed,
+            "the chord restarted, so this is a first C-c again"
+        );
+    }
+
+    #[test]
+    fn rows_move_down_and_rebuild_keys_resync() {
+        let doc = "\n* A\n* B\n";
+        let (mut view, mut buf) = open_doc(doc);
+        view.handle_key(alt(KeyCode::Down), &mut buf);
+        assert!(
+            buf.find("* B").unwrap() < buf.find("* A").unwrap(),
+            "{buf:?}"
+        );
+        assert_eq!(view.cell(view.row(), 0), "A", "selection follows A down");
+        // Moving the last row further down is a no-op.
+        let before = buf.clone();
+        view.handle_key(alt(KeyCode::Down), &mut buf);
+        assert_eq!(buf, before);
+        // External edits are picked up by `r` and `g`.
+        buf = buf.replace("* B", "* Renamed");
+        view.handle_key(key('r'), &mut buf);
+        assert!((0..view.row_count()).any(|r| view.cell(r, 0) == "Renamed"));
+        buf = buf.replace("* Renamed", "* Again");
+        view.handle_key(key('g'), &mut buf);
+        assert!((0..view.row_count()).any(|r| view.cell(r, 0) == "Again"));
+    }
+
+    #[test]
+    fn cell_lookup_outside_the_table_is_empty() {
+        let (view, _) = open_doc(DOC);
+        assert_eq!(view.cell(99, 0), "");
+        assert_eq!(view.cell(0, 99), "");
+        assert!(!view.is_editing() && !view.is_editing_allowed());
+        assert_eq!(view.columns().len(), 4);
     }
 }

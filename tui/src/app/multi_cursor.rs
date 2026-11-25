@@ -5,6 +5,18 @@
 //! the pattern. The caret logic lives in `vix_editor_core::multicursor`; this
 //! only wires the prompt, the regex and the status line.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::{App, Prompt, PromptKind};
 
 impl App {

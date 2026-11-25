@@ -10388,7 +10388,178 @@ principle, so it waits for a deliberate decision.
   inserted by a click and by Enter on the same day. Include an empty leading
   cell and a month with a sixth row. [Calendar layout](crates/vix-calendar-panel/spec/index.md#layout)
 
-## Run Y — audit follow-ups (2026-11-25)
+## Run Y — user feedback (2026-11-24)
+
+Seven requests from users. Each starts with its spec section, then the code, as
+every task does; none is started.
+
+- [ ] **T798 — Reopen a remote SSH workspace in its dev container.** Today
+  **OC → Reopen in Dev Container** (`oc.devcontainer_reopen`) works only on a
+  *local* workspace, with Docker and the `devcontainer` CLI on this machine
+  ([`spec/remote-editing`](spec/remote-editing/index.md), Dev containers). The
+  request is the VS Code combination: connect to a host over SSH, find the
+  `devcontainer.json` in the remote workspace, and open the workspace inside
+  that host's container. The `devcontainer up` has to run **on the remote
+  host**, against the remote path, because the workspace is bind-mounted from
+  the host's disk; the SSH authority's `command()` already runs a process
+  there. Then connect to the container id it reports through a transport that
+  chains the two hops (`ssh … HOST ENGINE exec -i [-u U] CTR /bin/sh -c …`):
+  a new `Transport` beside `SshTransport` and `ExecTransport` in
+  [`crates/vix-authority/spec/container`](crates/vix-authority/spec/container/index.md),
+  so the scripts, the remote agent, trust, reconnect, tasks, git, search, LSP
+  and DAP all follow with no second copy. Keep the existing rules: ask before
+  building (the project's Dockerfile and lifecycle commands run; the same
+  250 ms key guard), say so with the install command when the `devcontainer`
+  CLI or the engine is missing **on the host**, trust keyed by host, container
+  and path, and the status bar naming both hops. Specify first how a lost SSH
+  connection and a stopped container are told apart and reconnected
+  separately. Tests: the fake engine behind the fake `ssh` of the existing SSH
+  conformance suite, so the whole path runs without a network; an opt-in real
+  run (`VIX_TEST_SSH` plus a Docker host). Document under
+  [`docs/remote-editing`](docs/remote-editing/index.md).
+- [ ] **T799 — CMake projects: configure, build, and choose the build and
+  launch targets.** `vix-tasks` has no CMake support at all
+  ([`crates/vix-tasks/spec/index.md`](crates/vix-tasks/spec/index.md)). Add a
+  `cmake` project type, detected by `CMakeLists.txt`, with these pieces, each
+  its own slice:
+  1. **Presets and configure.** Read `CMakePresets.json` and
+     `CMakeUserPresets.json` (`cmake --list-presets`), choose the configure
+     preset and the build type, run `cmake --preset …` (or `cmake -S . -B
+     build`), keep the choice per workspace in `.vix/project.toml`.
+  2. **Targets from the CMake File API,** not by scraping `--target help`:
+     write the `codemodel-v2` and `cache-v2` queries under
+     `<build>/.cmake/api/v1/query/`, read the reply, and list targets with their
+     type (executable, library, utility), sources and artifact paths.
+  3. **Select the build target and the launch target.** A picker for each (the
+     build target may be `all`; the launch target is an executable), shown in
+     the status bar, persisted per preset. Per-launch arguments, working
+     directory and environment live in `.vix/project.toml`.
+  4. **Build, clean, install, test.** `cmake --build … --target T` (with `-j`),
+     compiler diagnostics parsed into the Messages dock with jump-to-error,
+     `ctest` with the test list and a run-at-point, all through the existing
+     task runner, so output, cancel and the project lifecycle chords
+     (`C-c p …`) behave as for other project types.
+  5. **Run and debug the launch target:** build first, then start the artifact
+     in the terminal or under the existing DAP client ([`spec/dap`](crates/vix-dap/spec/index.md)).
+  6. **Language server:** set `CMAKE_EXPORT_COMPILE_COMMANDS` and point
+     `clangd` at the build directory's `compile_commands.json`.
+  Menu: **Project → CMake**, with actions and i18n in the 15 locales like any
+  new surface. Tests: a stub `cmake` script that writes a File API reply, so
+  presets, target listing and selection are tested without CMake installed,
+  and an opt-in run against a real `cmake` (skipped when it is not on `PATH`).
+- [ ] **T800 — Git monorepos: scope the work and the commands to where you are.**
+  The request is unspecific, so this begins as **research**: read the editor
+  against a large monorepo (a 100,000-file tree with many subprojects, a
+  sparse checkout, a partial clone, `core.fsmonitor`) and write down what is
+  slow or wrong, ranked, before changing anything. Candidates, from what the
+  specs say exists: subprojects are found and the lifecycle acts on the
+  *nearest* one ([`crates/vix-tasks/spec/index.md`](crates/vix-tasks/spec/index.md),
+  Subprojects) but search, the file finder, git log, blame and status are
+  still workspace-wide; the LSP **multi-root workspace** is listed as
+  deferred ([`crates/vix-lsp/spec/index.md`](crates/vix-lsp/spec/index.md));
+  `git status` should use `--no-optional-locks` and honor `core.untrackedCache`
+  and the file-system monitor; a sparse checkout's out-of-cone paths must not
+  look deleted; and a `CODEOWNERS` file could say who owns the open file. Each
+  finding the research confirms becomes its own task with a measured before
+  and after. The research writes its numbers into `spec/git-monorepos`.
+
+- [ ] **T801 — Remote SSH on Alpine and other musl hosts: give them the agent.**
+  The shell-script layer already runs on BusyBox and Alpine (the conformance
+  suite passes against an `alpine` container and an `alpine:3` pod,
+  [`crates/vix-authority/spec/container`](crates/vix-authority/spec/container/index.md)).
+  What does not is the **remote agent**
+  ([`crates/vix-authority/spec/agent`](crates/vix-authority/spec/agent/index.md)):
+  `Upload` sends only this process's own executable and only when the remote's
+  `uname -sm` names the same operating system and architecture, so a macOS or
+  Windows client never gets an agent on a Linux host, and a glibc Linux client's
+  upload to an Alpine host fails the verification run (the spec notes "a
+  glibc/musl ABI mismatch shows up here") and falls back to the slow scripts.
+  A statically linked musl build runs on glibc and musl hosts alike
+  ([`.cargo/config.toml`](.cargo/config.toml), T670; `musl-alpine-check.yml`),
+  so let the client send **that** to a Linux remote. First decide and write
+  down, in the agent spec, where the binary comes from (the matching-version
+  release asset for the remote's architecture, fetched once and cached) and
+  **why it may be trusted**: the checksum must come from a source the asset
+  itself cannot forge, and with none available the answer is the script
+  fallback, never an unverified binary. Detect musl and the architecture in the
+  existing "find" round trip (`uname -m`, `/etc/alpine-release` or
+  `ls /lib/ld-musl-*`), keep the SHA-256 and `--version --json` checks, and say
+  in the status bar which mode a host is in. Also sweep the scripts for
+  BusyBox/musl differences the container tests cannot see (`find`, `sed`,
+  `readlink`, `stat -L`, `mktemp`, a login shell that is `ash`). Tests: the fake
+  engine for the selection logic; the real `alpine` run extended to the agent
+  (`VIX_TEST_DOCKER=1`), and a GitHub-only job with an `sshd` Alpine container.
+
+- [ ] **T802 — TextMate/VS Code snippet variables.** No variable resolves
+  today: in snippet files `$NAME` is literal text, and in LSP snippet
+  completions a variable becomes its default text or nothing
+  ([`crates/vix-snippets/spec`](crates/vix-snippets/spec/index.md),
+  [`crates/vix-lsp/spec`](crates/vix-lsp/spec/index.md), Snippet completions).
+  Resolve the standard set in the one shared tabstop engine
+  (`vix-snippet-tool`), so both paths get it: `TM_SELECTED_TEXT`,
+  `TM_CURRENT_LINE`, `TM_CURRENT_WORD`, `TM_LINE_INDEX`, `TM_LINE_NUMBER`,
+  `TM_FILENAME`, `TM_FILENAME_BASE`, `TM_DIRECTORY`, `TM_FILEPATH`,
+  `RELATIVE_FILEPATH`, `CLIPBOARD`, `WORKSPACE_NAME`, `WORKSPACE_FOLDER`,
+  `CURSOR_INDEX`, `CURSOR_NUMBER`, the date and time set (`CURRENT_YEAR`,
+  `CURRENT_YEAR_SHORT`, `CURRENT_MONTH`, `CURRENT_MONTH_NAME`,
+  `CURRENT_MONTH_NAME_SHORT`, `CURRENT_DATE`, `CURRENT_DAY_NAME`,
+  `CURRENT_DAY_NAME_SHORT`, `CURRENT_HOUR`, `CURRENT_MINUTE`,
+  `CURRENT_SECOND`, `CURRENT_SECONDS_UNIX`, `CURRENT_TIMEZONE_OFFSET`),
+  `RANDOM`, `RANDOM_HEX`, `UUID`, and the language's `BLOCK_COMMENT_START`,
+  `BLOCK_COMMENT_END` and `LINE_COMMENT`, in the forms `$NAME`, `${NAME}`,
+  `${NAME:default}` (used when the variable is unset or empty) and the
+  conditional forms `${NAME:+text}`, `${NAME:-text}` and `${NAME:?a:b}`, then
+  the transform `${NAME/regex/format/options}` with `$n`, `${n:/upcase}`,
+  `/downcase`, `/capitalize`, `/pascalcase` and `/camelcase`. An unknown
+  variable stays literal text, as VS Code does (and is inserted as a
+  placeholder named after it). The engine takes the values from a trait the
+  host implements, so the pure crate reads no files or clocks and is tested
+  with a fixed one; the App supplies them from the active tab, the workspace
+  and `jiff`. Record in the spec which variables remote workspaces resolve
+  from the remote path. Existing snippet files with a `$NAME` that was meant
+  literally are the one compatibility risk: list them in the CHANGELOG and
+  keep `\$NAME` as the escape.
+- [ ] **T803 — PDF preview.** Add a read-only PDF tab beside the image tab
+  ([`crates/vix-editor/spec`](crates/vix-editor/spec/index.md), the
+  image protocols: kitty, iTerm2, Sixel, half blocks, probed on first use).
+  Render a page to an image and hand it to the existing image path, so the
+  terminal protocol work is not repeated. Decide in the spec how pages are
+  rendered, with the dependency's size, license and maintenance weighed
+  against shelling out to `pdftoppm` or `mutool` when present (the same
+  optional-tool pattern as the formatters): a pure-Rust renderer adds weight
+  to every build and a process adds a runtime requirement. Behavior: open at
+  page 1; `PageDown`/`PageUp` or `n`/`p` change page, `g` goes to a page, `+`
+  and `-` zoom, fit width by default; the page count and number in the status
+  bar; a text extraction view for search (`/`) and copy, since the image
+  holds no selectable text; a password-protected or damaged file says so and
+  opens nothing. Bound the cost: a page over a size limit, a file over a
+  limit, and a time limit on rendering (the preview renders on a worker, not
+  in the draw). Remote files go through the authority like any read, with the
+  size cap. Tests: a small fixture PDF in `tests/`, with the page count, the
+  rendered size and the extracted text asserted; a run with no renderer
+  available shows the install hint instead of failing.
+- [ ] **T804 — Jupyter notebooks (`.ipynb`).** The kernel REPL is done
+  ([`spec/jupyter`](spec/jupyter/index.md)); the spec lists `.ipynb` editing
+  under "Out (later)". Open an `.ipynb` as a notebook: a list of cells, each
+  a code, Markdown or raw cell, with the saved outputs shown beneath the
+  code (text, streams, errors, PNG and JPEG through the existing image path),
+  not as raw JSON. Edit a cell in the editor, add, delete, move, split and
+  merge cells, change a cell's type, run a cell or all cells on the workspace
+  kernel (the existing launch, trust gate and status segment), with the
+  execution count and the output updated in place. **Saving must not damage a
+  notebook**: keep `nbformat` and `nbformat_minor`, the notebook, cell and
+  output metadata and every field it does not understand byte-for-byte
+  (read into `serde_json::Value` and change only the edited parts), write
+  with the indentation and key order Jupyter uses so a diff shows only the
+  change, support nbformat 4.0 to 4.5 (cell `id`s from 4.5) and refuse an
+  older or newer major version rather than guess. Also a clear-outputs command
+  and a plain-text view for `git diff` (an `nbdime`-style cell diff may come
+  later). Tests: round-trip a corpus of real notebooks (with widgets
+  metadata, attachments and large outputs) and assert the saved file equals
+  the original when nothing was edited; edit, run against a stub kernel and
+  save. Size caps on the notebook and on each output come from `Size (T734h)`.
+
+## Run Z — audit follow-ups (2026-11-25)
 
 Source: four audits of revision `55ba6ae1` (v2.1.0) — a healthcare audit and a
 VS Code-migration audit (both GPT-6.2 Astra High, source-and-synthetic-workflow,
@@ -10396,8 +10567,8 @@ with verified failing fixtures) and two broad, general assessments (Mistral
 Vibe, Mistral Medium 3.5 High; unverified, some facts already stale, e.g. they
 say VS Code/Helix migration guides and a tutor are missing; check each item
 against the repo before starting). The audit files were folded into this run and
-removed. Tasks T798–T813 come from the two GPT audits, in each audit's own
-order; T814–T829 distill the two Mistral assessments.
+removed. Tasks T805–T820 come from the two GPT audits, in each audit's own
+order; T821–T836 distill the two Mistral assessments.
 
 **Already landed on branch `fix/healthcare-audit` (2026-11-25, not yet merged):**
 FHIR/Bundle decimals shown as received (`pretty` now only re-indents;
@@ -10411,11 +10582,11 @@ Everything below is what remains.
 
 Positioning: use Vix first as a workbench for interface engineers with
 **synthetic** records. Identifiable-record troubleshooting is deferred until
-T798 passes; patient charting, treatment decisions and order entry are out of
+T805 passes; patient charting, treatment decisions and order entry are out of
 scope (they would need an intended use, clinical ownership, human-factors
 evaluation and a site safety assessment). FHIR R4 is the comparison point.
 
-- [ ] **T798 — Prove sensitive results are not retained.** The FHIR guide
+- [ ] **T805 — Prove sensitive results are not retained.** The FHIR guide
   promises results stay in memory until saved; the whole editor must keep that
   promise (crash recovery of untitled work, exports, clipboard, Cowork).
   Give results an explicit lifetime that follows a Bundle into opened entries
@@ -10426,13 +10597,13 @@ evaluation and a site safety assessment). FHIR R4 is the comparison point.
   and in the same run recover an ordinary unsaved document so the privacy
   change keeps the feature. [FHIR guide](docs/fhir-client/index.md) ·
   `tui/tests/integration/hot_exit.rs` · [`SECURITY.md`](SECURITY.md)
-- [ ] **T799 — Keep OperationOutcome JSON separable from its prose.** The
+- [ ] **T806 — Keep OperationOutcome JSON separable from its prose.** The
   outcome tab prepends readable issue lines to the JSON, so the whole tab
   cannot be passed to a JSON tool. Show the issue summary apart from (or as the
   only non-JSON part outside) exportable JSON. Extend the decimal test (`2`,
   `2.0`, `2.00`, a long fraction) through the response tab, Bundle drill-down
   and explicit export, asserting each displayed token and unit. `tui/src/app/fhir_http.rs`
-- [ ] **T800 — FHIR write attribution: destination, version, conflicts.**
+- [ ] **T807 — FHIR write attribution: destination, version, conflicts.**
   Remaining from the first-priority "outbound writes" table: show destination
   and operation before a write; keep the response `ETag` (the App currently
   drops response headers) and send `If-Match` on update for servers that
@@ -10442,34 +10613,34 @@ evaluation and a site safety assessment). FHIR R4 is the comparison point.
   show the destination/state of the one outstanding exchange, and add a
   delayed-loopback test (submit twice → server receives one write, first
   result shown). [FHIR R4 update and concurrency rules](https://hl7.org/fhir/R4/http.html)
-- [ ] **T801 — HL7 acknowledgment stage and outcome matrix.** Remaining test
+- [ ] **T808 — HL7 acknowledgment stage and outcome matrix.** Remaining test
   cases: matching, missing and differing `MSA-2`, a negative acknowledgment, a
   timeout; label commit and application outcomes separately in the reply
   summary tab (status line is done).
-- [ ] **T802 — HL7 character sets and wire fidelity.** Outgoing text is UTF-8
+- [ ] **T809 — HL7 character sets and wire fidelity.** Outgoing text is UTF-8
   and the reply view uses lossy UTF-8; a site declaring another `MSH-18` could
   see altered names. Test UTF-8, a supported legacy encoding with a synthetic
   accented name, and an unsupported declaration (explicit diagnostic); preserve
   the original bytes for inspection. Add a second independent implementation
   agreeing on the wire fixtures. [HL7 v2.5.1 ch. 2](https://hl7.eu/HL7v2x/v251/std251/ch02.html)
-- [ ] **T803 — HL7 transport security for pilots.** The sender is plaintext
+- [ ] **T810 — HL7 transport security for pilots.** The sender is plaintext
   TCP. Document the approved route and peer identity for pilots (a managed
   tunnel is one option); consider native TLS with server verification and
   optional mutual TLS. [`crates/vix-hl7/spec`](crates/vix-hl7/spec/index.md)
-- [ ] **T804 — Offline FHIR Bundle inspection without `http`.** The action id
+- [ ] **T811 — Offline FHIR Bundle inspection without `http`.** The action id
   `tools.http_fhir_bundle` falls under the HTTP capability gate, so a minimal
   build can view HL7 but not a local Bundle. Expose local Bundle inspection
   independently, gate remote paging separately, keep the old action id for
   saved keybindings, test both in minimal and HTTP builds.
   `tui/Cargo.toml`, `tui/src/capability.rs`, `tui/src/app/fhir.rs`
-- [ ] **T805 — Name `smart_backend` precisely.** It is OAuth
+- [ ] **T812 — Name `smart_backend` precisely.** It is OAuth
   client-credentials with HTTP Basic client auth; SMART Backend Services 2.2
   needs asymmetric client authentication. Document it as shared-secret OAuth,
   keep old config readable; prioritize SMART discovery and signed client
   assertions only when a partner server needs them, verified against an
   independent test server (advertised auth method, least-privilege scopes,
   rejection of invalid assertions). [SMART Backend Services 2.2](https://hl7.org/fhir/smart-app-launch/STU2.2/backend-services.html)
-- [ ] **T806 — Cross-feature App acceptance tests, and a distribution
+- [ ] **T813 — Cross-feature App acceptance tests, and a distribution
   verification table.** Give each cross-feature promise one named App
   acceptance test linked from both owning specs (the costly failures sit where
   the App connects features: tab creation, dispatch, recovery). Publish one
@@ -10477,20 +10648,20 @@ evaluation and a site safety assessment). FHIR R4 is the comparison point.
   verification command (`SECURITY.md` calls release artifacts unsigned while
   `scripts/release-local` signs and verifies a manifest); check it against a
   sample downloaded artifact per claimed route.
-- [ ] **T807 — Large-Bundle reliability.** The App parses/formats whole Bundles
+- [ ] **T814 — Large-Bundle reliability.** The App parses/formats whole Bundles
   and keeps the last response. Using the existing startup/frame benches, measure
   time to first usable row, peak memory and keyboard response on synthetic
   Bundles of increasing size on a named machine, then choose paging, lazy row
   formatting or a size cap. Treat a partial or unreadable response as its own
   result state.
-- [ ] **T808 — Bundle summaries for worldwide names and same-name records.**
+- [ ] **T815 — Bundle summaries for worldwide names and same-name records.**
   The summary prefers the first supplied name, else "family, given" (one
   imposed ordering). Prefer supplied display text, label identifier systems,
   show resource reference and source context together. Test same-name
   synthetic records, a single-part name, right-to-left text and keyboard-only
   selection in a narrow terminal. `crates/vix-fhir/src/bundle.rs`,
   `tui/src/ui/fhir.rs`, [worldwide spec](spec/worldwide/index.md)
-- [ ] **T809 — Healthcare pilot and profile-aware inspection.** Pilot: one
+- [ ] **T816 — Healthcare pilot and profile-aware inspection.** Pilot: one
   synthetic laboratory result and one International Patient Summary Bundle; the
   analyst locates the result, its unit and source, the matching patient
   reference, and explains a deliberately rejected message. Then local,
@@ -10513,7 +10684,7 @@ simultaneous debug sessions should evaluate those explicitly. No timed
 comparison against VS Code was run; the full gate, a live SSH host and Windows
 were not exercised.
 
-- [ ] **T810 — Task stages must stop on failure.** Verified on macOS: a run
+- [ ] **T817 — Task stages must stop on failure.** Verified on macOS: a run
   configuration whose child exits 7 beside a successful sibling still ran the
   dependent stage and exited 0 — the POSIX renderer backgrounds children and
   uses one argument-free `wait`. Preserve each child's status, wait for all,
@@ -10529,7 +10700,7 @@ were not exercised.
   child's pid/status, name the failed child on stderr and block dependents,
   tested by running the rendered plan under `sh`. Still open: Repeat Last Task
   cwd/matcher, and the Windows renderer's acceptance case.
-- [ ] **T811 — Stable test identity and suite outcome.** Verified: two Cargo
+- [ ] **T818 — Stable test identity and suite outcome.** Verified: two Cargo
   targets both emitting `tests::round_trip` (one fail, one pass) collapse to a
   single passing row because results key on display name; a pytest line ending
   `PASSED [100%]` yields no row; a nonzero exit with zero parsed failures can
@@ -10547,7 +10718,7 @@ were not exercised.
   suffix stripped, nonzero exit with no parsed failure is a failed suite. Still
   open: stable ids for rerun-only-that-case, raw-output link, test-at-point and
   code-lens integration, cancelled/unrecognized outcomes.
-- [ ] **T812 — Report the real outcome of a previewed multi-file edit.**
+- [ ] **T819 — Report the real outcome of a previewed multi-file edit.**
   The refactor preview diff clears the code-action chooser; applying a
   workspace edit separately writes closed files in a loop and may skip an
   unwritable one; for a server `workspace/applyEdit` the client replies
@@ -10561,7 +10732,7 @@ were not exercised.
   buffers, disk, visible outcome and server reply; include a rename after a
   non-ASCII character (negotiated position encoding).
   `tui/src/app/ide_parity.rs`, `tui/src/app/lsp_dap.rs`, `crates/vix-lsp/src/lib.rs`
-- [ ] **T813 — Review comments tied to the right range and revision.**
+- [ ] **T820 — Review comments tied to the right range and revision.**
   Verified: `main..feature/api` and `main..feature_api` share a storage name,
   and the loader ignores the stored range, so one range's comments load into
   the other. Use a collision-resistant key, validate the stored range on load
@@ -10575,7 +10746,7 @@ were not exercised.
   range check on load, legacy files still load. Still open: binding comments to
   the reviewed revision, keeping the code excerpt and marking comments outdated.
 
-- [ ] **T814 — Named debug target.** The debugger picks an adapter from the
+- [ ] **T821 — Named debug target.** The debugger picks an adapter from the
   active file and runs one session; the named run configuration only drives
   shell commands; the rust-analyzer Debug lens has no handler. A tracked
   project config names adapter, prerequisite task, executable, args and working
@@ -10587,7 +10758,7 @@ were not exercised.
   breakpoint; a failed prerequisite leaves the adapter unstarted; same fixture
   via menu, palette and shortcut; a Python project too. Compound (multi-session)
   debugging only once a real two-process workflow needs it.
-- [x] **T815 — Correct the VS Code migration guide and navigation spec.** The
+- [x] **T822 — Correct the VS Code migration guide and navigation spec.** The
   guide says incremental Ctrl+D is missing, but the keymap test sends it and
   the editor adds the next occurrence — extend the assertion to the selected
   ranges after two presses. It also calls pair tooling absent although Cowork
@@ -10598,7 +10769,7 @@ were not exercised.
   `tui/tests/integration/keymaps.rs`, [`spec/cowork`](spec/cowork/index.md)
   Done in docs/spec and the Ctrl+D test; the UI still does not label fallback
   definition results as text matches (open follow-up).
-- [ ] **T816 — Large-checkout open-time benchmark.** Add a repeatable
+- [ ] **T823 — Large-checkout open-time benchmark.** Add a repeatable
   project-opening exercise measuring time to first editable frame, first Quick
   Open result, first semantic definition and first actionable diagnostic;
   record tool versions, workspace size, enabled capabilities, cold/warm runs
@@ -10614,31 +10785,31 @@ signed gate, multi-forge CI, benchmarks (100 MB opens in ~14 ms, typing 10 MB
 ~3.4 µs, 10k-file workspace search ~214 ms). Their stated biggest gap is
 awareness, not capability. Items marked (stale?) may already exist.
 
-- [ ] **T817 — Community channels.** Discord or Discourse with a README
+- [ ] **T824 — Community channels.** Discord or Discourse with a README
   badge; GitHub Discussions Q&A category; "Join the community" README section;
   Good-first-issue / Help-wanted labels; `CONTRIBUTING.md` pointing at
   `AGENTS.md`; new-contributor checklist; social links on README/site; metrics
   to track (stars ~1,200, ~10 active contributors, ~5,000 downloads/month,
   docs coverage ~50% — all from the assessment, unverified). Needs maintainer
   decisions (accounts, outward posting), so never post anything without say-so.
-- [ ] **T818 — Outreach.** Regular GitHub Release announcements with detailed
+- [ ] **T825 — Outreach.** Regular GitHub Release announcements with detailed
   changelogs; Hacker News / Product Hunt / Reddit (r/rust, r/terminal) /
   Lobsters for major releases; 5–10 min YouTube walkthroughs and a contributor
   welcome video; podcast outreach; "Powered by Vix" and a user-showcase page;
   social preview (OpenGraph) cards generated like `scripts/render-theme-gallery.py`;
   public community-metrics dashboard (stars, downloads from crates.io/npm/Homebrew,
   CI, contributors) updated daily. Outward-facing: maintainer approval first.
-- [ ] **T819 — Onboarding in the editor.** "First 5 minutes" interactive
+- [ ] **T826 — Onboarding in the editor.** "First 5 minutes" interactive
   tutorial and `vix --tutor` (check `vix-tutor` first — stale?); a dismissible
   first-launch Quick Tour overlay (dismissal stored in `session.toml`); a
   "What's New" panel; optional Tips of the Day from a curated list (check
   `vix-tips`); install one-liners per platform with copy buttons on the site.
-- [ ] **T820 — Migration and comparison pages.** Standalone comparison landing
+- [ ] **T827 — Migration and comparison pages.** Standalone comparison landing
   pages (VS Code, Neovim, Helix) extending `docs/compare/index.md`; guides for
   Sublime Text, Atom, JetBrains, Eclipse, Notepad++ (Vim, Emacs, Helix, VS
   Code, Zed, Fresh, ttt exist); VS Code and Helix guides were reported missing
-  but exist (stale — only the T815 corrections apply).
-- [ ] **T821 — Documentation depth.** Deep dives for DB workbench, Git graph and
+  but exist (stale — only the T822 corrections apply).
+- [ ] **T828 — Documentation depth.** Deep dives for DB workbench, Git graph and
   hunk staging/conflicts, Cowork, AI panel, LSP/debugger, Org mode, remote
   editing; a tutorial series (10–15 parts incl. advanced Git, Rhai commands,
   custom themes, extending with new crates); hands-on labs and role-based
@@ -10649,12 +10820,12 @@ awareness, not capability. Items marked (stale?) may already exist.
   cheat-sheet generator by keymap; FAQ/troubleshooting; screenshot and theme
   galleries with a theme-submission guide and Rhai API docs; optional
   self-assessment quizzes. Check `docs/coverage.md` first — much is done.
-- [ ] **T822 — Packaging channels.** Prepared in `packaging/` but not
+- [ ] **T829 — Packaging channels.** Prepared in `packaging/` but not
   published: AUR, winget, Scoop, Nix flake, mise; public Docker/ghcr.io image;
   official Homebrew cask (instead of the custom tap); also Chocolatey,
   Flatpak, Snap, portable Windows ZIP and an auto-update mechanism (check
   current 2.0.2+ status before acting; publishing is a maintainer action).
-- [ ] **T823 — Startup and memory.** Defer the git refresh until first Git
+- [ ] **T830 — Startup and memory.** Defer the git refresh until first Git
   panel open (the assessment measured a 12.2 ms full startup vs ~134 µs
   `App::new`); lazy-load rarely used features (DB, containers, Jupyter); stated
   targets: <100 ms empty workspace (later <50 ms), <50 MB with a 100 MB log
@@ -10662,7 +10833,7 @@ awareness, not capability. Items marked (stale?) may already exist.
   incremental workspace search via filesystem watch (100k files < 1 s);
   Tree-sitter on very large files; LRU eviction for caches; native
   file-watching efficiency; incremental rendering; memory-usage tracking.
-- [ ] **T824 — Test infrastructure.** Coverage ≥90% on `vix-editor-core`,
+- [ ] **T831 — Test infrastructure.** Coverage ≥90% on `vix-editor-core`,
   `vix-fileops`, `vix-git`, `vix-lsp`, `vix-db` (tarpaulin; see the coverage
   push); more integration tests for editor+LSP, editor+Git, DB+SQLite/Postgres,
   remote+SSH; wider proptest use (parsers, search/replace, undo/redo, buffer
@@ -10673,29 +10844,29 @@ awareness, not capability. Items marked (stale?) may already exist.
   with baseline comparison reports; flaky-test detection/quarantine; test
   data generators; test-impact analysis for PRs; chaos/stress testing building
   on `chaos.yml`.
-- [ ] **T825 — Security follow-ups.** Quarterly audits with a checklist for new
+- [ ] **T832 — Security follow-ups.** Quarterly audits with a checklist for new
   features and a threat-model document; GitHub security advisories; SBOM per
   release; Dependabot or equivalent grouping; secret scanning (gitleaks) in
   hooks/CI; incident-response playbook from `SECURITY.md`; code signing of
-  release artifacts (ties to T806); a sandboxing study for external commands
+  release artifacts (ties to T813); a sandboxing study for external commands
   (seccomp / App Sandbox / Windows); input-validation and file-system (TOCTOU,
   canonicalization) audits; keep the zero-`unsafe`, license (`cargo-deny`) and
   i18n-coverage audits green.
-- [ ] **T826 — Code-quality tooling.** Project-specific lints (no `println!`,
+- [ ] **T833 — Code-quality tooling.** Project-specific lints (no `println!`,
   user strings via `t!`, no blocking I/O in async); pre-push and pre-commit
   hooks (already partly there: `make hooks`, `scripts/attest`); a PR review
   checklist/template; a quality-metrics dashboard; crate dependency layering
   report with `cargo-depgraph`.
-- [ ] **T827 — Ecosystem and extensibility.** Plugin system beyond Rhai
+- [ ] **T834 — Ecosystem and extensibility.** Plugin system beyond Rhai
   (WASM or dynamic, no-`unsafe`) with a stable documented API, plugin and theme
   registry (static site), submission process, script/theme package manager,
   configuration as Rhai code; a shared `vix-gui-core` to cut duplication across
   the eight GUIs; a language server for Vix config files; editor-side
   integration for developing Vix itself. Large — design spike first.
-- [ ] **T828 — Interactive web demo.** A WebAssembly build of `vix-tui` or a
+- [ ] **T835 — Interactive web demo.** A WebAssembly build of `vix-tui` or a
   recorded terminal session that can be replayed on the site; VHS tapes for palette,
   find, git, LSP, DB.
-- [ ] **T829 — Contributor developer-experience docs.** Development-setup guide
+- [ ] **T836 — Contributor developer-experience docs.** Development-setup guide
   with IDE recommendations, an architecture overview diagram, a crate
   navigation map (which crate owns what), a debugging guide and a performance
   profiling guide, release-process and code-review guidelines. Check
@@ -10710,7 +10881,7 @@ and the capability gate maps the whole `lsp.` prefix to `Capability::Lsp`
 (`tui/src/capability.rs`). The audit file was folded in and removed.
 Fix boundaries of everyday edits before adding Vi features.
 
-- [ ] **T830 — Vi: a change is one unit of repeat and undo.** `ciw`/`cw` text
+- [ ] **T837 — Vi: a change is one unit of repeat and undo.** `ciw`/`cw` text
   typed in Insert is not recorded, so `.` replays an older `dw`. Record from
   operator through Escape (typed text, backspaces), recompute the range on
   replay so a different-length word works, one undo unit per change, and
@@ -10720,7 +10891,7 @@ Fix boundaries of everyday edits before adding Vi features.
   independently; include typed Unicode, a corrected typo, a preceding delete
   and a cancelled operator; run under both Vi and Spacemacs.
   `tui/src/app/modal.rs`, `tui/src/app/keymap.rs`
-- [ ] **T831 — Vi: operator ranges, word classes, graphemes, columns.**
+- [ ] **T838 — Vi: operator ranges, word classes, graphemes, columns.**
   Separate a Normal-mode cursor destination from the half-open operator range:
   `$x` and `9x` must delete the last character; `x` consumes displayed
   characters (a combining mark must not be left detached); give the Vi keymap
@@ -10732,41 +10903,41 @@ Fix boundaries of everyday edits before adding Vi features.
   lines, `pkg::run`, `obj.field`, adjacent blanks, decomposed accents, plus a
   vertical fixture with a short line, a tab and a wide character.
   `crates/vix-modal/src/{motion,operator}.rs`, `crates/vix-textops`
-- [x] **T832 — Ex: `:q!` closes the current window only.** (Done, merged from `fix/t832-ex-force-quit`: `:q!` closes the tab, `:qa`/`:qa!` added; `:wq` save-conflict ordering untested.) `:q!` sets the
+- [x] **T839 — Ex: `:q!` closes the current window only.** (Done, merged from `fix/t832-ex-force-quit`: `:q!` closes the tab, `:qa`/`:qa!` added; `:wq` save-conflict ordering untested.) `:q!` sets the
   application-wide quit flag while `:q` closes the tab. Define pane/tab/window
   correspondence, apply `:q`/`:q!` to the same focused scope (bang = abandon
   edits), add an explicit all-windows force-quit command. Tests: two panes on
   one buffer, two modified buffers, the last window, and `:wq` on a save
   conflict (close only after a successful save). `tui/src/app/keymap.rs`
-- [ ] **T833 — Vi: Visual operators and counted put.** `vld`/`Vjd` leave the
+- [ ] **T840 — Vi: Visual operators and counted put.** `vld`/`Vjd` leave the
   buffer unchanged and `"ayy"a3p` inserts one copy. Wire Visual d/c/y to the
   existing editor operations, keep character-wise vs linewise register type,
   pass the count through put, handle forward and reversed selections.
   Acceptance: cut two lines, switch files, paste three copies from a named
   register, undo once; one-character and backward-across-newline selections.
   Visual Block and register macros later. `crates/vix-modal`
-- [ ] **T834 — Ex quickfix aliases and a bounded `:s`.** Map `:cn`/`:cp` to
+- [ ] **T841 — Ex quickfix aliases and a bounded `:s`.** Map `:cn`/`:cp` to
   `go.next_error`/`go.prev_error` and `:cope` to a task-problems view; verify
   by traversing a failing subproject build. Add `:s` / `:%s` for literal
   patterns with explicit `g` and confirm flags and a single undo; reject
   unsupported Vim pattern syntax before editing, document the grammar, test
   escaped delimiters, cancel, and an unchanged buffer on parse failure.
   `tui/src/app/task_problems.rs`, `spec/find-and-replace`
-- [ ] **T835 — Offline structural selection without the `lsp` feature.** With
+- [ ] **T842 — Offline structural selection without the `lsp` feature.** With
   the LSP feature off, three App tests for offline expand/shrink selection
   fail because the capability gate catches the `lsp.` prefix before the
   fallback runs. Give offline selection its own action ids (keep the `lsp.*`
   ids as aliases for saved keybindings), and verify both feature builds in
   `scripts/check` without starting a server. `tui/src/capability.rs`,
   `tui/tests/integration/textobjects.rs`
-- [ ] **T836 — Vi motion cost must not scale with file size.** `l` takes
+- [ ] **T843 — Vi motion cost must not scale with file size.** `l` takes
   0.4 ms at 512 KiB and 8.6 ms at 8 MiB, `w` 12.4 ms (budget is 16 ms),
   because the App materializes the whole buffer and the motion collects its
   chars. Use rope and line-local grapheme APIs and scan only as far as needed;
   add Vi `h/l`, `w/b` and counted operators to `tui/benches/editor_ops.rs`
   (a same-line step should cost the same when unrelated text is appended);
   measure key-to-frame latency with the existing profiler.
-- [ ] **T837 — Vim-parity table test and a runnable migration exercise.** A
+- [ ] **T844 — Vim-parity table test and a runnable migration exercise.** A
   table of key sequences (initial text/cursor → expected text, cursor, mode,
   register) run unconditionally in CI against Vix, and verified or regenerated
   against a pinned, unconfigured Vim in a separate job with intentional
@@ -11038,15 +11209,25 @@ CI-discovered rounds to get genuinely right on Windows).
 24. **Run X (worldwide editing).** T794 covers workspace search. Prioritize
     T795 for other result lists. T796 and T797 can proceed independently.
 
-25. **Run Y (2026-11-25 audits).** T810, T811 first (a failed prerequisite
+25. **Run Y (user feedback, 2026-11-24):** T798 (a remote SSH dev container)
+    builds on the container authority and needs no new design for the scripts;
+    T799 (CMake) is the largest, in six slices that each land alone; T800
+    (git monorepos) is research first, its tasks follow the findings; T801
+    (the agent on Alpine and musl hosts) needs its trust decision written
+    before any code. T802 (snippet variables) is the smallest and
+    independent; T803 (PDF preview) needs the renderer decision first; T804
+    (notebooks) builds on the finished kernel REPL and must start with the
+    round-trip corpus, since saving without loss is its hard requirement.
+
+26. **Run Z (2026-11-25 audits).** T817, T818 first (a failed prerequisite
     must stop its dependents; same-name tests must stay distinct), together
-    with T798 (result retention) and T799–T802 (healthcare fidelity). Then
-    T812, T813 and T815; then T814, T803–T809 and T816. T817–T829 are the
+    with T805 (result retention) and T806–T809 (healthcare fidelity). Then
+    T819, T820 and T822; then T821, T810–T816 and T823. T824–T836 are the
     general assessments' backlog: pick by maintainer priority; anything
-    outward-facing (T817, T818, T822) needs the maintainer's say-so.
-    The Vim audit (T830–T837): T830, T832 first (wrong repeat and an
-    over-broad quit are data-loss-adjacent), then T831, T833, T836; then
-    T834, T835, T837.
+    outward-facing (T824, T825, T829) needs the maintainer's say-so.
+    The Vim audit (T837–T844): T837, T839 first (wrong repeat and an
+    over-broad quit are data-loss-adjacent), then T838, T840, T843; then
+    T841, T842, T844.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.

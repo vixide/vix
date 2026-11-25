@@ -191,3 +191,7 @@ closing, and scrollback paging, the cap and wheel scrolling.
   characters before the path can pick the neighboring word.
 - Clicking a tab in the strip does not switch to it; use `Ctrl+PgUp`/`Ctrl+PgDn`
   or the menu.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Word lookup, OSC 7 scanning, URI decoding, scrolling and the tab list use `get`, iterators and `checked_*`; mouse-report encoding carries an `RCA-EXC-2` proof (small protocol bytes). **Changed:** `Ctrl` with a character that has no control byte (a digit, a non-ASCII character) sends the character itself; it used to send an arbitrary byte (`Ctrl-1` came out as `q`). **Declared (TERMINAL-F1):** scrolling past either end goes to that end and `vt100` limits it to the lines it holds; tab selection wraps from the last tab to the first and back.

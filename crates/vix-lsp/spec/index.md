@@ -725,3 +725,7 @@ showing more than the first workspace folder as the root.
 
 - `process` (default on): starting a server process. Off, `Lsp` can be built but every
   server fails to start. The root `lsp` feature enables it (`spec/cargo-features`, T595).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Lookups use `get`, `get_mut`, `first` and `strip_suffix`; the diagnostic total and the progress count add with a declared `usize::MAX` ceiling. **Declared (LSP-F1):** a `will*Files` answer nobody is waiting for leaves the waiting count at 0; the progress line shows `+N` for the other tasks. Request ids, document versions, restart attempts and read lengths carry `RCA-EXC-2` proofs.

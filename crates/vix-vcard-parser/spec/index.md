@@ -13,3 +13,7 @@ and legacy bare `TYPE` parameters), and value **unescaping** (`\\`, `\n`,
 ## See also
 
 - [contact-panel spec](../../vix-contact-panel/spec/) — shared contacts model
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The value after the first `:` is taken with `strip_prefix`, so no slicing remains. No fallbacks are declared: a line without a `:` is skipped.

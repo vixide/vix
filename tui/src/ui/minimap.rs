@@ -1,5 +1,18 @@
 //! The code-overview minimap: a dim bar-chart summary of the active buffer.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::Paragraph;
 
@@ -24,23 +37,31 @@ pub(super) fn draw_minimap(app: &mut App, frame: &mut Frame, area: Rect, editor_
     // either way, but with no per-line allocation.
     let code = tab.editor.code_ref();
     let total = code.len_lines().max(1);
-    let rows = area.height as usize;
+    let rows = usize::from(area.height);
     let top = app.editor.top_visible_line();
-    let view_end = (top + editor_height).min(total);
-    let width = area.width as usize;
+    let view_end = top.plus(editor_height).min(total);
+    let width = usize::from(area.width);
     let dim = theme::dim();
     let view_bg = theme::region_title(theme::Region::Editor, true);
     let mut text = Vec::with_capacity(rows);
     for r in 0..rows {
         // The band of source lines this minimap row represents.
-        let start = r * total / rows;
-        let end = ((r + 1) * total / rows).max(start + 1).min(total);
+        let start = r.times(total).quot(rows);
+        let end = r
+            .plus(1)
+            .times(total)
+            .quot(rows)
+            .max(start.plus(1))
+            .min(total);
         let longest = (start..end)
             .map(|i| trimmed_char_len(code.line(i)))
             .max()
             .unwrap_or(0);
         // Scale the longest line (~120 cols) to the minimap width.
-        let bar = (longest * width / 120).clamp(usize::from(longest > 0), width);
+        let bar = longest
+            .times(width)
+            .quot(120)
+            .clamp(usize::from(longest > 0), width);
         let in_view = start < view_end && end > top;
         let style = if in_view { view_bg } else { dim };
         let glyph = if in_view { '\u{2593}' } else { '\u{2592}' }; // ▓ vs ▒
@@ -61,7 +82,7 @@ fn trimmed_char_len(line: ropey::RopeSlice<'_>) -> usize {
     let mut last_non_ws = 0;
     for (i, c) in line.chars().enumerate() {
         if !c.is_whitespace() {
-            last_non_ws = i + 1;
+            last_non_ws = i.plus(1);
         }
     }
     last_non_ws

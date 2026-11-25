@@ -298,14 +298,14 @@ impl DebugView {
         // `prefix` ends up holding the name path from the scope down to the
         // node owning `reference`; children extend it to look up the memory.
         let mut prefix = Vec::new();
-        let Some(i) = self
+        let Some(scope) = self
             .scopes
-            .iter()
-            .position(|n| n.path_to(reference, &mut prefix))
+            .iter_mut()
+            .find(|n| n.path_to(reference, &mut prefix))
         else {
             return Vec::new();
         };
-        let Some(node) = self.scopes[i].find_mut(reference) else {
+        let Some(node) = scope.find_mut(reference) else {
             return Vec::new();
         };
         node.children = variables.iter().map(Node::variable).collect();
@@ -445,8 +445,18 @@ impl DebugView {
             .iter()
             .position(|&i| i >= self.selected)
             .unwrap_or(last);
-        let target = at.saturating_add_signed(delta).min(last);
-        self.selected = selectable[target];
+        // A step past either end stops at that end (a declared boundary).
+        let target = match at.checked_add_signed(delta) {
+            Some(t) => t.min(last),
+            None if delta < 0 => 0,
+            None => last,
+        };
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: target is at most last, which is selectable.len() - 1"
+        )]
+        let row = selectable[target];
+        self.selected = row;
     }
 
     /// Highlight the first selectable row.
@@ -506,8 +516,10 @@ impl DebugView {
             node.expanded = false;
             return;
         }
-        if path.len() > 1 {
-            let parent = RowKind::Node(path[..path.len() - 1].to_vec());
+        if let Some((_, parent_path)) = path.split_last()
+            && !parent_path.is_empty()
+        {
+            let parent = RowKind::Node(parent_path.to_vec());
             if let Some(i) = self.rows().iter().position(|r| r.kind == parent) {
                 self.selected = i;
             }
@@ -569,7 +581,12 @@ impl DebugView {
 /// Push `node` and, when expanded, its descendants.
 fn push_node(rows: &mut Vec<Row>, node: &Node, path: &[usize]) {
     let mut row = Row::new(RowKind::Node(path.to_vec()), node.name.clone());
-    row.depth = path.len() - 1;
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: a node's path always holds at least its own index, so the length is at least 1"
+    )]
+    let depth = path.len() - 1;
+    row.depth = depth;
     row.detail.clone_from(&node.value);
     row.expandable = node.reference != 0;
     row.expanded = row.expandable && node.expanded;
@@ -842,5 +859,64 @@ mod tests {
         v.clear();
         assert_eq!(v.watches, vec![("x".to_string(), String::new())]);
         assert!(v.threads.is_empty() && v.frames.is_empty());
+    }
+
+    #[test]
+    fn replies_for_another_frame_or_an_unknown_reference_change_nothing() {
+        let mut v = stopped_view();
+        let before = kinds(&v);
+        assert_eq!(
+            v.set_scopes(99, &[Scope::new("Other", 40)]),
+            Vec::<i64>::new()
+        );
+        assert_eq!(
+            v.set_variables(404, &[Variable::new("z", "0")]),
+            Vec::<i64>::new()
+        );
+        v.variable_set(404, "x", "9");
+        v.variable_set(5, "missing", "9");
+        assert_eq!(kinds(&v), before);
+        // A known name under a known container takes the new value.
+        v.variable_set(5, "x", "9");
+        v.selected = 8;
+        assert_eq!(v.selected_variable(), Some((5, "x".into(), "9".into())));
+    }
+
+    #[test]
+    fn collapse_closes_an_open_node_then_climbs_to_its_parent() {
+        let mut v = stopped_view();
+        v.selected = 9; // p, a variable under Locals
+        assert_eq!(v.activate(), Activation::Load(7));
+        v.set_variables(7, &[Variable::new("y", "4")]);
+        v.selected = 10; // y, a child of p
+        v.collapse();
+        assert_eq!(
+            v.selected_row().map(|r| r.kind),
+            Some(RowKind::Node(vec![0, 1])),
+            "a leaf collapse moves to the parent"
+        );
+        v.collapse();
+        assert!(
+            !v.rows()
+                .iter()
+                .any(|r| r.kind == RowKind::Node(vec![0, 1, 0]))
+        );
+        // A scope has no parent row to climb to: nothing moves.
+        v.selected = 7;
+        v.collapse();
+        v.collapse();
+        assert_eq!(v.selected_variable(), None, "a scope is not a variable");
+    }
+
+    #[test]
+    fn expand_on_a_thread_selects_it_and_on_a_leaf_does_nothing() {
+        let mut v = stopped_view();
+        v.selected = 2; // worker thread
+        assert_eq!(v.expand(), Activation::SelectThread(2));
+        v.selected = 8; // x, no children
+        assert_eq!(v.expand(), Activation::None);
+        v.selected = 0; // a section header
+        assert_eq!(v.activate(), Activation::None);
+        assert_eq!(v.expand(), Activation::None);
     }
 }

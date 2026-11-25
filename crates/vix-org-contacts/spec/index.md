@@ -45,3 +45,7 @@ directory, birthday, and vCard views.
 ## See also
 
 - [contact-panel spec](../../vix-contact-panel/spec/) — shared contacts model
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The headline parser returns the star count and the text after the stars, so no string slicing or subtraction on lengths remains, and the drawer search skips lines with `skip` instead of slicing.

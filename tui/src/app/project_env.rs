@@ -5,6 +5,18 @@
 //! resolved only when the workspace's trust decision (T132, persisted in the
 //! session store) is a recorded "yes". See `crates/vix-project-env/spec`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::App;
 
 impl App {

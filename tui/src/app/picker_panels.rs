@@ -9,7 +9,20 @@
 //! media-type detection, not part of the media-type *panel*, despite the
 //! similar name.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::info_panel::InfoSlot;
+use crate::geo::Geo;
 use ratatui::layout::Rect;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
@@ -33,6 +46,8 @@ pub(super) trait ListPanel {
     fn page_down(&mut self, page: usize);
     /// Index of the first visible row (used to map a mouse click to a row).
     fn scroll(&self) -> usize;
+    /// Number of rows, so Home/End can jump to either end.
+    fn len(&self) -> usize;
 }
 
 macro_rules! impl_list_panel {
@@ -53,6 +68,9 @@ macro_rules! impl_list_panel {
             fn scroll(&self) -> usize {
                 self.scroll
             }
+            fn len(&self) -> usize {
+                Self::len(self)
+            }
         }
     };
 }
@@ -63,6 +81,12 @@ impl_list_panel!(crate::media_type::Panel);
 impl_list_panel!(crate::todo_tree::Panel);
 impl_list_panel!(vix_theme_editor_panel::Panel);
 impl_list_panel!(crate::fhir::BundlePanel);
+impl_list_panel!(crate::contact_panel::Panel);
+impl_list_panel!(crate::vcard_panel::Panel);
+impl_list_panel!(crate::file_information_panel::Panel);
+impl_list_panel!(crate::conflict_tool::List);
+impl_list_panel!(crate::app::HtmlPanel);
+impl_list_panel!(crate::outline_panel::Outline);
 
 /// Try the Up/Down/PageUp/PageDown navigation keys against `panel`,
 /// returning whether one handled `code`. Each caller still handles its own
@@ -85,6 +109,28 @@ pub(super) fn list_panel_nav_key<P: ListPanel>(
     true
 }
 
+/// [`list_panel_nav_key`] plus Home and End (jump to the first or last row),
+/// for the panels whose only other keys are Enter and Esc.
+pub(super) fn list_panel_full_nav_key<P: ListPanel>(
+    panel: Option<&mut P>,
+    code: KeyCode,
+    page: usize,
+) -> bool {
+    let Some(p) = panel else {
+        return false;
+    };
+    match code {
+        KeyCode::Up => p.up(),
+        KeyCode::Down => p.down(),
+        KeyCode::PageUp => p.page_up(page),
+        KeyCode::PageDown => p.page_down(page),
+        KeyCode::Home => p.page_up(p.len()),
+        KeyCode::End => p.page_down(p.len()),
+        _ => return false,
+    }
+    true
+}
+
 /// Resolve a left-click inside a list-style picker panel's `rect` to the
 /// item index under the cursor (the panel's `scroll` offset plus the
 /// clicked row), or `None` when the click isn't a left-button-down inside
@@ -97,15 +143,8 @@ pub(super) fn list_panel_click_index<P: ListPanel>(
     rect: Rect,
     mouse: MouseEvent,
 ) -> Option<usize> {
-    if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-        return None;
-    }
-    if !rect_contains(rect, mouse.column, mouse.row) {
-        return None;
-    }
-    let p = panel?;
-    let row_in_view = (mouse.row - rect.y) as usize;
-    Some(p.scroll() + row_in_view)
+    let row = crate::app::hit::left_click_row(rect, mouse)?;
+    Some((panel?.scroll()).plus(row))
 }
 
 impl App {
@@ -156,8 +195,8 @@ impl App {
         if !rect_contains(r, mouse.column, mouse.row) {
             return;
         }
-        let col = ((mouse.column - r.x) / crate::ui::NERD_CELL_W) as usize;
-        let row = (mouse.row - r.y) as usize;
+        let col = usize::from(mouse.column.minus(r.x).quot(crate::ui::NERD_CELL_W));
+        let row = usize::from(mouse.row.minus(r.y));
         if let Some(p) = self.info.nerd_palette_mut()
             && p.select_at(row, col)
         {
@@ -171,8 +210,11 @@ impl App {
         let Some(p) = self.info.nerd_palette() else {
             return;
         };
-        let glyph = p.selected_glyph();
-        let name = p.selected_name();
+        let (Some(glyph), Some(name)) = (p.selected_glyph(), p.selected_name()) else {
+            self.messages
+                .error(t!("msg.command_failed", error = "selected: out of range").to_string());
+            return;
+        };
         let area = self.layout.editor;
         if self.editor.insert_str(&glyph.to_string(), area) {
             self.status = t!("status.glyph_inserted", name = name).to_string();
@@ -205,7 +247,7 @@ impl App {
     /// Handle a key in the ASCII table: shared list navigation first, then Home/End jump to the
     /// ends, Enter inserts the character (panel stays open), Esc closes.
     pub(super) fn ascii_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.ascii_panel.height as usize).max(1);
+        let page = (usize::from(self.layout.ascii_panel.height)).max(1);
         if list_panel_nav_key(self.info.ascii_panel_mut(), key.code, page) {
             return;
         }
@@ -265,7 +307,7 @@ impl App {
     /// the color (or, when opened from the theme editor, assigns it to the slot), Esc closes it
     /// and ends any theme-editor pick.
     pub(super) fn x11_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.x11_panel.height as usize).max(1);
+        let page = (usize::from(self.layout.x11_panel.height)).max(1);
         if list_panel_nav_key(self.x11_panel.as_mut(), key.code, page) {
             return;
         }
@@ -319,18 +361,31 @@ impl App {
             return;
         };
         if self.flags.contains(AppFlags::THEME_EDITOR_PICKING) {
-            let c = p.selected_color();
+            let Some(c) = p.selected_color() else {
+                self.messages
+                    .error(t!("msg.command_failed", error = "selected: out of range").to_string());
+                return;
+            };
+            let mut applied = Ok(());
             if let Some(editor) = self.theme_editor.as_mut() {
-                editor.apply_color([c.r, c.g, c.b]);
+                applied = editor.apply_color([c.r, c.g, c.b]);
                 crate::theme_model::apply(&editor.theme);
                 self.editor.refresh_theme();
+            }
+            if let Err(e) = applied {
+                self.messages
+                    .error(t!("msg.command_failed", error = e.to_string()).to_string());
             }
             self.x11_panel = None;
             self.flags.remove(AppFlags::THEME_EDITOR_PICKING);
             return;
         }
-        let hex = p.selected_hex().to_string();
-        let name = p.selected_name().to_string();
+        let (Some(hex), Some(name)) = (p.selected_hex(), p.selected_name()) else {
+            self.messages
+                .error(t!("msg.command_failed", error = "selected: out of range").to_string());
+            return;
+        };
+        let (hex, name) = (hex.to_string(), name.to_string());
         let area = self.layout.editor;
         if self.editor.insert_str(&hex, area) {
             self.status = t!("status.x11_inserted", name = name).to_string();
@@ -364,7 +419,7 @@ impl App {
     /// choose the highlighted slot's color; Ctrl+S prompts for a name to save the theme as; Esc
     /// closes the editor (reverting the live preview).
     pub(super) fn theme_editor_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.theme_editor.height as usize).max(1);
+        let page = (usize::from(self.layout.theme_editor.height)).max(1);
         if list_panel_nav_key(self.theme_editor.as_mut(), key.code, page) {
             return;
         }
@@ -440,7 +495,14 @@ impl App {
             return;
         }
         let path = dir.join(format!("{name}.json"));
-        let json = crate::theme_model::to_json(&editor.theme);
+        let json = match crate::theme_model::to_json(&editor.theme) {
+            Ok(json) => json,
+            Err(e) => {
+                self.messages
+                    .error(t!("msg.theme_save_failed", error = e).to_string());
+                return;
+            }
+        };
         if let Err(e) = std::fs::write(&path, json) {
             self.messages
                 .error(t!("msg.theme_save_failed", error = e).to_string());
@@ -473,7 +535,7 @@ impl App {
     /// Handle a key in the media-type picker: shared list navigation, typing filters (Backspace
     /// edits), Enter inserts the media type (panel stays open), Esc closes.
     pub(super) fn media_type_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.media_type_panel.height as usize).max(1);
+        let page = (usize::from(self.layout.media_type_panel.height)).max(1);
         if list_panel_nav_key(self.info.media_type_panel_mut(), key.code, page) {
             return;
         }
@@ -544,7 +606,7 @@ impl App {
     /// Handle a key in the Todo Tree: shared list navigation; Space folds a group, `g` toggles
     /// the grouping, `[`/`]` collapse/expand all, Enter jumps to the item, Esc closes.
     pub(super) fn todo_tree_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.todo_tree.height as usize).max(1);
+        let page = (usize::from(self.layout.todo_tree.height)).max(1);
         if list_panel_nav_key(self.todo_tree.as_mut(), key.code, page) {
             return;
         }
@@ -597,3 +659,442 @@ impl App {
         });
     }
 }
+
+#[cfg(test)]
+mod nav_tests {
+    use super::*;
+
+    /// A ten-row panel that records the last move, standing in for any real
+    /// list panel.
+    #[derive(Default)]
+    struct Fake {
+        selected: usize,
+    }
+
+    impl ListPanel for Fake {
+        fn up(&mut self) {
+            self.selected = vix_list_state::up(self.selected);
+        }
+        fn down(&mut self) {
+            self.selected = vix_list_state::down(self.selected, 10);
+        }
+        fn page_up(&mut self, page: usize) {
+            self.selected = vix_list_state::page_up(self.selected, page);
+        }
+        fn page_down(&mut self, page: usize) {
+            self.selected = vix_list_state::page_down(self.selected, page, 10);
+        }
+        fn scroll(&self) -> usize {
+            0
+        }
+        fn len(&self) -> usize {
+            10
+        }
+    }
+
+    #[test]
+    fn the_full_nav_keys_move_page_and_jump_to_either_end() {
+        let mut p = Fake::default();
+        let mut press = |code| list_panel_full_nav_key(Some(&mut p), code, 4);
+        assert!(press(KeyCode::Down));
+        assert!(press(KeyCode::PageDown));
+        assert!(press(KeyCode::Up));
+        assert!(press(KeyCode::PageUp));
+        assert!(press(KeyCode::End));
+        assert_eq!(p.selected, 9);
+        let mut press = |code| list_panel_full_nav_key(Some(&mut p), code, 4);
+        assert!(press(KeyCode::Home));
+        assert_eq!(p.selected, 0);
+    }
+
+    #[test]
+    fn other_keys_and_a_closed_panel_are_not_handled() {
+        let mut p = Fake::default();
+        for code in [KeyCode::Enter, KeyCode::Esc, KeyCode::Char('x')] {
+            assert!(!list_panel_full_nav_key(Some(&mut p), code, 4), "{code:?}");
+        }
+        assert!(!list_panel_full_nav_key::<Fake>(None, KeyCode::Down, 4));
+        // The four-key variant leaves Home and End to its caller.
+        assert!(!list_panel_nav_key(Some(&mut p), KeyCode::Home, 4));
+        assert!(!list_panel_nav_key(Some(&mut p), KeyCode::End, 4));
+        assert!(list_panel_nav_key(Some(&mut p), KeyCode::Down, 4));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Focus;
+    use crate::app::cov4::*;
+
+    fn fresh(tag: &str) -> App {
+        let dir = temp(tag);
+        let mut app = app_at(&dir);
+        buffer_with(&mut app, "", 0);
+        app
+    }
+
+    #[test]
+    fn nerd_palette_moves_inserts_the_glyph_and_closes() {
+        let mut app = fresh("pp-nerd");
+        app.open_nerd_palette();
+        assert!(app.info.nerd_palette().is_some());
+        for k in [
+            KeyCode::Down,
+            KeyCode::Right,
+            KeyCode::Up,
+            KeyCode::Left,
+            KeyCode::Tab,
+        ] {
+            app.nerd_key(code(k));
+        }
+        let (glyph, name) = {
+            let p = app.info.nerd_palette().unwrap();
+            (
+                p.selected_glyph().unwrap(),
+                p.selected_name().unwrap().to_string(),
+            )
+        };
+        app.nerd_key(code(KeyCode::Enter));
+        assert_eq!(content(&mut app), glyph.to_string());
+        assert_eq!(
+            app.status,
+            t!("status.glyph_inserted", name = name).to_string()
+        );
+        assert!(
+            app.info.nerd_palette().is_some(),
+            "stays open for more picks"
+        );
+        app.nerd_key(code(KeyCode::Esc));
+        assert!(app.info.nerd_palette().is_none());
+        // Enter with no palette is a no-op.
+        app.nerd_key(code(KeyCode::Enter));
+    }
+
+    #[test]
+    fn nerd_palette_click_inserts_only_for_a_left_press_inside_a_cell() {
+        let mut app = fresh("pp-nerd-mouse");
+        app.open_nerd_palette();
+        app.layout.nerd_palette = Rect::new(2, 2, 40, 10);
+        let moved = vix_input::MouseEvent {
+            kind: vix_input::MouseEventKind::Moved,
+            column: 2,
+            row: 2,
+            modifiers: KeyModifiers::NONE,
+        };
+        app.nerd_mouse(moved);
+        app.nerd_mouse(click(0, 0)); // outside the palette
+        assert_eq!(content(&mut app), "");
+        app.nerd_mouse(click(2, 2));
+        let glyph = app.info.nerd_palette().unwrap().selected_glyph().unwrap();
+        assert_eq!(content(&mut app), glyph.to_string());
+    }
+
+    #[test]
+    fn ascii_table_navigates_jumps_inserts_and_closes() {
+        let mut app = fresh("pp-ascii");
+        app.layout.ascii_panel = Rect::new(0, 0, 30, 8);
+        app.open_ascii_panel();
+        app.ascii_key(code(KeyCode::Down));
+        app.ascii_key(code(KeyCode::PageDown));
+        app.ascii_key(code(KeyCode::Up));
+        app.ascii_key(code(KeyCode::PageUp));
+        app.ascii_key(code(KeyCode::End));
+        let last = app.info.ascii_panel().unwrap().selected_char();
+        app.ascii_key(code(KeyCode::Enter));
+        assert_eq!(content(&mut app), last.to_string());
+        app.ascii_key(code(KeyCode::Home));
+        let first = app.info.ascii_panel().unwrap().selected_char();
+        assert_ne!(first, last);
+        app.ascii_key(code(KeyCode::Tab));
+        app.ascii_key(code(KeyCode::Esc));
+        assert!(app.info.ascii_panel().is_none());
+    }
+
+    #[test]
+    fn ascii_table_click_inserts_the_character_on_that_row() {
+        let mut app = fresh("pp-ascii-mouse");
+        app.layout.ascii_panel = Rect::new(0, 0, 30, 8);
+        app.open_ascii_panel();
+        app.ascii_mouse(click(40, 40)); // outside
+        assert_eq!(content(&mut app), "");
+        app.ascii_mouse(click(1, 3));
+        let ch = app.info.ascii_panel().unwrap().selected_char();
+        assert_eq!(content(&mut app), ch.to_string());
+        // With the panel closed a click is ignored.
+        app.info.close_ascii_panel();
+        app.ascii_mouse(click(1, 3));
+    }
+
+    #[test]
+    fn x11_picker_inserts_hex_navigates_and_closes() {
+        let mut app = fresh("pp-x11");
+        app.layout.x11_panel = Rect::new(0, 0, 30, 8);
+        app.open_x11_panel();
+        app.x11_key(code(KeyCode::Down));
+        app.x11_key(code(KeyCode::End));
+        app.x11_key(code(KeyCode::Home));
+        app.x11_key(code(KeyCode::Tab));
+        let (hex, name) = {
+            let p = app.x11_panel.as_ref().unwrap();
+            (
+                p.selected_hex().unwrap().to_string(),
+                p.selected_name().unwrap().to_string(),
+            )
+        };
+        app.x11_key(code(KeyCode::Enter));
+        assert_eq!(content(&mut app), hex);
+        assert_eq!(
+            app.status,
+            t!("status.x11_inserted", name = name).to_string()
+        );
+        app.flags.insert(AppFlags::THEME_EDITOR_PICKING);
+        app.x11_key(code(KeyCode::Esc));
+        assert!(app.x11_panel.is_none());
+        assert!(!app.flags.contains(AppFlags::THEME_EDITOR_PICKING));
+        app.x11_key(code(KeyCode::Enter)); // no panel: nothing
+    }
+
+    #[test]
+    fn x11_click_acts_on_the_clicked_row_and_a_stray_pick_without_a_theme_editor_closes() {
+        let mut app = fresh("pp-x11-mouse");
+        app.layout.x11_panel = Rect::new(0, 0, 30, 8);
+        app.open_x11_panel();
+        app.x11_mouse(click(1, 2));
+        let hex = app
+            .x11_panel
+            .as_ref()
+            .unwrap()
+            .selected_hex()
+            .unwrap()
+            .to_string();
+        assert_eq!(content(&mut app), hex);
+        // Opened for a theme-editor pick that no longer exists: it just closes.
+        app.flags.insert(AppFlags::THEME_EDITOR_PICKING);
+        let before = content(&mut app);
+        app.x11_mouse(click(1, 2));
+        assert!(app.x11_panel.is_none());
+        assert!(!app.flags.contains(AppFlags::THEME_EDITOR_PICKING));
+        assert_eq!(content(&mut app), before);
+    }
+
+    #[test]
+    fn media_type_picker_filters_inserts_and_closes() {
+        let mut app = fresh("pp-media");
+        let json = app.root.join("data.json");
+        std::fs::write(&json, "{}").unwrap();
+        app.open_path(&json, false);
+        buffer_with(&mut app, "", 0);
+        app.layout.media_type_panel = Rect::new(0, 0, 40, 8);
+        app.open_media_type_panel();
+        let selected = app
+            .info
+            .media_type_panel()
+            .unwrap()
+            .selected_entry()
+            .unwrap()
+            .media_type
+            .to_string();
+        assert_eq!(
+            selected, "application/json",
+            "pre-selected from the extension"
+        );
+        app.media_type_key(code(KeyCode::Enter));
+        assert_eq!(content(&mut app), "application/json");
+        assert_eq!(
+            app.status,
+            t!(
+                "status.media_type_inserted",
+                media_type = "application/json"
+            )
+            .to_string()
+        );
+        for c in "png".chars() {
+            app.media_type_key(key(c));
+        }
+        app.media_type_key(code(KeyCode::Backspace));
+        app.media_type_key(key('g'));
+        app.media_type_key(code(KeyCode::Down));
+        app.media_type_key(code(KeyCode::Tab));
+        let filtered = app
+            .info
+            .media_type_panel()
+            .unwrap()
+            .selected_entry()
+            .unwrap()
+            .media_type
+            .to_string();
+        assert!(filtered.contains("png"), "{filtered}");
+        app.media_type_mouse(click(1, 0));
+        let clicked = app
+            .info
+            .media_type_panel()
+            .unwrap()
+            .selected_entry()
+            .unwrap()
+            .media_type
+            .to_string();
+        assert!(content(&mut app).ends_with(&clicked));
+        app.media_type_key(code(KeyCode::Esc));
+        assert!(app.info.media_type_panel().is_none());
+        app.media_type_mouse(click(1, 0)); // closed: ignored
+        app.media_type_key(code(KeyCode::Enter));
+    }
+
+    #[test]
+    fn the_qr_overlay_encodes_the_selection_or_line_and_warns_on_nothing() {
+        let mut app = fresh("pp-qr");
+        app.open_qrcode();
+        assert!(app.qrcode.is_none());
+        assert_eq!(last_message(&app), Some(t!("msg.qrcode_empty").to_string()));
+        buffer_with(&mut app, "https://example.invalid", 0);
+        app.open_qrcode();
+        assert!(app.qrcode.as_ref().is_some_and(|a| !a.is_empty()));
+        app.qrcode = None;
+        buffer_with(&mut app, "ignored line\nfoo bar", 0);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(13, 20);
+        app.open_qrcode();
+        assert!(app.qrcode.is_some());
+    }
+
+    #[test]
+    fn todo_tree_lists_comment_tags_navigates_folds_and_jumps() {
+        let mut app = fresh("pp-todo");
+        std::fs::write(
+            app.root.join("work.rs"),
+            "fn a() {}\n// TODO: first thing\nfn b() {}\n// FIXME: second thing\n",
+        )
+        .unwrap();
+        app.layout.todo_tree = Rect::new(0, 0, 40, 10);
+        app.open_todo_tree();
+        assert!(app.todo_tree.as_ref().expect("todos found").len() >= 2);
+        let n = 2;
+        assert_eq!(app.status, t!("status.todos_n", n = n).to_string());
+        for k in [
+            KeyCode::Down,
+            KeyCode::PageDown,
+            KeyCode::Up,
+            KeyCode::PageUp,
+        ] {
+            app.todo_tree_key(code(k));
+        }
+        let rows = app.todo_tree.as_ref().unwrap().len();
+        app.todo_tree_key(key('['));
+        assert!(app.todo_tree.as_ref().unwrap().len() <= rows);
+        app.todo_tree_key(key(']'));
+        assert_eq!(app.todo_tree.as_ref().unwrap().len(), rows);
+        app.todo_tree_key(key('g'));
+        app.todo_tree_key(key('g'));
+        app.todo_tree_key(key(' '));
+        app.todo_tree_key(key('x')); // ignored
+        assert!(app.todo_tree.is_some());
+        app.todo_tree_key(code(KeyCode::Esc));
+        assert!(app.todo_tree.is_none());
+        app.todo_tree_key(code(KeyCode::Enter)); // closed: nothing
+        app.todo_tree_mouse(click(1, 1));
+
+        // Enter on an item opens its file at the line.
+        app.open_todo_tree();
+        app.todo_tree_key(key(']'));
+        for _ in 0..rows {
+            app.todo_tree_key(code(KeyCode::Down));
+            app.todo_tree_key(code(KeyCode::Enter));
+            if app.todo_tree.is_none() {
+                break;
+            }
+        }
+        assert!(app.todo_tree.is_none(), "an item was activated");
+        assert!(
+            app.editor
+                .active_tab_mut()
+                .unwrap()
+                .path
+                .as_ref()
+                .is_some_and(|p| p.ends_with("work.rs"))
+        );
+        assert_eq!(app.focus, Focus::Editor);
+    }
+
+    #[test]
+    fn todo_tree_click_activates_an_item_and_an_empty_project_says_so() {
+        let mut app = fresh("pp-todo-click");
+        app.layout.todo_tree = Rect::new(0, 0, 40, 10);
+        app.open_todo_tree();
+        assert!(app.todo_tree.is_none());
+        assert_eq!(app.status, t!("status.no_todos").to_string());
+        std::fs::write(app.root.join("w.rs"), "// TODO: x\n").unwrap();
+        app.open_todo_tree();
+        app.todo_tree_mouse(click(1, 0)); // the group header folds
+        assert!(app.todo_tree.is_some());
+        app.todo_tree_mouse(click(1, 0)); // and unfolds again
+        app.todo_tree_mouse(click(1, 1)); // the item under it jumps
+        assert!(app.todo_tree.is_none(), "clicking the item jumped to it");
+    }
+
+    #[test]
+    fn theme_editor_opens_navigates_picks_a_color_and_closes() {
+        let mut app = fresh("pp-theme");
+        app.layout.theme_editor = Rect::new(0, 0, 40, 10);
+        app.open_theme_editor();
+        assert!(app.theme_editor.is_some());
+        assert_eq!(
+            app.theme_editor_baseline.as_deref(),
+            Some(app.settings.theme.as_str())
+        );
+        for k in [
+            KeyCode::Down,
+            KeyCode::PageDown,
+            KeyCode::Up,
+            KeyCode::PageUp,
+            KeyCode::Tab,
+        ] {
+            app.theme_editor_key(code(k));
+        }
+        app.theme_editor_key(code(KeyCode::Enter));
+        assert!(app.flags.contains(AppFlags::THEME_EDITOR_PICKING));
+        assert!(app.x11_panel.is_some());
+        app.x11_key(code(KeyCode::Esc));
+        assert!(app.x11_panel.is_none());
+        assert!(!app.flags.contains(AppFlags::THEME_EDITOR_PICKING));
+
+        app.theme_editor_key(ctrl('s'));
+        assert!(matches!(
+            app.prompt.as_ref().unwrap().kind,
+            PromptKind::ThemeSaveAs
+        ));
+        app.prompt = None;
+        app.theme_editor_mouse(click(40, 40)); // outside
+        assert!(app.x11_panel.is_none());
+        app.theme_editor_mouse(click(1, 1));
+        assert!(app.flags.contains(AppFlags::THEME_EDITOR_PICKING));
+        assert!(app.x11_panel.is_some());
+        app.theme_editor_key(code(KeyCode::Esc));
+        assert!(app.theme_editor.is_none());
+        assert!(app.x11_panel.is_none());
+        assert!(app.theme_editor_baseline.is_none());
+        assert!(!app.flags.contains(AppFlags::THEME_EDITOR_PICKING));
+        // With no editor open these do nothing.
+        app.theme_editor_key(code(KeyCode::Enter));
+        assert!(app.x11_panel.is_none());
+        app.theme_editor_mouse(click(1, 1));
+    }
+
+    #[test]
+    fn saving_a_theme_needs_a_name_and_an_open_editor() {
+        let mut app = fresh("pp-theme-save");
+        app.save_theme_as(""); // blank name: cancelled
+        app.save_theme_as("whatever"); // no editor: nothing written
+        assert!(app.theme_editor.is_none());
+        app.open_theme_editor();
+        app.save_theme_as("");
+        assert!(app.theme_editor.is_some(), "a blank name keeps the draft");
+    }
+}
+
+#[cfg(test)]
+#[path = "tests_r3_picker_panels.rs"]
+mod r3_tests;

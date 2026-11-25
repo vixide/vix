@@ -21,7 +21,20 @@
 //! `wrap_text`, `smart_toggle`) sit interleaved in the original range but
 //! aren't org-specific, so they stayed in `app.rs`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::chooser::ChooserSlot;
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
@@ -339,15 +352,16 @@ impl App {
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
         let (new, new_line) = crate::org::new_heading(&text, line);
-        let offset = new
+        let offset = (new
             .split('\n')
             .take(new_line)
-            .map(|l| l.chars().count() + 1)
-            .sum::<usize>()
-            + new
-                .split('\n')
+            .map(|l| l.chars().count().plus(1))
+            .sum::<usize>())
+        .plus(
+            new.split('\n')
                 .nth(new_line)
-                .map_or(0, |l| l.chars().count());
+                .map_or(0, |l| l.chars().count()),
+        );
         tab.editor.set_content(&new);
         tab.editor.set_cursor(offset);
         tab.dirty = true;
@@ -381,8 +395,10 @@ impl App {
             return;
         };
         let lines: Vec<&str> = text.split('\n').collect();
-        tab.editor
-            .copy_to_clipboard(&format!("{}\n", lines[start..end].join("\n")));
+        tab.editor.copy_to_clipboard(&format!(
+            "{}\n",
+            lines.get(start..end).unwrap_or_default().join("\n")
+        ));
         if cut {
             let rest: Vec<&str> = lines
                 .iter()
@@ -391,8 +407,7 @@ impl App {
                 .map(|(_, s)| *s)
                 .collect();
             tab.editor.set_content(&rest.join("\n"));
-            tab.editor
-                .set_cursor_line(start.min(rest.len().saturating_sub(1)));
+            tab.editor.set_cursor_line(start.min(rest.len().minus(1)));
             tab.dirty = true;
             self.status = t!("status.org_subtree_cut").to_string();
         } else {
@@ -433,7 +448,7 @@ impl App {
         let targets: Vec<(usize, String)> = crate::org::headlines(&text)
             .into_iter()
             .filter(|(l, _, _)| !(start..end).contains(l))
-            .map(|(l, level, title)| (l, format!("{}{title}", "  ".repeat(level - 1))))
+            .map(|(l, level, title)| (l, format!("{}{title}", "  ".repeat(level.minus(1)))))
             .collect();
         if targets.is_empty() {
             self.status = t!("status.org_no_refile_target").to_string();
@@ -452,12 +467,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.refile_mut() {
                     let n = c.targets.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.refile_mut() {
-                    c.selected = (c.selected + 1) % c.targets.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.targets.len());
                 }
             }
             KeyCode::Enter => self.accept_refile_chooser(),
@@ -565,8 +580,8 @@ impl App {
         };
         let body: Vec<&str> = text
             .split('\n')
-            .skip(begin + 1)
-            .take(end - begin - 1)
+            .skip(begin.plus(1))
+            .take(end.minus(begin).minus(1))
             .collect();
         self.src_edit = Some(SrcEdit {
             source: tab.path.clone(),
@@ -696,7 +711,7 @@ impl App {
             return;
         }
         if let Some(tab) = self.editor.active_tab_mut() {
-            let target = line.min(rest.split('\n').count().saturating_sub(1));
+            let target = line.min(rest.split('\n').count().minus(1));
             tab.editor.set_content(&rest);
             tab.editor.set_cursor_line(target);
             tab.dirty = true;
@@ -761,7 +776,7 @@ impl App {
     /// Insert an active `<…>` or inactive `[…]` timestamp for today at the
     /// cursor (Org `C-c .` / `C-c !`).
     fn org_insert_timestamp(&mut self, active: bool) {
-        let today = jiff::Zoned::now().strftime("%Y-%m-%d").to_string();
+        let today = jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string();
         if let Some(stamp) = crate::org::timestamp_for(&today, active) {
             self.insert_content(&stamp);
         }
@@ -777,7 +792,7 @@ impl App {
         } else {
             "prompt.org_deadline"
         };
-        let today = jiff::Zoned::now().strftime("%Y-%m-%d").to_string();
+        let today = jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string();
         self.prompt = Some(Prompt::new(kind, t!(key).to_string()).with_input(today));
     }
 
@@ -921,7 +936,7 @@ impl App {
             .unwrap_or(&path)
             .to_string_lossy()
             .into_owned();
-        let stored = format!("[[file:{rel}::{}][{rel}:{}]]", line + 1, line + 1);
+        let stored = format!("[[file:{rel}::{}][{rel}:{}]]", line.plus(1), line.plus(1));
         self.status = t!("status.org_link_stored", link = stored).to_string();
         self.stored_org_link = Some(stored);
     }
@@ -1206,7 +1221,7 @@ impl App {
         };
         if pc.next < pc.prompts.len() {
             pc.answers.push(input.to_string());
-            pc.next += 1;
+            pc.next = pc.next.plus(1);
         } else {
             pc.tags = Some(input.to_string());
         }
@@ -1265,7 +1280,7 @@ impl App {
     /// Build the placeholder-expansion [`vix_org_capture::Context`] from the
     /// current date/time, active buffer, selection, and clipboard.
     fn capture_context(&mut self) -> vix_org_capture::Context {
-        let now = jiff::Zoned::now();
+        let now = jiff::ZonedDateTime::now();
         let path = self.active_path();
         let line = self
             .editor
@@ -1277,7 +1292,7 @@ impl App {
                 .unwrap_or(p)
                 .to_string_lossy()
                 .into_owned();
-            format!("[[file:{rel}::{}][{rel}:{}]]", line + 1, line + 1)
+            format!("[[file:{rel}::{}][{rel}:{}]]", line.plus(1), line.plus(1))
         });
         let initial = self
             .editor
@@ -1406,7 +1421,9 @@ impl App {
 
     /// The current local time as an Org timestamp (`YYYY-MM-DD Day HH:MM`).
     fn org_timestamp() -> String {
-        jiff::Zoned::now().strftime("%Y-%m-%d %a %H:%M").to_string()
+        jiff::ZonedDateTime::now()
+            .strftime("%Y-%m-%d %a %H:%M")
+            .to_string()
     }
 
     /// Org clock-in: insert a `CLOCK: [now]` entry at the cursor.
@@ -1558,7 +1575,7 @@ impl App {
         let (text, view, _) = self.build_view(&kind);
         if let Some(tab) = self.editor.active_tab_mut() {
             tab.editor.set_content(&text);
-            let last = text.split('\n').count().saturating_sub(1);
+            let last = text.split('\n').count().minus(1);
             tab.editor.set_cursor_line(cursor_line.min(last));
             tab.dirty = false;
             tab.read_only = true;
@@ -1606,7 +1623,7 @@ impl App {
                 .get(line)
                 .copied()
                 .flatten()
-                .map(|idx| view.items[idx].clone()),
+                .and_then(|idx| view.items.get(idx).cloned()),
             _ => return false,
         };
         let Some((path, src_line)) = target else {
@@ -1714,7 +1731,7 @@ impl App {
             let is_headline = lines
                 .get(line)
                 .is_some_and(|l| crate::org::headline_level(l).is_some());
-            let subtree = crate::org::subtree_range(&lines, line).map(|(s, e)| (s, e - 1));
+            let subtree = crate::org::subtree_range(&lines, line).map(|(s, e)| (s, e.minus(1)));
             (is_headline, crate::org::drawer_range(&lines, line), subtree)
         };
         if let Some((start, end)) = drawer {
@@ -1811,13 +1828,13 @@ impl App {
             KeyCode::Up => {
                 let n = self.settings.org_capture_templates.len();
                 if let Some(cc) = self.chooser.capture_mut() {
-                    cc.selected = (cc.selected + n - 1) % n;
+                    cc.selected = vix_list_state::wrap_up(cc.selected, n);
                 }
             }
             KeyCode::Down => {
                 let n = self.settings.org_capture_templates.len();
                 if let Some(cc) = self.chooser.capture_mut() {
-                    cc.selected = (cc.selected + 1) % n;
+                    cc.selected = vix_list_state::wrap_down(cc.selected, n);
                 }
             }
             KeyCode::Enter => self.accept_capture_chooser(),
@@ -1853,3 +1870,6 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

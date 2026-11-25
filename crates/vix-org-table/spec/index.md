@@ -119,10 +119,21 @@ Sorts the data rows in `[first_line, last_line]` by their `column`-th field.
 (unparsable cells sort last); `Time` parses cells permissively as an
 Org/ISO-ish timestamp (`<YYYY-MM-DD [Www] [HH:MM]>`, brackets optional) or a
 bare `H(H):MM` duration, falling back to alphabetic comparison on parse
-failure. Hlines in the range keep their line position; only data-row
-*contents* are reordered into the data-row slots, in source order — the
-simplest correct behavior for the common cases (a whole table, or a
-caller-narrowed run between two hlines).
+failure. Hlines in the range keep their line position and no row crosses
+one: each run of data rows between hlines (a header, a body, ...) is sorted on
+its own, so sorting a whole table with a header rule leaves the header where it
+is.
+
+```rust
+pub fn section_range(text, line) -> Option<(usize, usize)>
+```
+
+The lines of the section holding `line`: the run between the nearest hlines
+(or the table's edges), which is the range Org's `C-c ^` sorts. The editor's
+sort acts on this range, so the cursor in the body sorts the body and the
+cursor in the header sorts the header (one row, so nothing moves). On an hline
+itself the section is the one just below, or the one above when the hline ends
+the table. `None` off a table or when the table is only hlines.
 
 ## Rectangle copy/cut/paste
 

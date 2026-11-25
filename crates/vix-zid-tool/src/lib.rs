@@ -12,6 +12,18 @@
 //!
 //! Spec: `crates/vix-zid-tool/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Generate a fresh ZID of `byte_len` secure-random bytes, rendered as
 /// `2 * byte_len` lowercase hex characters. Falls back to all-zero bytes only if
 /// the OS RNG is somehow unavailable (never expected on supported platforms).
@@ -40,7 +52,8 @@ pub fn generate(byte_len: usize) -> String {
 /// nibble first, zero-padded so `0x0f` is `"0f"`, not `"f"`).
 #[expect(clippy::expect_used, reason = "a nibble is always below 16")]
 fn to_hex(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
+    let mut s = // TOOL-F1: the capacity is only a hint, so an unrepresentable size is 0.
+    String::with_capacity(bytes.len().checked_mul(2).unwrap_or(0));
     for b in bytes {
         s.push(char::from_digit(u32::from(b >> 4), 16).expect("nibble"));
         s.push(char::from_digit(u32::from(b & 0x0f), 16).expect("nibble"));

@@ -18,6 +18,18 @@
 //! [`cherry_pick`] are the mutating per-commit actions. Every failure is a
 //! [`GraphError`].
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 #[cfg(feature = "process")]
 use std::path::Path;
 
@@ -32,6 +44,25 @@ const RECORD_SEP: char = '\u{1e}';
 /// The `git log --format=` argument this crate parses: full hash, abbreviated
 /// hash, parent hashes, author, short date, ref names, subject.
 pub const LOG_FORMAT: &str = "--format=%H\u{1f}%h\u{1f}%P\u{1f}%an\u{1f}%ad\u{1f}%D\u{1f}%s\u{1e}";
+
+/// The index of the last of `len` items; with none, 0.
+fn last_index(len: usize) -> usize {
+    sub_or(len, 1, 0)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Why a graph operation failed.
 #[derive(Debug)]
@@ -243,14 +274,20 @@ impl Row {
     pub fn glyphs(&self, width: usize) -> String {
         let width = width.max(self.width);
         let mut bend: Vec<Option<char>> = vec![None; width];
+        // A lane index is below the row's width by construction (see
+        // `assign_lanes`); a column that does not exist draws no glyph.
         for &i in &self.incoming {
-            if i != self.lane {
-                bend[i] = Some('╯');
+            if i != self.lane
+                && let Some(slot) = bend.get_mut(i)
+            {
+                *slot = Some('╯');
             }
         }
         for &o in &self.outgoing {
-            if o != self.lane {
-                bend[o] = Some(match bend[o] {
+            if o != self.lane
+                && let Some(slot) = bend.get_mut(o)
+            {
+                *slot = Some(match *slot {
                     Some(_) => '┼',
                     None if o > self.lane => '╮',
                     None => '╭',
@@ -265,7 +302,7 @@ impl Row {
             .iter()
             .rposition(Option::is_some)
             .map_or(self.lane, |p| p.max(self.lane));
-        let mut s = String::with_capacity(width * 2);
+        let mut s = String::new();
         for (col, mark) in bend.iter().enumerate() {
             let glyph = if col == self.lane {
                 '●'
@@ -291,7 +328,8 @@ fn free_slot(lanes: &mut Vec<Option<&str>>) -> usize {
         i
     } else {
         lanes.push(None);
-        lanes.len() - 1
+        // The slot just pushed.
+        last_index(lanes.len())
     }
 }
 
@@ -320,7 +358,9 @@ pub fn assign_lanes(commits: &[Commit]) -> Vec<Row> {
             None => free_slot(&mut lanes),
         };
         for &i in &incoming {
-            lanes[i] = None;
+            if let Some(slot) = lanes.get_mut(i) {
+                *slot = None;
+            }
         }
         let through: Vec<usize> = lanes
             .iter()
@@ -334,12 +374,16 @@ pub fn assign_lanes(commits: &[Commit]) -> Vec<Row> {
             match (waiting, k) {
                 (Some(i), _) => outgoing.push(i),
                 (None, 0) => {
-                    lanes[lane] = Some(parent.as_str());
+                    if let Some(slot) = lanes.get_mut(lane) {
+                        *slot = Some(parent.as_str());
+                    }
                     outgoing.push(lane);
                 }
                 (None, _) => {
                     let slot = free_slot(&mut lanes);
-                    lanes[slot] = Some(parent.as_str());
+                    if let Some(entry) = lanes.get_mut(slot) {
+                        *entry = Some(parent.as_str());
+                    }
                     outgoing.push(slot);
                 }
             }
@@ -351,7 +395,7 @@ pub fn assign_lanes(commits: &[Commit]) -> Vec<Row> {
             .copied()
             .chain(std::iter::once(lane))
             .max()
-            .map_or(1, |m| m + 1);
+            .map_or(1, |m| add_or(m, 1, usize::MAX));
         rows.push(Row {
             lane,
             incoming,
@@ -507,7 +551,7 @@ impl Panel {
             .filter(|(_, c)| c.matches(&q))
             .map(|(i, _)| i)
             .collect();
-        self.selected = self.selected.min(self.visible.len().saturating_sub(1));
+        self.selected = self.selected.min(last_index(self.visible.len()));
     }
 
     /// Append the next page of commits (a short page marks the history
@@ -559,7 +603,7 @@ impl Panel {
     /// should be loaded.
     #[must_use]
     pub fn wants_more(&self) -> bool {
-        !self.exhausted && self.selected + 20 >= self.visible.len()
+        !self.exhausted && add_or(self.selected, 20, usize::MAX) >= self.visible.len()
     }
 
     /// Append a character to the search and reset the highlight.
@@ -625,16 +669,18 @@ impl Panel {
     /// [`refs`](Self::refs) in turn, then all again. The caller reloads the
     /// first page with [`replace`](Self::replace) afterwards.
     pub fn cycle_reference(&mut self, forward: bool) {
-        let n = self.refs.len() + 1;
+        // Position 0 is "all refs"; position k is `refs[k - 1]`.
+        let n = add_or(self.refs.len(), 1, usize::MAX);
         let cur = self
             .reference
             .as_ref()
             .and_then(|r| self.refs.iter().position(|x| x == r))
-            .map_or(0, |i| i + 1);
+            .map_or(0, |i| add_or(i, 1, usize::MAX));
+        // Stepping wraps around the ring of n positions.
         let next = if forward {
-            (cur + 1) % n
+            add_or(cur, 1, 0).checked_rem(n).unwrap_or(0)
         } else {
-            (cur + n - 1) % n
+            add_or(cur, sub_or(n, 1, 0), 0).checked_rem(n).unwrap_or(0)
         };
         self.reference = next.checked_sub(1).and_then(|i| self.refs.get(i)).cloned();
     }

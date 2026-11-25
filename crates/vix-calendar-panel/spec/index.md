@@ -51,3 +51,12 @@ navigation state (`move_days`/`move_months`/`move_years`, `selected`,
 optional day numbers, with `today` set only for the current month). The host owns
 the `Visible::CALENDAR` flag, the `Calendar` state, the `tools.calendar` toggle, key/mouse
 routing, and `draw_calendar`. See `crates/vix-calendar-panel/spec/index.md`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Moving the selection builds a `Span` with `try_*` and adds it with `checked_add`; the old `saturating_*` calls are gone, and the week grid uses `get_mut`. A span the date library refuses (for example `i64::MAX` days) is an input error: `move_days`, `move_months`, `move_years`, `next_month` and `prev_month` return `Err(MoveError::InvalidSpan { figure })` and leave the selection alone. A valid span that would leave the calendar's own limits stops at the current selection, the declared boundary of navigation.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `CAL-F1` | A valid span would take the date past the calendar's limits | the selection stays where it is | The limits are the end of the calendar, like the last row of a list. |
+| `CAL-F2` | A week column count does not fit | the end of the week | The grid has seven columns. |

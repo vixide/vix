@@ -168,10 +168,16 @@ impl Output {
     pub fn plain_text(&self) -> String {
         match self {
             Self::Stream { text, .. } => text.clone(),
-            Self::Result { data, .. } | Self::Display { data, .. } => data
-                .text("text/markdown")
-                .or_else(|| data.text("text/plain"))
-                .unwrap_or_default(),
+            Self::Result { data, .. } | Self::Display { data, .. } => {
+                // A bundle with neither a markdown nor a plain-text form has no text.
+                let Some(text) = data
+                    .text("text/markdown")
+                    .or_else(|| data.text("text/plain"))
+                else {
+                    return String::new();
+                };
+                text
+            }
             Self::Error {
                 ename,
                 evalue,

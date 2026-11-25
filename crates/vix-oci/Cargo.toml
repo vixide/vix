@@ -16,6 +16,7 @@ process = []
 
 [dependencies]
 serde_json = { workspace = true }
+vix-civil-date = { workspace = true }
 
 [lints]
 workspace = true

@@ -21,7 +21,9 @@ pub struct Snapshot {
     /// The schema name (`public`, or `main` on `SQLite`).
     pub schema: String,
     /// `true` when the schema does not exist on this connection (only the
-    /// `PostgreSQL` reader can say so); the migration then creates it.
+    /// `PostgreSQL` reader can say so; `SQLite` compares only `main`, which
+    /// always exists, and refuses any other name); the migration then
+    /// creates it.
     pub missing: bool,
     /// Tables, sorted by name.
     pub tables: Vec<Table>,

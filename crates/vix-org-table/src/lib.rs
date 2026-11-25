@@ -99,6 +99,35 @@ pub fn table_range(text: &str, line: usize) -> Option<(usize, usize)> {
     Some((start, end))
 }
 
+/// The lines of the table section holding `line`: the run of rows between the
+/// nearest horizontal rules (or the table's own edges), the range Org's
+/// `C-c ^` sorts. A table with a header rule has the header as one section and
+/// the body as another. On a rule itself the section is the one just below it,
+/// or the one above when it is the table's last line. `None` when `line` is
+/// not in a table or the section is empty (a table of nothing but rules).
+#[must_use]
+pub fn section_range(text: &str, line: usize) -> Option<(usize, usize)> {
+    let (first, last) = table_range(text, line)?;
+    let lines: Vec<&str> = text.split('\n').collect();
+    let is_rule = |i: usize| lines.get(i).is_some_and(|l| is_hline_line(l));
+    let mut at = line;
+    if is_rule(at) {
+        // Step off the rule: down into the next section, else up.
+        at = (at..=last)
+            .find(|&i| !is_rule(i))
+            .or_else(|| (first..at).rev().find(|&i| !is_rule(i)))?;
+    }
+    let mut start = at;
+    while start > first && !is_rule(start - 1) {
+        start -= 1;
+    }
+    let mut end = at;
+    while end < last && !is_rule(end + 1) {
+        end += 1;
+    }
+    Some((start, end))
+}
+
 /// Parse one table line into a [`Row`].
 fn parse_row(line: &str) -> Row {
     if is_hline_line(line) {
@@ -777,11 +806,10 @@ pub enum SortKind {
 
 /// Sort the data rows in `[first_line, last_line]` (inclusive) by their
 /// 0-indexed `column`, in place. Hlines within the range keep their line
-/// position; only the data-row *contents* are reordered into the data-row
-/// slots (in source order) — this is the simplest correct behavior for the
-/// common cases (a whole table, or a caller-narrowed contiguous run between
-/// hlines) and does not attempt to keep a run "anchored" to a particular
-/// hline beyond that.
+/// position and no row crosses one: each run of data rows between hlines (a
+/// header, a body, ...) is sorted on its own, its contents reordered into its
+/// own slots. Sorting a whole table with a header rule therefore leaves the
+/// header where it is; [`section_range`] gives the one section a cursor is in.
 #[must_use]
 pub fn sort_rows(
     text: &str,
@@ -803,30 +831,39 @@ pub fn sort_rows(
         return None;
     }
     let mut table = parse(text, first_line, last_line);
-    let slots: Vec<usize> = table
-        .rows
-        .iter()
-        .enumerate()
-        .filter_map(|(i, r)| matches!(r, Row::Data(_)).then_some(i))
-        .collect();
-    if slots.is_empty() {
+    // Rows never cross a horizontal rule: each run of data rows between rules
+    // (a header, a body, ...) is sorted on its own, into its own slots.
+    let mut runs: Vec<Vec<usize>> = Vec::new();
+    let mut open = false;
+    for (i, row) in table.rows.iter().enumerate() {
+        if matches!(row, Row::Data(_)) {
+            match runs.last_mut() {
+                Some(run) if open => run.push(i),
+                _ => runs.push(vec![i]),
+            }
+            open = true;
+        } else {
+            open = false;
+        }
+    }
+    if runs.is_empty() {
         return None;
     }
-    let mut rows: Vec<Vec<String>> = slots
-        .iter()
-        .map(|&i| match &table.rows[i] {
-            Row::Data(cells) => cells.clone(),
-            Row::Hline => Vec::new(),
-        })
-        .collect();
-
-    sort_rows_by_key(&mut rows, column, kind, case_sensitive);
-    if reverse {
-        rows.reverse();
-    }
-
-    for (&slot, cells) in slots.iter().zip(rows) {
-        table.rows[slot] = Row::Data(cells);
+    for slots in &runs {
+        let mut rows: Vec<Vec<String>> = slots
+            .iter()
+            .map(|&i| match &table.rows[i] {
+                Row::Data(cells) => cells.clone(),
+                Row::Hline => Vec::new(),
+            })
+            .collect();
+        sort_rows_by_key(&mut rows, column, kind, case_sensitive);
+        if reverse {
+            rows.reverse();
+        }
+        for (&slot, cells) in slots.iter().zip(rows) {
+            table.rows[slot] = Row::Data(cells);
+        }
     }
     let rendered = render(&table);
     Some(splice_lines(text, first_line, last_line, &rendered))
@@ -2188,6 +2225,60 @@ mod tests {
             })
             .collect();
         assert_eq!(nums, vec!["3", "2", "1"]);
+    }
+
+    #[test]
+    fn sorting_never_moves_a_row_across_a_horizontal_rule() {
+        // The header used to be sorted in with the body.
+        let text = "| name | n |\n|------+---|\n| pear | 3 |\n| apple | 1 |\n| fig | 2 |";
+        let (first, last) = table_range(text, 0).unwrap();
+        let out = sort_rows(text, first, last, 0, SortKind::Alphabetic, false, false).unwrap();
+        let lines: Vec<&str> = out.split('\n').collect();
+        assert!(lines[0].contains("name"), "{out}");
+        assert!(lines[1].starts_with("|--"), "{out}");
+        assert!(lines[2].contains("apple"), "{out}");
+        assert!(lines[3].contains("fig"), "{out}");
+        assert!(lines[4].contains("pear"), "{out}");
+        // Reversed, numerically: still the header first.
+        let out = sort_rows(text, first, last, 1, SortKind::Numeric, true, false).unwrap();
+        let lines: Vec<&str> = out.split('\n').collect();
+        assert!(lines[0].contains("name"), "{out}");
+        assert!(
+            lines[2].contains("pear") && lines[4].contains("apple"),
+            "{out}"
+        );
+        // Two bodies sort independently, neither swapping rows with the other.
+        let text = "| z | 1 |\n| a | 2 |\n|---+---|\n| y | 3 |\n| b | 4 |";
+        let (first, last) = table_range(text, 0).unwrap();
+        let out = sort_rows(text, first, last, 0, SortKind::Alphabetic, false, false).unwrap();
+        let lines: Vec<&str> = out.split('\n').collect();
+        assert!(
+            lines[0].contains("| a") && lines[1].contains("| z"),
+            "{out}"
+        );
+        assert!(
+            lines[3].contains("| b") && lines[4].contains("| y"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn a_section_is_the_run_between_the_nearest_rules() {
+        let text = "intro\n| h |\n|---|\n| b1 |\n| b2 |\n|---|\n| c |\n";
+        assert_eq!(section_range(text, 1), Some((1, 1)), "the header");
+        assert_eq!(section_range(text, 3), Some((3, 4)), "the first body");
+        assert_eq!(section_range(text, 4), Some((3, 4)));
+        assert_eq!(section_range(text, 6), Some((6, 6)), "the last section");
+        // On a rule: the section below it.
+        assert_eq!(section_range(text, 2), Some((3, 4)));
+        assert_eq!(section_range(text, 5), Some((6, 6)));
+        // A table without rules is one section; a non-table line has none.
+        assert_eq!(section_range("| a |\n| b |", 1), Some((0, 1)));
+        assert_eq!(section_range(text, 0), None);
+        // Only rules: no rows to sort.
+        assert_eq!(section_range("|---|\n|---|", 0), None);
+        // A rule as the table's last line: the section above it.
+        assert_eq!(section_range("| a |\n|---|", 1), Some((0, 0)));
     }
 
     #[test]

@@ -19,6 +19,18 @@
 //! more than one field, not a single call) and so did the prefix-matched
 //! actions (`view.theme:`, `script:`, …).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{App, SQL_CREATE_EXTENSION, SQL_CREATE_TABLE};
@@ -425,14 +437,15 @@ impl App {
                     c.focus_prev();
                 }
             }
-            KeyCode::Left => {
-                if let Some(c) = self.unit_converter.as_mut() {
-                    c.cycle(-1);
-                }
-            }
-            KeyCode::Right => {
-                if let Some(c) = self.unit_converter.as_mut() {
-                    c.cycle(1);
+            KeyCode::Left | KeyCode::Right => {
+                let step = if key.code == KeyCode::Left { -1 } else { 1 };
+                let refused = self
+                    .unit_converter
+                    .as_mut()
+                    .and_then(|c| c.cycle(step).err());
+                if let Some(e) = refused {
+                    self.messages
+                        .error(t!("msg.command_failed", error = e.to_string()).to_string());
                 }
             }
             KeyCode::Backspace => {
@@ -571,5 +584,299 @@ impl App {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::cov4::*;
+
+    /// An app on a scratch buffer holding `text` with its cursor at the end.
+    fn app_with_text(tag: &str, text: &str) -> App {
+        let mut app = app_at(&temp(tag));
+        buffer_with(&mut app, text, text.chars().count());
+        app
+    }
+
+    fn select(app: &mut App, from: usize, to: usize) {
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(from, to);
+    }
+
+    fn type_into(app: &mut App, f: fn(&mut App, KeyEvent), text: &str) {
+        for c in text.chars() {
+            f(app, key(c));
+        }
+    }
+
+    #[test]
+    fn plain_tool_actions_are_dispatched_and_unknown_ones_are_not() {
+        let mut app = app_at(&temp("tools-dispatch"));
+        assert!(!app.run_tools_action("tools.no_such_thing"));
+        assert!(app.run_tools_action("tools.calculator"));
+        assert!(app.calculator.is_some());
+        assert!(app.run_tools_action("tools.regex_tester"));
+        assert!(app.regex_tester.is_some());
+        assert!(app.run_tools_action("tools.color_converter"));
+        assert!(app.color_converter.is_some());
+    }
+
+    #[test]
+    fn markdown_and_html_snippets_land_at_the_cursor_and_unknown_ids_do_not() {
+        let mut app = app_with_text("snippets", "");
+        assert!(app.insert_markdown("tools.insert.markdown.headline2"));
+        assert_eq!(content(&mut app), "## Headline 2\n\n");
+        assert_eq!(
+            app.status,
+            t!("status.generated", text = "## Headline 2\n\n").to_string()
+        );
+        assert!(app.insert_markdown("tools.insert.markdown.todos"));
+        assert!(content(&mut app).ends_with("- [ ] Todo\n- [ ] Todo\n- [ ] Todo\n\n"));
+        assert!(!app.insert_markdown("tools.insert.markdown.nope"));
+        let before = content(&mut app);
+        assert!(app.insert_html("tools.insert.html.link"));
+        assert_eq!(
+            content(&mut app),
+            format!("{before}<a href=\"https://www.example.com\">Example</a>")
+        );
+        assert!(!app.insert_html("tools.insert.html.nope"));
+    }
+
+    #[test]
+    fn dynamic_inserts_produce_text_and_unknown_ids_are_refused() {
+        let mut app = app_with_text("dynamic", "");
+        assert!(app.insert_dynamic("tools.insert.lorem.words"));
+        assert_eq!(content(&mut app).split_whitespace().count(), 8);
+        assert!(app.insert_dynamic("tools.insert.datetime.epoch"));
+        assert!(
+            content(&mut app).chars().any(|c| c.is_ascii_digit()),
+            "the epoch seconds were inserted"
+        );
+        assert!(app.insert_dynamic("tools.insert.datetime.iso8601"));
+        assert!(app.insert_dynamic("tools.insert.datetime.rfc3339"));
+        assert!(app.insert_dynamic("tools.insert.lorem.sentence"));
+        assert!(app.insert_dynamic("tools.insert.lorem.paragraph"));
+        assert!(!app.insert_dynamic("tools.insert.lorem.nope"));
+    }
+
+    #[test]
+    fn markers_and_blocks_wrap_the_selection_and_unknown_ids_are_refused() {
+        let mut app = app_with_text("wrap", "word");
+        select(&mut app, 0, 4);
+        assert!(app.insert_marker("tools.insert.marker.bold"));
+        assert_eq!(content(&mut app), "*word*");
+        assert!(!app.insert_marker("tools.insert.marker.nope"));
+        let mut app = app_with_text("block", "body");
+        select(&mut app, 0, 4);
+        assert!(app.insert_block("tools.insert.block.quote"));
+        assert_eq!(content(&mut app), "#+BEGIN_QUOTE\nbody\n#+END_QUOTE");
+        assert!(!app.insert_block("tools.insert.block.nope"));
+    }
+
+    #[test]
+    fn the_color_converter_seeds_from_a_selected_color_and_inserts_the_focused_field() {
+        let mut app = app_with_text("color", "#ff8000");
+        select(&mut app, 0, 7);
+        app.open_color_converter();
+        let conv = app.color_converter.as_ref().unwrap();
+        let color = conv.color().expect("the selection parsed");
+        assert_eq!((color.r, color.g, color.b), (0xff, 0x80, 0x00));
+        // Tab moves focus; typing edits the focused field and live-updates the rest.
+        app.color_converter_key(code(KeyCode::Tab));
+        let rgb_focus = app.color_converter.as_ref().unwrap().focus;
+        assert_ne!(rgb_focus, crate::color_converter_tool::Field::Hex);
+        app.color_converter_key(code(KeyCode::BackTab));
+        app.color_converter_key(code(KeyCode::Down));
+        app.color_converter_key(code(KeyCode::Up));
+        assert_eq!(
+            app.color_converter.as_ref().unwrap().focus,
+            crate::color_converter_tool::Field::Hex
+        );
+        // Ctrl/Alt characters and unrelated keys are not typed.
+        app.color_converter_key(ctrl('z'));
+        app.color_converter_key(alt('z'));
+        app.color_converter_key(code(KeyCode::F(5)));
+        assert_eq!(app.color_converter.as_ref().unwrap().current(), "#ff8000");
+        app.color_converter_key(code(KeyCode::Backspace));
+        app.color_converter_key(key('f'));
+        let expected = app.color_converter.as_ref().unwrap().current().to_string();
+        app.color_converter_key(code(KeyCode::Enter));
+        assert!(app.color_converter.is_none(), "Enter closes the dialog");
+        assert!(content(&mut app).contains(&expected));
+        assert_eq!(
+            app.status,
+            t!("status.generated", text = expected).to_string()
+        );
+    }
+
+    #[test]
+    fn an_empty_color_field_closes_without_inserting_and_escape_closes() {
+        let mut app = app_with_text("color-empty", "x");
+        app.open_color_converter();
+        // Empty the focused field.
+        for _ in 0..20 {
+            app.color_converter_key(code(KeyCode::Backspace));
+        }
+        app.color_converter_key(code(KeyCode::Enter));
+        assert!(app.color_converter.is_none());
+        assert_eq!(content(&mut app), "x", "nothing was inserted");
+        app.open_color_converter();
+        app.color_converter_key(code(KeyCode::Esc));
+        assert!(app.color_converter.is_none());
+        // Keys with no dialog open are harmless.
+        app.color_converter_key(code(KeyCode::Enter));
+    }
+
+    #[test]
+    fn the_unit_converter_cycles_units_and_inserts_the_result() {
+        let mut app = app_with_text("unit", "");
+        app.open_unit_converter();
+        let start = app.unit_converter.as_ref().unwrap().clone();
+        type_into(&mut app, App::unit_converter_key, "5");
+        // Tab to the From selector, then Right/Left cycle it.
+        app.unit_converter_key(code(KeyCode::Tab));
+        let from0 = app.unit_converter.as_ref().unwrap().from;
+        app.unit_converter_key(code(KeyCode::Right));
+        let from1 = app.unit_converter.as_ref().unwrap().from;
+        assert_ne!(from0, from1);
+        app.unit_converter_key(code(KeyCode::Left));
+        assert_eq!(app.unit_converter.as_ref().unwrap().from, from0);
+        app.unit_converter_key(code(KeyCode::BackTab));
+        app.unit_converter_key(code(KeyCode::Down));
+        app.unit_converter_key(code(KeyCode::Up));
+        app.unit_converter_key(ctrl('q'));
+        app.unit_converter_key(code(KeyCode::F(1)));
+        app.unit_converter_key(code(KeyCode::Backspace));
+        app.unit_converter_key(key('7'));
+        let text = app.unit_converter.as_ref().unwrap().insert_text();
+        assert_ne!(text, "");
+        assert_ne!(start.value, app.unit_converter.as_ref().unwrap().value);
+        app.unit_converter_key(code(KeyCode::Enter));
+        assert!(app.unit_converter.is_none());
+        assert_eq!(content(&mut app), text);
+        assert_eq!(app.status, t!("status.generated", text = text).to_string());
+    }
+
+    #[test]
+    fn a_unit_converter_with_nothing_to_convert_just_closes() {
+        let mut app = app_with_text("unit-empty", "");
+        app.open_unit_converter();
+        for _ in 0..8 {
+            app.unit_converter_key(code(KeyCode::Backspace));
+        }
+        app.unit_converter_key(code(KeyCode::Enter));
+        assert!(app.unit_converter.is_none());
+        assert_eq!(content(&mut app), "");
+        app.unit_converter_key(code(KeyCode::Right)); // no dialog: nothing
+        app.unit_converter_key(code(KeyCode::Esc));
+        app.open_unit_converter();
+        app.unit_converter_key(code(KeyCode::Esc));
+        assert!(app.unit_converter.is_none());
+    }
+
+    #[test]
+    fn a_unit_converter_selector_past_the_table_reports_the_error() {
+        let mut app = app_with_text("unit-bad", "");
+        app.open_unit_converter();
+        app.unit_converter_key(code(KeyCode::Tab));
+        app.unit_converter.as_mut().unwrap().from = usize::MAX;
+        app.unit_converter_key(code(KeyCode::Right));
+        let shown = last_message(&app).expect("the refusal is shown");
+        let expected = crate::unit_converter_tool::ConverterError::OutOfRange {
+            figure: "unit",
+            len: crate::unit_converter_tool::UNITS.len(),
+        };
+        assert_eq!(
+            shown,
+            t!("msg.command_failed", error = expected.to_string()).to_string()
+        );
+    }
+
+    #[test]
+    fn the_calculator_seeds_from_the_selection_runs_and_inserts_the_result() {
+        let mut app = app_with_text("calc", "2+3*4");
+        select(&mut app, 0, 5);
+        app.open_calculator();
+        assert_eq!(app.calculator.as_ref().unwrap().input, "2+3*4");
+        // Enter on the input focus runs the formula.
+        app.calculator_key(code(KeyCode::Enter));
+        assert_eq!(app.calculator.as_ref().unwrap().result(), Some("14"));
+        // Editing discards the stale result; typing is only for the input control.
+        app.calculator_key(key('1'));
+        assert_eq!(app.calculator.as_ref().unwrap().result(), None);
+        app.calculator_key(code(KeyCode::Backspace));
+        app.calculator_key(code(KeyCode::Enter));
+        // Tab to Run, then to Insert: typing there is ignored.
+        app.calculator_key(code(KeyCode::Tab));
+        app.calculator_key(key('9'));
+        assert_eq!(app.calculator.as_ref().unwrap().input, "2+3*4");
+        app.calculator_key(code(KeyCode::Tab));
+        app.calculator_key(code(KeyCode::BackTab));
+        app.calculator_key(code(KeyCode::Tab));
+        assert_eq!(
+            app.calculator.as_ref().unwrap().focus,
+            crate::calculator_tool::Focus::Insert
+        );
+        app.calculator_key(ctrl('x'));
+        app.calculator_key(alt('x'));
+        app.calculator_key(code(KeyCode::F(3)));
+        app.calculator_key(code(KeyCode::Enter));
+        assert!(app.calculator.is_none(), "inserting closes the dialog");
+        assert!(content(&mut app).ends_with("14"));
+        assert_eq!(app.status, t!("status.generated", text = "14").to_string());
+    }
+
+    #[test]
+    fn the_calculator_keeps_open_without_a_result_and_escape_closes() {
+        let mut app = app_with_text("calc-none", "");
+        app.open_calculator();
+        type_into(&mut app, App::calculator_key, "1+");
+        app.calculator_key(code(KeyCode::Enter));
+        assert!(
+            matches!(
+                app.calculator.as_ref().unwrap().outcome,
+                Some(crate::calculator_tool::Outcome::Err(_))
+            ),
+            "a bad formula reports its error"
+        );
+        app.insert_calculator_result();
+        assert!(app.calculator.is_some(), "no result: nothing inserted");
+        assert_eq!(content(&mut app), "");
+        app.calculator_key(code(KeyCode::Esc));
+        assert!(app.calculator.is_none());
+        app.calculator_key(code(KeyCode::Enter)); // no dialog: nothing
+        app.insert_calculator_result();
+    }
+
+    #[test]
+    fn the_regex_tester_edits_pattern_and_subject() {
+        let mut app = app_with_text("regex", "abc123");
+        select(&mut app, 0, 6);
+        app.open_regex_tester();
+        assert_eq!(app.regex_tester.as_ref().unwrap().subject, "abc123");
+        type_into(&mut app, App::regex_tester_key, "[0-9]+");
+        assert_eq!(app.regex_tester.as_ref().unwrap().pattern, "[0-9]+");
+        assert_eq!(
+            app.regex_tester.as_ref().unwrap().result(),
+            crate::regex_tool::Outcome::Matches(vec!["123".to_string()])
+        );
+        app.regex_tester_key(code(KeyCode::Tab));
+        app.regex_tester_key(code(KeyCode::Backspace));
+        assert_eq!(app.regex_tester.as_ref().unwrap().subject, "abc12");
+        app.regex_tester_key(ctrl('z'));
+        app.regex_tester_key(alt('z'));
+        app.regex_tester_key(code(KeyCode::Enter));
+        assert_eq!(app.regex_tester.as_ref().unwrap().subject, "abc12");
+        app.regex_tester_key(code(KeyCode::Esc));
+        assert!(app.regex_tester.is_none());
+        app.regex_tester_key(key('x')); // no dialog: nothing
+        // Without a selection the subject starts empty.
+        let mut app = app_with_text("regex-empty", "zzz");
+        app.open_regex_tester();
+        assert_eq!(app.regex_tester.as_ref().unwrap().subject, "");
     }
 }

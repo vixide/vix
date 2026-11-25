@@ -44,3 +44,7 @@ that delegation calls `human_bytes_for_locale` with the active
 since every one of their call sites is user-facing text. `tui/src/app.rs`'s
 workspace-dashboard disk-size figure calls `human_bytes_for_locale`
 directly for the same reason.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The unit table is walked with an iterator, so no subtraction or index variable remains, and the first unit is read from a constant six-entry array. Float steps are unchecked by design: the divisions are by a constant above zero. No fallbacks are declared.

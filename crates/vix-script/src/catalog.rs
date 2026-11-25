@@ -127,8 +127,8 @@ impl Catalog {
             if let Some(text) = self.locales.get(current).and_then(|t| t.get(key)) {
                 return Some(text);
             }
-            match current.rfind('-') {
-                Some(n) => current = &current[..n],
+            match current.rsplit_once('-') {
+                Some((head, _)) => current = head,
                 None => break,
             }
         }

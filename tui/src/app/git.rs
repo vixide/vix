@@ -6,16 +6,29 @@
 //! across the file rather than one contiguous block. An inherent `impl App`
 //! block can live in any module of the crate.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::chooser::ChooserSlot;
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
-use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use crate::app::picker_panels::list_panel_full_nav_key;
+use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 #[cfg(feature = "ai")]
 use super::{AiDest, AiReplace};
 use super::{
     App, AppFlags, BranchChooser, Confirm, ConfirmKind, GitPanel, Prompt, PromptKind, gutter_hex,
-    rect_contains,
 };
 use crate::editor::Tab;
 
@@ -230,7 +243,7 @@ impl App {
                 .unwrap_or_default();
             self.git_head_cache.insert(path.to_path_buf(), head);
         }
-        self.git_head_cache[path].clone()
+        self.git_head_cache.get(path).cloned().unwrap_or_default()
     }
 
     /// Git -> Change Gutter Base...: choose what the change gutter compares
@@ -288,7 +301,10 @@ impl App {
                 .unwrap_or_default();
             self.git_head_cache.insert(path.clone(), head);
         }
-        crate::git::hunks(&self.git_head_cache[&path], &current)
+        crate::git::hunks(
+            self.git_head_cache.get(&path).map_or("", String::as_str),
+            &current,
+        )
     }
 
     /// Move the cursor to the next (or previous) changed hunk, wrapping around.
@@ -312,15 +328,14 @@ impl App {
                 .find(|&s| s < line)
         };
         // Wrap to the first/last hunk when there is none beyond the cursor.
-        let target = target.unwrap_or_else(|| {
-            if forward {
-                hunks[0].current_start
-            } else {
-                hunks[hunks.len() - 1].current_start
-            }
-        });
+        let Some(target) = target.or_else(|| {
+            let edge = if forward { hunks.first() } else { hunks.last() };
+            edge.map(|h| h.current_start)
+        }) else {
+            return;
+        };
         let area = self.editor_view();
-        self.editor.goto(target + 1, None, area);
+        self.editor.goto(target.plus(1), None, area);
     }
 
     /// Restore the committed (HEAD) version of the hunk under the cursor in the
@@ -346,10 +361,15 @@ impl App {
         let start = hunk.current_start.min(lines.len());
         let end = hunk.current_end.min(lines.len()).max(start);
         let mut rebuilt = String::new();
-        rebuilt.push_str(&lines[..start].concat());
+        rebuilt.push_str(&lines.get(..start).unwrap_or_default().concat());
         rebuilt.push_str(&hunk.head_text);
-        rebuilt.push_str(&lines[end..].concat());
-        let caret: usize = lines[..start].iter().map(|l| l.chars().count()).sum();
+        rebuilt.push_str(&lines.get(end..).unwrap_or_default().concat());
+        let caret: usize = lines
+            .get(..start)
+            .unwrap_or_default()
+            .iter()
+            .map(|l| l.chars().count())
+            .sum();
         self.apply_rebuilt_buffer(&rebuilt, caret, "status.hunk_reverted");
     }
 
@@ -397,13 +417,17 @@ impl App {
         else {
             return;
         };
-        // Search from the line after the cursor so repeated calls advance.
-        match crate::conflict_tool::find(&content, line + 1)
+        // Search from past the conflict the cursor is inside (or the line
+        // after it), so repeated calls advance instead of re-finding it.
+        let from = crate::conflict_tool::find(&content, line)
+            .filter(|c| c.start <= line)
+            .map_or(line.plus(1), |c| c.end);
+        match crate::conflict_tool::find(&content, from)
             .or_else(|| crate::conflict_tool::find(&content, 0))
         {
             Some(c) => {
                 let area = self.editor_view();
-                self.editor.goto(c.start + 1, None, area);
+                self.editor.goto(c.start.plus(1), None, area);
             }
             None => self.status = t!("status.no_conflict").to_string(),
         }
@@ -434,38 +458,11 @@ impl App {
     /// selection, Enter jumps to the conflict, `o`/`t`/`b` resolve it with ours/theirs/both,
     /// Esc closes.
     pub(super) fn conflict_list_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.conflict_list.height as usize).max(1);
+        let page = (usize::from(self.layout.conflict_list.height)).max(1);
+        if list_panel_full_nav_key(self.conflict_list.as_mut(), key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.page_up(l.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(l) = self.conflict_list.as_mut() {
-                    l.page_down(l.len());
-                }
-            }
             KeyCode::Enter => self.jump_to_conflict_list_selection(),
             KeyCode::Char('o') => {
                 self.resolve_conflict_list_selection(crate::conflict_tool::Resolution::Ours);
@@ -484,16 +481,12 @@ impl App {
     /// Handle a mouse event in the conflict list: a left click on a row selects it and jumps to
     /// the conflict; clicks outside the list are ignored.
     pub(super) fn conflict_list_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.conflict_list;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         if let Some(l) = self.conflict_list.as_mut() {
-            let idx = l.scroll + row;
+            let idx = l.scroll.plus(row);
             if l.select_index(idx) {
                 self.jump_to_conflict_list_selection();
             }
@@ -513,7 +506,7 @@ impl App {
         self.conflict_list = None;
         self.with_jump(|s| {
             let area = s.editor_view();
-            s.editor.goto(start + 1, None, area);
+            s.editor.goto(start.plus(1), None, area);
             s.focus = crate::app::Focus::Editor;
         });
     }
@@ -634,7 +627,7 @@ impl App {
         let head_count = hunk.head_text.split_inclusive('\n').count();
         // The hunk's committed lines must still be present in the index region,
         // or staging this hunk could corrupt other staged changes.
-        let region = base_lines.get(hunk.head_start..hunk.head_start + head_count);
+        let region = base_lines.get(hunk.head_start..hunk.head_start.plus(head_count));
         if region.map(<[&str]>::concat).as_deref() != Some(hunk.head_text.as_str()) {
             self.status = t!("status.stage_hunk_failed", error = "index diverged").to_string();
             return;
@@ -643,9 +636,17 @@ impl App {
         let added = cur_lines
             .get(hunk.current_start..hunk.current_end)
             .map_or_default(<[&str]>::concat);
-        let mut new_index = base_lines[..hunk.head_start].concat();
+        let mut new_index = base_lines
+            .get(..hunk.head_start)
+            .unwrap_or_default()
+            .concat();
         new_index.push_str(&added);
-        new_index.push_str(&base_lines[hunk.head_start + head_count..].concat());
+        new_index.push_str(
+            &base_lines
+                .get(hunk.head_start.plus(head_count)..)
+                .unwrap_or_default()
+                .concat(),
+        );
         self.apply_hunk_index(
             &rel,
             &new_index,
@@ -675,15 +676,23 @@ impl App {
         let added = cur_lines
             .get(hunk.current_start..hunk.current_end)
             .map_or_default(<[&str]>::concat);
-        let added_count = hunk.current_end - hunk.current_start;
-        let region = base_lines.get(hunk.head_start..hunk.head_start + added_count);
+        let added_count = hunk.current_end.minus(hunk.current_start);
+        let region = base_lines.get(hunk.head_start..hunk.head_start.plus(added_count));
         if region.map(<[&str]>::concat).as_deref() != Some(added.as_str()) {
             self.status = t!("status.unstage_hunk_failed", error = "hunk not staged").to_string();
             return;
         }
-        let mut new_index = base_lines[..hunk.head_start].concat();
+        let mut new_index = base_lines
+            .get(..hunk.head_start)
+            .unwrap_or_default()
+            .concat();
         new_index.push_str(&hunk.head_text);
-        new_index.push_str(&base_lines[hunk.head_start + added_count..].concat());
+        new_index.push_str(
+            &base_lines
+                .get(hunk.head_start.plus(added_count)..)
+                .unwrap_or_default()
+                .concat(),
+        );
         self.apply_hunk_index(
             &rel,
             &new_index,
@@ -735,14 +744,14 @@ impl App {
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.git_panel.as_mut() {
-                    p.selected = p.selected.saturating_sub(1);
+                    p.selected = p.selected.minus(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(p) = self.git_panel.as_mut()
-                    && p.selected + 1 < self.git_status.len()
+                    && p.selected.plus(1) < self.git_status.len()
                 {
-                    p.selected += 1;
+                    p.selected = p.selected.plus(1);
                 }
             }
             // Space / s / u toggle or set the staged state of the selected file.
@@ -771,14 +780,10 @@ impl App {
     /// Handle a mouse event in the Git status panel: a left click on a file row selects it and
     /// toggles its staged state.
     pub(super) fn git_panel_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.git_panel;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         if row < self.git_status.len() {
             if let Some(p) = self.git_panel.as_mut() {
                 p.selected = row;
@@ -796,7 +801,7 @@ impl App {
     /// Keep the panel selection inside the (possibly shrunk) status list after a refresh.
     fn clamp_git_selection(&mut self) {
         if let Some(p) = self.git_panel.as_mut() {
-            p.selected = p.selected.min(self.git_status.len().saturating_sub(1));
+            p.selected = p.selected.min(self.git_status.len().minus(1));
         }
     }
 
@@ -1061,9 +1066,7 @@ impl App {
     /// Handle a key in the Git log view: Up/Down/PageUp/PageDown move, Enter opens the commit
     /// diff, `c` cherry-picks (only in the pick-a-commit scope), Esc closes.
     pub(super) fn git_log_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.editor.height as usize)
-            .max(1)
-            .saturating_sub(2);
+        let page = (usize::from(self.layout.editor.height)).max(1).minus(2);
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.git_log.as_mut() {
@@ -1180,16 +1183,12 @@ impl App {
     /// the cursor, select it, and open its diff -- matches `outline_mouse`'s
     /// own click-selects-and-jumps convention.
     pub(super) fn git_log_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.git_log;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         let hit = self.git_log.as_mut().is_some_and(|p| {
-            let idx = p.scroll + row;
+            let idx = p.scroll.plus(row);
             let ok = idx < p.entries.len();
             if ok {
                 p.selected = idx;
@@ -1323,7 +1322,7 @@ impl App {
         let Some((path, line)) = self
             .editor
             .active_tab()
-            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line() + 1)))
+            .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line().plus(1))))
         else {
             self.status = t!("status.blame_no_file").into();
             return;
@@ -1397,7 +1396,7 @@ impl App {
             }
             return;
         };
-        let line = line0 + 1;
+        let line = line0.plus(1);
         if self.blame_cache.as_ref() == Some(&(path.clone(), line)) {
             return;
         }
@@ -1471,12 +1470,12 @@ impl App {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.branch_mut() {
                     let n = c.branches.len();
-                    c.selected = (c.selected + n - 1) % n;
+                    c.selected = vix_list_state::wrap_up(c.selected, n);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.branch_mut() {
-                    c.selected = (c.selected + 1) % c.branches.len();
+                    c.selected = vix_list_state::wrap_down(c.selected, c.branches.len());
                 }
             }
             KeyCode::Enter => self.checkout_selected_branch(),
@@ -1547,10 +1546,17 @@ fn rebuild_with_resolution(
     how: crate::conflict_tool::Resolution,
 ) -> (String, usize) {
     let lines: Vec<&str> = content.split_inclusive('\n').collect();
-    let mut rebuilt = lines[..conflict.start].concat();
+    let mut rebuilt = lines.get(..conflict.start).unwrap_or_default().concat();
     rebuilt.push_str(&conflict.resolved(how));
-    rebuilt.push_str(&lines[conflict.end.min(lines.len())..].concat());
-    let caret: usize = lines[..conflict.start]
+    rebuilt.push_str(
+        &lines
+            .get(conflict.end.min(lines.len())..)
+            .unwrap_or_default()
+            .concat(),
+    );
+    let caret: usize = lines
+        .get(..conflict.start)
+        .unwrap_or_default()
         .iter()
         .map(|l| l.chars().count())
         .sum();
@@ -1745,3 +1751,10 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod cov_r3;
+#[cfg(test)]
+mod cov_r4;
+#[cfg(test)]
+pub(super) mod tests;

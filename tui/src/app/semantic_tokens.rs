@@ -8,6 +8,19 @@
 //! requested at once. Which request is sent (range, full/delta or full) is the
 //! LSP client's choice, `Lsp::request_semantic_tokens`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, later};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -28,9 +41,9 @@ pub(crate) type SemanticKey = (PathBuf, u64, Option<(usize, usize)>);
 /// keeps the same window (and sends no request).
 pub(crate) fn token_window(top: usize, height: usize, len_lines: usize) -> (usize, usize) {
     let chunk = height.max(1);
-    let base = top / chunk * chunk;
-    let first = base.saturating_sub(chunk).min(len_lines);
-    let end = base.saturating_add(2 * chunk).min(len_lines);
+    let base = top.quot(chunk).times(chunk);
+    let first = base.minus(chunk).min(len_lines);
+    let end = base.plus(chunk.times(2)).min(len_lines);
     (first, end.max(first))
 }
 
@@ -90,7 +103,7 @@ impl App {
             let now = Instant::now();
             match self.semantic_due {
                 None => {
-                    self.semantic_due = Some(now + SEMANTIC_DEBOUNCE);
+                    self.semantic_due = Some(later(now, SEMANTIC_DEBOUNCE));
                     return;
                 }
                 Some(due) if now < due => return,

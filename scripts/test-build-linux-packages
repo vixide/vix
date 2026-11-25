@@ -52,7 +52,10 @@ mkarchive() { # package target
 	mkdir -p "$d" "$work/archives"
 	printf 'bin' >"$d/vix"
 	printf 'lic' >"$d/LICENSE"
-	tar -cJf "$work/archives/$1-$2.tar.xz" -C "$work/src" "$1-$2"
+	# COPYFILE_DISABLE: macOS tar otherwise adds `._*` AppleDouble entries for
+	# files with extended attributes (such as com.apple.provenance), and the
+	# archive then has more than one top-level entry.
+	COPYFILE_DISABLE=1 tar -cJf "$work/archives/$1-$2.tar.xz" -C "$work/src" "$1-$2"
 }
 run() { # package
 	rm -rf "$work/log" "$work/out"

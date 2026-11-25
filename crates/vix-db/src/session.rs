@@ -68,6 +68,12 @@ enum Request {
     Exec(String, mpsc::Sender<Result<u64, QueryError>>),
 }
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A piece of a streamed result: the header row, then batches of data rows,
 /// then a terminal marker (or an error).
 #[derive(Debug, Clone)]
@@ -807,7 +813,7 @@ async fn stream_sql(
                 }
                 let cells = row.cells();
                 batch.push(cells);
-                total += 1;
+                total = add_or(total, 1, usize::MAX);
                 if batch.len() >= BATCH
                     && reply_tx
                         .send(Chunk::Rows(std::mem::take(&mut batch)))
@@ -1270,5 +1276,167 @@ mod tests {
         // Every existing "just show the text" call site relies on this.
         let err = QueryError::other("boom");
         assert_eq!(err.to_string(), "boom");
+    }
+
+    #[test]
+    fn session_errors_display_and_chain() {
+        let spawn = SessionError::Spawn(std::io::Error::other("no thread"));
+        assert_eq!(spawn.to_string(), "no thread");
+        assert!(std::error::Error::source(&spawn).is_some());
+        for e in [
+            SessionError::Connect {
+                message: "refused".into(),
+            },
+            SessionError::Setup {
+                message: "bad pragma".into(),
+            },
+        ] {
+            assert_ne!(e.to_string(), "");
+            assert!(std::error::Error::source(&e).is_none());
+        }
+        assert_eq!(
+            SessionError::NotConnected.to_string(),
+            t!("msg.db_not_connected")
+        );
+        let q = SessionError::Query(QueryError::other("boom"));
+        assert_eq!(q.to_string(), "boom");
+        assert!(std::error::Error::source(&q).is_none());
+    }
+
+    #[test]
+    fn a_failing_setup_statement_stops_the_connect() {
+        let Err(err) = Session::connect("sqlite::memory:", &["NOT SQL".to_string()]) else {
+            panic!("a failing setup must not yield a session");
+        };
+        assert!(matches!(err, SessionError::Setup { .. }), "{err}");
+    }
+
+    #[test]
+    fn an_unreadable_file_is_a_connect_error() {
+        let Err(err) = Session::connect("sqlite:/no/such/dir/x.db?mode=ro", &[]) else {
+            panic!("an unreadable file must not connect");
+        };
+        assert!(matches!(err, SessionError::Connect { .. }), "{err}");
+    }
+
+    #[test]
+    fn cancel_statements_and_replies_per_engine() {
+        use crate::connect::Kind;
+        assert_eq!(
+            cancel_sql(Kind::Postgres, 42).as_deref(),
+            Some("SELECT pg_cancel_backend(42)")
+        );
+        assert_eq!(cancel_sql(Kind::Mysql, 7).as_deref(), Some("KILL QUERY 7"));
+        assert_eq!(cancel_sql(Kind::Sqlite, 1), None);
+        assert_eq!(backend_id_sql(Kind::Sqlite), None);
+        assert!(backend_id_sql(Kind::Mysql).is_some_and(|s| s.contains("CONNECTION_ID")));
+        assert_eq!(kind_of_url("mariadb://h"), Some(Kind::Mysql));
+        assert_eq!(kind_of_url("POSTGRES://h"), Some(Kind::Postgres));
+        let reply = |v: &str| cancel_reply_ok(&[vec![v.to_string()]]);
+        assert!(reply("t") && reply("true"));
+        for no in ["f", "false", "FALSE", "0"] {
+            assert!(!reply(no), "{no}");
+        }
+        assert!(cancel_reply_ok(&[]), "KILL QUERY answers with no rows");
+    }
+
+    #[test]
+    fn poll_reports_a_dead_worker_and_send_fails_after_it() {
+        let mut s = memory();
+        assert!(s.poll().is_none(), "nothing sent, nothing to poll");
+        assert_eq!(s.error_position(), None);
+        assert!(
+            s.cancel_handle().is_none(),
+            "SQLite cannot be cancelled on the server"
+        );
+        assert_eq!(s.url(), "sqlite::memory:");
+        s.cancel();
+        // The worker abandons the next statement and exits.
+        s.send("SELECT 1").unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let chunk = loop {
+            if let Some(chunk) = s.poll() {
+                break chunk;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        };
+        assert!(matches!(chunk, Chunk::Err(_)), "worker gone: {chunk:?}");
+        assert!(matches!(s.run("SELECT 1"), Err(SessionError::NotConnected)));
+        assert!(matches!(
+            s.execute("SELECT 1"),
+            Err(SessionError::NotConnected)
+        ));
+        assert!(matches!(
+            s.send("SELECT 1"),
+            Err(SessionError::NotConnected)
+        ));
+    }
+
+    #[test]
+    fn execute_counts_rows_and_reports_errors() {
+        let mut s = memory();
+        s.run("CREATE TABLE t (a INTEGER)").unwrap();
+        assert_eq!(s.execute("INSERT INTO t VALUES (1), (2)").unwrap(), 2);
+        assert_eq!(s.execute("UPDATE t SET a = a + 1").unwrap(), 2);
+        let Err(SessionError::Query(e)) = s.execute("INSERT INTO nope VALUES (1)") else {
+            panic!("expected a query error");
+        };
+        assert_eq!(e.kind, QueryErrorKind::Database);
+    }
+
+    #[test]
+    fn restarting_gives_a_fresh_connection() {
+        let mut s = memory();
+        s.run("CREATE TABLE t (a)").unwrap();
+        s.restart().unwrap();
+        assert!(
+            s.run("SELECT * FROM t").is_err(),
+            "a new in-memory database"
+        );
+        assert!(s.run("SELECT 1").is_ok());
+    }
+
+    #[test]
+    fn an_empty_result_still_sends_an_empty_header() {
+        let mut s = memory();
+        s.run("CREATE TABLE t (a)").unwrap();
+        let (headers, rows) = s.run("SELECT a FROM t").unwrap();
+        assert_eq!(headers, Vec::<String>::new());
+        assert_eq!(rows, Vec::<Vec<String>>::new());
+    }
+
+    #[test]
+    fn large_results_stream_in_batches_and_stop_at_the_cap() {
+        let s = memory();
+        let n = MAX_ROWS + 10;
+        s.send(&format!(
+            "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < {n}) SELECT x FROM c"
+        ))
+        .unwrap();
+        let mut rows = 0;
+        let mut truncated = None;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while truncated.is_none() {
+            match s.poll() {
+                Some(Chunk::Rows(batch)) => rows += batch.len(),
+                Some(Chunk::Done(t)) => truncated = Some(t),
+                Some(Chunk::Head(_)) | None => std::thread::yield_now(),
+                Some(Chunk::Err(e)) => panic!("{e}"),
+            }
+            assert!(std::time::Instant::now() < deadline);
+        }
+        assert_eq!(rows, MAX_ROWS);
+        assert_eq!(truncated, Some(true));
+    }
+
+    #[test]
+    fn url_secrets_are_redacted_from_driver_messages() {
+        let url = "postgres://joel:hunter2@db/app";
+        let msg = redact_url_secret(
+            "failed for postgres://joel:hunter2@db/app: bad hunter2",
+            url,
+        );
+        assert!(!msg.contains("hunter2"), "{msg}");
     }
 }

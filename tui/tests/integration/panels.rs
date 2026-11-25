@@ -452,11 +452,13 @@ fn explorer_paste_conflicts_ask_and_each_choice_is_kept() {
     }
     let mut app = app_at(&dir);
     app.focus = Focus::Explorer;
+    // Ctrl+C copies the marked set (just the highlighted row when nothing is
+    // marked), so mark all three files.
     let copy = |app: &mut App| {
         for name in ["a.txt", "b.txt", "c.txt"] {
-            app.explorer.selected = node_index(app, name);
-            app.on_key(ctrl('c'));
+            app.explorer.marked.insert(app.root.join(name));
         }
+        app.on_key(ctrl('c'));
     };
     copy(&mut app);
     app.explorer.selected = node_index(&app, "sub");
@@ -773,4 +775,136 @@ fn help_and_clock_panels_take_their_keys() {
     app.run_action("tools.clock");
     app.on_key(keycode(KeyCode::Char('q')));
     assert!(!app.visible.contains(vix::app::Visible::CLOCK));
+}
+
+/// Home and End jump to the ends, paging moves, Right enters a highlighted
+/// directory, Left walks back up to its parent.
+#[test]
+fn file_browser_jumps_pages_and_walks_the_directory_tree() {
+    let dir = unique_dir("file-browser-walk").canonicalize().unwrap();
+    for name in ["a.txt", "b.txt", "c.txt"] {
+        fs::write(dir.join(name), "x\n").unwrap();
+    }
+    fs::create_dir(dir.join("sub")).unwrap();
+    fs::write(dir.join("sub").join("inner.txt"), "y\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("file.open");
+    draw_frame(&mut app, 100, 30);
+    let len = app.file_browser.as_ref().unwrap().len();
+    assert!(len >= 4, "the folder and its files are listed");
+
+    app.on_key(keycode(KeyCode::End));
+    assert_eq!(app.file_browser.as_ref().unwrap().selected, len - 1);
+    app.on_key(keycode(KeyCode::Home));
+    assert_eq!(app.file_browser.as_ref().unwrap().selected, 0);
+    app.on_key(keycode(KeyCode::PageDown));
+    app.on_key(keycode(KeyCode::PageUp));
+    assert_eq!(app.file_browser.as_ref().unwrap().selected, 0);
+
+    // Directories sort first, so the first row is `sub`: Right enters it.
+    assert!(
+        app.file_browser
+            .as_ref()
+            .unwrap()
+            .selected_entry()
+            .unwrap()
+            .is_dir
+    );
+    app.on_key(keycode(KeyCode::Right));
+    assert!(
+        app.file_browser.is_some(),
+        "entering a folder keeps the browser"
+    );
+    draw_frame(&mut app, 100, 30);
+    let inside = draw_frame(&mut app, 100, 30);
+    assert!(inside.contains("inner.txt"), "{inside}");
+    // Right on a file does nothing; Left goes back up.
+    app.on_key(keycode(KeyCode::Right));
+    app.on_key(keycode(KeyCode::Left));
+    let back = draw_frame(&mut app, 100, 30);
+    assert!(back.contains("a.txt"), "{back}");
+    app.on_key(keycode(KeyCode::Esc));
+    assert!(app.file_browser.is_none());
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// The document outline and the HTML entity palette answer every navigation
+/// key (up, down, paging, Home, End), keep their highlight in range, and
+/// close on Esc.
+#[test]
+fn outline_and_html_palette_take_the_navigation_keys() {
+    let dir = unique_dir("outline-html-nav");
+    let src: String = (0..30).map(|i| format!("fn f{i}() {{}}\n")).collect();
+    fs::write(dir.join("a.rs"), src).unwrap();
+    for (action, which) in [("nav.outline", 0), ("tools.html_chars", 1)] {
+        let mut app = app_at(&dir);
+        app.open_initial(&dir.join("a.rs"));
+        app.run_action(action);
+        draw_frame(&mut app, 100, 30);
+        for code in [
+            KeyCode::Down,
+            KeyCode::Down,
+            KeyCode::PageDown,
+            KeyCode::End,
+            KeyCode::Up,
+            KeyCode::PageUp,
+            KeyCode::Home,
+        ] {
+            app.on_key(keycode(code));
+            draw_frame(&mut app, 100, 30);
+        }
+        let open = |app: &App| {
+            if which == 0 {
+                app.outline.is_some()
+            } else {
+                app.html_panel.is_some()
+            }
+        };
+        assert!(open(&app), "{action} stays open through navigation");
+        app.on_key(keycode(KeyCode::Esc));
+        assert!(!open(&app), "{action} closes on Esc");
+    }
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// At a paste conflict, `O` overwrites this and every later conflict, and
+/// Esc cancels like `c`.
+#[test]
+fn explorer_paste_conflict_overwrite_all_and_escape() {
+    // A fresh folder and app per scenario.
+    let scenario = |tag: &str, answer: KeyEvent| {
+        let dir = unique_dir(tag);
+        fs::create_dir(dir.join("sub")).unwrap();
+        for name in ["a.txt", "b.txt"] {
+            fs::write(dir.join(name), format!("new {name}")).unwrap();
+            fs::write(dir.join("sub").join(name), format!("old {name}")).unwrap();
+        }
+        let mut app = app_at(&dir);
+        app.focus = Focus::Explorer;
+        // Ctrl+C copies the marked set (or just the highlighted row when
+        // nothing is marked), so mark both files.
+        for name in ["a.txt", "b.txt"] {
+            app.explorer.marked.insert(dir.join(name));
+        }
+        app.on_key(ctrl('c'));
+        app.explorer.selected = node_index(&app, "sub");
+        app.on_key(ctrl('v'));
+        assert!(app.paste.is_some(), "a conflict asks: {}", app.status);
+        app.on_key(answer);
+        assert!(app.paste.is_none(), "the answer settles the paste");
+        let read = |n: &str| fs::read_to_string(dir.join("sub").join(n)).unwrap();
+        let result = (read("a.txt"), read("b.txt"));
+        fs::remove_dir_all(&dir).ok();
+        result
+    };
+    assert_eq!(
+        scenario("paste-esc", keycode(KeyCode::Esc)),
+        ("old a.txt".to_string(), "old b.txt".to_string()),
+        "Esc changes nothing"
+    );
+    assert_eq!(
+        scenario("paste-all", key('O')),
+        ("new a.txt".to_string(), "new b.txt".to_string()),
+        "O overwrites every conflict"
+    );
 }

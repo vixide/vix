@@ -34,6 +34,18 @@
 //! assert_eq!(inbox.total_unread(), 1);
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod command;
 pub mod history;
 pub mod mention;
@@ -50,6 +62,20 @@ pub use mention::{CaseMapping, find_mentions, mentions};
 pub use reference::{CodeRef, CodeRefMatch, find_refs, parse_ref, resolve_in_root};
 pub use sanitize::{sanitize, sanitize_multiline};
 pub use thread::{Anchor, Thread, reanchor};
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// What a conversation is with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -567,12 +593,10 @@ impl Inbox {
         // Trim oldest-first. `first_unread` is an index, so it must shift down
         // by the same amount (saturating: an unread marker that was trimmed
         // away now points at the oldest kept message).
-        let overflow = conversation.messages.len().saturating_sub(limit);
+        let overflow = sub_or(conversation.messages.len(), limit, 0);
         if overflow > 0 {
             conversation.messages.drain(..overflow);
-            conversation.first_unread = conversation
-                .first_unread
-                .map(|i| i.saturating_sub(overflow));
+            conversation.first_unread = conversation.first_unread.map(|i| sub_or(i, overflow, 0));
         }
         if own || system {
             // Answering in a conversation reads it.
@@ -581,11 +605,11 @@ impl Inbox {
             }
             return Delivery::Read;
         }
-        conversation.unread += 1;
+        conversation.unread = add_or(conversation.unread, 1, usize::MAX);
         // Only the first unread message sets the marker; later ones keep it.
         conversation
             .first_unread
-            .get_or_insert(conversation.messages.len() - 1);
+            .get_or_insert(sub_or(conversation.messages.len(), 1, 0));
         conversation.mentioned |= mention;
         Delivery::Unread { mention }
     }
@@ -603,11 +627,18 @@ impl Inbox {
     #[must_use]
     pub fn next_unread(&self, after: Option<&ConversationId>) -> Option<&ConversationId> {
         let len = self.conversations.len();
-        let start = after.and_then(|id| self.index_of(id)).map_or(0, |i| i + 1);
+        let start = after
+            .and_then(|id| self.index_of(id))
+            .map_or(0, |i| add_or(i, 1, usize::MAX));
         // Walk every conversation once starting at `start`, wrapping; `after`
         // itself comes last (k == len - 1). `% len` is safe: with len == 0
         // the range is empty and the closure never indexes.
-        let order = || (0..len).map(|k| &self.conversations[(start + k) % len]);
+        let order = || {
+            (0..len).filter_map(|k| {
+                self.conversations
+                    .get(add_or(start, k, usize::MAX).checked_rem(len)?)
+            })
+        };
         order()
             .find(|c| c.unread > 0 && c.mentioned)
             .or_else(|| order().find(|c| c.unread > 0))
@@ -617,7 +648,9 @@ impl Inbox {
     /// The unread count over every conversation.
     #[must_use]
     pub fn total_unread(&self) -> usize {
-        self.conversations.iter().map(|c| c.unread).sum()
+        self.conversations
+            .iter()
+            .fold(0, |total, c| add_or(total, c.unread, usize::MAX))
     }
 
     /// Whether any unread message mentions you.

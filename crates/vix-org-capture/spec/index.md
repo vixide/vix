@@ -231,3 +231,7 @@ template (`App::start_capture`):
    capture buffer opens, before any minibuffer prompt). `draw_prompt`
    (`tui/src/ui.rs`) renders it above the input, scrolled to keep the current
    field's line in view.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Template scanning and the Org placement helpers read through `ch`, `span` and a checked `ahead` (a read past the end is the NUL end-of-template sentinel, which the scanners stop before), and look lines up with `get`. **Declared (CAPTURE-F1):** a prompt with no choices has an empty default; a month number outside 1 to 12 has an empty month name in a date-tree headline; a headline shift that cannot be computed leaves the entry unshifted.

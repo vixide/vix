@@ -15,6 +15,18 @@
 //!
 //! Spec: `crates/vix-todo-tree/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::collections::BTreeSet;
 
 /// The tags looked for by default, in the order their groups appear.
@@ -65,8 +77,9 @@ pub fn scan(file: &str, text: &str, tags: &[&str]) -> Vec<Item> {
             Some(Item {
                 tag: tag.to_string(),
                 file: file.to_string(),
-                line: i + 1,
-                col: col + 1,
+                // TODO-F1: a position that does not fit drops the item.
+                line: i.checked_add(1)?,
+                col: col.checked_add(1)?,
                 text: raw.trim().chars().take(120).collect(),
             })
         })
@@ -172,8 +185,12 @@ impl Panel {
     pub fn rows(&self) -> Vec<Row> {
         let mut rows = Vec::new();
         for label in self.group_order() {
-            let members: Vec<usize> = (0..self.items.len())
-                .filter(|&i| self.group_label(&self.items[i]) == label)
+            let members: Vec<usize> = self
+                .items
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| self.group_label(item) == label)
+                .map(|(i, _)| i)
                 .collect();
             let collapsed = self.collapsed.contains(&self.key(&label));
             rows.push(Row::Group {
@@ -255,7 +272,7 @@ impl Panel {
         // Clamp a stale `selected` (e.g. after a fold shortened the list) to the
         // last row; `checked_sub` yields `None` for an empty list.
         let upto = self.selected.min(rows.len().checked_sub(1)?);
-        rows[..=upto]
+        rows.get(..=upto)?
             .iter()
             .enumerate()
             .rev()

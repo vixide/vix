@@ -9,10 +9,23 @@
 //! `Ctrl+Y` copies its hash; `Tab` steps the branch/tag filter; typing
 //! searches.
 
-use vix_git_graph::{Action, GraphError, Mode, PAGE_SIZE, Panel};
-use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
 
-use super::{App, rect_contains};
+use crate::geo::Geo;
+use vix_git_graph::{Action, GraphError, Mode, PAGE_SIZE, Panel};
+use vix_input::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
+
+use super::App;
 
 /// The user-facing text of a graph error, with the install hint for a missing
 /// `git`.
@@ -108,7 +121,7 @@ impl App {
     /// Ctrl+O checks out, Ctrl+P cherry-picks, Ctrl+B creates a branch, Ctrl+Y copies the hash;
     /// Esc closes.
     fn git_graph_browse_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.git_graph.height as usize).max(1);
+        let page = (usize::from(self.layout.git_graph.height)).max(1);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let Some(p) = self.git_graph.as_mut() else {
             return;
@@ -324,21 +337,20 @@ impl App {
     /// A click selects a row; a click on the already-highlighted row opens
     /// its diff.
     pub(super) fn git_graph_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.git_graph;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
+        };
         let Some(p) = self.git_graph.as_mut() else {
             return;
         };
-        let idx = p.scroll + row;
+        let idx = p.scroll.plus(row);
         let again = p.selected == idx;
         if p.select_index(idx) && again {
             self.open_git_graph_diff();
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

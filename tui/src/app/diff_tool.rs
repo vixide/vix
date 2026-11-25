@@ -2,6 +2,19 @@
 //! active buffer and another file. Plain file comparison, independent of the
 //! `git` capability (moved out of `git.rs` by T593 for that reason).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent};
 
 use super::{App, DiffViewState};
@@ -53,30 +66,33 @@ impl App {
     /// Handle a key in the read-only diff view: Esc/`q` closes it, Up/Down and PageUp/PageDown
     /// scroll (clamped to the last line).
     pub(super) fn diff_view_key(&mut self, key: KeyEvent) {
-        let page = self.layout.editor.height.max(1) as usize;
+        let page = usize::from(self.layout.editor.height.max(1));
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => self.diff_view = None,
             KeyCode::Up => {
                 if let Some(d) = self.diff_view.as_mut() {
-                    d.scroll = d.scroll.saturating_sub(1);
+                    d.scroll = d.scroll.minus(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(d) = self.diff_view.as_mut() {
-                    d.scroll = (d.scroll + 1).min(d.lines.len().saturating_sub(1));
+                    d.scroll = d.scroll.plus(1).min(d.lines.len().minus(1));
                 }
             }
             KeyCode::PageUp => {
                 if let Some(d) = self.diff_view.as_mut() {
-                    d.scroll = d.scroll.saturating_sub(page);
+                    d.scroll = d.scroll.minus(page);
                 }
             }
             KeyCode::PageDown => {
                 if let Some(d) = self.diff_view.as_mut() {
-                    d.scroll = (d.scroll + page).min(d.lines.len().saturating_sub(1));
+                    d.scroll = d.scroll.plus(page).min(d.lines.len().minus(1));
                 }
             }
             _ => {}
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -88,3 +88,7 @@ abort. The `vix-tui` integration tests drive the overlay by key.
 - Lane colors (the graph is drawn in one dim color).
 - Horizontal scrolling for very wide graphs; the graph column is not capped.
 - Remote operations (push/fetch) from a commit.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Lane bookkeeping uses `get_mut` and checked helpers. **Declared (GRAPH-F1):** a lane index with no column in the row being drawn draws no glyph (a row built by `assign_lanes` never has one); the last index of an empty list is 0; the branch filter steps around a ring of all-refs plus each ref.

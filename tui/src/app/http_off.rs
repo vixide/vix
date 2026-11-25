@@ -1,6 +1,18 @@
 //! The `http` capability's absent half (T592): no HTTP client, so the shared
 //! dispatch and event loop's entry points are no-ops.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::App;
 
 impl App {

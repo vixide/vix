@@ -1,6 +1,19 @@
 //! Rendering for the HL7 message view overlay (Tools → HL7 View): a filter
 //! line, the numbered segment/field rows, and a hint line.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -12,10 +25,10 @@ use crate::theme::{self, icon};
 /// The overlay's rectangle: centred, wide enough for a typical field value.
 fn overlay_rect(area: Rect) -> Rect {
     let width = 78u16.min(area.width);
-    let height = (area.height.saturating_sub(4)).max(6).min(area.height);
+    let height = (area.height.minus(4)).max(6).min(area.height);
     Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 4,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(4)),
         width,
         height,
     }
@@ -46,7 +59,7 @@ pub(super) fn draw_hl7_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let view_h = chunks[1].height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.hl7_panel.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -64,51 +77,52 @@ pub(super) fn draw_hl7_panel(app: &mut App, frame: &mut Frame, area: Rect) {
             Span::raw(p.query.clone()),
         ])
     };
-    frame.render_widget(Paragraph::new(filter), chunks[0]);
+    frame.render_widget(Paragraph::new(filter), chunk(&chunks, 0));
 
     let matches = p.matches();
     let total = matches.len();
-    let text_w = (chunks[1].width as usize).saturating_sub(1);
+    let text_w = usize::from(chunk(&chunks, 1).width).minus(1);
     let lines: Vec<Line> = matches
         .iter()
         .enumerate()
         .skip(p.scroll)
         .take(view_h)
-        .map(|(row, &idx)| {
-            let text = trunc(&p.rows[idx].display(), text_w);
+        .filter_map(|(row, &idx)| {
+            let r = p.rows.get(idx)?;
+            let text = trunc(&r.display(), text_w);
             let style = if row == p.selected {
                 theme::selected()
-            } else if p.rows[idx].kind == RowKind::Segment {
+            } else if r.kind == RowKind::Segment {
                 theme::title(true)
             } else {
                 Style::default()
             };
-            Line::from(Span::styled(text, style))
+            Some(Line::from(Span::styled(text, style)))
         })
         .collect();
-    let show_bar = total > view_h && chunks[1].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 1).width > 1;
     let row_area = Rect {
-        width: chunks[1].width.saturating_sub(u16::from(show_bar)),
-        ..chunks[1]
+        width: chunk(&chunks, 1).width.minus(u16::from(show_bar)),
+        ..chunk(&chunks, 1)
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[1].x + chunks[1].width - 1,
+            x: chunk(&chunks, 1).x.plus(chunk(&chunks, 1).width).minus(1),
             width: 1,
-            ..chunks[1]
+            ..chunk(&chunks, 1)
         };
-        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }
     let hint = Line::from(Span::styled(
         t!("ui.hl7_view_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[2]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
     app.layout.hl7_panel = Rect {
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[1].height),
+            .min(chunk(&chunks, 1).height),
         ..row_area
     };
 }

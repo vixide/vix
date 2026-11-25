@@ -275,12 +275,10 @@ ILIKE
 bytea
 setval
 AUTOINCREMENT
-constraintdef
 functiondef
 indexdef
 triggerdef
 viewdef
-xinfo
 
 # LSP servers / editors referenced in docs
 gopls
@@ -918,16 +916,14 @@ personalised
 canonicalisation
 replayable
 conv
-licence
-travelling
-underflows
-ilog
-signum
 CONV
-fract
-milli
-newtype
-newtypes
-instalments
-subnormals
-kani
+
+# Run Y (user feedback, 2026-11-24)
+codemodel
+ctest
+fsmonitor
+mutool
+nbdime
+nbformat
+pascalcase
+pdftoppm

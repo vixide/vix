@@ -52,3 +52,11 @@ Workspace-wide (every conflicted file across the whole `git status`
 output, not just the active buffer) is a deliberate non-goal for this
 overlay — a natural follow-on, sized separately if wanted, not folded in
 here to keep this change reviewable.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Conflict markers are found with an iterator (`skip` and `find`) and the conflict block is read with `get` and `checked_add`, so no indexing or slicing remains; `None` (no complete block) is the answer if a line number did not fit. The refresh uses a subtraction with a declared fallback.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `CONFLICT-F1` | `len - 1` on an empty conflict list | entry `0` | With no conflicts there is nothing to select, and entry 0 is the neutral position. |

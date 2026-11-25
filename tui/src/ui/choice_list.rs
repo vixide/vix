@@ -2,6 +2,19 @@
 //! definition peek): a titled frame, the rows with the selection highlighted,
 //! and a key hint underneath.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -16,12 +29,13 @@ pub(super) fn draw_choice_list(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let width = 100u16.min(area.width);
-    let height = (u16::try_from(open.panel.len()).unwrap_or(u16::MAX) + 4)
-        .clamp(6, area.height.saturating_sub(4).max(6))
+    let height = (u16::try_from(open.panel.len()).unwrap_or(u16::MAX))
+        .plus(4)
+        .clamp(6, area.height.minus(4).max(6))
         .min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 4,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(4)),
         width,
         height,
     };
@@ -39,7 +53,7 @@ pub(super) fn draw_choice_list(app: &mut App, frame: &mut Frame, area: Rect) {
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(inner);
 
-    let view_h = chunks[0].height as usize;
+    let view_h = usize::from(chunk(&chunks, 0).height);
     if let Some(o) = app.choice_list.as_mut() {
         o.panel.ensure_visible(view_h);
     }
@@ -47,16 +61,16 @@ pub(super) fn draw_choice_list(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     };
     let total = p.len();
-    let show_bar = total > view_h && chunks[0].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 0).width > 1;
     let row_area = if show_bar {
         Rect {
-            width: chunks[0].width - 1,
-            ..chunks[0]
+            width: chunk(&chunks, 0).width.minus(1),
+            ..chunk(&chunks, 0)
         }
     } else {
-        chunks[0]
+        chunk(&chunks, 0)
     };
-    let text_w = row_area.width as usize;
+    let text_w = usize::from(row_area.width);
     let lines: Vec<Line> = p
         .rows
         .iter()
@@ -75,21 +89,21 @@ pub(super) fn draw_choice_list(app: &mut App, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[0].x + chunks[0].width - 1,
-            ..chunks[0]
+            x: chunk(&chunks, 0).x.plus(chunk(&chunks, 0).width).minus(1),
+            ..chunk(&chunks, 0)
         };
-        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(p.hint.clone(), theme::dim()))),
-        chunks[1],
+        chunk(&chunks, 1),
     );
     app.layout.choice_list = Rect {
-        x: chunks[0].x,
-        y: chunks[0].y,
+        x: chunk(&chunks, 0).x,
+        y: chunk(&chunks, 0).y,
         width: row_area.width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[0].height),
+            .min(chunk(&chunks, 0).height),
     };
 }

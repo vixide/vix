@@ -25,6 +25,30 @@
 //! assert_eq!(p.stops.iter().map(|s| s.num).collect::<Vec<_>>(), vec![1, 0]);
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+/// The index `step` places after `from`. An index past the end of the input
+/// reads as the end, so an overflowing one is `usize::MAX`.
+fn ahead(from: usize, step: usize) -> usize {
+    add_or(from, step, usize::MAX)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// One named, insertable snippet (a compiled-in entry of [`SNIPPETS`]).
 pub struct Snippet {
     /// Display name shown in the picker.
@@ -199,7 +223,7 @@ impl Parser<'_> {
     /// Append one literal char.
     fn push(&mut self, c: char) {
         self.text.push(c);
-        self.len += 1;
+        self.len = ahead(self.len, 1);
     }
 
     /// Parse elements from `i` until the end, or — inside a placeholder
@@ -212,21 +236,21 @@ impl Parser<'_> {
             }
             i = match c {
                 '\\' => {
-                    if let Some(e @ ('$' | '}' | '\\')) = self.at(i + 1) {
+                    if let Some(e @ ('$' | '}' | '\\')) = self.at(ahead(i, 1)) {
                         self.push(e);
-                        i + 2
+                        ahead(i, 2)
                     } else {
                         self.push('\\');
-                        i + 1
+                        ahead(i, 1)
                     }
                 }
                 '$' => self.dollar(i, depth).unwrap_or_else(|| {
                     self.push('$');
-                    i + 1
+                    ahead(i, 1)
                 }),
                 _ => {
                     self.push(c);
-                    i + 1
+                    ahead(i, 1)
                 }
             };
         }
@@ -250,30 +274,30 @@ impl Parser<'_> {
     fn dollar_inner(&mut self, i: usize, depth: usize) -> Option<usize> {
         let lsp = self.dialect == Dialect::Lsp;
         // A trailing `$` (no next char) is malformed -> `None` -> literal `$`.
-        let next = self.at(i + 1)?;
+        let next = self.at(ahead(i, 1))?;
         if next.is_ascii_digit() {
-            let (num, j) = self.number(i + 1);
+            let (num, j) = self.number(ahead(i, 1))?;
             self.stop(num, self.len);
             return Some(j);
         }
         if lsp && is_ident_start(next) {
-            return Some(self.ident_end(i + 1));
+            return Some(self.ident_end(ahead(i, 1)));
         }
         // Past MAX_DEPTH a `${` is treated as literal text rather than recursing.
         if next != '{' || depth >= MAX_DEPTH {
             return None;
         }
-        let first = self.at(i + 2)?;
+        let first = self.at(ahead(i, 2))?;
         if first.is_ascii_digit() {
-            let (num, j) = self.number(i + 2);
+            let (num, j) = self.number(ahead(i, 2))?;
             let start = self.len;
             let end = match self.at(j)? {
-                '}' => j + 1,
+                '}' => ahead(j, 1),
                 ':' => {
-                    let k = self.seq(j + 1, depth + 1);
+                    let k = self.seq(ahead(j, 1), ahead(depth, 1));
                     self.closed(k)?
                 }
-                '|' => self.choice(j + 1)?,
+                '|' => self.choice(ahead(j, 1))?,
                 _ => return None,
             };
             self.stop(num, start);
@@ -282,22 +306,22 @@ impl Parser<'_> {
         if !(lsp && is_ident_start(first)) {
             return None;
         }
-        let j = self.ident_end(i + 2);
+        let j = self.ident_end(ahead(i, 2));
         match self.at(j)? {
-            '}' => Some(j + 1),
+            '}' => Some(ahead(j, 1)),
             ':' => {
-                let k = self.seq(j + 1, depth + 1);
+                let k = self.seq(ahead(j, 1), ahead(depth, 1));
                 self.closed(k)
             }
             // A transform: nothing to transform, so it resolves to nothing.
-            '/' => self.closed(self.skip_to_brace(j + 1)),
+            '/' => self.closed(self.skip_to_brace(ahead(j, 1))),
             _ => None,
         }
     }
 
-    /// `Some(k + 1)` when `k` is a closing `}`.
+    /// `Some(ahead(k, 1))` when `k` is a closing `}`.
     fn closed(&self, k: usize) -> Option<usize> {
-        (self.at(k) == Some('}')).then_some(k + 1)
+        (self.at(k) == Some('}')).then_some(ahead(k, 1))
     }
 
     /// Record a stop numbered `num` spanning `start..` the current end.
@@ -315,23 +339,23 @@ impl Parser<'_> {
         let mut first = true;
         loop {
             match self.at(i)? {
-                '\\' if matches!(self.at(i + 1), Some('$' | '}' | '\\' | ',' | '|')) => {
+                '\\' if matches!(self.at(ahead(i, 1)), Some('$' | '}' | '\\' | ',' | '|')) => {
                     if first {
-                        let e = self.at(i + 1)?;
+                        let e = self.at(ahead(i, 1))?;
                         self.push(e);
                     }
-                    i += 2;
+                    i = ahead(i, 2);
                 }
                 ',' => {
                     first = false;
-                    i += 1;
+                    i = ahead(i, 1);
                 }
-                '|' => return self.closed(i + 1),
+                '|' => return self.closed(ahead(i, 1)),
                 c => {
                     if first {
                         self.push(c);
                     }
-                    i += 1;
+                    i = ahead(i, 1);
                 }
             }
         }
@@ -341,23 +365,26 @@ impl Parser<'_> {
     fn skip_to_brace(&self, mut i: usize) -> usize {
         while let Some(c) = self.at(i) {
             match c {
-                '\\' => i += 2,
+                '\\' => i = ahead(i, 2),
                 '}' => return i,
-                _ => i += 1,
+                _ => i = ahead(i, 1),
             }
         }
         i
     }
 
     /// Read a run of ASCII digits from `from`: `(value, next_index)`.
-    fn number(&self, from: usize) -> (u32, usize) {
+    ///
+    /// `None` when the number does not fit a `u32`: such a stop number is
+    /// malformed, so the `$` stays literal text.
+    fn number(&self, from: usize) -> Option<(u32, usize)> {
         let mut j = from;
         let mut num = 0u32;
         while let Some(d) = self.at(j).and_then(|c| c.to_digit(10)) {
-            num = num.saturating_mul(10).saturating_add(d);
-            j += 1;
+            num = num.checked_mul(10)?.checked_add(d)?;
+            j = ahead(j, 1);
         }
-        (num, j)
+        Some((num, j))
     }
 
     /// The index just past a variable name starting at `from`.
@@ -367,7 +394,7 @@ impl Parser<'_> {
             .at(j)
             .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
         {
-            j += 1;
+            j = ahead(j, 1);
         }
         j
     }
@@ -460,5 +487,15 @@ mod tests {
         let body = "${1:".repeat(10_000) + &"}".repeat(10_000);
         let p = parse(&body);
         assert!(p.text.len() < body.len(), "outer levels still parse");
+    }
+
+    #[test]
+    fn a_tabstop_number_too_large_is_literal_text_not_a_capped_stop() {
+        // 99999999999 does not fit a u32: the `$` is malformed, so it stays text.
+        let p = parse("a $99999999999 b");
+        assert_eq!(p.text, "a $99999999999 b");
+        assert_eq!(p.stops.len(), 0);
+        let p = parse("a ${99999999999:x} b");
+        assert!(p.stops.is_empty(), "{:?}", p.stops);
     }
 }

@@ -156,8 +156,8 @@ impl SharedPath {
 /// every platform: a path that is relative on Unix but absolute on Windows would
 /// let a guest escape the share root when the host runs on Windows.
 fn has_drive_prefix(raw: &str) -> bool {
-    let b = raw.as_bytes();
-    b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':'
+    let mut chars = raw.chars();
+    matches!((chars.next(), chars.next()), (Some(letter), Some(':')) if letter.is_ascii_alphabetic())
 }
 
 #[cfg(test)]

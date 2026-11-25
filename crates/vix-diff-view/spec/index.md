@@ -76,3 +76,11 @@ owns the split, the per-frame refresh and the actions. The crate root's `build`,
 (3 lines of context). Both are pure and unit tested. The host owns
 `DiffViewState`, `open_compare_prompt`, `open_diff_with`, and `diff_view_key`;
 `ui::draw_diff_view` renders the overlay.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Hunk ranges from the diff library are plain additions under `RCA-EXC-2` expectations (each names lines inside the text it diffed). `map_line` returns `Option<usize>`: `None` when the hunk table is inconsistent (a count that does not fit, or a line that would land before the first), and the compare view then leaves the other pane where it is. Inside a hunk, a line past the other side's range stops at that range's last line (an empty range maps to its start), which is a declared boundary. `copy_hunk` uses the hunk's exact ranges and copies nothing (`None`) for a stale hunk, instead of clamping them; line endings are detected with `split_once`.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `DIFF-F1` | A line inside a hunk maps past the other side's range | the other range's last line (its start if empty) | A hunk pairs lines by offset; the shorter side ends where its range ends. |

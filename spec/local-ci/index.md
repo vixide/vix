@@ -35,7 +35,8 @@ Measured or observed, not assumed:
   `cargo hack check --each-feature` (39 builds), the semver step (two builds
   of every crate) and the test suite. Under heavy machine load the
   each-feature step alone took about an hour. `nextest` measured about twice
-  as slow as `cargo test` on macOS (process-spawn scanning), so it is opt-in.
+  as slow as `cargo test` on macOS (process-spawn scanning), so it is opt-in
+  there and the default elsewhere.
 - **Four hand-kept copies of the gate** (GitHub, GitLab, Forgejo, `Makefile`)
   drift. `spec/ci` calls this deliberate; it is also a standing maintenance
   cost.
@@ -60,6 +61,62 @@ guessed. The final line is distinct per tier: `full` ends with exactly
 so they cannot be mistaken for one. A signed attestation (T761) must accept
 only `full`.
 
+
+## Faster gate (concurrent groups, scoping, caches)
+
+The landing bar is unchanged; these make the same checks wait less.
+
+- **Concurrent groups.** After the build, clippy and tests, the independent slow
+  steps run at the same time: the feature combinations, headless examples and
+  generated reference docs (one group, in the main target), `cargo doc` (its own
+  target, `<target>.par-doc`, cloned copy-on-write from the main one on first
+  use and kept warm after), and semver. Each group's output is captured and
+  printed under a `==> group <name>` header when it ends; any failing group
+  fails the run after the others have finished. `VIX_PARALLEL=0` runs them one
+  after another in the main target, exactly the old order.
+- **Private target directory.** `VIX_PRIVATE_TARGET=1` gates in
+  `${XDG_CACHE_HOME:-~/.cache}/vix-target/<worktree name>`, seeded as a clone of
+  the directory it replaces. Two gates on one target queue on cargo's build
+  lock, which cost whole hours in practice; this removes the wait.
+- **Semver baselines are cached.** Published releases never change, so
+  `cargo semver-checks` runs in a persistent target
+  (`VIX_SEMVER_TARGET`, default `${XDG_CACHE_HOME:-~/.cache}/vix/semver-target`)
+  and builds each baseline once.
+- **`--scope changed` is the default for local runs** (`--scope all`, or
+  `VIX_SCOPE=all`, widens it). It limits `cargo doc` and semver to the crates
+  changed since the merge base with `main` plus every workspace crate that
+  depends on them (the dependency closure), because a crate's doc warnings and
+  public API can only change through itself or something it re-exports. A
+  change to a root manifest, lockfile, toolchain, lint or `scripts/check` file,
+  or no `main` to compare with, widens it to the whole workspace, and the run then says so (`… ran on the whole workspace -- full pass`). Otherwise the run ends
+  with `OK (scope changed, tier …)`. CI (the forge workflows and `scripts/ci`)
+  runs the whole workspace and the attestation runs `--scope all` explicitly,
+  so an attested tree always passed the whole-workspace doc and semver checks;
+  run `--scope all` yourself before publishing a crate.
+- **nextest by default off macOS.** When `cargo-nextest` is installed the gate
+  runs the test suite with it on Linux (parallel across binaries, one process
+  per test, one retry reported as FLAKY; documentation tests still run with
+  `cargo test --doc`). On macOS it stays opt-in (`VIX_NEXTEST=1`) because every process
+  spawn is scanned by the OS and it measured about twice as slow; `VIX_NEXTEST=0`
+  forces `cargo test` anywhere. CI and `scripts/ci` already behaved this way.
+- **Tests never touch your real config.** The tests build an `App` that
+  persists settings, the session and history, and an ordinary run used to rewrite
+  the developer's `~/.config/vix`. Two layers now prevent it. In code, every
+  user-directory lookup goes through `vix_fileops::user_dirs`, and every crate
+  whose tests can reach those directories enables its `isolated-user-dirs` feature
+  as a dev-dependency, so any `cargo test` (the gate, `-p` by hand, nextest, an
+  agent) reads and writes a per-process directory under the system temporary
+  directory instead. And `scripts/check` also points `XDG_CONFIG_HOME`,
+  `XDG_DATA_HOME` and `XDG_STATE_HOME` at a throwaway directory for the whole run
+  (`VIX_HERMETIC_HOME=0` opts out), which covers anything that bypasses the first
+  layer.
+- **Test builds carry less debug information.** `[profile.test]` uses
+  line-tables-only and no debug information for dependencies, as `[profile.dev]`
+  already did; backtraces keep file and line for workspace code.
+
+`scripts/test-check-groups` (no network, no build; part of the `push` tier)
+proves the group targets, the failure propagation, the sequential mode, the
+scope narrowing and the private target with a stub `cargo`.
 
 ## Principles
 

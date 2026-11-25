@@ -16,6 +16,18 @@
 //! banners in [`GLYPHS`]. The last grid row may be partial, so navigation always
 //! bounds-checks against `GLYPHS.len()` rather than assuming a full grid. Spec: `crates/vix-nerd-font-picker/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// One selectable glyph and a short, human-readable name.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Glyph {
@@ -305,29 +317,33 @@ impl Palette {
 
     /// Move the highlight up one row, staying put on the top row.
     pub fn up(&mut self) {
-        if self.selected >= COLS {
-            self.selected -= COLS;
+        if let Some(next) = self.selected.checked_sub(COLS) {
+            self.selected = next;
         }
     }
 
     /// Move the highlight down one row, staying within the populated grid.
     pub fn down(&mut self) {
-        if self.selected + COLS < GLYPHS.len() {
-            self.selected += COLS;
+        if let Some(next) = self.selected.checked_add(COLS)
+            && next < GLYPHS.len()
+        {
+            self.selected = next;
         }
     }
 
     /// Move the highlight one cell left, stopping at the first glyph.
     pub fn left(&mut self) {
-        if self.selected > 0 {
-            self.selected -= 1;
+        if let Some(next) = self.selected.checked_sub(1) {
+            self.selected = next;
         }
     }
 
     /// Move the highlight one cell right, stopping at the last glyph.
     pub fn right(&mut self) {
-        if self.selected + 1 < GLYPHS.len() {
-            self.selected += 1;
+        if let Some(next) = self.selected.checked_add(1)
+            && next < GLYPHS.len()
+        {
+            self.selected = next;
         }
     }
 
@@ -337,7 +353,10 @@ impl Palette {
         if col >= COLS {
             return false;
         }
-        let idx = row * COLS + col;
+        // A position that does not fit is not a glyph, like one past the end.
+        let Some(idx) = row.checked_mul(COLS).and_then(|base| base.checked_add(col)) else {
+            return false;
+        };
         if idx < GLYPHS.len() {
             self.selected = idx;
             true
@@ -346,16 +365,17 @@ impl Palette {
         }
     }
 
-    /// The highlighted glyph.
+    /// The highlighted glyph, or `None` when the public [`selected`](Self::selected)
+    /// field was set past the last glyph (the navigation methods never do).
     #[must_use]
-    pub fn selected_glyph(&self) -> char {
-        GLYPHS[self.selected].ch
+    pub fn selected_glyph(&self) -> Option<char> {
+        GLYPHS.get(self.selected).map(|glyph| glyph.ch)
     }
 
-    /// The highlighted glyph's name.
+    /// The highlighted glyph's name, or `None` when nothing valid is highlighted.
     #[must_use]
-    pub fn selected_name(&self) -> &'static str {
-        GLYPHS[self.selected].name
+    pub fn selected_name(&self) -> Option<&'static str> {
+        GLYPHS.get(self.selected).map(|glyph| glyph.name)
     }
 }
 
@@ -367,7 +387,7 @@ mod tests {
     fn opens_on_first_glyph() {
         let p = Palette::open();
         assert_eq!(p.selected, 0);
-        assert_eq!(p.selected_glyph(), GLYPHS[0].ch);
+        assert_eq!(p.selected_glyph(), Some(GLYPHS[0].ch));
     }
 
     #[test]
@@ -415,5 +435,18 @@ mod tests {
         assert!(!p.select_at(0, COLS));
         // A row past the populated grid is never a cell.
         assert!(!p.select_at(p.rows(), 0));
+    }
+
+    #[test]
+    fn a_selection_past_the_end_is_none_not_the_last_glyph() {
+        let mut p = Palette {
+            selected: GLYPHS.len(),
+        };
+        assert_eq!(p.selected_glyph(), None);
+        assert_eq!(p.selected_name(), None);
+        p.selected = GLYPHS.len() - 1;
+        assert!(p.selected_glyph().is_some(), "the last glyph is valid");
+        // A grid position whose index does not fit is not a glyph.
+        assert!(!p.select_at(usize::MAX, 0));
     }
 }

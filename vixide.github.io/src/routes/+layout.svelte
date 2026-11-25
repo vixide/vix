@@ -215,7 +215,7 @@
   <div class="site-footer-inner">
     <p>
       Vix™ is free open-source software — Apache-2.0, BSD-3-Clause, MIT, GPL-2.0,
-      GPL-3.0, OGL-UK-3.0, or CC-BY-NC-SA-4.0, your choice.
+      GPL-3.0, OGL-UK-3.0, or CC-BY-SA-4.0, your choice.
     </p>
     <p class="site-footer-trademark">Vix™ and Vix IDE™ are trademarks.</p>
     <nav class="site-footer-links" aria-label="Footer">

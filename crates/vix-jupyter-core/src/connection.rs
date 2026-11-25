@@ -162,7 +162,11 @@ impl ConnectionInfo {
     #[must_use]
     pub fn to_json(&self) -> String {
         // A struct of strings and integers always serializes.
-        serde_json::to_string_pretty(self).unwrap_or_default()
+        // The text of a value that cannot be serialized would be empty.
+        let Ok(json) = serde_json::to_string_pretty(self) else {
+            return String::new();
+        };
+        json
     }
 
     /// The port (IPC: path suffix) of `channel`.

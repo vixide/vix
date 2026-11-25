@@ -91,4 +91,30 @@ mod tests {
         assert!(Environment::Production.is_production());
         assert!(!Environment::Staging.is_production());
     }
+
+    const THEME: &str =
+        r#"{"name":"t","syntax":{"keyword":[1,2,3],"string":[4,5,6],"number":[7,8,9]}}"#;
+
+    #[test]
+    fn without_a_theme_only_local_is_dimmed() {
+        crate::test_support::without_theme(|| {
+            assert_eq!(style(Environment::Local), vix_theme::dim());
+            for env in Environment::ALL.iter().skip(1) {
+                assert_eq!(style(*env), vix_theme::base());
+            }
+        });
+    }
+
+    #[test]
+    fn a_theme_colors_each_environment_from_its_syntax_slots() {
+        crate::test_support::with_theme(THEME, || {
+            let fg = |env| style(env).fg;
+            assert_eq!(fg(Environment::Development), Some(Color::Rgb(4, 5, 6)));
+            assert_eq!(fg(Environment::Testing), Some(Color::Rgb(1, 2, 3)));
+            assert_eq!(fg(Environment::Staging), Some(Color::Rgb(7, 8, 9)));
+            assert_eq!(fg(Environment::Production), Some(Color::Red));
+            // The theme leaves `comment` unset, so local falls back.
+            assert_eq!(fg(Environment::Local), Some(Color::DarkGray));
+        });
+    }
 }

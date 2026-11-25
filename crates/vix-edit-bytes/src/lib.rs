@@ -15,6 +15,18 @@
 //! overwrites the current byte's high then low nibble; **u**/**Ctrl+R**
 //! undo/redo; **Ctrl+S** save; **Esc**/**q** close.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Bytes shown per row.
@@ -22,6 +34,59 @@ pub const COLS: usize = 16;
 
 /// Maximum number of undo steps retained.
 const HISTORY_CAP: usize = 200;
+
+/// The last column of a row.
+const LAST_COL: usize = COLS - 1;
+
+/// The row a byte index is on.
+fn row_of(index: usize) -> usize {
+    #[expect(
+        clippy::integer_division,
+        reason = "RCA-EXC-2: COLS is the non-zero constant 16 and the quotient is a row number"
+    )]
+    let row = index / COLS;
+    row
+}
+
+/// The index of the first byte of the row holding `index`.
+fn row_start(index: usize) -> usize {
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: row_of(index) * COLS is at most index"
+    )]
+    let start = row_of(index) * COLS;
+    start
+}
+
+/// The bytes a page of `page` rows covers (at least one row); a count too
+/// large to hold is `usize::MAX`, which movement then stops short of.
+fn page_bytes(page: usize) -> usize {
+    mul_or(page.max(1), COLS, usize::MAX)
+}
+
+/// The index of the last of `len` bytes; with none, 0.
+fn last_index(len: usize) -> usize {
+    sub_or(len, 1, 0)
+}
+
+/// `a * b`, or the declared `fallback` when the product does not fit.
+fn mul_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_mul(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// What the host should do after the editor handled a key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,7 +192,7 @@ impl Hex {
 
     /// Adjust the scroll so the cursor's row stays within a `height`-row window.
     pub fn ensure_visible(&mut self, height: usize) {
-        let row = self.cursor / COLS;
+        let row = row_of(self.cursor);
         self.scroll = vix_list_state::ensure_visible(row, self.scroll, height, self.rows());
     }
 
@@ -138,14 +203,19 @@ impl Hex {
             return Outcome::Save;
         }
         match key.code {
-            KeyCode::Left | KeyCode::Char('h') => self.move_to(self.cursor.saturating_sub(1)),
-            KeyCode::Right | KeyCode::Char('l') => self.move_to(self.cursor + 1),
-            KeyCode::Up | KeyCode::Char('k') => self.move_to(self.cursor.saturating_sub(COLS)),
-            KeyCode::Down | KeyCode::Char('j') => self.move_to(self.cursor + COLS),
-            KeyCode::Home => self.move_to(self.cursor - self.cursor % COLS),
-            KeyCode::End => self.move_to(self.cursor - self.cursor % COLS + COLS - 1),
-            KeyCode::PageUp => self.move_to(self.cursor.saturating_sub(page.max(1) * COLS)),
-            KeyCode::PageDown => self.move_to(self.cursor + page.max(1) * COLS),
+            // Movement stops at the first and last byte (a declared boundary).
+            KeyCode::Left | KeyCode::Char('h') => self.move_to(sub_or(self.cursor, 1, 0)),
+            KeyCode::Right | KeyCode::Char('l') => self.move_to(add_or(self.cursor, 1, usize::MAX)),
+            KeyCode::Up | KeyCode::Char('k') => self.move_to(sub_or(self.cursor, COLS, 0)),
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.move_to(add_or(self.cursor, COLS, usize::MAX));
+            }
+            KeyCode::Home => self.move_to(row_start(self.cursor)),
+            KeyCode::End => self.move_to(add_or(row_start(self.cursor), LAST_COL, usize::MAX)),
+            KeyCode::PageUp => self.move_to(sub_or(self.cursor, page_bytes(page), 0)),
+            KeyCode::PageDown => {
+                self.move_to(add_or(self.cursor, page_bytes(page), usize::MAX));
+            }
             KeyCode::Char('u') if !ctrl => self.undo(),
             KeyCode::Char('r') if ctrl => self.redo(),
             KeyCode::Char(c) if c.is_ascii_hexdigit() => self.type_nibble(c),
@@ -160,7 +230,7 @@ impl Hex {
         if self.bytes.is_empty() {
             return;
         }
-        self.cursor = to.min(self.bytes.len() - 1);
+        self.cursor = to.min(last_index(self.bytes.len()));
         self.nibble = false;
     }
 
@@ -173,13 +243,16 @@ impl Hex {
             return;
         };
         self.push_undo();
-        let b = self.bytes[self.cursor];
+        let Some(slot) = self.bytes.get_mut(self.cursor) else {
+            return;
+        };
+        let b = *slot;
         if self.nibble {
-            self.bytes[self.cursor] = (b & 0xf0) | d;
+            *slot = (b & 0xf0) | d;
             self.nibble = false;
-            self.cursor = (self.cursor + 1).min(self.bytes.len() - 1);
+            self.cursor = add_or(self.cursor, 1, usize::MAX).min(last_index(self.bytes.len()));
         } else {
-            self.bytes[self.cursor] = (d << 4) | (b & 0x0f);
+            *slot = d.rotate_left(4) | (b & 0x0f);
             self.nibble = true;
         }
         self.dirty = true;
@@ -208,7 +281,7 @@ impl Hex {
                 cursor: self.cursor,
             });
             self.bytes = snap.bytes;
-            self.cursor = snap.cursor.min(self.bytes.len().saturating_sub(1));
+            self.cursor = snap.cursor.min(last_index(self.bytes.len()));
             self.nibble = false;
             self.dirty = true;
         }
@@ -222,7 +295,7 @@ impl Hex {
                 cursor: self.cursor,
             });
             self.bytes = snap.bytes;
-            self.cursor = snap.cursor.min(self.bytes.len().saturating_sub(1));
+            self.cursor = snap.cursor.min(last_index(self.bytes.len()));
             self.nibble = false;
             self.dirty = true;
         }

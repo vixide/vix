@@ -40,6 +40,18 @@
 //!
 //! [wooorm/dictionaries]: https://github.com/wooorm/dictionaries
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 #[cfg(feature = "hunspell")]
@@ -192,7 +204,8 @@ impl SpellChecker {
             .into_iter()
             .filter(|(_, _, w)| should_check(w))
             .filter(|(_, _, w)| !self.check(w))
-            .map(|(start, end, _)| (base + start, base + end))
+            // A span whose position does not fit `usize` cannot be reported.
+            .filter_map(|(start, end, _)| Some((base.checked_add(start)?, base.checked_add(end)?)))
             .collect()
     }
 }
@@ -222,29 +235,30 @@ fn locale_candidates(locale: &str) -> Vec<String> {
 fn tokenize(text: &str) -> Vec<(usize, usize, String)> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
+    // The next index; an index is below `n` here, so it cannot overflow, and
+    // the end of the text is where scanning stops anyway.
+    let bump = |i: usize| i.checked_add(1).unwrap_or(n);
     let mut tokens = Vec::new();
     let mut i = 0;
-    while i < n {
-        if !chars[i].is_alphabetic() {
-            i += 1;
+    while let Some(&first) = chars.get(i) {
+        if !first.is_alphabetic() {
+            i = bump(i);
             continue;
         }
         let start = i;
         let mut word = String::new();
-        while i < n {
-            let c = chars[i];
+        while let Some(&c) = chars.get(i) {
             if c.is_alphabetic() {
                 word.push(c);
-                i += 1;
+                i = bump(i);
             // An apostrophe joins two letters only (not leading or trailing,
             // so a quote mark around a word is not part of the token).
             } else if (c == '\'' || c == '\u{2019}')
                 && !word.is_empty()
-                && i + 1 < n
-                && chars[i + 1].is_alphabetic()
+                && chars.get(bump(i)).is_some_and(|next| next.is_alphabetic())
             {
                 word.push('\'');
-                i += 1;
+                i = bump(i);
             } else {
                 break;
             }
@@ -600,5 +614,159 @@ mod tests {
         // A missing locale yields None.
         assert_eq!(find_dictionary(std::slice::from_ref(&dir), "zz"), None);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn error_display_names_the_cause() {
+        let io = Error::Io(std::io::Error::other("boom"));
+        assert_eq!(io.to_string(), "dictionary I/O error: boom");
+        assert_eq!(
+            Error::Parse("bad".into()).to_string(),
+            "dictionary parse error: bad"
+        );
+        assert_eq!(
+            Error::NotFound("xx".into()).to_string(),
+            "no dictionary found for locale 'xx'"
+        );
+    }
+
+    #[test]
+    fn from_strings_rejects_a_broken_dictionary() {
+        // A non-numeric entry count is a parse failure, surfaced as Error::Parse.
+        let err = SpellChecker::from_strings(AFF, "notanumber\nhello\n").err();
+        assert!(matches!(err, Some(Error::Parse(_))), "got: {err:?}");
+    }
+
+    #[test]
+    fn suggestions_are_capped_by_with_max_suggestions() {
+        let aff = "SET UTF-8\nTRY esianrtolcdugmphbyfvkwz\n";
+        let dic = "6\ncat\ncar\ncap\ncab\ncan\ncam\n";
+        let sc = SpellChecker::from_strings(aff, dic).unwrap();
+        let all = sc.suggest("cax");
+        assert!(all.len() > 2, "need several suggestions, got {all:?}");
+        let capped = SpellChecker::from_strings(aff, dic)
+            .unwrap()
+            .with_max_suggestions(2);
+        assert_eq!(capped.suggest("cax"), all[..2].to_vec());
+        let none = SpellChecker::from_strings(aff, dic)
+            .unwrap()
+            .with_max_suggestions(0);
+        assert_eq!(none.suggest("cax").len(), 0);
+    }
+
+    #[test]
+    fn load_reads_the_index_files_and_falls_back_to_the_base_language() {
+        let dir = temp_dir("load");
+        let sub = dir.join("en");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("index.aff"), AFF).unwrap();
+        std::fs::write(sub.join("index.dic"), DIC).unwrap();
+        // en-GB is absent, so the chain reaches `en`.
+        let sc = SpellChecker::load(&dir, "en-GB").expect("falls back to en");
+        assert!(sc.check("hello"));
+        assert!(!sc.check("helo"));
+        let err = SpellChecker::load(&dir.join("nowhere"), "en").err();
+        assert!(matches!(err, Some(Error::NotFound(l)) if l == "en"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_reports_a_parse_failure_for_a_broken_dic() {
+        let dir = temp_dir("loadbad");
+        let sub = dir.join("en");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("index.aff"), AFF).unwrap();
+        std::fs::write(sub.join("index.dic"), "notanumber\n").unwrap();
+        let err = SpellChecker::load(&dir, "en").err();
+        assert!(matches!(err, Some(Error::Parse(_))), "got: {err:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_reports_io_error_for_a_non_utf8_dic() {
+        let dir = temp_dir("loadio");
+        let sub = dir.join("en");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("index.aff"), AFF).unwrap();
+        std::fs::write(sub.join("index.dic"), [0xff, 0xfe, 0xfd]).unwrap();
+        let err = SpellChecker::load(&dir, "en").err();
+        assert!(matches!(err, Some(Error::Io(_))), "got: {err:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn find_dictionary_prefers_earlier_dirs_and_skips_unreadable_ones() {
+        let first = temp_dir("pref1");
+        let second = temp_dir("pref2");
+        for d in [&first, &second] {
+            std::fs::write(d.join("de.aff"), "SET UTF-8\n").unwrap();
+            std::fs::write(d.join("de.dic"), "1\nhallo\n").unwrap();
+        }
+        let missing = first.join("does-not-exist");
+        let dirs = vec![missing, first.clone(), second.clone()];
+        assert_eq!(
+            find_dictionary(&dirs, "de"),
+            Some((first.join("de.aff"), first.join("de.dic")))
+        );
+        std::fs::remove_dir_all(&first).ok();
+        std::fs::remove_dir_all(&second).ok();
+    }
+
+    #[test]
+    fn prefix_fallback_needs_a_matching_aff_and_picks_the_first_alphabetically() {
+        let dir = temp_dir("prefix");
+        // en_AU has no .aff so it is skipped; en_GB wins over en_US; "english"
+        // shares the letters but not the `en_`/`en-` boundary; other
+        // extensions are ignored.
+        std::fs::write(dir.join("en_AU.dic"), "1\nx\n").unwrap();
+        std::fs::write(dir.join("en_GB.dic"), "1\nx\n").unwrap();
+        std::fs::write(dir.join("en_GB.aff"), "SET UTF-8\n").unwrap();
+        std::fs::write(dir.join("en_US.dic"), "1\nx\n").unwrap();
+        std::fs::write(dir.join("en_US.aff"), "SET UTF-8\n").unwrap();
+        std::fs::write(dir.join("english.dic"), "1\nx\n").unwrap();
+        std::fs::write(dir.join("english.aff"), "SET UTF-8\n").unwrap();
+        std::fs::write(dir.join("notes.txt"), "x").unwrap();
+        let found = find_dictionary(std::slice::from_ref(&dir), "en");
+        assert_eq!(found, Some((dir.join("en_GB.aff"), dir.join("en_GB.dic"))));
+        // A dash-separated stem also matches the base language.
+        let dash = temp_dir("prefixdash");
+        std::fs::write(dir.join("zz").with_extension("dic"), "1\nx\n").unwrap();
+        std::fs::write(dash.join("pt-BR.dic"), "1\nx\n").unwrap();
+        std::fs::write(dash.join("pt-BR.aff"), "SET UTF-8\n").unwrap();
+        let found = find_dictionary(std::slice::from_ref(&dash), "pt");
+        assert_eq!(
+            found,
+            Some((dash.join("pt-BR.aff"), dash.join("pt-BR.dic")))
+        );
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_dir_all(&dash).ok();
+    }
+
+    #[test]
+    fn load_for_uses_the_explicit_dictionary_path_first() {
+        let dir = temp_dir("loadfor");
+        std::fs::write(dir.join("tlh.aff"), AFF).unwrap();
+        std::fs::write(dir.join("tlh.dic"), DIC).unwrap();
+        let sc = load_for(dir.to_str().unwrap(), "tlh").expect("found in the explicit dir");
+        assert!(sc.check("spell"));
+        let err = load_for("", "qqq-zzz").err();
+        assert!(matches!(err, Some(Error::NotFound(l)) if l == "qqq-zzz"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn system_dictionary_dirs_only_lists_existing_unique_directories() {
+        let dirs = system_dictionary_dirs();
+        let mut seen = HashSet::new();
+        for d in &dirs {
+            assert!(d.is_dir(), "{d:?} must exist");
+            assert!(seen.insert(d.clone()), "{d:?} listed twice");
+        }
+    }
+
+    #[cfg(feature = "hunspell")]
+    #[test]
+    fn which_on_path_never_finds_a_missing_program() {
+        assert_eq!(which_on_path("vix-no-such-program-0a1b2c"), None);
     }
 }

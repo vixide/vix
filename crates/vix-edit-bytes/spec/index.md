@@ -34,3 +34,7 @@ interprets keys itself, returning an `Outcome` (`Consumed`/`Close`/`Save`). `app
 opens it from the active buffer's bytes, routes keys, and on save writes the
 (lossily decoded) bytes back through `file.save`. `ui` renders each row as
 `offset  hex pairs  |ascii|`, highlighting the cursor byte.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Cursor movement uses `checked_*` through small helpers and the nibble edit uses `get_mut`. **Declared (BYTES-F1):** moving the cursor past the first or last byte stops at that byte, and an empty buffer has cursor 0; a page larger than the address space moves to the end; undo and redo bring a stored cursor back inside a shorter buffer.

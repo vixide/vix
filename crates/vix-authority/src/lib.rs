@@ -31,6 +31,18 @@
 //! Cross-cutting design: `spec/remote-editing/index.md` at the repo root.
 //!
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod agent;
 pub mod conformance;
 pub mod container;

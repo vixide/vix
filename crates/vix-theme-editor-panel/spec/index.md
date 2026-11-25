@@ -47,3 +47,7 @@ choosing any other theme from the View → Theme submenu).
   establishes for go-to-definition. `PromptKind::ThemeSaveAs` prompts for a name; `save_theme_as`,
   writes the JSON, and calls the same theme-setting path `set_theme_by_name`
   uses (persisted + `editor.refresh_theme()`).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The slot lookup `selected_slot` returns `Option` and `apply_color` returns `Result<(), SelectionError>`: a public `selected` past the last slot is `SelectionError::OutOfRange { figure: "selected", len }` and the draft is left unchanged, never moved to the last slot. The old `# Panics` section is gone.

@@ -19,6 +19,20 @@
 
 use std::cmp::Ordering;
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// The results table plus its view state.
 ///
 /// The `Default` grid is empty; [`Grid::set`] loads a result and resets the
@@ -100,14 +114,17 @@ impl Grid {
         let mut out: Vec<usize> = (0..self.rows.len())
             .filter(|&i| {
                 needle.is_empty()
-                    || self.rows[i]
-                        .iter()
-                        .any(|cell| cell.to_lowercase().contains(&needle))
+                    || self.rows.get(i).is_some_and(|row| {
+                        row.iter().any(|cell| cell.to_lowercase().contains(&needle))
+                    })
             })
             .collect();
         if let Some((col, asc)) = self.sort {
             out.sort_by(|&a, &b| {
-                let (a, b) = (cell(&self.rows[a], col), cell(&self.rows[b], col));
+                let (a, b) = (
+                    self.rows.get(a).map_or("", |row| cell(row, col)),
+                    self.rows.get(b).map_or("", |row| cell(row, col)),
+                );
                 let ord = compare_cells(a, b);
                 if asc { ord } else { ord.reverse() }
             });
@@ -119,7 +136,7 @@ impl Grid {
     #[must_use]
     pub fn selected_cell(&self) -> Option<&str> {
         let ri = *self.filtered().get(self.sel)?;
-        Some(cell(&self.rows[ri], self.cur_col))
+        Some(cell(self.rows.get(ri)?, self.cur_col))
     }
 
     /// The selected row, if the grid has one.
@@ -144,15 +161,16 @@ impl Grid {
     /// fit.
     pub fn select_col(&mut self, left: bool) {
         if left {
-            self.cur_col = self.cur_col.saturating_sub(1);
+            self.cur_col = sub_or(self.cur_col, 1, 0);
         } else {
-            self.cur_col = (self.cur_col + 1).min(self.headers.len().saturating_sub(1));
+            self.cur_col =
+                add_or(self.cur_col, 1, usize::MAX).min(sub_or(self.headers.len(), 1, 0));
         }
         // Keep cur_col inside a window of col_off..=col_off+3.
         if self.cur_col < self.col_off {
             self.col_off = self.cur_col;
-        } else if self.cur_col > self.col_off + 3 {
-            self.col_off = self.cur_col - 3;
+        } else if self.cur_col > add_or(self.col_off, 3, usize::MAX) {
+            self.col_off = sub_or(self.cur_col, 3, 0);
         }
     }
 
@@ -180,7 +198,7 @@ impl Grid {
         self.sel = if home {
             0
         } else {
-            self.filtered().len().saturating_sub(1)
+            sub_or(self.filtered().len(), 1, 0)
         };
     }
 
@@ -192,7 +210,7 @@ impl Grid {
                 self.filter.pop();
             }
         }
-        self.sel = self.sel.min(self.filtered().len().saturating_sub(1));
+        self.sel = self.sel.min(sub_or(self.filtered().len(), 1, 0));
     }
 
     /// Keep the selection within a window of `height` visible rows.

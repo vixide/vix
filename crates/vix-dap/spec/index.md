@@ -218,3 +218,11 @@ Exception-filter choices are about one adapter and are not saved.
 runs a mock adapter over a fake `ssh` from **Run → Start**: it starts in the
 remote workspace, is launched with the remote program path, and its stop moves
 the editor there.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Row selection, the scope lookup and the collapse-to-parent step use iterators, `get`, `split_last` and `checked_add_signed`; a step past either end of the selectable rows stops at that end (a declared boundary of navigation). The few indexing and arithmetic operations that remain carry `RCA-EXC-2` expectations that state their proofs (a bound taken from the same list, a request counter, the length a read returned).
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `DAP-F1` | A selection step goes past the first or last selectable row | that first or last row | Moving the highlight stops at the ends of the list. |

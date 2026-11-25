@@ -1,6 +1,19 @@
 //! The file explorer (left dock): the directory tree, flattened to rows,
 //! with git-status coloring, vertical and horizontal scroll.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 
@@ -12,7 +25,10 @@ use crate::theme::{self, icon};
 /// optional cut-dimming and mark dot, and a trailing git-change letter. Split
 /// out of [`draw_explorer`] to keep it within the line limit.
 fn explorer_rows(app: &App, top: usize, end: usize) -> Vec<Vec<Span<'static>>> {
-    app.explorer.nodes[top..end]
+    app.explorer
+        .nodes
+        .get(top..end)
+        .unwrap_or(&[])
         .iter()
         .map(|n| {
             let indent = "  ".repeat(n.depth);
@@ -79,25 +95,35 @@ pub(super) fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
 
     let total = app.explorer.nodes.len();
     let allow_bars = app.settings.viewport.show_scrollbar && inner.width > 1 && inner.height > 1;
-    let vbar = allow_bars && total > inner.height as usize;
-    let text_w = if vbar { inner.width - 1 } else { inner.width } as usize;
+    let vbar = allow_bars && total > usize::from(inner.height);
+    let text_w = usize::from(if vbar {
+        inner.width.minus(1)
+    } else {
+        inner.width
+    });
 
     let top = app.explorer.top.min(total);
     // Build the full (unsliced) styled rows for the visible window.
-    let win_h = inner.height as usize;
-    let end = (top + win_h).min(total);
+    let win_h = usize::from(inner.height);
+    let end = top.plus(win_h).min(total);
     let rows = explorer_rows(app, top, end);
 
     let content_w = rows.iter().map(|s| span_line_width(s)).max().unwrap_or(0);
     let hbar = allow_bars && content_w > text_w;
-    let body_h = if hbar { inner.height - 1 } else { inner.height } as usize;
-    let hmax = content_w.saturating_sub(text_w);
+    let body_h = usize::from(if hbar {
+        inner.height.minus(1)
+    } else {
+        inner.height
+    });
+    let hmax = content_w.minus(text_w);
     app.explorer_hmax = hmax;
     app.explorer_hscroll = app.explorer_hscroll.min(hmax);
     let off = app.explorer_hscroll;
 
     let visible = body_h.min(rows.len());
-    let items: Vec<ListItem> = rows[..visible]
+    let items: Vec<ListItem> = rows
+        .get(..visible)
+        .unwrap_or(&[])
         .iter()
         .map(|spans| ListItem::new(Line::from(hslice_spans(spans, off, text_w))))
         .collect();
@@ -108,24 +134,24 @@ pub(super) fn draw_explorer(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let list = List::new(items).highlight_style(theme::selected());
     let mut state = ListState::default();
-    if app.explorer.selected >= top && app.explorer.selected < top + visible {
-        state.select(Some(app.explorer.selected - top));
+    if app.explorer.selected >= top && app.explorer.selected < top.plus(visible) {
+        state.select(Some(app.explorer.selected.minus(top)));
     }
     frame.render_stateful_widget(list, list_area, &mut state);
 
     if vbar {
         let sb = Rect {
-            x: inner.x + inner.width - 1,
+            x: inner.x.plus(inner.width).minus(1),
             y: inner.y,
             width: 1,
             height: u16::try_from(body_h).unwrap_or(u16::MAX),
         };
-        draw_scrollbar(frame, sb, app.explorer.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb, app.explorer.selected, total.minus(1));
     }
     app.layout.explorer_hscrollbar = if hbar {
         let hb = Rect {
             x: inner.x,
-            y: inner.y + inner.height - 1,
+            y: inner.y.plus(inner.height).minus(1),
             width: u16::try_from(text_w).unwrap_or(u16::MAX),
             height: 1,
         };

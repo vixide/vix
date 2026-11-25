@@ -8,6 +8,24 @@ use vix_input::{KeyCode, KeyEvent};
 
 use super::{Browser, Outcome, Pane, catalog, editor, row_filter};
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// The slot after `i` in a ring of `n` slots (the first after the last).
+fn ring_next(i: usize, n: usize) -> usize {
+    i.checked_add(1).filter(|next| *next < n).unwrap_or(0)
+}
+
+/// The slot before `i` in a ring of `n` slots (the last before the first).
+fn ring_prev(i: usize, n: usize) -> usize {
+    i.checked_sub(1).unwrap_or_else(|| sub_or(n, 1, 0))
+}
+
 impl Browser {
     /// Open the row search for the current table preview (`F`), on the
     /// selected column. The operator and value from the last search are kept.
@@ -16,10 +34,7 @@ impl Browser {
             self.message = Some(t!("msg.db_filter_needs_preview").to_string());
             return;
         }
-        self.row_filter.column = self
-            .grid
-            .cur_col
-            .min(self.grid.headers.len().saturating_sub(1));
+        self.row_filter.column = self.grid.cur_col.min(sub_or(self.grid.headers.len(), 1, 0));
         self.row_filter.field = 2;
         self.row_filter.open = true;
     }
@@ -51,14 +66,14 @@ impl Browser {
         let columns = self.grid.headers.len().max(1);
         let ops = row_filter::OPS.len();
         match key.code {
-            KeyCode::Up | KeyCode::BackTab => form.field = (form.field + 2) % 3,
-            KeyCode::Down | KeyCode::Tab => form.field = (form.field + 1) % 3,
+            KeyCode::Up | KeyCode::BackTab => form.field = ring_prev(form.field, 3),
+            KeyCode::Down | KeyCode::Tab => form.field = ring_next(form.field, 3),
             KeyCode::Left | KeyCode::Right => {
                 let step = |i: usize, n: usize| {
                     if key.code == KeyCode::Left {
-                        (i + n - 1) % n
+                        ring_prev(i, n)
                     } else {
-                        (i + 1) % n
+                        ring_next(i, n)
                     }
                 };
                 match form.field {
@@ -139,5 +154,210 @@ impl Browser {
                 false
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{family, press, preview, typed, workbench};
+    use crate::{View, row_filter};
+    use vix_input::KeyCode;
+
+    fn open(b: &mut Browser, table: &str) {
+        preview(b, table);
+        press(b, KeyCode::Char('F'));
+        assert!(b.row_filter_open());
+    }
+
+    #[test]
+    fn the_ring_helpers_wrap_at_both_ends() {
+        assert_eq!(ring_next(0, 3), 1);
+        assert_eq!(ring_next(2, 3), 0);
+        assert_eq!(ring_prev(1, 3), 0);
+        assert_eq!(ring_prev(0, 3), 2);
+        assert_eq!(ring_prev(0, 0), 0);
+    }
+
+    #[test]
+    fn f_needs_a_table_preview() {
+        let mut b = family(true);
+        b.focus = Pane::Results;
+        press(&mut b, KeyCode::Char('F'));
+        assert!(!b.row_filter_open());
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_filter_needs_preview").to_string())
+        );
+        // Applying without a preview says the same.
+        assert!(!b.run_row_filter(None));
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_filter_needs_preview").to_string())
+        );
+    }
+
+    #[test]
+    fn the_form_opens_on_the_selected_column_with_the_value_field_active() {
+        let mut b = family(true);
+        preview(&mut b, "parent");
+        b.grid.cur_col = 1;
+        press(&mut b, KeyCode::Char('F'));
+        assert_eq!((b.row_filter.column, b.row_filter.field), (1, 2));
+        assert_eq!(
+            b.row_filter_clause(),
+            Err(row_filter::FilterError::MissingValue)
+        );
+    }
+
+    #[test]
+    fn fields_and_choices_navigate_with_the_arrows() {
+        let mut b = family(true);
+        open(&mut b, "parent");
+        press(&mut b, KeyCode::Up);
+        assert_eq!(b.row_filter.field, 1, "up from value is the operator");
+        press(&mut b, KeyCode::Right);
+        assert_eq!(b.row_filter.op, 1, "Contains -> Equals");
+        press(&mut b, KeyCode::Left);
+        press(&mut b, KeyCode::Left);
+        assert_eq!(
+            b.row_filter.op,
+            row_filter::OPS.len() - 1,
+            "wraps to the last"
+        );
+        press(&mut b, KeyCode::Right);
+        assert_eq!(b.row_filter.op, 0);
+        press(&mut b, KeyCode::BackTab);
+        assert_eq!(b.row_filter.field, 0);
+        press(&mut b, KeyCode::Right);
+        assert_eq!(b.row_filter.column, 1);
+        press(&mut b, KeyCode::Right);
+        assert_eq!(b.row_filter.column, 0, "two columns, so it wraps");
+        press(&mut b, KeyCode::Left);
+        assert_eq!(b.row_filter.column, 1);
+        press(&mut b, KeyCode::Down);
+        press(&mut b, KeyCode::Right);
+        assert_eq!(b.row_filter.op, 1);
+        press(&mut b, KeyCode::Tab);
+        assert_eq!(b.row_filter.field, 2);
+        press(&mut b, KeyCode::Right);
+        press(&mut b, KeyCode::Left);
+        assert_eq!(
+            (b.row_filter.column, b.row_filter.op),
+            (1, 1),
+            "the value row ignores them"
+        );
+        press(&mut b, KeyCode::Tab);
+        assert_eq!(b.row_filter.field, 0, "wraps");
+        press(&mut b, KeyCode::PageUp);
+    }
+
+    #[test]
+    fn searching_reruns_the_preview_on_the_server_and_stays_editable() {
+        let mut b = family(true);
+        open(&mut b, "parent");
+        b.row_filter.column = 1; // the name column
+        typed(&mut b, "BET");
+        assert_eq!(b.row_filter.value, "BET");
+        press(&mut b, KeyCode::Backspace);
+        typed(&mut b, "T");
+        assert!(b.row_filter_clause().unwrap().contains("'%BET%'"));
+        press(&mut b, KeyCode::Enter);
+        assert!(!b.row_filter_open());
+        assert_eq!(b.grid.rows, [["2", "beta"]]);
+        assert!(b.editable());
+        assert_eq!(b.focus, Pane::Results);
+        assert_eq!(b.view, View::Workbench);
+        assert!(b.server_filter().is_some_and(|c| c.contains("BET")));
+        assert_eq!(b.message, Some(t!("msg.db_rows", count = 1).to_string()));
+        // Delete drops the filter and restores the plain preview.
+        press(&mut b, KeyCode::Char('F'));
+        press(&mut b, KeyCode::Delete);
+        assert_eq!(b.grid.rows.len(), 2);
+        assert_eq!(b.server_filter(), None);
+        assert_eq!(b.message, Some(t!("msg.db_filter_cleared").to_string()));
+    }
+
+    #[test]
+    fn an_unfinished_value_is_reported_not_run() {
+        let mut b = family(true);
+        open(&mut b, "parent");
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(
+            b.message,
+            Some(row_filter::FilterError::MissingValue.to_string())
+        );
+        assert!(b.row_filter_open(), "the form stays open");
+        assert_eq!(b.grid.rows.len(), 2);
+    }
+
+    #[test]
+    fn staged_changes_block_a_search() {
+        let mut b = family(true);
+        preview(&mut b, "parent");
+        b.grid.cur_col = 1;
+        press(&mut b, KeyCode::Char('i'));
+        typed(&mut b, "x");
+        press(&mut b, KeyCode::Enter);
+        press(&mut b, KeyCode::Char('F'));
+        typed(&mut b, "a");
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_filter_staged").to_string()));
+        assert!(b.row_filter_open());
+        press(&mut b, KeyCode::Delete);
+        assert_eq!(b.message, Some(t!("msg.db_filter_staged").to_string()));
+        press(&mut b, KeyCode::Esc);
+        assert!(!b.row_filter_open());
+    }
+
+    #[test]
+    fn a_raw_condition_that_writes_is_refused() {
+        let mut b = family(true);
+        open(&mut b, "parent");
+        b.row_filter.op = row_filter::OPS
+            .iter()
+            .position(|o| *o == row_filter::Op::Raw)
+            .unwrap();
+        typed(&mut b, "1=1; DELETE FROM parent");
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_filter_write").to_string()));
+        assert_eq!(b.grid.rows.len(), 2);
+        assert_eq!(
+            b.session
+                .as_mut()
+                .unwrap()
+                .run("SELECT count(*) FROM parent")
+                .unwrap()
+                .1,
+            [["2"]]
+        );
+    }
+
+    #[test]
+    fn a_condition_the_server_rejects_shows_the_error() {
+        let mut b = family(true);
+        open(&mut b, "parent");
+        b.row_filter.op = row_filter::OPS
+            .iter()
+            .position(|o| *o == row_filter::Op::Raw)
+            .unwrap();
+        typed(&mut b, "no_such_column = 1");
+        press(&mut b, KeyCode::Enter);
+        assert!(
+            b.message.as_deref().unwrap().contains("no_such_column"),
+            "{:?}",
+            b.message
+        );
+        assert!(b.row_filter_open());
+        assert_eq!(b.grid.rows.len(), 2);
+    }
+
+    #[test]
+    fn the_clause_without_a_connection_falls_back_to_the_default_engine() {
+        let mut b = workbench(true, &["CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)"]);
+        b.conn = None;
+        b.grid.set(vec!["v".into()], Vec::new());
+        b.row_filter.value = "x".into();
+        assert!(b.row_filter_clause().is_ok());
     }
 }

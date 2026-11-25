@@ -11,3 +11,7 @@ Convert colors between HEX, RGB, and HSL formats instantly. Enter any value and 
 - Enter a HEX, RGB, or HSL value in any of the three fields.
 - All other formats update instantly.
 - Copy the value you need for your CSS or design tool.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Hex, RGB and HSL parsing use `chars`, `get` and `checked_*`; the three fields are reached by destructuring, with `Field::next`/`Field::previous` for focus wrapping. Non-ASCII hex text is `None` whatever its byte length. No fallbacks are declared.

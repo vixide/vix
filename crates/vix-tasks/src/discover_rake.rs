@@ -28,6 +28,20 @@ static NAMESPACE_OPEN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"^namespace\s*\(?\s*[:'"]([A-Za-z0-9_.\-]+)['"]?\s+do\b"#).unwrap()
 });
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Find Rake task definitions across `rakefiles` (`[(filename, content),
 /// ...]` — the host collects `Rakefile` plus any `.rake` files it finds,
 /// e.g. under `rakelib/`/`tasks/`/`lib/tasks/`). Command is
@@ -66,14 +80,14 @@ fn discover_rake_tasks_in_file(content: &str, use_bundler: bool) -> Vec<NamedTas
         let line = raw_line.trim();
 
         if let Some(caps) = NAMESPACE_OPEN.captures(line) {
-            do_depth += 1;
+            do_depth = add_or(do_depth, 1, usize::MAX);
             namespace_stack.push((caps[1].to_string(), do_depth));
             continue;
         }
         if let Some(caps) = TASK_DEF.captures(line) {
             record_task(&caps[1], &namespace_stack, use_bundler, &mut out);
             if ends_with_block_open(line) {
-                do_depth += 1;
+                do_depth = add_or(do_depth, 1, usize::MAX);
             }
             continue;
         }
@@ -84,11 +98,12 @@ fn discover_rake_tasks_in_file(content: &str, use_bundler: bool) -> Vec<NamedTas
             {
                 namespace_stack.pop();
             }
-            do_depth = do_depth.saturating_sub(1);
+            // A stray `end` with nothing open leaves the depth at 0.
+            do_depth = sub_or(do_depth, 1, 0);
             continue;
         }
         if ends_with_block_open(line) {
-            do_depth += 1;
+            do_depth = add_or(do_depth, 1, usize::MAX);
         }
     }
     out
@@ -176,5 +191,22 @@ mod tests {
         let tasks = discover_rake_tasks(&[("Rakefile", rakefile)], false);
         let names: Vec<_> = tasks.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(names, ["rake:db:migrate", "rake:outside"]);
+    }
+}
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn plain_blocks_and_task_blocks_keep_namespaces_balanced() {
+        // `each do` opens a block that its own `end` closes, so the
+        // namespace's `end` still closes the namespace and `b` is outside it.
+        let rake = "namespace :db do\n  [1, 2].each do\n    puts 1\n  end\n  task :migrate do\n    puts 2\n  end\nend\ntask :b do\nend\n";
+        let names: Vec<String> = discover_rake_tasks(&[("Rakefile", rake)], false)
+            .into_iter()
+            .map(|t| t.name)
+            .collect();
+        assert_eq!(names, ["rake:db:migrate", "rake:b"]);
     }
 }

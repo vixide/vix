@@ -36,7 +36,13 @@ impl Chapter {
     /// — matches the bundled lesson file's own name.
     #[must_use]
     pub fn filename(&self) -> String {
-        format!("{:02}-{}.txt", self.ordinal + 1, self.id)
+        // Chapters are numbered from 1 in their file names.
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: ordinal is an index into the bundled chapter list, a few dozen entries"
+        )]
+        let number = self.ordinal + 1;
+        format!("{number:02}-{}.txt", self.id)
     }
 }
 

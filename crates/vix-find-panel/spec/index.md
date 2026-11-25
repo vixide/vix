@@ -56,3 +56,7 @@ owns the state (`SearchBar`), the keys, and the rendering.
 
 See `spec/find-and-replace/index.md` for interactive query-replace and the
 workspace panel, and `crates/vix-menu/spec/index.md` for the menu around it.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Match offsets from the regex engine are used under `RCA-EXC-2` expectations (they are UTF-8 character boundaries inside the text). `replace_one` no longer sizes its buffer with an addition, and returns `None` if the resume offset does not fit (`at_char` plus the replacement's length), instead of wrapping.

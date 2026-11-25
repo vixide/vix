@@ -600,6 +600,20 @@ Org *content* insertion (snippets, inline markers, blocks) lives under
   and `[[url][desc]]` / `[[url]]` links.
 - Bullet lists → Markdown `-` / HTML `<ul><li>`. Block delimiters (`#+BEGIN_…`)
   are dropped, their inner text kept.
+- Emphasis follows Org's boundary rules. An opening marker must come at the
+  start of the text, after whitespace or after one of `-`, `(`, `{`, `'`, `"`,
+  and be followed by a non-space; a closing marker must follow a non-space and
+  be followed by the end of the text, whitespace or one of `-.,;:!?')}"[`. A
+  marker anywhere else (`and/or`, `snake_case_name`, `2*3*4`, the slashes of a
+  URL) is plain text. A link's target and a bare link are never scanned, the
+  tags the exporter writes are never read back as markers, and the text of
+  `=verbatim=` and `~code~` is literal (no emphasis inside it). The exporters
+  keep what they must not rescan in a stash of placeholder characters from the
+  Unicode private-use area, which input text cannot forge: those characters
+  are dropped from the input first.
+- A weekday after a date (`2026-08-05 Wed`) is recognized only as one of the
+  English abbreviations `Mon`..`Sun` as a whole word; any other word after a
+  date is prose, so shifting the date leaves it alone.
 
 ## Sub-specs
 
@@ -611,3 +625,9 @@ Org *content* insertion (snippets, inline markers, blocks) lives under
   placeholder expansion (its own crate).
 - [Org tables](../../vix-org-table/spec/index.md) — the built-in table editor
   and `TBLFM` formulas (its own crate).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, the whole crate denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Code reads lines through `get`, `line_at` and `split_at_checked` instead of indexing and slicing. A line number the text does not have is not a headline: every function that takes one returns `None` or leaves the text as it was. Declared fallbacks, each the correct answer to a failed operation on valid data: a line index or count that would pass the top of `usize` stays at the top; a headline level shift that would go below 1 stays at 1 (relevel); a clock total or statistics total past its type stays at the maximum; a time or age summary whose sum does not fit leaves its cell empty.
+
+`clock_out` returns `None` when the end timestamp cannot be read or is before the start; it used to write a duration of 0:00. A numeric time or age value that is not finite, or that does not fit 64 bits, is not a duration and does not parse.

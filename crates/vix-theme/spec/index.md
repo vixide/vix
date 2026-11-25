@@ -160,3 +160,7 @@ sorted list for the View → Theme submenu). The host gathers bundled + user the
 (`available_custom_themes`), feeds the names to the menu
 (`menu::set_theme_names`), and applies a chosen theme by name. See
 `crates/vix-theme-model/spec/index.md`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The color-depth functions (`distance2`, `cube_index`, `indexed_rgb`, `nearest_256`) carry `RCA-EXC-2` proofs from the fixed ranges of the xterm palette (6 cube levels, 16 ANSI entries, a 24-step gray ramp, byte-sized channels); a palette index outside the 16 ANSI entries is matched through its RGB value. No fallbacks are declared.

@@ -25,6 +25,14 @@ const MAX_SUGGESTIONS: usize = 8;
 /// minimum.
 const MIN_PREFIX: usize = 2;
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// A suggestion list plus where the to-be-replaced prefix starts.
 ///
 /// An empty `items` means "show no popup"; `start` is then meaningless.
@@ -108,20 +116,20 @@ impl Completer {
         let chars: Vec<char> = line.chars().collect();
         let col = col.min(chars.len());
         let mut start = col;
-        while start > 0
-            && (chars[start - 1].is_ascii_alphanumeric()
-                || chars[start - 1] == '_'
-                || chars[start - 1] == '.')
+        while let Some(before) = start.checked_sub(1)
+            && chars
+                .get(before)
+                .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '.')
         {
-            start -= 1;
+            start = before;
         }
-        let token: String = chars[start..col].iter().collect();
+        let token: String = chars.get(start..col).unwrap_or(&[]).iter().collect();
         // A dot anywhere in the token means column completion; the replaced
         // prefix is only the part after the last dot, so `users.` + accept
         // keeps the table qualifier.
         if let Some(dot) = token.rfind('.') {
-            let qualifier = &token[..dot];
-            let partial = &token[dot + 1..];
+            let (qualifier, rest) = token.split_at_checked(dot).unwrap_or((token.as_str(), ""));
+            let partial = rest.strip_prefix('.').unwrap_or(rest);
             let table = crate::alias::resolve(statement, qualifier).unwrap_or_else(|| {
                 // `schema.table.` → the columns are keyed by the bare name.
                 qualifier
@@ -133,14 +141,14 @@ impl Completer {
             let items = self.column_matches(&table, partial);
             let partial_chars = partial.chars().count();
             return Suggestions {
-                start: col - partial_chars,
+                start: sub_or(col, partial_chars, 0),
                 items,
             };
         }
         // Right after a `JOIN` keyword, offer whole `table ON …` clauses drawn
         // from the foreign-key graph (no minimum prefix — `JOIN ` alone lists
         // the joinable tables).
-        let before: String = chars[..start].iter().collect();
+        let before: String = chars.get(..start).unwrap_or(&[]).iter().collect();
         let prev_word = before.split_whitespace().last().unwrap_or("");
         if prev_word.eq_ignore_ascii_case("join") {
             let items = self.join_matches(&token);

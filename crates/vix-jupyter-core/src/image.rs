@@ -20,6 +20,12 @@ pub const MAX_SIDE: u32 = 16_384;
 /// RGBA once decoded).
 pub const MAX_PIXELS: u64 = 16 * 1024 * 1024;
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Why an image was refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -85,13 +91,11 @@ impl Image {
     #[must_use]
     pub fn file_name(&self) -> String {
         let digest = Sha256::digest(&self.bytes);
-        let mut name = digest[..8]
-            .iter()
-            .fold(String::with_capacity(20), |mut out, b| {
-                use std::fmt::Write as _;
-                let _ = write!(out, "{b:02x}");
-                out
-            });
+        let mut name = digest.iter().take(8).fold(String::new(), |mut out, b| {
+            use std::fmt::Write as _;
+            let _ = write!(out, "{b:02x}");
+            out
+        });
         name.push('.');
         name.push_str(self.extension());
         name
@@ -110,7 +114,12 @@ pub fn decode(mime: &str, base64_text: &str) -> Result<Image, ImageError> {
         _ => return Err(ImageError::Unsupported),
     };
     // Four base64 characters carry three bytes: refuse before decoding.
-    if base64_text.len() / 4 * 3 > MAX_IMAGE_BYTES + 3 {
+    if base64_text
+        .len()
+        .div_euclid(4)
+        .checked_mul(3)
+        .is_none_or(|n| n > add_or(MAX_IMAGE_BYTES, 3, usize::MAX))
+    {
         return Err(ImageError::TooLarge);
     }
     let compact: String = base64_text
@@ -133,7 +142,9 @@ pub fn decode(mime: &str, base64_text: &str) -> Result<Image, ImageError> {
         || height == 0
         || width > MAX_SIDE
         || height > MAX_SIDE
-        || u64::from(width) * u64::from(height) > MAX_PIXELS
+        || u64::from(width)
+            .checked_mul(u64::from(height))
+            .is_none_or(|pixels| pixels > MAX_PIXELS)
     {
         return Err(ImageError::TooManyPixels { width, height });
     }
@@ -147,14 +158,14 @@ pub fn decode(mime: &str, base64_text: &str) -> Result<Image, ImageError> {
 
 /// Big-endian `u32` at `at`, or `None` if the slice is too short.
 fn be_u32(bytes: &[u8], at: usize) -> Option<u32> {
-    let b = bytes.get(at..at + 4)?;
-    Some(u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    let b: [u8; 4] = bytes.get(at..at.checked_add(4)?)?.try_into().ok()?;
+    Some(u32::from_be_bytes(b))
 }
 
 /// Big-endian `u16` at `at`, or `None` if the slice is too short.
 fn be_u16(bytes: &[u8], at: usize) -> Option<u16> {
-    let b = bytes.get(at..at + 2)?;
-    Some(u16::from_be_bytes([b[0], b[1]]))
+    let b: [u8; 2] = bytes.get(at..at.checked_add(2)?)?.try_into().ok()?;
+    Some(u16::from_be_bytes(b))
 }
 
 /// Width and height from a PNG's signature and `IHDR` chunk.
@@ -177,13 +188,13 @@ fn jpeg_size(bytes: &[u8]) -> Option<(u32, u32)> {
         if *bytes.get(i)? != 0xff {
             return None;
         }
-        let mut marker = *bytes.get(i + 1)?;
-        i += 1;
+        let mut marker = *bytes.get(i.checked_add(1)?)?;
+        i = i.checked_add(1)?;
         while marker == 0xff {
-            i += 1;
+            i = i.checked_add(1)?;
             marker = *bytes.get(i)?;
         }
-        i += 1;
+        i = i.checked_add(1)?;
         // Markers without a length: TEM, RST0–7.
         if marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
             continue;
@@ -195,14 +206,14 @@ fn jpeg_size(bytes: &[u8]) -> Option<(u32, u32)> {
         let len = usize::from(be_u16(bytes, i)?);
         let is_sof = (0xc0..=0xcf).contains(&marker) && !matches!(marker, 0xc4 | 0xc8 | 0xcc);
         if is_sof {
-            let height = be_u16(bytes, i + 3)?;
-            let width = be_u16(bytes, i + 5)?;
+            let height = be_u16(bytes, i.checked_add(3)?)?;
+            let width = be_u16(bytes, i.checked_add(5)?)?;
             return Some((u32::from(width), u32::from(height)));
         }
         if len < 2 {
             return None;
         }
-        i += len;
+        i = i.checked_add(len)?;
     }
 }
 

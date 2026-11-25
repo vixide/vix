@@ -73,3 +73,12 @@ Each row shows:
   reason to show them here rather than only in the F1 panel.
 - Reverse lookup ("press a combo, see what it's bound to") — shared
   roadmap item with `vix-keyboard-shortcut-panel`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Selection and scrolling use `checked_*`; the old `saturating_sub` calls are gone, and the row lookups are indexed under `RCA-EXC-2` expectations because the indexes come from enumerating the row table.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `BINDING-F1` | A subtraction goes below zero | `0` | A short list does not scroll, and moving up stops at the top. |
+| `BINDING-F2` | A selection step does not fit | the last row | Moving down stops at the last match. |

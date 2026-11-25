@@ -8,6 +8,14 @@
 //!
 //! Spec: `crates/vix-terminal/spec/index.md`.
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// An ordered set of terminal tabs. Ids are never reused, so a reference by id
 /// (Cowork's shared terminal, T697) cannot silently move to another tab.
 ///
@@ -54,9 +62,15 @@ impl<T> Tabs<T> {
     /// its id.
     pub fn push(&mut self, item: T) -> u64 {
         let id = self.next_id;
-        self.next_id += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: one id per tab ever opened in one session, so a u64 cannot overflow"
+        )]
+        {
+            self.next_id += 1;
+        }
         self.items.push((id, item));
-        self.active = self.items.len() - 1;
+        self.active = sub_or(self.items.len(), 1, 0);
         self.shown = true;
         id
     }
@@ -135,14 +149,20 @@ impl<T> Tabs<T> {
     /// Activate the next tab, wrapping around.
     pub fn next(&mut self) {
         if !self.items.is_empty() {
-            self.active = (self.active + 1) % self.items.len();
+            let next = self.active.checked_add(1).filter(|n| *n < self.items.len());
+            // After the last tab comes the first.
+            self.active = next.unwrap_or(0);
         }
     }
 
     /// Activate the previous tab, wrapping around.
     pub fn prev(&mut self) {
         if !self.items.is_empty() {
-            self.active = (self.active + self.items.len() - 1) % self.items.len();
+            // Before the first tab comes the last.
+            self.active = self
+                .active
+                .checked_sub(1)
+                .unwrap_or_else(|| sub_or(self.items.len(), 1, 0));
         }
     }
 
@@ -163,11 +183,11 @@ impl<T> Tabs<T> {
         // active. (Removing the active tab itself keeps the index, which now
         // names its successor.)
         if index < self.active {
-            self.active -= 1;
+            self.active = sub_or(self.active, 1, 0);
         }
         // Removed the last tab while it was active: fall back to the new last.
         if self.active >= self.items.len() {
-            self.active = self.items.len().saturating_sub(1);
+            self.active = sub_or(self.items.len(), 1, 0);
         }
         if self.items.is_empty() {
             self.shown = false;
@@ -277,5 +297,57 @@ mod tests {
         assert_eq!(tabs.get(id_a), Some(&1));
         assert_eq!(tabs.get_mut(id_c), Some(&mut 3));
         assert_eq!(tabs.len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn three() -> (Tabs<&'static str>, [u64; 3]) {
+        let mut t = Tabs::default();
+        let ids = [t.push("a"), t.push("b"), t.push("c")];
+        (t, ids)
+    }
+
+    #[test]
+    fn navigation_wraps_and_select_ignores_out_of_range() {
+        let (mut t, ids) = three();
+        assert_eq!(t.active_index(), 2);
+        t.next();
+        assert_eq!(t.active_index(), 0);
+        t.prev();
+        assert_eq!(t.active_index(), 2);
+        t.select(1);
+        assert_eq!(t.active_id(), Some(ids[1]));
+        t.select(9);
+        assert_eq!(t.active_index(), 1);
+        let mut empty: Tabs<&str> = Tabs::default();
+        empty.next();
+        empty.prev();
+        assert_eq!(empty.active_index(), 0);
+        assert!(empty.active().is_none());
+    }
+
+    #[test]
+    fn iter_mut_and_lookup_by_id_reach_each_tab() {
+        let (mut t, ids) = three();
+        for (id, item) in t.iter_mut() {
+            if id == ids[0] {
+                *item = "A";
+            }
+        }
+        assert_eq!(t.get(ids[0]), Some(&"A"));
+        *t.get_mut(ids[2]).unwrap() = "C";
+        let all: Vec<&str> = t.iter().map(|(_, x)| *x).collect();
+        assert_eq!(all, ["A", "b", "C"]);
+        assert!(t.get(99).is_none());
+        assert!(t.get_mut(99).is_none());
+        assert_eq!(t.len(), 3);
+        // Closing the active (last) tab falls back to the new last and the
+        // panel hides only when none remain.
+        assert_eq!(t.close_active(), Some("C"));
+        assert_eq!(t.active_index(), 1);
+        assert!(t.is_visible());
     }
 }

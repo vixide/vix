@@ -28,7 +28,7 @@ fn main() {
     theme.editor.background = Some([0x10, 0x10, 0x18]); // Rgb is a plain [u8; 3]
 
     // `to_json` is the same serializer the theme editor's Save As uses.
-    let saved = vix::theme_model::to_json(&theme);
+    let saved = vix::theme_model::to_json(&theme).expect("serialize custom theme");
     let dir = std::env::temp_dir().join(format!("vix-theme-roundtrip-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("create scratch dir");
     let path = dir.join("my-dark.json");

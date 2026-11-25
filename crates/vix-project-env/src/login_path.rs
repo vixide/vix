@@ -29,9 +29,9 @@ pub fn script() -> String {
 /// there and not empty.
 #[must_use]
 pub fn parse_marked(output: &str) -> Option<&str> {
-    let start = output.find(MARKER)? + MARKER.len();
-    let len = output[start..].find(MARKER)?;
-    let path = output[start..start + len].trim();
+    let (_, after_first) = output.split_once(MARKER)?;
+    let (between, _) = after_first.split_once(MARKER)?;
+    let path = between.trim();
     (!path.is_empty()).then_some(path)
 }
 

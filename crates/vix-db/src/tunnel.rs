@@ -271,27 +271,21 @@ fn free_port() -> Option<u16> {
 /// timeout elapses. Returns early with `false` if `child` (the `ssh` process)
 /// exits first — with `ExitOnForwardFailure=yes` a failed forward exits almost
 /// immediately, so this avoids blocking the caller for the full timeout.
-#[expect(
-    clippy::expect_used,
-    reason = "invariant established earlier in this function"
-)]
 fn wait_ready(local_port: u16, child: &mut Child) -> bool {
     use std::net::TcpStream;
     // Poll rather than sleep once: `ssh` gives no readiness signal, and the
     // only observable "up" state is the local port accepting a connection.
-    let deadline = Instant::now() + READY_TIMEOUT;
-    let addr = format!("127.0.0.1:{local_port}");
-    while Instant::now() < deadline {
+    // A timeout too long to be a deadline never expires.
+    let deadline = Instant::now().checked_add(READY_TIMEOUT);
+    let Ok(addr) = format!("127.0.0.1:{local_port}").parse::<std::net::SocketAddr>() else {
+        return false;
+    };
+    while deadline.is_none_or(|deadline| Instant::now() < deadline) {
         // If ssh has already exited the forward will never come up.
         if matches!(child.try_wait(), Ok(Some(_))) {
             return false;
         }
-        if TcpStream::connect_timeout(
-            &addr.parse().expect("valid loopback addr"),
-            Duration::from_millis(200),
-        )
-        .is_ok()
-        {
+        if TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
             return true;
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -450,5 +444,116 @@ mod tests {
         let mut sqlite = pg("j", "", "");
         sqlite.kind = Kind::Sqlite;
         assert!(!wanted(&sqlite), "sqlite is a file, never tunnelled");
+    }
+
+    fn pg_via(ssh_host: &str) -> Connection {
+        Connection {
+            kind: Kind::Postgres,
+            host: "db.internal".into(),
+            ssh_host: ssh_host.into(),
+            ..Connection::default()
+        }
+    }
+
+    #[test]
+    fn errors_describe_themselves_and_chain_their_cause() {
+        assert_eq!(TunnelError::InvalidField("bad".into()).to_string(), "bad");
+        assert_eq!(TunnelError::NoPort.to_string(), t!("msg.db_tunnel_no_port"));
+        assert_eq!(
+            TunnelError::NotInstalled.to_string(),
+            t!("msg.db_tunnel_ssh_missing")
+        );
+        assert_eq!(
+            TunnelError::Timeout.to_string(),
+            t!("msg.db_tunnel_timeout")
+        );
+        let spawn = TunnelError::Spawn(std::io::Error::other("boom"));
+        assert_eq!(
+            spawn.to_string(),
+            t!("msg.db_tunnel_spawn", error = "boom").to_string()
+        );
+        assert!(std::error::Error::source(&spawn).is_some());
+        assert!(std::error::Error::source(&TunnelError::Timeout).is_none());
+    }
+
+    #[test]
+    fn a_missing_ssh_binary_is_told_apart_from_other_spawn_failures() {
+        let missing = TunnelError::from(std::io::Error::from(std::io::ErrorKind::NotFound));
+        assert!(matches!(missing, TunnelError::NotInstalled));
+        let denied = TunnelError::from(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+        assert!(matches!(denied, TunnelError::Spawn(_)));
+    }
+
+    #[test]
+    fn nothing_is_spawned_for_sqlite_or_without_a_jump_host() {
+        assert!(open(&Connection::default()).unwrap().is_none());
+        assert!(open_batch(&pg_via("  ")).unwrap().is_none());
+        let sqlite = Connection {
+            kind: Kind::Sqlite,
+            ssh_host: "jump".into(),
+            ..Connection::default()
+        };
+        assert!(!wanted(&sqlite));
+        assert!(open(&sqlite).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_hostile_field_is_refused_before_any_process_starts() {
+        for result in [
+            open(&pg_via("-oProxyCommand=evil")),
+            open_batch(&pg_via("-oProxyCommand=evil")),
+        ] {
+            assert!(matches!(result, Err(TunnelError::InvalidField(_))));
+        }
+    }
+
+    #[test]
+    fn batch_mode_goes_before_the_end_of_options_marker() {
+        let conn = pg_via("jump");
+        let plain = args_for(&conn, 5000, false).unwrap();
+        let batch = args_for(&conn, 5000, true).unwrap();
+        assert_eq!(batch[..2], ["-o", "BatchMode=yes"]);
+        assert_eq!(batch[2..], plain[..]);
+        assert!(args_for(&pg_via("-x"), 1, true).is_err());
+    }
+
+    #[test]
+    fn a_free_port_can_be_bound_again() {
+        let port = free_port().expect("a free port");
+        assert!(TcpListener::bind(("127.0.0.1", port)).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn readiness_is_a_listening_port_with_a_live_ssh_and_never_with_a_dead_one() {
+        use std::process::{Command, Stdio};
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut alive = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .spawn()
+            .unwrap();
+        assert!(wait_ready(port, &mut alive), "the port accepts connections");
+        // A tunnel dropped kills its child.
+        let tunnel = Tunnel {
+            child: alive,
+            local_port: port,
+        };
+        let pid_alive = tunnel.child.id();
+        drop(tunnel);
+        assert!(
+            Command::new("kill")
+                .args(["-0", &pid_alive.to_string()])
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|s| !s.success()),
+            "the child is gone"
+        );
+        // ssh exiting first ends the wait with failure, well before the timeout.
+        drop(listener);
+        let dead_port = free_port().unwrap();
+        let mut dead = Command::new("true").spawn().unwrap();
+        assert!(!wait_ready(dead_port, &mut dead));
     }
 }

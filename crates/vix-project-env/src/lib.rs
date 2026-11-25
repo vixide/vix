@@ -40,6 +40,18 @@
 //! assert!(resolved.env.is_none() && resolved.blocked.is_none());
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 #[cfg(feature = "process")]
 mod run;
 
@@ -231,9 +243,11 @@ impl Detector {
             && self.name.chars().count() <= 64
             && !self.detect.is_empty()
             && self.detect.iter().all(rel_ok)
-            && !self.command.is_empty()
             && self.command.iter().all(|a| !a.contains('\0'))
-            && !self.command[0].is_empty()
+            && self
+                .command
+                .first()
+                .is_some_and(|program| !program.is_empty())
             && self
                 .timeout_secs
                 .is_none_or(|t| (1..=MAX_TIMEOUT_SECS).contains(&t))
@@ -437,10 +451,12 @@ pub fn resolve_with(
         .into_iter()
         .find(|d| d.applies(root))
     {
-        if trusted {
-            let args: Vec<&str> = d.command[1..].iter().map(String::as_str).collect();
+        // A detector with no command was rejected when it was loaded; if one got
+        // here anyway it simply yields nothing.
+        if trusted && let Some((program, rest)) = d.command.split_first() {
+            let args: Vec<&str> = rest.iter().map(String::as_str).collect();
             let extra = d.command_env();
-            if let Some(vars) = runner(&d.command[0], &args, root, d.timeout(), &extra)
+            if let Some(vars) = runner(program, &args, root, d.timeout(), &extra)
                 .and_then(|t| parse_env_json(&t))
                 .filter(|v| !v.is_empty())
             {
@@ -450,7 +466,7 @@ pub fn resolve_with(
                 out.env = Some(env);
                 return out;
             }
-        } else {
+        } else if !trusted {
             out.blocked = Some(Source::Custom);
         }
     }
@@ -930,5 +946,80 @@ mod tests {
         assert!(seen.contains(&("VIX_T667_GONE".to_string(), None)));
         set_active(None);
         assert!(active().is_none() && active_vars().is_empty());
+    }
+
+    #[test]
+    fn source_labels_and_code_running_flags() {
+        assert_eq!(Source::Venv.label(), "venv");
+        assert_eq!(Source::Direnv.label(), "direnv");
+        assert_eq!(Source::Mise.label(), "mise");
+        assert_eq!(Source::Custom.label(), "custom");
+        assert!(!Source::Venv.runs_project_code());
+        assert!(Source::Direnv.runs_project_code());
+        assert!(Source::Mise.runs_project_code());
+        assert!(Source::Custom.runs_project_code());
+        let mut env = ProjectEnv::new(Source::Mise, BTreeMap::new());
+        assert_eq!(env.label(), "mise");
+        env.name = Some("mine".to_string());
+        assert_eq!(env.label(), "mine");
+    }
+
+    #[test]
+    fn a_windows_style_venv_uses_scripts_only_when_bin_is_absent() {
+        let dir = Dir::new("scripts");
+        let venv = dir.path().join(".venv");
+        fs::create_dir_all(venv.join("Scripts")).unwrap();
+        let base = std::env::join_paths(["/usr/bin"]).unwrap();
+        let env = venv_env(&venv, Some(&base));
+        let path = env.vars["PATH"].clone().unwrap();
+        assert!(path.starts_with(&venv.join("Scripts").to_string_lossy().into_owned()));
+        assert!(path.ends_with("/usr/bin"));
+        assert_eq!(env.vars["PYTHONHOME"], None);
+        // With both present, the POSIX `bin` wins.
+        fs::create_dir_all(venv.join("bin")).unwrap();
+        let env = venv_env(&venv, None);
+        assert_eq!(
+            env.vars["PATH"].as_deref(),
+            Some(venv.join("bin").to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            env.vars["VIRTUAL_ENV"].as_deref(),
+            Some(venv.to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn untrusted_custom_detector_is_blocked_and_beats_a_blocked_direnv() {
+        let dir = Dir::new("blocked-custom");
+        write_detectors(dir.path(), NIX);
+        fs::write(dir.path().join("flake.nix"), "").unwrap();
+        fs::write(dir.path().join(".envrc"), "x").unwrap();
+        let r = resolve_with(dir.path(), false, None, &|_, _, _, _, _| panic!("no"), None);
+        assert_eq!(
+            r.blocked,
+            Some(Source::Custom),
+            "the first blocked source is kept"
+        );
+        assert!(r.env.is_none());
+    }
+
+    #[test]
+    fn trusted_tools_that_print_nothing_fall_through() {
+        let dir = Dir::new("empty-tools");
+        fs::write(dir.path().join(".envrc"), "x").unwrap();
+        make_venv(dir.path());
+        let r = resolve_with(
+            dir.path(),
+            true,
+            None,
+            &|_, _, _, _, _| Some("{}".into()),
+            None,
+        );
+        assert_eq!(
+            r.env.unwrap().source,
+            Source::Venv,
+            "empty direnv output falls to the venv"
+        );
+        assert!(r.blocked.is_none());
     }
 }

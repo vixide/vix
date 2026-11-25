@@ -97,3 +97,7 @@ real `App`).
 TLS-wrapped MLLP, a long-lived listener (receiving messages), batch (`FHS/BHS`)
 files, per-version segment/field dictionaries (the view shows numbers, not
 field names) and message editing from the view are out of scope.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Escape decoding, field splitting, MLLP framing, path parsing and the reply loop use `get`, iterators and `checked_*`. **Declared (HL7-F1):** an absent acknowledgement field reads as empty text; a reply timeout too long to be a deadline leaves no overall deadline (the per-read socket timeout still applies); the 1-based numbers of the view carry an `RCA-EXC-2` proof.

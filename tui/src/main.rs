@@ -3,6 +3,18 @@
 //! Sets up the terminal (with mouse capture), runs the event loop, and restores
 //! on exit. All of the application logic lives in the `vix` library crate.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Always start with high quality coding conventions.
 
 // When we build for MUSL static, use faster memory allocator.
@@ -66,7 +78,12 @@ fn query_background_colour() -> Option<(u8, u8, u8)> {
         return None;
     }
     let mut reply = String::new();
-    let deadline = std::time::Instant::now() + BACKGROUND_QUERY_TIMEOUT;
+    // The timeout is a small constant, so the deadline always exists; if it
+    // somehow did not, there is nothing to wait for.
+    let Some(deadline) = std::time::Instant::now().checked_add(BACKGROUND_QUERY_TIMEOUT) else {
+        let _ = crossterm::terminal::disable_raw_mode();
+        return None;
+    };
     while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
         if !crossterm::event::poll(left).unwrap_or(false) {
             break;
@@ -394,7 +411,7 @@ fn run(
             // terminal reports too) sends dozens of events at once, and
             // drawing a whole frame after each one made scrolling lag behind
             // the wheel. Bounded, so a flood of input still lets frames out.
-            let mut handled = 0;
+            let mut handled = 0_usize;
             while let Some(event) = next.take() {
                 // A resize only redraws; it is not something a user waits on.
                 if !matches!(event, Event::Resize(..))
@@ -403,7 +420,11 @@ fn run(
                     p.input_read(Instant::now());
                 }
                 handle_event(app, event);
-                handled += 1;
+                // A count past the top of `usize` is far past the per-frame cap.
+                let Some(count) = handled.checked_add(1) else {
+                    break;
+                };
+                handled = count;
                 if handled < MAX_EVENTS_PER_FRAME
                     && start.elapsed() < MAX_EVENT_BURST
                     && !app.flags.contains(AppFlags::SHOULD_QUIT)
@@ -532,4 +553,205 @@ fn handle_settings_bundle_flags(cli: &Cli, settings: &Settings) -> bool {
         return true;
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{
+        KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    };
+
+    /// A fresh temp directory, canonical so paths compare equal.
+    fn temp(tag: &str) -> PathBuf {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("vix-main-{tag}-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.canonicalize().unwrap()
+    }
+
+    fn app_in(dir: &std::path::Path) -> App {
+        App::new(dir.to_path_buf(), Settings::default()).with_session_path(dir.join("session.toml"))
+    }
+
+    fn cli(args: &[&str]) -> Cli {
+        let mut full = vec!["vix"];
+        full.extend_from_slice(args);
+        Cli::try_parse_from(full).unwrap()
+    }
+
+    fn content(app: &mut App) -> String {
+        app.editor.active_tab_mut().unwrap().editor.get_content()
+    }
+
+    #[test]
+    fn the_workspace_root_is_the_remote_path_a_lone_folder_or_the_current_directory() {
+        let dir = temp("root");
+        // A remote target wins, and leaves the file list alone.
+        let mut c = cli(&[dir.to_str().unwrap()]);
+        assert_eq!(
+            workspace_root(&mut c, Some("/srv/app")),
+            PathBuf::from("/srv/app")
+        );
+        assert_eq!(c.files.len(), 1);
+        // A lone folder becomes the root and is no longer a file to open.
+        assert_eq!(workspace_root(&mut c, None), dir);
+        assert_eq!(c.files, Vec::<PathBuf>::new());
+        // A file, or nothing, means the current directory.
+        let file = dir.join("a.txt");
+        std::fs::write(&file, "x").unwrap();
+        let mut c = cli(&[file.to_str().unwrap()]);
+        assert_eq!(
+            workspace_root(&mut c, None),
+            std::env::current_dir().unwrap()
+        );
+        assert_eq!(c.files, vec![file]);
+        let mut c = cli(&[]);
+        assert_eq!(
+            workspace_root(&mut c, None),
+            std::env::current_dir().unwrap()
+        );
+    }
+
+    #[test]
+    fn version_modes_print_and_stop_while_a_normal_launch_continues() {
+        assert!(run_early_modes(&cli(&["--version"])));
+        assert!(run_early_modes(&cli(&["--version", "--json"])));
+        assert!(!run_early_modes(&cli(&[])));
+        assert!(!run_early_modes(&cli(&["some-file.txt"])));
+    }
+
+    #[test]
+    fn key_events_type_into_the_editor() {
+        let dir = temp("key");
+        let mut app = app_in(&dir);
+        handle_event(
+            &mut app,
+            Event::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE)),
+        );
+        handle_event(
+            &mut app,
+            Event::Key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE)),
+        );
+        assert_eq!(content(&mut app), "hi");
+    }
+
+    #[test]
+    fn paste_events_insert_the_text_as_one_edit() {
+        let dir = temp("paste");
+        let mut app = app_in(&dir);
+        handle_event(&mut app, Event::Paste("one\ntwo".to_string()));
+        assert_eq!(content(&mut app), "one\ntwo");
+    }
+
+    #[test]
+    fn resize_events_change_nothing_and_mouse_events_reach_the_app() {
+        let dir = temp("mouse");
+        let mut app = app_in(&dir);
+        handle_event(&mut app, Event::Paste("abc".to_string()));
+        let status = app.status.clone();
+        handle_event(&mut app, Event::Resize(120, 40));
+        assert_eq!(content(&mut app), "abc");
+        assert_eq!(app.status, status);
+        // A click in the far corner of an unlaid-out screen must not panic
+        // and must not edit the buffer.
+        handle_event(
+            &mut app,
+            Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 0,
+                row: 0,
+                modifiers: KeyModifiers::NONE,
+            }),
+        );
+        assert_eq!(content(&mut app), "abc");
+    }
+
+    #[test]
+    fn losing_focus_saves_dirty_buffers_only_when_auto_save_asks_for_it() {
+        let dir = temp("focus");
+        let file = dir.join("watched.txt");
+        std::fs::write(&file, "before").unwrap();
+        let mut app = app_in(&dir);
+        app.editor.open(&file, false).unwrap();
+        handle_event(&mut app, Event::FocusGained);
+        handle_event(&mut app, Event::Paste("!".to_string()));
+        handle_event(&mut app, Event::FocusLost);
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "before",
+            "default: no auto-save"
+        );
+
+        app.settings.editor_behavior.auto_save = vix::settings::AutoSave::FocusLost;
+        handle_event(&mut app, Event::FocusLost);
+        assert!(std::fs::read_to_string(&file).unwrap().contains('!'));
+    }
+
+    #[test]
+    fn export_settings_writes_a_bundle_and_reports_to_the_caller() {
+        let dir = temp("export");
+        let out = dir.join("bundle.json");
+        let c = cli(&["--export-settings", out.to_str().unwrap()]);
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        assert!(out.is_file());
+        assert!(
+            vix::settings_bundle::read(&out).is_ok(),
+            "the bundle reads back"
+        );
+        // An unwritable destination is reported (on stderr) but still handled.
+        let bad = dir.join("no-dir").join("bundle.json");
+        let c = cli(&["--export-settings", bad.to_str().unwrap()]);
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        assert!(!bad.exists());
+    }
+
+    #[test]
+    fn importing_a_missing_bundle_is_handled_without_touching_any_config() {
+        let dir = temp("import");
+        let missing = dir.join("nope.json");
+        let c = cli(&["--import-settings", missing.to_str().unwrap()]);
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        let c = cli(&[]);
+        assert!(!handle_settings_bundle_flags(&c, &Settings::default()));
+    }
+
+    /// Importing a bundle writes each recognised entry to the config
+    /// directory (backing up what was there) and skips the rest. Only runs
+    /// when the config directory is a throwaway one.
+    #[test]
+    fn importing_a_bundle_writes_backs_up_and_skips_entries() {
+        let root = if vix_fileops::user_dirs::is_isolated() {
+            Some(std::env::temp_dir().into_os_string())
+        } else {
+            std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty())
+        };
+        let Some(xdg) = root else {
+            return;
+        };
+        let Some(macros) = Settings::macros_path().filter(|p| p.starts_with(&xdg)) else {
+            return;
+        };
+        let dir = temp("import-ok");
+        let bundle = dir.join("bundle.json");
+        std::fs::write(
+            &bundle,
+            r#"{"format":1,"entries":{"macros.toml":"","unknown.bin":"x"}}"#,
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(&macros);
+        let backup = macros.with_extension("toml.bak");
+        let _ = std::fs::remove_file(&backup);
+
+        let c = cli(&["--import-settings", bundle.to_str().unwrap()]);
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        assert!(macros.is_file(), "the recognised entry was written");
+        assert!(!backup.exists(), "nothing to back up the first time");
+        // Again: the existing file is backed up first.
+        assert!(handle_settings_bundle_flags(&c, &Settings::default()));
+        assert!(backup.is_file(), "the previous file moved aside as .bak");
+        let _ = std::fs::remove_file(&macros);
+        let _ = std::fs::remove_file(&backup);
+    }
 }

@@ -15,13 +15,11 @@ const MAX_IPC_PREFIX: usize = 96;
 pub(crate) fn random_hex(n: usize) -> io::Result<String> {
     let mut bytes = vec![0u8; n];
     getrandom::fill(&mut bytes).map_err(|e| io::Error::other(e.to_string()))?;
-    Ok(bytes
-        .iter()
-        .fold(String::with_capacity(n * 2), |mut out, b| {
-            use std::fmt::Write as _;
-            let _ = write!(out, "{b:02x}");
-            out
-        }))
+    Ok(bytes.iter().fold(String::new(), |mut out, b| {
+        use std::fmt::Write as _;
+        let _ = write!(out, "{b:02x}");
+        out
+    }))
 }
 
 /// A directory only the user can enter, removed (with everything in it)
@@ -165,6 +163,7 @@ fn free_ports() -> io::Result<[u16; 5]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vix_jupyter_core::Channel;
 
     #[test]
     fn private_dir_and_file() {
@@ -209,5 +208,89 @@ mod tests {
         let b = dir.new_connection(Transport::Ipc, "k").unwrap();
         assert_ne!(a.key, b.key);
         assert!(a.ip.ends_with("kernel"));
+    }
+
+    #[test]
+    fn random_hex_is_lowercase_hex_of_double_length() {
+        let a = random_hex(12).unwrap();
+        assert_eq!(a.len(), 24);
+        assert!(
+            a.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        );
+        assert_eq!(random_hex(0).unwrap(), "");
+    }
+
+    #[test]
+    fn create_fails_when_the_base_is_missing() {
+        let base = std::env::temp_dir().join(format!("vix-jupyter-nobase-{}", std::process::id()));
+        assert!(RuntimeDir::create(&base).is_err());
+    }
+
+    #[test]
+    fn ipc_path_that_is_too_long_for_a_socket_is_refused() {
+        let base = std::env::temp_dir().join("x".repeat(120));
+        // Built directly: the deep directory is never created, so dropping
+        // the value removes nothing real.
+        let dir = RuntimeDir {
+            path: base.join("vix-jupyter-0123456789abcdef"),
+        };
+        let err = dir.new_connection(Transport::Ipc, "k").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+        // TCP does not use the path, so it is unaffected.
+        let tcp = dir.new_connection(Transport::Tcp, "k").unwrap();
+        assert_eq!(tcp.ip, "127.0.0.1");
+    }
+
+    #[test]
+    fn tcp_connections_get_five_distinct_loopback_ports() {
+        let dir = RuntimeDir::create(&std::env::temp_dir()).unwrap();
+        let info = dir.new_connection(Transport::Tcp, "python3").unwrap();
+        assert!(info.is_local());
+        let mut ports: Vec<u16> = [
+            Channel::Shell,
+            Channel::IoPub,
+            Channel::Stdin,
+            Channel::Control,
+            Channel::Heartbeat,
+        ]
+        .iter()
+        .map(|c| info.port(*c))
+        .collect();
+        ports.sort_unstable();
+        ports.dedup();
+        assert_eq!(ports.len(), 5);
+    }
+
+    #[test]
+    fn write_connection_replaces_an_existing_file() {
+        let dir = RuntimeDir::create(&std::env::temp_dir()).unwrap();
+        let first = dir.new_connection(Transport::Tcp, "a").unwrap();
+        let second = dir.new_connection(Transport::Tcp, "b").unwrap();
+        let path = dir.write_connection(&first).unwrap();
+        assert_eq!(path, dir.connection_file());
+        let again = dir.write_connection(&second).unwrap();
+        assert_eq!(again, path);
+        let text = fs::read_to_string(&path).unwrap();
+        assert_eq!(ConnectionInfo::parse(&text).unwrap(), second);
+    }
+
+    #[test]
+    fn clear_sockets_removes_only_the_five_ipc_socket_files() {
+        let dir = RuntimeDir::create(&std::env::temp_dir()).unwrap();
+        let info = dir.new_connection(Transport::Ipc, "k").unwrap();
+        for port in 1..=6 {
+            fs::write(format!("{}-{port}", info.ip), b"s").unwrap();
+        }
+        RuntimeDir::clear_sockets(&info);
+        for port in 1..=5 {
+            assert!(!Path::new(&format!("{}-{port}", info.ip)).exists());
+        }
+        assert!(Path::new(&format!("{}-6", info.ip)).exists());
+
+        // TCP connections have no socket files; nothing happens.
+        let tcp = dir.new_connection(Transport::Tcp, "k").unwrap();
+        RuntimeDir::clear_sockets(&tcp);
+        assert!(Path::new(&format!("{}-6", info.ip)).exists());
     }
 }

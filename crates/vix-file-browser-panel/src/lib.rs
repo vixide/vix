@@ -20,6 +20,18 @@
 //! ascending) and at least one fuzzy token is present, files are ranked by
 //! fuzzy score instead, best match first; an explicit sort always wins.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -27,6 +39,12 @@ use std::time::UNIX_EPOCH;
 /// stall the UI. When the cap is hit, [`Panel::truncated`] is set and the host
 /// shows a marker.
 pub const DEFAULT_MAX_ENTRIES: usize = 10_000;
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// One walked file or directory.
 #[derive(Clone, Debug)]
@@ -213,6 +231,10 @@ impl Panel {
         let has_fuzzy = tokens.iter().any(|t| matches!(t, Token::Fuzzy(_)));
         let by_relevance = has_fuzzy && self.sort == SortKey::Name && self.ascending;
         scored.sort_by(|&(a, sa), &(b, sb)| {
+            #[expect(
+                clippy::indexing_slicing,
+                reason = "RCA-EXC-2: a and b come from enumerate over self.entries above, so they are valid indexes"
+            )]
             let (ea, eb) = (&self.entries[a], &self.entries[b]);
             // Directories group before files regardless of the sort.
             eb.is_dir.cmp(&ea.is_dir).then_with(|| {
@@ -359,7 +381,9 @@ impl Panel {
     /// The highlighted entry, if any.
     #[must_use]
     pub fn selected_entry(&self) -> Option<&Entry> {
-        self.matches().get(self.selected).map(|&i| &self.entries[i])
+        self.matches()
+            .get(self.selected)
+            .and_then(|&i| self.entries.get(i))
     }
 
     /// Act on the highlighted row: a directory re-roots the panel into it (and
@@ -462,7 +486,10 @@ fn entry_score(entry: &Entry, tokens: &[Token]) -> Option<i32> {
                 }
             }
             Token::Fuzzy(text) => {
-                score = score.saturating_add(vix_palette::fuzzy_score(&entry.rel, text)?);
+                // A relevance past the top of the scale is the top of the scale.
+                score = score
+                    .checked_add(vix_palette::fuzzy_score(&entry.rel, text)?)
+                    .unwrap_or(i32::MAX);
             }
         }
     }
@@ -510,26 +537,32 @@ pub fn glob_match(pattern: &str, text: &str) -> bool {
     let pat: Vec<char> = pattern.chars().collect();
     let hay: Vec<char> = text.chars().collect();
     // Two-pointer match with one backtrack point per `*` (classic wildcard walk).
+    let next = |i: usize| add_or(i, 1, usize::MAX);
     let (mut p, mut t) = (0usize, 0usize);
-    let (mut star, mut mark) = (usize::MAX, 0usize);
+    let mut star: Option<usize> = None;
+    let mut mark = 0usize;
     while t < hay.len() {
-        if p < pat.len() && (pat[p] == '?' || pat[p] == hay[t]) {
-            p += 1;
-            t += 1;
-        } else if p < pat.len() && pat[p] == '*' {
-            star = p;
+        let pc = pat.get(p).copied();
+        let hc = hay.get(t).copied();
+        if let (Some(pc), Some(hc)) = (pc, hc)
+            && (pc == '?' || pc == hc)
+        {
+            p = next(p);
+            t = next(t);
+        } else if pc == Some('*') {
+            star = Some(p);
             mark = t;
-            p += 1;
-        } else if star != usize::MAX {
-            p = star + 1;
-            mark += 1;
+            p = next(p);
+        } else if let Some(at) = star {
+            p = next(at);
+            mark = next(mark);
             t = mark;
         } else {
             return false;
         }
     }
-    while p < pat.len() && pat[p] == '*' {
-        p += 1;
+    while pat.get(p) == Some(&'*') {
+        p = next(p);
     }
     p == pat.len()
 }
@@ -537,9 +570,10 @@ pub fn glob_match(pattern: &str, text: &str) -> bool {
 /// A human-readable size such as `973 B`, `4.1 KB`, `12 MB`.
 #[must_use]
 pub fn size_label(size: u64) -> String {
-    #[allow(
+    #[expect(
         clippy::cast_precision_loss,
-        reason = "display only; fine beyond 2^52 bytes"
+        clippy::as_conversions,
+        reason = "RCA-EXC-2: display only; a size beyond 2^52 bytes loses low digits that the one-decimal label does not show"
     )]
     let mut value = size as f64;
     let mut unit = "B";
@@ -572,7 +606,9 @@ pub fn unix_secs(t: Option<std::time::SystemTime>) -> Option<i64> {
     match t.duration_since(UNIX_EPOCH) {
         Ok(d) => i64::try_from(d.as_secs()).ok(),
         // Pre-epoch timestamps (rare, but valid) count downward.
-        Err(e) => i64::try_from(e.duration().as_secs()).ok().map(|s| -s),
+        Err(e) => i64::try_from(e.duration().as_secs())
+            .ok()
+            .and_then(i64::checked_neg),
     }
 }
 

@@ -18,6 +18,18 @@
 //!
 //! [RFC 6350]: https://www.rfc-editor.org/info/rfc6350
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// One vCard property: a name, its parameters, and its (unescaped) value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Property {
@@ -118,9 +130,8 @@ fn parse_line(line: &str) -> Option<Property> {
     // be split early.
     let colon = line.find(':')?;
     let (left, value) = line.split_at(colon);
-    // `split_at` leaves the `:` at the head of `value`; `[1..]` skips that
-    // single ASCII byte, so the slice is on a char boundary.
-    let value = unescape(&value[1..]);
+    // `split_at` leaves the `:` at the head of `value`; drop it.
+    let value = unescape(value.strip_prefix(':')?);
 
     let mut parts = left.split(';');
     let raw_name = parts.next()?;

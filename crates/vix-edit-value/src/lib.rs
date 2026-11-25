@@ -24,7 +24,54 @@
 //! [`Tree::value`], [`Tree::depth`], ...) and never touches the tree directly,
 //! so all fold/undo invariants live here.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+
+/// The nesting depth one level below `depth`. Depth counts the levels of a
+/// parsed document, which the parser's recursion limit keeps far below `usize::MAX`.
+fn deeper(depth: usize) -> usize {
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: depth is a nesting level of a parsed document, bounded by the parser's recursion limit"
+    )]
+    let next = depth + 1;
+    next
+}
+
+/// Whether an item at `index` of `len` items is followed by another.
+fn has_next(index: usize, len: usize) -> bool {
+    index.checked_add(1).is_some_and(|next| next < len)
+}
+
+/// The index of the last of `len` rows; with none, 0.
+fn last_index(len: usize) -> usize {
+    sub_or(len, 1, 0)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Which serialization the buffer uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -274,16 +321,20 @@ impl Tree {
     }
 
     /// Serialize the tree back to text in its format.
-    #[must_use]
-    pub fn to_text(&self) -> String {
+    ///
+    /// # Errors
+    ///
+    /// The YAML serializer's error when the tree cannot be written as YAML;
+    /// the caller must not save in that case (an empty text would erase the file).
+    pub fn to_text(&self) -> Result<String, serde_norway::Error> {
         match self.format {
             Format::Json => {
                 let mut out = String::new();
                 json_push(&self.root, 0, &mut out);
                 out.push('\n');
-                out
+                Ok(out)
             }
-            Format::Yaml => serde_norway::to_string(&to_yaml(&self.root)).unwrap_or_default(),
+            Format::Yaml => serde_norway::to_string(&to_yaml(&self.root)),
         }
     }
 
@@ -316,12 +367,12 @@ impl Tree {
             return Outcome::Consumed;
         }
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => self.sel = self.sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => self.sel = sub_or(self.sel, 1, 0),
             KeyCode::Down | KeyCode::Char('j') => self.step_down(1),
-            KeyCode::PageUp => self.sel = self.sel.saturating_sub(page.max(1)),
+            KeyCode::PageUp => self.sel = sub_or(self.sel, page.max(1), 0),
             KeyCode::PageDown => self.step_down(page.max(1)),
             KeyCode::Home => self.sel = 0,
-            KeyCode::End => self.sel = self.rows.len().saturating_sub(1),
+            KeyCode::End => self.sel = last_index(self.rows.len()),
             KeyCode::Left | KeyCode::Char('h') => self.collapse_or_parent(),
             KeyCode::Right | KeyCode::Char('l') => self.expand_or_child(),
             KeyCode::Char(' ') => self.toggle(),
@@ -350,7 +401,7 @@ impl Tree {
 
     /// Move the selection down by `n`, clamped.
     fn step_down(&mut self, n: usize) {
-        self.sel = (self.sel + n).min(self.rows.len().saturating_sub(1));
+        self.sel = add_or(self.sel, n, usize::MAX).min(last_index(self.rows.len()));
     }
 
     /// Collapse the selected container, or jump to its parent.
@@ -365,10 +416,11 @@ impl Tree {
             self.select_path(&path);
         } else {
             let path = row.path.clone();
-            if path.is_empty() {
+            // The root has no parent.
+            let Some((_, parent)) = path.split_last() else {
                 return;
-            }
-            self.select_path(&path[..path.len() - 1]);
+            };
+            self.select_path(parent);
         }
     }
 
@@ -385,8 +437,9 @@ impl Tree {
                 self.select_path(&path);
             }
             Kind::Container(false) => {
-                if self.sel + 1 < self.rows.len() {
-                    self.sel += 1;
+                let next = add_or(self.sel, 1, usize::MAX);
+                if next < self.rows.len() {
+                    self.sel = next;
                 }
             }
             Kind::Scalar => {}
@@ -408,13 +461,13 @@ impl Tree {
 
     /// Enter: edit a scalar, or toggle a container.
     fn activate(&mut self) {
-        match self.rows.get(self.sel).map(|r| r.kind) {
-            Some(Kind::Scalar) => {
-                self.edit_buf = self.rows[self.sel].value.clone();
+        match self.rows.get(self.sel) {
+            Some(row) if row.kind == Kind::Scalar => {
+                self.edit_buf = row.value.clone();
                 self.mode = Mode::Edit;
             }
-            Some(Kind::Container(_)) => self.toggle(),
-            None => {}
+            Some(row) if matches!(row.kind, Kind::Container(_)) => self.toggle(),
+            _ => {}
         }
     }
 
@@ -459,7 +512,7 @@ impl Tree {
         self.rows.clear();
         flatten(&self.root, 0, String::new(), Vec::new(), &mut self.rows);
         if self.sel >= self.rows.len() {
-            self.sel = self.rows.len().saturating_sub(1);
+            self.sel = last_index(self.rows.len());
         }
     }
 
@@ -529,7 +582,7 @@ fn flatten(val: &Val, depth: usize, label: String, path: Vec<Seg>, out: &mut Vec
                 for (i, item) in items.iter().enumerate() {
                     let mut p = path.clone();
                     p.push(Seg::Index(i));
-                    flatten(item, depth + 1, format!("[{i}]"), p, out);
+                    flatten(item, deeper(depth), format!("[{i}]"), p, out);
                 }
             }
         }
@@ -545,7 +598,7 @@ fn flatten(val: &Val, depth: usize, label: String, path: Vec<Seg>, out: &mut Vec
                 for (k, v) in entries {
                     let mut p = path.clone();
                     p.push(Seg::Key(k.clone()));
-                    flatten(v, depth + 1, k.clone(), p, out);
+                    flatten(v, deeper(depth), k.clone(), p, out);
                 }
             }
         }
@@ -659,9 +712,9 @@ fn json_push(val: &Val, depth: usize, out: &mut String) {
             }
             out.push_str("[\n");
             for (i, item) in items.iter().enumerate() {
-                indent(out, depth + 1);
-                json_push(item, depth + 1, out);
-                if i + 1 < items.len() {
+                indent(out, deeper(depth));
+                json_push(item, deeper(depth), out);
+                if has_next(i, items.len()) {
                     out.push(',');
                 }
                 out.push('\n');
@@ -676,11 +729,11 @@ fn json_push(val: &Val, depth: usize, out: &mut String) {
             }
             out.push_str("{\n");
             for (i, (k, v)) in entries.iter().enumerate() {
-                indent(out, depth + 1);
+                indent(out, deeper(depth));
                 out.push_str(&json_quote(k));
                 out.push_str(": ");
-                json_push(v, depth + 1, out);
-                if i + 1 < entries.len() {
+                json_push(v, deeper(depth), out);
+                if has_next(i, entries.len()) {
                     out.push(',');
                 }
                 out.push('\n');
@@ -770,7 +823,7 @@ mod tests {
         t.handle_key(code(KeyCode::Enter), 8); // commit
         assert_eq!(t.value(1), "9");
         assert!(t.is_dirty());
-        assert!(t.to_text().contains("\"a\": 9"));
+        assert!(t.to_text().unwrap().contains("\"a\": 9"));
     }
 
     #[test]
@@ -792,7 +845,7 @@ mod tests {
     fn json_round_trips_and_preserves_key_order() {
         let t = Tree::from_text(r#"{"b": 1, "a": 2}"#, Format::Json).unwrap();
         assert_eq!(
-            t.to_text(),
+            t.to_text().unwrap(),
             "{\n  \"b\": 1,\n  \"a\": 2\n}\n",
             "keys stay in source order"
         );
@@ -803,7 +856,7 @@ mod tests {
         let t = Tree::from_text("name: vix\ntags:\n  - tui\n  - editor\n", Format::Yaml).unwrap();
         assert_eq!(t.label(1), "name");
         assert_eq!(t.value(1), "vix");
-        let out = t.to_text();
+        let out = t.to_text().unwrap();
         assert!(out.contains("name: vix"), "got: {out:?}");
         assert!(out.contains("- tui"), "got: {out:?}");
     }
@@ -831,5 +884,331 @@ mod tests {
         // pathologically nested input; serde's depth limit rejects it as an error.
         let deep = format!("{}{}", "[".repeat(100_000), "]".repeat(100_000));
         assert!(Tree::from_text(&deep, Format::Json).is_err());
+    }
+
+    fn row_of(t: &Tree, label: &str) -> usize {
+        (0..t.row_count())
+            .find(|&i| t.label(i) == label)
+            .unwrap_or_else(|| panic!("no row labelled {label}"))
+    }
+
+    fn goto(t: &mut Tree, label: &str) {
+        let target = row_of(t, label);
+        t.handle_key(code(KeyCode::Home), 8);
+        for _ in 0..target {
+            t.handle_key(code(KeyCode::Down), 8);
+        }
+        assert_eq!(t.label(t.sel()), label);
+    }
+
+    fn type_value(t: &mut Tree, text: &str) {
+        t.handle_key(code(KeyCode::Enter), 8);
+        while !t.edit_buffer().is_empty() {
+            t.handle_key(code(KeyCode::Backspace), 8);
+        }
+        for c in text.chars() {
+            t.handle_key(key(c), 8);
+        }
+        t.handle_key(code(KeyCode::Enter), 8);
+    }
+
+    #[test]
+    fn accessors_are_total_and_describe_the_tree() {
+        let t = json();
+        assert_eq!(t.format(), Format::Json);
+        assert_eq!((t.sel(), t.scroll()), (0, 0));
+        assert!(!t.is_dirty() && !t.is_editing());
+        assert_eq!(t.edit_buffer(), "");
+        assert_eq!(t.value(0), "{3}", "object rows show their entry count");
+        assert_eq!(t.value(2), "[2]", "array rows show their length");
+        assert_eq!(t.label(3), "[0]");
+        assert_eq!(t.depth(0), 0);
+        assert_eq!(t.depth(3), 2);
+        assert_eq!(t.depth(99), 0);
+        assert_eq!(t.label(99), "");
+        assert_eq!(t.value(99), "");
+        assert!(!t.is_container(99) && !t.is_collapsed(99));
+        assert!(!t.is_container(1), "scalars are not containers");
+        assert!(!t.is_collapsed(2));
+    }
+
+    #[test]
+    fn parse_error_displays_its_message() {
+        let err = ParseError::Syntax {
+            message: "boom".into(),
+        };
+        assert_eq!(err.to_string(), "boom");
+        let boxed: Box<dyn std::error::Error> = Box::new(err);
+        assert_eq!(boxed.to_string(), "boom");
+    }
+
+    #[test]
+    fn navigation_keys_move_and_clamp() {
+        let mut t = json();
+        t.handle_key(code(KeyCode::Up), 8);
+        assert_eq!(t.sel(), 0);
+        t.handle_key(key('j'), 8);
+        t.handle_key(key('j'), 8);
+        assert_eq!(t.sel(), 2);
+        t.handle_key(key('k'), 8);
+        assert_eq!(t.sel(), 1);
+        t.handle_key(code(KeyCode::PageDown), 3);
+        assert_eq!(t.sel(), 4);
+        t.handle_key(code(KeyCode::PageDown), 100);
+        assert_eq!(t.sel(), 5, "clamped to the last row");
+        t.handle_key(code(KeyCode::Down), 8);
+        assert_eq!(t.sel(), 5);
+        t.handle_key(code(KeyCode::PageUp), 2);
+        assert_eq!(t.sel(), 3);
+        t.handle_key(code(KeyCode::PageUp), 0);
+        assert_eq!(t.sel(), 2, "a zero page still moves one row");
+        t.handle_key(code(KeyCode::PageUp), 100);
+        assert_eq!(t.sel(), 0);
+        t.handle_key(code(KeyCode::End), 8);
+        assert_eq!(t.sel(), 5);
+        t.handle_key(code(KeyCode::Home), 8);
+        assert_eq!(t.sel(), 0);
+        t.handle_key(key('x'), 8);
+        assert_eq!(t.sel(), 0, "unbound keys are inert");
+    }
+
+    #[test]
+    fn left_steps_to_the_parent_and_right_expands_or_enters() {
+        let mut t = json();
+        goto(&mut t, "[1]");
+        t.handle_key(code(KeyCode::Left), 8);
+        assert_eq!(t.label(t.sel()), "b", "a scalar's Left goes to its parent");
+        t.handle_key(key('h'), 8);
+        assert!(t.is_collapsed(t.sel()));
+        t.handle_key(code(KeyCode::Left), 8);
+        assert_eq!(
+            t.label(t.sel()),
+            "",
+            "a collapsed container's Left goes to the root"
+        );
+        t.handle_key(code(KeyCode::Left), 8);
+        assert!(t.is_collapsed(0), "an open root collapses");
+        t.handle_key(code(KeyCode::Left), 8);
+        assert_eq!(t.sel(), 0, "a collapsed root has no parent to go to");
+        assert_eq!(t.row_count(), 1);
+        t.handle_key(code(KeyCode::Right), 8);
+        assert!(!t.is_collapsed(0));
+        goto(&mut t, "b");
+        t.handle_key(key('l'), 8);
+        assert!(!t.is_collapsed(t.sel()), "b expanded");
+        t.handle_key(code(KeyCode::Right), 8);
+        assert_eq!(
+            t.label(t.sel()),
+            "[0]",
+            "Right on an open container enters it"
+        );
+        t.handle_key(code(KeyCode::Right), 8);
+        assert_eq!(t.label(t.sel()), "[0]", "Right on a scalar does nothing");
+    }
+
+    #[test]
+    fn right_on_the_last_open_empty_container_stays_put() {
+        let mut t = Tree::from_text("{\"e\": []}", Format::Json).unwrap();
+        goto(&mut t, "e");
+        t.handle_key(code(KeyCode::Right), 8);
+        assert_eq!(t.label(t.sel()), "e", "nothing below to step into");
+    }
+
+    #[test]
+    fn space_and_enter_toggle_containers_and_keep_the_selection() {
+        let mut t = json();
+        goto(&mut t, "b");
+        t.handle_key(key(' '), 8);
+        assert!(t.is_collapsed(t.sel()));
+        assert_eq!(t.row_count(), 4);
+        t.handle_key(code(KeyCode::Enter), 8);
+        assert!(!t.is_collapsed(t.sel()), "Enter toggles a container");
+        assert_eq!(t.label(t.sel()), "b");
+        t.handle_key(code(KeyCode::F(2)), 8);
+        assert!(t.is_collapsed(t.sel()), "F2 does too");
+        assert!(!t.is_editing());
+        goto(&mut t, "a");
+        t.handle_key(key(' '), 8);
+        assert!(
+            !t.is_editing() && !t.is_dirty(),
+            "space on a scalar is inert"
+        );
+    }
+
+    #[test]
+    fn edit_mode_cancel_and_ignored_keys() {
+        let mut t = json();
+        goto(&mut t, "c");
+        t.handle_key(code(KeyCode::F(2)), 8);
+        assert!(t.is_editing());
+        assert_eq!(t.edit_buffer(), "hi");
+        t.handle_key(key('!'), 8);
+        t.handle_key(code(KeyCode::Down), 8);
+        assert_eq!(
+            t.edit_buffer(),
+            "hi!",
+            "navigation keys do nothing while editing"
+        );
+        assert_eq!(
+            t.handle_key(key('q'), 8),
+            Outcome::Consumed,
+            "q is text here"
+        );
+        assert_eq!(t.edit_buffer(), "hi!q");
+        assert_eq!(t.handle_key(code(KeyCode::Esc), 8), Outcome::Consumed);
+        assert!(!t.is_editing() && !t.is_dirty());
+        assert_eq!(t.value(t.sel()), "hi", "Esc discards");
+    }
+
+    #[test]
+    fn ctrl_s_while_editing_commits_first_then_saves() {
+        let mut t = json();
+        goto(&mut t, "a");
+        t.handle_key(code(KeyCode::Enter), 8);
+        t.handle_key(code(KeyCode::Backspace), 8);
+        t.handle_key(key('5'), 8);
+        assert_eq!(t.handle_key(ctrl('s'), 8), Outcome::Save);
+        assert!(!t.is_editing());
+        assert_eq!(t.value(row_of(&t, "a")), "5");
+        assert!(t.is_dirty());
+        t.mark_saved();
+        assert!(!t.is_dirty());
+    }
+
+    #[test]
+    fn typed_values_become_the_right_json_types() {
+        let mut t = json();
+        goto(&mut t, "a");
+        type_value(&mut t, "true");
+        goto(&mut t, "c");
+        type_value(&mut t, "null");
+        goto(&mut t, "[0]");
+        type_value(&mut t, "1.50");
+        goto(&mut t, "[1]");
+        type_value(&mut t, "two words");
+        assert_eq!(
+            t.to_text().unwrap(),
+            "{\n  \"a\": true,\n  \"b\": [\n    1.50,\n    \"two words\"\n  ],\n  \"c\": null\n}\n"
+        );
+    }
+
+    #[test]
+    fn an_unchanged_edit_is_not_an_edit() {
+        let mut t = json();
+        goto(&mut t, "a");
+        type_value(&mut t, "1");
+        assert!(!t.is_dirty());
+        t.handle_key(key('u'), 8);
+        assert_eq!(t.value(row_of(&t, "a")), "1", "nothing to undo");
+        assert!(!t.is_dirty(), "undo of nothing leaves it clean");
+    }
+
+    #[test]
+    fn a_new_edit_clears_the_redo_stack_and_undo_marks_dirty() {
+        let mut t = json();
+        goto(&mut t, "a");
+        type_value(&mut t, "2");
+        t.handle_key(key('u'), 8);
+        assert!(t.is_dirty());
+        type_value(&mut t, "3");
+        t.handle_key(ctrl('r'), 8);
+        assert_eq!(
+            t.value(row_of(&t, "a")),
+            "3",
+            "redo is gone after a fresh edit"
+        );
+        t.handle_key(key('r'), 8);
+        assert_eq!(t.value(row_of(&t, "a")), "3", "plain r is unbound");
+        t.handle_key(key('u'), 8);
+        t.handle_key(key('u'), 8);
+        assert_eq!(t.value(row_of(&t, "a")), "1");
+    }
+
+    #[test]
+    fn undo_history_is_capped() {
+        let mut t = json();
+        goto(&mut t, "a");
+        for n in 0..(HISTORY_CAP + 20) {
+            type_value(&mut t, &format!("{}", n + 100));
+        }
+        let mut undone = 0;
+        loop {
+            let before = t.value(row_of(&t, "a")).to_string();
+            t.handle_key(key('u'), 8);
+            if t.value(row_of(&t, "a")) == before {
+                break;
+            }
+            undone += 1;
+        }
+        assert_eq!(undone, HISTORY_CAP);
+    }
+
+    #[test]
+    fn yaml_scalars_keys_and_tags_map_to_rows() {
+        let text = "1: one\ntrue: yes_text\nnull: n\n? [a, b]\n: complex\nnum: 3.5\nflag: false\nnothing: ~\ntagged: !custom value\n";
+        let t = Tree::from_text(text, Format::Yaml).unwrap();
+        let labels: Vec<&str> = (0..t.row_count()).map(|i| t.label(i)).collect();
+        assert!(labels.contains(&"1"));
+        assert!(labels.contains(&"true"));
+        assert!(labels.contains(&"null"));
+        assert!(
+            labels.contains(&"?"),
+            "a complex key has a placeholder label"
+        );
+        let at = |l: &str| t.value(row_of(&t, l)).to_string();
+        assert_eq!(at("num"), "3.5");
+        assert_eq!(at("flag"), "false");
+        assert_eq!(at("nothing"), "null");
+        assert_eq!(at("tagged"), "value", "the tag is dropped");
+    }
+
+    #[test]
+    fn yaml_numbers_keep_their_kind_when_saved() {
+        let mut t = Tree::from_text("n: 7\nf: 2.5\ns: x\n", Format::Yaml).unwrap();
+        goto(&mut t, "s");
+        type_value(&mut t, "1e");
+        goto(&mut t, "n");
+        type_value(&mut t, "8");
+        let out = t.to_text().unwrap();
+        assert!(out.contains("n: 8\n"), "{out}");
+        assert!(out.contains("f: 2.5\n"), "{out}");
+        assert!(out.contains("s: 1e\n") || out.contains("s: '1e'"), "{out}");
+        assert_eq!(t.format(), Format::Yaml);
+    }
+
+    #[test]
+    fn empty_containers_and_nesting_serialize_as_json() {
+        let t = Tree::from_text(
+            r#"{"e": [], "o": {}, "n": [[1], {"k": "v\"q"}]}"#,
+            Format::Json,
+        )
+        .unwrap();
+        assert_eq!(
+            t.to_text().unwrap(),
+            "{\n  \"e\": [],\n  \"o\": {},\n  \"n\": [\n    [\n      1\n    ],\n    {\n      \"k\": \"v\\\"q\"\n    }\n  ]\n}\n"
+        );
+        assert_eq!(t.value(row_of(&t, "e")), "[0]");
+        assert_eq!(t.value(row_of(&t, "o")), "{0}");
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_to_the_selection() {
+        let mut t = json();
+        t.handle_key(code(KeyCode::End), 8);
+        t.ensure_visible(3);
+        assert_eq!(t.scroll(), 3, "last row sits at the bottom of the window");
+        t.handle_key(code(KeyCode::Home), 8);
+        t.ensure_visible(3);
+        assert_eq!(t.scroll(), 0);
+    }
+
+    #[test]
+    fn a_scalar_root_is_one_editable_row() {
+        let mut t = Tree::from_text("42", Format::Json).unwrap();
+        assert_eq!(t.row_count(), 1);
+        t.handle_key(code(KeyCode::Left), 8);
+        assert_eq!(t.sel(), 0, "no parent to step to");
+        type_value(&mut t, "43");
+        assert_eq!(t.to_text().unwrap(), "43\n");
     }
 }

@@ -97,7 +97,6 @@ impl Ghost {
     #[must_use]
     pub fn next_word(&self) -> &str {
         let rest = self.text.trim_start();
-        let lead = self.text.len() - rest.len();
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
         let Some(first) = rest.chars().next() else {
             return &self.text;
@@ -107,7 +106,10 @@ impl Ghost {
             .char_indices()
             .find(|&(_, c)| c.is_whitespace() || is_word(c) != word)
             .map_or(rest.len(), |(i, _)| i);
-        &self.text[..lead + len]
+        // The text is the leading blanks, the word, then what follows it: drop
+        // what follows to keep the first two.
+        let after = rest.get(len..).unwrap_or("");
+        self.text.strip_suffix(after).unwrap_or(&self.text)
     }
 
     /// What remains after `taken` (a prefix of the suggestion) was inserted,
@@ -133,6 +135,14 @@ mod tests {
         assert_eq!(Source::parse("ai"), Source::Ai);
         assert_eq!(Source::parse("off"), Source::Off);
         assert_eq!(Source::parse("copilot"), Source::Off);
+    }
+
+    #[test]
+    fn it_reports_what_it_was_computed_for() {
+        let g = ghost("suggestion");
+        assert_eq!(g.text(), "suggestion");
+        assert_eq!(g.revision(), 4);
+        assert_eq!(g.cursor(), 10);
     }
 
     #[test]

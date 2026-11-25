@@ -7,6 +7,19 @@
 //! pure (`vix_tasks::matcher`); a matched file is opened only when the user
 //! picks it, and the inline text only touches buffers already open.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use crate::editor_core::virtual_text::{EolText, VirtualTextLayer};
@@ -144,7 +157,7 @@ impl App {
         let text = severity_text(problem.severity, &problem.message);
         self.status = t!(
             "status.task_problem_nav",
-            index = step.index + 1,
+            index = step.index.plus(1),
             total = self.task_problems.len(),
             text = text
         )
@@ -202,7 +215,7 @@ impl App {
             (mode, Some(path)) if !self.task_problems.is_empty() => {
                 let mut texts: Vec<EolText> = Vec::new();
                 for (i, p) in self.task_problems.problems().iter().enumerate() {
-                    let line = p.line.saturating_sub(1);
+                    let line = p.line.minus(1);
                     if (mode == InlineMode::CursorLine && line != cursor)
                         || texts.iter().any(|t| t.line == line)
                         || self.task_problems.path(i) != Some(path.as_path())

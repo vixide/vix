@@ -2,6 +2,19 @@
 //! breadcrumb bar (active file name + enclosing symbol), plus the layout
 //! split that carves their rows out of the center column.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Paragraph, Tabs};
 
@@ -21,13 +34,13 @@ pub(super) fn center_split(area: Rect, breadcrumbs: bool) -> (Rect, Option<Rect>
                 Constraint::Min(1),
             ])
             .split(area);
-        (c[0], Some(c[1]), c[2])
+        (chunk(&c, 0), Some(chunk(&c, 1)), chunk(&c, 2))
     } else {
         let c = Layout::default()
             .direction(dir)
             .constraints([Constraint::Length(1), Constraint::Min(1)])
             .split(area);
-        (c[0], None, c[1])
+        (chunk(&c, 0), None, chunk(&c, 1))
     }
 }
 
@@ -41,7 +54,7 @@ pub(super) fn draw_breadcrumb(app: &App, frame: &mut Frame, area: Rect) {
 /// mirrored layout, where the tab strip's right-aligned block begins (T564).
 pub fn tabs_origin(app: &App, area: Rect) -> u16 {
     if !super::layout_mirrored(app) {
-        return area.x + 1;
+        return area.x.plus(1);
     }
     let n = app.editor.tabs.len();
     let titles: usize = app
@@ -51,17 +64,17 @@ pub fn tabs_origin(app: &App, area: Rect) -> u16 {
         .map(|t| t.title().chars().count())
         .sum();
     // Each title is padded by one cell either side; dividers sit between.
-    let total = titles + 3 * n.saturating_sub(1) + 2;
+    let total = titles.plus(n.minus(1).times(3)).plus(2);
     let total = u16::try_from(total).unwrap_or(u16::MAX).min(area.width);
-    area.right().saturating_sub(total) + 1
+    area.right().minus(total).plus(1)
 }
 
 /// Draw the tab strip right-aligned at `tabs_origin`: one title per tab (preview
 /// tabs dimmed), separated by dividers, over a base-styled editor-region row.
 pub(super) fn draw_tabs(app: &App, frame: &mut Frame, area: Rect) {
     let strip = Rect {
-        x: tabs_origin(app, area) - 1,
-        width: area.right() - (tabs_origin(app, area) - 1),
+        x: tabs_origin(app, area).minus(1),
+        width: area.right().minus(tabs_origin(app, area).minus(1)),
         ..area
     };
     frame.render_widget(

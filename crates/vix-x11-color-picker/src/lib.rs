@@ -11,6 +11,18 @@
 //! List navigation delegates to `vix_list_state`. Spec:
 //! `crates/vix-x11-color-picker/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::sync::OnceLock;
 
 /// One X11 color: a name, its `#RRGGBB` hex string, and 8-bit RGB components.
@@ -151,24 +163,25 @@ impl Panel {
             vix_list_state::ensure_visible(self.selected, self.scroll, height, self.len());
     }
 
-    /// The highlighted color. `selected` is clamped to the last row so this
-    /// never indexes out of range even if a caller set `selected` directly.
+    /// The highlighted color, or `None` when the public [`selected`](Self::selected)
+    /// field was set past the last color (the navigation methods never do): an
+    /// out-of-range selection is not moved to the nearest color.
     #[must_use]
-    pub fn selected_color(&self) -> &'static Color {
-        let i = self.selected.min(self.len().saturating_sub(1));
-        &colors()[i]
+    pub fn selected_color(&self) -> Option<&'static Color> {
+        colors().get(self.selected)
     }
 
-    /// The highlighted color's hex string (what insertion uses).
+    /// The highlighted color's hex string (what insertion uses), or `None` when
+    /// nothing valid is highlighted (see [`Panel::selected_color`]).
     #[must_use]
-    pub fn selected_hex(&self) -> &'static str {
-        self.selected_color().hex
+    pub fn selected_hex(&self) -> Option<&'static str> {
+        self.selected_color().map(|color| color.hex)
     }
 
-    /// The highlighted color's name.
+    /// The highlighted color's name, or `None` when nothing valid is highlighted.
     #[must_use]
-    pub fn selected_name(&self) -> &'static str {
-        self.selected_color().name
+    pub fn selected_name(&self) -> Option<&'static str> {
+        self.selected_color().map(|color| color.name)
     }
 }
 
@@ -197,7 +210,7 @@ mod tests {
     fn opens_on_the_first_row() {
         let p = Panel::open();
         assert_eq!(p.selected, 0);
-        assert_eq!(p.selected_name(), "AliceBlue");
+        assert_eq!(p.selected_name(), Some("AliceBlue"));
     }
 
     #[test]
@@ -248,8 +261,19 @@ mod tests {
     #[test]
     fn selected_hex_is_the_highlighted_colors_hex() {
         let mut p = Panel::open();
-        assert_eq!(p.selected_hex(), "#F0F8FF");
+        assert_eq!(p.selected_hex(), Some("#F0F8FF"));
         p.down();
-        assert_eq!(p.selected_hex(), colors()[1].hex);
+        assert_eq!(p.selected_hex(), Some(colors()[1].hex));
+    }
+
+    #[test]
+    fn a_selection_past_the_end_is_none_not_the_last_color() {
+        let mut p = Panel::open();
+        p.selected = colors().len();
+        assert!(p.selected_color().is_none());
+        assert_eq!(p.selected_hex(), None);
+        assert_eq!(p.selected_name(), None);
+        p.selected = colors().len() - 1;
+        assert!(p.selected_color().is_some(), "the last color is valid");
     }
 }

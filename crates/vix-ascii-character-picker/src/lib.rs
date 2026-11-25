@@ -13,6 +13,18 @@
 //! the shared pure list helpers used by every list-style panel.
 //! Owning spec: `crates/vix-ascii-character-picker/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Number of ASCII codes in the table (`0..=127`).
 pub const LEN: usize = 128;
 
@@ -60,11 +72,17 @@ pub fn hex(code: u8) -> String {
 #[must_use]
 pub fn label(code: u8) -> String {
     match code {
-        // Indexing is safe: the arm bounds `code` to the array's 32 entries.
-        0..=31 => CONTROL[code as usize].to_string(),
+        0..=31 => {
+            #[expect(
+                clippy::indexing_slicing,
+                reason = "RCA-EXC-2: the arm bounds code to 0..=31 and CONTROL has 32 entries"
+            )]
+            let name = CONTROL[usize::from(code)];
+            name.to_string()
+        }
         32 => "space".to_string(),
         127 => "DEL".to_string(),
-        _ => (code as char).to_string(),
+        _ => char::from(code).to_string(),
     }
 }
 
@@ -72,8 +90,8 @@ pub fn label(code: u8) -> String {
 /// the editor when a row is chosen.
 #[must_use]
 pub fn ch(code: u8) -> char {
-    // `u8 as char` maps 0..=255 to U+0000..=U+00FF, i.e. exactly Latin-1.
-    code as char
+    // `char::from(u8)` maps 0..=255 to U+0000..=U+00FF, i.e. exactly Latin-1.
+    char::from(code)
 }
 
 /// Whether a code is a non-printable control character (`0..=31` or 127).

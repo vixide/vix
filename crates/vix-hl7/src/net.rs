@@ -209,17 +209,24 @@ pub fn send(ep: &Endpoint, payload: &[u8], opts: &SendOptions) -> Result<Vec<u8>
 /// per-read socket timeout, so a peer that trickles bytes cannot keep us waiting
 /// forever. Anything after the first frame is ignored.
 fn read_reply(stream: &mut impl Read, opts: &SendOptions) -> Result<Vec<u8>, SendError> {
-    let deadline = Instant::now() + opts.reply_timeout;
+    // A timeout too long to be a deadline leaves no overall deadline; the
+    // per-read socket timeout still applies.
+    let deadline = Instant::now().checked_add(opts.reply_timeout);
     let mut deframer = Deframer::new(opts.max_reply);
     let mut chunk = [0u8; 4096];
     loop {
-        if Instant::now() >= deadline {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             return Err(SendError::Timeout);
         }
         match stream.read(&mut chunk) {
             Ok(0) => return Err(SendError::Closed),
             Ok(n) => {
-                let frames = deframer.push(&chunk[..n]).map_err(SendError::Framing)?;
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most chunk.len()"
+                )]
+                let received = &chunk[..n];
+                let frames = deframer.push(received).map_err(SendError::Framing)?;
                 if let Some(first) = frames.into_iter().next() {
                     return Ok(first);
                 }

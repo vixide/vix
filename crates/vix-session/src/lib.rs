@@ -22,6 +22,18 @@
 //! assert_eq!(s.workspace("/tmp/proj").unwrap().files.len(), 1);
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use serde::{Deserialize, Serialize};
 
 /// Application name used by [`confy`] to locate the config directory (matches
@@ -253,7 +265,7 @@ impl Session {
     /// Load the saved sessions, falling back to an empty set on any error.
     #[must_use]
     pub fn load() -> Session {
-        confy::load(APP_NAME, Some(SESSION_NAME)).unwrap_or_default()
+        vix_fileops::user_dirs::load(APP_NAME, SESSION_NAME).unwrap_or_default()
     }
 
     /// Load sessions from an explicit file, falling back to an empty set on
@@ -271,8 +283,7 @@ impl Session {
     /// the read-only `vix --mcp` server (T731).
     #[must_use]
     pub fn load_existing() -> Session {
-        confy::get_configuration_file_path(APP_NAME, Some(SESSION_NAME))
-            .ok()
+        vix_fileops::user_dirs::config_file(APP_NAME, SESSION_NAME)
             .filter(|path| path.is_file())
             .map_or_default(|path| Self::load_existing_from(&path))
     }
@@ -297,8 +308,8 @@ impl Session {
     /// # Errors
     /// Returns a [`confy::ConfyError`] if the file cannot be written/serialized.
     pub fn save(&self) -> Result<(), confy::ConfyError> {
-        confy::store(APP_NAME, Some(SESSION_NAME), self)?;
-        if let Ok(path) = confy::get_configuration_file_path(APP_NAME, Some(SESSION_NAME)) {
+        vix_fileops::user_dirs::store(APP_NAME, SESSION_NAME, self)?;
+        if let Some(path) = vix_fileops::user_dirs::config_file(APP_NAME, SESSION_NAME) {
             vix_fileops::restrict_to_owner(&path);
         }
         Ok(())
@@ -433,7 +444,8 @@ impl Session {
             .iter()
             .find(|w| w.root == ws.root)
             .map_or(0, |w| w.visits);
-        ws.visits = prior.saturating_add(1).max(ws.visits);
+        // SES-F1: a visit count at the top of `u32` stays there.
+        ws.visits = prior.checked_add(1).unwrap_or(prior).max(ws.visits);
         if let Some(old) = self.workspaces.iter().find(|w| w.root == ws.root) {
             ws.scripts_trusted = ws.scripts_trusted.or(old.scripts_trusted);
             ws.remote_trusted = ws.remote_trusted.or(old.remote_trusted);
@@ -453,8 +465,11 @@ impl Session {
     /// a visit within a day counts most, then a week, then older.
     #[must_use]
     pub fn frecency_ordered(&self, now: i64) -> Vec<String> {
-        let score = |w: &WorkspaceSession| -> i64 {
-            let age = now.saturating_sub(w.last_visit);
+        // A workspace whose age cannot be computed (a stored `last_visit` too far
+        // from `now` for `i64`) is unknown, not old: it has no score and ranks
+        // after every workspace that does (SES-F2).
+        let score = |w: &WorkspaceSession| -> Option<i64> {
+            let age = now.checked_sub(w.last_visit)?;
             let weight = if w.last_visit == 0 {
                 1
             } else if age < 86_400 {
@@ -466,9 +481,15 @@ impl Session {
             } else {
                 1
             };
-            i64::from(w.visits) * weight
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: visits is a u32 and the weight is at most 8, so the product is below 2^36"
+            )]
+            let score = i64::from(w.visits) * weight;
+            Some(score)
         };
         let mut ranked: Vec<&WorkspaceSession> = self.workspaces.iter().collect();
+        // `None` sorts below every `Some`, so `Reverse` puts unknown scores last.
         ranked.sort_by_key(|w| std::cmp::Reverse(score(w)));
         ranked.into_iter().map(|w| w.root.clone()).collect()
     }
@@ -759,5 +780,30 @@ mod tests {
             0o600
         );
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_workspace_whose_age_cannot_be_computed_ranks_last() {
+        let mut s = Session::default();
+        s.set_workspace(WorkspaceSession {
+            root: "/unknown".into(),
+            last_visit: i64::MIN,
+            ..Default::default()
+        });
+        s.set_workspace(WorkspaceSession {
+            root: "/old".into(),
+            last_visit: 1,
+            ..Default::default()
+        });
+        s.set_workspace(WorkspaceSession {
+            root: "/known".into(),
+            last_visit: 1_000_000,
+            ..Default::default()
+        });
+        // `now - i64::MIN` overflows: "/unknown" has no score and goes last,
+        // after even the oldest known workspace.
+        let order = s.frecency_ordered(2_000_000);
+        assert_eq!(order.last().map(String::as_str), Some("/unknown"));
+        assert_eq!(order.len(), 3);
     }
 }

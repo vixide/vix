@@ -28,6 +28,12 @@ use crate::OciError;
 /// CLI looks (relative to the workspace root).
 pub const CONFIG_FILES: [&str; 2] = [".devcontainer/devcontainer.json", ".devcontainer.json"];
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// The fields of `devcontainer.json` Vix uses.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
@@ -123,17 +129,16 @@ pub fn strip_jsonc(text: &str) -> String {
 /// strings.
 fn drop_trailing_commas(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
-    let mut out = String::with_capacity(text.len());
+    let mut out = String::new();
     let mut in_string = false;
     let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
+    while let Some(&c) = chars.get(i) {
         if in_string {
             out.push(c);
             if c == '\\' {
-                if let Some(&n) = chars.get(i + 1) {
+                if let Some(&n) = chars.get(add_or(i, 1, usize::MAX)) {
                     out.push(n);
-                    i += 1;
+                    i = add_or(i, 1, usize::MAX);
                 }
             } else if c == '"' {
                 in_string = false;
@@ -144,14 +149,17 @@ fn drop_trailing_commas(text: &str) -> String {
         } else if c == ',' {
             // Look past whitespace: a comma is trailing only if the next
             // significant character closes the container.
-            let next = chars[i + 1..].iter().find(|n| !n.is_whitespace());
+            let next = chars
+                .iter()
+                .skip(add_or(i, 1, usize::MAX))
+                .find(|n| !n.is_whitespace());
             if !matches!(next, Some(']' | '}')) {
                 out.push(c);
             }
         } else {
             out.push(c);
         }
-        i += 1;
+        i = add_or(i, 1, usize::MAX);
     }
     out
 }

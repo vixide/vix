@@ -24,6 +24,10 @@ use crate::wire::{self, Incoming, RpcError};
 /// The ACP protocol version this client speaks.
 pub const PROTOCOL_VERSION: u64 = 1;
 
+/// The text of an absent optional text field of an agent message: the empty
+/// string (ACP-F1).
+const ABSENT_TEXT: &str = "";
+
 /// What kind of grant a permission option is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptionKind {
@@ -282,7 +286,13 @@ impl Client {
     /// Allocate an id, remember what it is for, and build the request.
     fn send(&mut self, method: &str, params: &Value, kind: Pending) -> Value {
         let id = self.next_id;
-        self.next_id += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: one id per request sent in one session, so a u64 cannot overflow"
+        )]
+        {
+            self.next_id += 1;
+        }
         self.pending.insert(id, kind);
         wire::request(id, method, params)
     }
@@ -386,7 +396,13 @@ impl Client {
     ) -> Value {
         let mut result = json!({"output": output, "truncated": truncated});
         if let Some(e) = exit {
-            result["exitStatus"] = e.to_json();
+            #[expect(
+                clippy::indexing_slicing,
+                reason = "RCA-EXC-2: result is the object literal built above; assigning to a key of an object inserts it"
+            )]
+            {
+                result["exitStatus"] = e.to_json();
+            }
         }
         wire::response(req_id, &result)
     }
@@ -487,8 +503,11 @@ impl Client {
                 // The session id was already set when `session/load` was sent.
                 self.resumed = true;
                 self.phase = Phase::Ready;
-                let sid = self.session_id.clone().unwrap_or_default();
-                step.events.push(Event::Ready { session_id: sid });
+                // The id was set when `session/load` was sent; without one there
+                // is no session to report as ready.
+                if let Some(session_id) = self.session_id.clone() {
+                    step.events.push(Event::Ready { session_id });
+                }
             }
             Pending::NewSession => {
                 if let Some(sid) = value.get("sessionId").and_then(Value::as_str) {
@@ -541,14 +560,14 @@ impl Client {
             update
                 .pointer("/content/text")
                 .and_then(Value::as_str)
-                .unwrap_or_default()
+                .unwrap_or(ABSENT_TEXT)
                 .to_string()
         };
         let field = |k: &str| {
             update
                 .get(k)
                 .and_then(Value::as_str)
-                .unwrap_or_default()
+                .unwrap_or(ABSENT_TEXT)
                 .to_string()
         };
         match update.get("sessionUpdate").and_then(Value::as_str) {
@@ -569,7 +588,7 @@ impl Client {
                                 content: e
                                     .get("content")
                                     .and_then(Value::as_str)
-                                    .unwrap_or_default()
+                                    .unwrap_or(ABSENT_TEXT)
                                     .to_string(),
                                 status: e
                                     .get("status")
@@ -618,7 +637,7 @@ impl Client {
                     title: params
                         .pointer("/toolCall/title")
                         .and_then(Value::as_str)
-                        .unwrap_or_default()
+                        .unwrap_or(ABSENT_TEXT)
                         .to_string(),
                     options: parse_options(params),
                 });
@@ -745,7 +764,7 @@ fn parse_options(params: &Value) -> Vec<PermOption> {
                         name: o
                             .get("name")
                             .and_then(Value::as_str)
-                            .unwrap_or_default()
+                            .unwrap_or(ABSENT_TEXT)
                             .to_string(),
                         kind,
                     })
@@ -757,23 +776,35 @@ fn parse_options(params: &Value) -> Vec<PermOption> {
 /// Apply ACP's `line`/`limit` (1-based first line, max line count) to `text`.
 ///
 /// Lines keep their terminators (`split_inclusive`). Absent both parameters the
-/// text is returned whole; a `line` of `0` is treated like `1`.
+/// text is returned whole. `line` is 1-based, so a `line` of `0` is an error
+/// rather than being moved to 1; a `line` past the end of the text, or a
+/// `limit` of `0`, selects no lines, and a `limit` beyond the end selects all.
+///
+/// # Errors
+///
+/// A message naming the invalid `line`, when it is `0`.
 ///
 /// # Examples
 ///
 /// ```
 /// use vix_acp::client::slice_lines;
-/// assert_eq!(slice_lines("a\nb\nc\n", Some(2), Some(1)), "b\n");
-/// assert_eq!(slice_lines("a\nb\n", None, None), "a\nb\n");
+/// assert_eq!(slice_lines("a\nb\nc\n", Some(2), Some(1)).unwrap(), "b\n");
+/// assert_eq!(slice_lines("a\nb\n", None, None).unwrap(), "a\nb\n");
+/// assert!(slice_lines("a\n", Some(0), None).is_err());
 /// ```
-#[must_use]
-pub fn slice_lines(text: &str, line: Option<u64>, limit: Option<u64>) -> String {
+pub fn slice_lines(text: &str, line: Option<u64>, limit: Option<u64>) -> Result<String, String> {
     if line.is_none() && limit.is_none() {
-        return text.to_string();
+        return Ok(text.to_string());
     }
-    let skip = usize::try_from(line.unwrap_or(1).saturating_sub(1)).unwrap_or(usize::MAX);
+    let first = line.unwrap_or(1);
+    let Some(skip) = first.checked_sub(1) else {
+        return Err(format!("line {first} is not a line: lines start at 1"));
+    };
+    // A count beyond the address space is beyond any text: no lines are
+    // skipped past the end, and every line is taken.
+    let skip = usize::try_from(skip).unwrap_or(usize::MAX);
     let take = limit.map_or(usize::MAX, |l| usize::try_from(l).unwrap_or(usize::MAX));
-    text.split_inclusive('\n').skip(skip).take(take).collect()
+    Ok(text.split_inclusive('\n').skip(skip).take(take).collect())
 }
 
 #[cfg(test)]
@@ -1039,10 +1070,187 @@ mod tests {
     #[test]
     fn slice_lines_is_one_based() {
         let t = "a\nb\nc\n";
-        assert_eq!(slice_lines(t, None, None), t);
-        assert_eq!(slice_lines(t, Some(2), None), "b\nc\n");
-        assert_eq!(slice_lines(t, Some(2), Some(1)), "b\n");
-        assert_eq!(slice_lines(t, None, Some(1)), "a\n");
-        assert_eq!(slice_lines(t, Some(0), Some(1)), "a\n");
+        assert_eq!(slice_lines(t, None, None).unwrap(), t);
+        assert_eq!(slice_lines(t, Some(2), None).unwrap(), "b\nc\n");
+        assert_eq!(slice_lines(t, Some(2), Some(1)).unwrap(), "b\n");
+        assert_eq!(slice_lines(t, None, Some(1)).unwrap(), "a\n");
+        assert_eq!(slice_lines(t, Some(9), None).unwrap(), "");
+        assert_eq!(slice_lines(t, Some(1), Some(u64::MAX)).unwrap(), t);
+        // Line 0 does not exist: an error naming it, not line 1.
+        assert!(
+            slice_lines(t, Some(0), Some(1))
+                .unwrap_err()
+                .contains("line 0")
+        );
+    }
+
+    #[test]
+    fn start_is_a_no_op_once_started() {
+        let mut c = Client::new("/w");
+        assert_eq!(c.start().len(), 1);
+        assert_eq!(c.start().len(), 0);
+    }
+
+    #[test]
+    fn a_session_new_reply_without_an_id_fails_and_a_prompt_reply_may_omit_the_stop_reason() {
+        let mut c = Client::new("/w");
+        c.start();
+        c.handle(&json!({"id":1,"result":{"protocolVersion":1}}));
+        let s = c.handle(&json!({"id":2,"result":{}}));
+        assert_eq!(
+            s.events,
+            vec![Event::Failed("session/new returned no sessionId".into())]
+        );
+        assert_ne!(c.phase(), Phase::Ready);
+
+        let mut c = ready();
+        c.prompt("hi").unwrap();
+        let s = c.handle(&json!({"id":3,"result":{}}));
+        assert_eq!(
+            s.events,
+            vec![Event::TurnEnded {
+                stop_reason: "end_turn".into()
+            }]
+        );
+        assert_eq!(c.phase(), Phase::Ready);
+    }
+
+    #[test]
+    fn thought_chunks_and_plans_become_events_and_unknown_updates_are_skipped() {
+        let mut c = ready();
+        let s = c.handle(&update(&json!({
+            "sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"hm"}})));
+        assert_eq!(s.events, vec![Event::Thought("hm".into())]);
+        let s = c.handle(&update(&json!({
+            "sessionUpdate":"plan","entries":[{"content":"do it","status":"done"},{}]})));
+        let Event::Plan(entries) = &s.events[0] else {
+            panic!("{:?}", s.events)
+        };
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].content, "do it");
+        assert_eq!(entries[0].status, "done");
+        assert_eq!(entries[1].status, "pending");
+        let s = c.handle(&update(&json!({"sessionUpdate":"future_kind"})));
+        assert!(s.events.is_empty() && s.out.is_empty());
+        // An update with no `update` object is ignored.
+        let s = c.handle(&json!({"method":"session/update","params":{"sessionId":"S"}}));
+        assert_eq!(s.events.len(), 0);
+        // An update for a foreign session is ignored.
+        let s = c.handle(&json!({"method":"session/update","params":{
+            "sessionId":"other","update":{"sessionUpdate":"agent_message_chunk"}}}));
+        assert_eq!(s.events.len(), 0);
+    }
+
+    #[test]
+    fn responses_to_unknown_ids_and_other_notifications_are_ignored() {
+        let mut c = ready();
+        let s = c.handle(&json!({"id":999,"result":{}}));
+        assert!(s.events.is_empty() && s.out.is_empty());
+        let s = c.handle(&json!({"method":"some/other","params":{}}));
+        assert!(s.events.is_empty() && s.out.is_empty());
+        let s = c.handle(&json!("not json-rpc"));
+        assert!(s.events.is_empty() && s.out.is_empty());
+    }
+
+    #[test]
+    fn terminal_requests_become_events_and_malformed_ones_are_refused() {
+        let mut c = ready();
+        for (method, expect) in [
+            ("terminal/output", "output"),
+            ("terminal/wait_for_exit", "wait"),
+            ("terminal/kill", "kill"),
+            ("terminal/release", "release"),
+        ] {
+            let s = c.handle(&json!({"id":11,"method":method,
+                "params":{"sessionId":"S","terminalId":"T1"}}));
+            let ev = s.events.first().expect(method);
+            let ok = match (expect, ev) {
+                ("output", Event::TerminalOutput { terminal_id, .. })
+                | ("wait", Event::TerminalWait { terminal_id, .. })
+                | ("kill", Event::TerminalKill { terminal_id, .. })
+                | ("release", Event::TerminalRelease { terminal_id, .. }) => terminal_id == "T1",
+                _ => false,
+            };
+            assert!(ok, "{method}: {ev:?}");
+            let s = c.handle(&json!({"id":12,"method":method,
+                "params":{"sessionId":"S"}}));
+            assert_eq!(s.out[0]["error"]["code"], -32602, "{method}");
+            assert_eq!(s.out[0]["error"]["message"], "missing terminalId");
+        }
+    }
+
+    #[test]
+    fn malformed_file_and_terminal_create_requests_are_refused_with_invalid_params() {
+        let mut c = ready();
+        let s = c.handle(&json!({"id":5,"method":"fs/read_text_file",
+            "params":{"sessionId":"S"}}));
+        assert_eq!(s.out[0]["error"]["message"], "missing path");
+        let s = c.handle(&json!({"id":6,"method":"fs/write_text_file",
+            "params":{"sessionId":"S","path":"/w/a"}}));
+        assert_eq!(s.out[0]["error"]["message"], "missing path or content");
+        let s = c.handle(&json!({"id":7,"method":"fs/write_text_file",
+            "params":{"sessionId":"S","path":"/w/a","content":"x"}}));
+        assert_eq!(
+            s.events,
+            vec![Event::WriteFile {
+                req_id: json!(7),
+                path: "/w/a".into(),
+                content: "x".into()
+            }]
+        );
+        let s = c.handle(&json!({"id":8,"method":"terminal/create",
+            "params":{"sessionId":"S","command":"   "}}));
+        assert_eq!(s.out[0]["error"]["message"], "missing command");
+    }
+
+    #[test]
+    fn terminal_answers_have_the_acp_shapes() {
+        let id = json!(3);
+        assert_eq!(Client::answer_unit(&id)["result"], Value::Null);
+        assert_eq!(
+            Client::answer_denied(&id, "no")["error"],
+            json!({"code": -32000, "message": "no"})
+        );
+        let exit = TerminalExit {
+            code: Some(2),
+            signal: None,
+        };
+        assert_eq!(
+            Client::answer_terminal_exit(&id, &exit)["result"],
+            json!({"exitCode": 2, "signal": null})
+        );
+        assert_eq!(
+            Client::answer_read(&id, Err("nope"))["error"]["message"],
+            "nope"
+        );
+        assert_eq!(
+            Client::answer_write(&id, Err("ro"))["error"]["code"],
+            -32602
+        );
+    }
+
+    #[test]
+    fn permission_options_with_an_unknown_kind_or_no_id_are_dropped() {
+        let mut c = ready();
+        let s = c.handle(
+            &json!({"id":9,"method":"session/request_permission","params":{
+            "sessionId":"S","toolCall":{"title":"x"},
+            "options":[{"optionId":"a","kind":"allow_always"},
+                       {"optionId":"b","kind":"reject_always","name":"Never"},
+                       {"optionId":"c","kind":"mystery"},
+                       {"kind":"allow_once"}]}}),
+        );
+        let Event::Permission { options, .. } = &s.events[0] else {
+            panic!("{:?}", s.events)
+        };
+        let kinds: Vec<_> = options.iter().map(|o| (o.id.as_str(), o.kind)).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                ("a", OptionKind::AllowAlways),
+                ("b", OptionKind::RejectAlways)
+            ]
+        );
+        assert_eq!(options[1].name, "Never");
     }
 }

@@ -234,8 +234,10 @@ guideline's sense.
 4. Document every new public item (`deny(missing_docs)`).
 5. Add/extend tests (`tui/tests/integration/main.rs` or a module's unit tests).
 6. Run the **whole** `scripts/check` gate (the local CI-parity gate; it ends
-   with `OK: … all passed`) before every commit you intend to land — not a
-   hand-picked subset: `cargo doc`, the generated-reference diff and
+   with `OK: … all passed`, or `OK (scope changed, …)` when `cargo doc` and
+   semver ran only on the changed crates and their dependents, which is the
+   local default; CI runs the whole workspace with `--scope all`) before every
+   commit you intend to land — not a hand-picked subset: `cargo doc`, the generated-reference diff and
    `scripts/check-docs` catch what clippy and the tests don't.
 7. Note user-visible changes in [`CHANGELOG.md`](CHANGELOG.md).
 8. Spelling: prose/docs are checked with CSpell (`cspell.json`); add project terms

@@ -91,7 +91,7 @@ pub fn connect(invite: &Invite, timeout: Duration) -> Result<(Link, LinkReader),
     // NK message 1 (`-> e, es`) carries no payload, so it is tiny.
     let mut buf = [0u8; 1024];
     let n = hs.write_message(&[], &mut buf)?;
-    write_frame(&mut stream, &buf[..n])?;
+    write_frame(&mut stream, buf.get(..n).ok_or(NetError::Crypto)?)?;
 
     // Message 2 (`<- e, ee`) completes the handshake; a wrong host key or a
     // spent invite makes the host close instead, which shows up here as an
@@ -157,7 +157,7 @@ pub(crate) fn accept_stream(
         hs.read_message(&first, &mut payload)?;
         let mut buf = [0u8; 1024];
         let n = hs.write_message(&[], &mut buf)?;
-        write_frame(&mut stream, &buf[..n])?;
+        write_frame(&mut stream, buf.get(..n).ok_or(NetError::Crypto)?)?;
         if !hs.is_handshake_finished() {
             return Err(NetError::Protocol);
         }

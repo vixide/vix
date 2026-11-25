@@ -19,3 +19,7 @@ filesystem.
 - [dailies-calendar](dailies-calendar/index.md)
 - [live-backlinks](live-backlinks/index.md)
 - [wiki-link-completion](wiki-link-completion/index.md)
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Node editing (`nodeify`, `append_property`, the file-tags adder), title lookup and date validation use `get`, iterators and `checked_*` instead of slicing and indexing; the title key is matched in any case with the value keeping its casing. No fallbacks are declared.

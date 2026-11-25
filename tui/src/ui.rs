@@ -1,6 +1,18 @@
 //! All rendering. `draw` lays out the frame, records pane rectangles for mouse
 //! hit-testing, and delegates to per-pane helpers.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 #[cfg(feature = "ai")]
 mod ai;
 mod bidi;
@@ -43,6 +55,7 @@ mod terminal;
 mod tool_panels;
 mod undo_tree;
 
+use crate::geo::{Geo, chunk};
 #[cfg(feature = "ai")]
 use ai::{draw_ai_diff, draw_ai_panel};
 use bottom_dock::draw_bottom_dock;
@@ -165,7 +178,7 @@ const AGENT_PLAN_WIDTH: u16 = 36;
 /// keeps at least 20 columns; a mirrored layout reverses the left-to-right order.
 fn body_columns(app: &App, body: Rect) -> BodyColumns {
     use crate::app::Visible;
-    let dock_max = body.width.saturating_sub(20).max(12);
+    let dock_max = body.width.minus(20).max(12);
     let st = &app.settings;
     // Left-to-right order; a mirrored layout reverses it.
     let mut order: Vec<(char, Constraint)> = Vec::new();
@@ -210,7 +223,12 @@ fn body_columns(app: &App, body: Rect) -> BodyColumns {
         .direction(Direction::Horizontal)
         .constraints(order.iter().map(|&(_, c)| c).collect::<Vec<_>>())
         .split(body);
-    let at = |k: char| order.iter().position(|&(o, _)| o == k).map(|i| cols[i]);
+    let at = |k: char| {
+        order
+            .iter()
+            .position(|&(o, _)| o == k)
+            .map(|i| chunk(&cols, i))
+    };
     BodyColumns {
         explorer: at('e'),
         center: at('c').unwrap_or(body),
@@ -261,7 +279,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         .direction(Direction::Vertical)
         .constraints(vconstraints)
         .split(area);
-    app.layout.menu = rows[0];
+    app.layout.menu = chunk(&rows, 0);
     let status_row = rows.get(2).copied();
 
     // The bottom dock (when shown) takes a fixed-height strip at the bottom of the
@@ -269,15 +287,15 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
     let (body, bottom_dock_rect) = if app.visible.contains(crate::app::Visible::BOTTOM_DOCK) {
         // Height is user-adjustable (drag the dock's top edge); keep at least 3
         // rows for the main body above it.
-        let max_h = rows[1].height.saturating_sub(3).max(3);
+        let max_h = chunk(&rows, 1).height.minus(3).max(3);
         let h = app.settings.bottom_dock_height.clamp(3, max_h);
         let v = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(3), Constraint::Length(h)])
-            .split(rows[1]);
-        (v[0], Some(v[1]))
+            .split(chunk(&rows, 1));
+        (chunk(&v, 0), Some(chunk(&v, 1)))
     } else {
-        (rows[1], None)
+        (chunk(&rows, 1), None)
     };
 
     let cols = body_columns(app, body);
@@ -311,12 +329,12 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
 
     // Keep the explorer selection within its viewport (also used by mouse).
     if let Some(r) = explorer_rect {
-        let h = r.height.saturating_sub(2) as usize;
+        let h = usize::from(r.height.minus(2));
         app.explorer.ensure_visible(h);
     }
 
     // ----- render (immutable reads from here) -----
-    draw_menu_bar(app, frame, rows[0]);
+    draw_menu_bar(app, frame, chunk(&rows, 0));
     if let Some(r) = explorer_rect {
         draw_explorer(app, frame, r);
     }
@@ -335,7 +353,7 @@ pub fn draw(app: &mut App, frame: &mut Frame) {
         draw_status_bar(app, frame, r);
     }
 
-    draw_overlays(app, frame, area, rows[0]);
+    draw_overlays(app, frame, area, chunk(&rows, 0));
     end_of_frame_passes(app, frame);
 }
 
@@ -406,9 +424,9 @@ fn reflect_panels(app: &App, buf: &mut ratatui::buffer::Buffer) {
         // Inside the border, short of the scroll bar column.
         bidi::reflect_rows(
             buf,
-            ex.x + 1,
-            ex.right().saturating_sub(2),
-            ex.y + 1,
+            ex.x.plus(1),
+            ex.right().minus(2),
+            ex.y.plus(1),
             ex.bottom(),
         );
     }
@@ -421,7 +439,13 @@ fn reflect_panels(app: &App, buf: &mut ratatui::buffer::Buffer) {
             rects.push(app.layout.subsubmenu_dropdown);
         }
         for d in rects.into_iter().filter(|d| d.width > 2 && d.height > 2) {
-            bidi::reflect_rows(buf, d.x + 1, d.right() - 1, d.y + 1, d.bottom() - 1);
+            bidi::reflect_rows(
+                buf,
+                d.x.plus(1),
+                d.right().minus(1),
+                d.y.plus(1),
+                d.bottom().minus(1),
+            );
         }
     }
 }
@@ -574,7 +598,7 @@ fn draw_overlay_3(app: &mut App, frame: &mut Frame, area: Rect, id: OverlayId) {
 fn unix_secs_label(secs: Option<i64>) -> String {
     secs.and_then(|s| jiff::Timestamp::from_second(s).ok())
         .map_or_default(|ts| {
-            ts.to_zoned(jiff::tz::TimeZone::system())
+            ts.to_zoned_datetime(jiff::tz::TimeZone::system())
                 .strftime("%Y-%m-%d %H:%M")
                 .to_string()
         })
@@ -588,7 +612,7 @@ fn menu_offsets(defs: &[MenuDef]) -> Vec<u16> {
     let mut pos: u16 = 0;
     for m in defs {
         offsets.push(pos);
-        pos += u16::try_from(m.title().chars().count()).unwrap_or(u16::MAX) + 2;
+        pos = pos.plus((u16::try_from(m.title().chars().count()).unwrap_or(u16::MAX)).plus(2));
     }
     offsets
 }
@@ -597,7 +621,10 @@ fn menu_offsets(defs: &[MenuDef]) -> Vec<u16> {
 /// menu bar as shown, [`crate::menu::Menu::defs`]), padding included.
 #[must_use]
 pub fn menu_title_width(defs: &[MenuDef], index: usize) -> u16 {
-    u16::try_from(defs[index].title().chars().count()).unwrap_or(u16::MAX) + 2
+    let title_w = defs.get(index).map_or(0, |d| {
+        u16::try_from(d.title().chars().count()).unwrap_or(u16::MAX)
+    });
+    title_w.plus(2)
 }
 
 /// Screen column where the top-level menu title at `index` starts. Left to right
@@ -605,11 +632,13 @@ pub fn menu_title_width(defs: &[MenuDef], index: usize) -> u16 {
 /// the first menu is rightmost (T564).
 #[must_use]
 pub fn menu_title_x(defs: &[MenuDef], bar: Rect, index: usize, mirrored: bool) -> u16 {
-    let offset = menu_offsets(defs)[index];
+    let offset = menu_offsets(defs).get(index).copied().unwrap_or(0);
     if mirrored {
-        (bar.x + bar.width).saturating_sub(offset + menu_title_width(defs, index))
+        bar.x
+            .plus(bar.width)
+            .minus(offset.plus(menu_title_width(defs, index)))
     } else {
-        bar.x + offset
+        bar.x.plus(offset)
     }
 }
 
@@ -625,11 +654,11 @@ pub fn dock_toggle_cols(menu: Rect) -> (u16, u16) {
 pub fn dock_toggle_cols_for(menu: Rect, mirrored: bool) -> (u16, u16) {
     if mirrored {
         // From the left edge: space, BELL (messages), space, FOLDER (explorer).
-        (menu.x + 3, menu.x + 1)
+        (menu.x.plus(3), menu.x.plus(1))
     } else {
-        let right = menu.x + menu.width;
+        let right = menu.x.plus(menu.width);
         // From the right edge: FOLDER (explorer), space, BELL (messages), space.
-        (right.saturating_sub(4), right.saturating_sub(2))
+        (right.minus(4), right.minus(2))
     }
 }
 
@@ -650,20 +679,24 @@ pub fn menu_dropdown_rect_for(
     index: usize,
     mirrored: bool,
 ) -> Rect {
-    let def = &defs[index];
+    let Some(def) = defs.get(index) else {
+        return Rect::default();
+    };
     let width = dropdown_width(def.items);
     let x = if mirrored {
-        (menu_title_x(defs, bar, index, true) + menu_title_width(defs, index)).saturating_sub(width)
+        menu_title_x(defs, bar, index, true)
+            .plus(menu_title_width(defs, index))
+            .minus(width)
     } else {
         menu_title_x(defs, bar, index, false)
     };
-    let height = u16::try_from(def.items.len()).unwrap_or(u16::MAX) + 2;
-    let y = bar.y + 1;
+    let height = (u16::try_from(def.items.len()).unwrap_or(u16::MAX)).plus(2);
+    let y = bar.y.plus(1);
     Rect {
-        x: x.min(frame_area.width.saturating_sub(width)),
+        x: x.min(frame_area.width.minus(width)),
         y,
         width: width.min(frame_area.width),
-        height: height.min(frame_area.height.saturating_sub(y)),
+        height: height.min(frame_area.height.minus(y)),
     }
 }
 
@@ -675,9 +708,9 @@ pub fn dropdown_scroll(selected: Option<usize>, inner_h: usize, len: usize) -> u
     if len <= inner_h || inner_h == 0 {
         return 0;
     }
-    let max = len - inner_h;
+    let max = len.minus(inner_h);
     match selected {
-        Some(s) if s >= inner_h => (s + 1 - inner_h).min(max),
+        Some(s) if s >= inner_h => s.plus(1).minus(inner_h).min(max),
         _ => 0,
     }
 }
@@ -721,13 +754,16 @@ fn draw_scrollbar_marked(
     if area.width == 0 || area.height == 0 {
         return;
     }
-    let h = area.height as usize;
+    let h = usize::from(area.height);
     let thumb_glyph = Span::styled("●", theme::title(true));
     let track_glyph = || Span::styled("│", theme::dim());
     // Proportional thumb position: round(pos.min(max) * (h-1) / max), done in
     // integer math to match the previous float rounding for in-range values.
-    let span = h.saturating_sub(1);
-    let thumb = (pos.min(max) * span + max / 2)
+    let span = h.minus(1);
+    let thumb = pos
+        .min(max)
+        .times(span)
+        .plus(max.quot(2))
         .checked_div(max)
         .unwrap_or(0);
     let mut lines: Vec<Line> = Vec::with_capacity(h);
@@ -752,10 +788,10 @@ pub fn scrollbar_pos_from_row(area: Rect, row: u16, max: usize) -> usize {
         return 0;
     }
     let h = area.height;
-    let rel = usize::from(row.saturating_sub(area.y));
-    let denom = usize::from((h - 1).max(1));
+    let rel = usize::from(row.minus(area.y));
+    let denom = usize::from(h.minus(1).max(1));
     // round(rel / denom * max) in integer math.
-    let pos = (rel * max + denom / 2) / denom;
+    let pos = rel.times(max).plus(denom.quot(2)).quot(denom);
     pos.min(max)
 }
 
@@ -766,10 +802,13 @@ fn draw_hscrollbar(frame: &mut Frame, area: Rect, pos: usize, max: usize) {
     if area.width == 0 || area.height == 0 {
         return;
     }
-    let w = area.width as usize;
+    let w = usize::from(area.width);
     // Proportional thumb position via integer rounding (mirrors `draw_scrollbar`).
-    let span = w.saturating_sub(1);
-    let thumb = (pos.min(max) * span + max / 2)
+    let span = w.minus(1);
+    let thumb = pos
+        .min(max)
+        .times(span)
+        .plus(max.quot(2))
         .checked_div(max)
         .unwrap_or(0);
     let spans: Vec<Span> = (0..w)
@@ -792,10 +831,10 @@ pub fn scrollbar_pos_from_col(area: Rect, col: u16, max: usize) -> usize {
         return 0;
     }
     let w = area.width;
-    let rel = usize::from(col.saturating_sub(area.x));
-    let denom = usize::from((w - 1).max(1));
+    let rel = usize::from(col.minus(area.x));
+    let denom = usize::from(w.minus(1).max(1));
     // round(rel / denom * max) in integer math.
-    let pos = (rel * max + denom / 2) / denom;
+    let pos = rel.times(max).plus(denom.quot(2)).quot(denom);
     pos.min(max)
 }
 
@@ -817,14 +856,18 @@ fn hslice_spans(spans: &[Span], offset: usize, width: usize) -> Vec<Span<'static
         let chars: Vec<char> = sp.content.chars().collect();
         let len = chars.len();
         if skip >= len {
-            skip -= len;
+            skip = skip.minus(len);
             continue;
         }
         let start = skip;
         skip = 0;
-        let take = remaining.min(len - start);
-        let text: String = chars[start..start + take].iter().collect();
-        remaining -= take;
+        let take = remaining.min(len.minus(start));
+        let text: String = chars
+            .get(start..start.plus(take))
+            .unwrap_or(&[])
+            .iter()
+            .collect();
+        remaining = remaining.minus(take);
         out.push(Span::styled(text, sp.style));
     }
     out
@@ -848,7 +891,7 @@ fn hint_lines(hint: &str, width: u16) -> Vec<String> {
         let needed = if row.is_empty() {
             group.width()
         } else {
-            row.width() + 3 + group.width()
+            row.width().plus(3).plus(group.width())
         };
         if !row.is_empty() && needed > width {
             rows.push(std::mem::take(&mut row));
@@ -885,7 +928,7 @@ fn trunc(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_string()
     } else {
-        let keep = max.saturating_sub(1);
+        let keep = max.minus(1);
         format!("{}…", s.chars().take(keep).collect::<String>())
     }
 }
@@ -898,19 +941,20 @@ fn centered(area: Rect, pct_x: u16, pct_y: u16) -> Rect {
     let v = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage((100 - pct_y) / 2),
+            Constraint::Percentage(100_u16.minus(pct_y).quot(2)),
             Constraint::Percentage(pct_y),
-            Constraint::Percentage((100 - pct_y) / 2),
+            Constraint::Percentage(100_u16.minus(pct_y).quot(2)),
         ])
         .split(area);
-    Layout::default()
+    let h = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage((100 - pct_x) / 2),
+            Constraint::Percentage(100_u16.minus(pct_x).quot(2)),
             Constraint::Percentage(pct_x),
-            Constraint::Percentage((100 - pct_x) / 2),
+            Constraint::Percentage(100_u16.minus(pct_x).quot(2)),
         ])
-        .split(v[1])[1]
+        .split(chunk(&v, 1));
+    chunk(&h, 1)
 }
 
 #[cfg(test)]
@@ -948,5 +992,154 @@ mod hint_tests {
                 .all(|r| unicode_width::UnicodeWidthStr::width(r.as_str()) <= 62)
         );
         assert!(rows.last().unwrap().ends_with("Esc close"), "{rows:?}");
+    }
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+    use crate::app::cov4::{app_at, temp};
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn rows(app: &mut App, w: u16, h: u16) -> Vec<String> {
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.draw(|f| draw(app, f)).unwrap();
+        let buf = terminal.backend().buffer().clone();
+        (0..h)
+            .map(|y| (0..w).map(|x| buf[(x, y)].symbol().to_string()).collect())
+            .collect()
+    }
+
+    fn has(rows: &[String], needle: &str) -> bool {
+        rows.iter().any(|r| r.contains(needle))
+    }
+
+    /// The query-replace, structural-replace, macro and spelling overlays each
+    /// draw their own bar or list over the editor.
+    #[test]
+    fn the_replace_macro_and_spelling_overlays_draw() {
+        let mut app = app_at(&temp("r3-ui-overlays"));
+        app.editor.new_tab_with_content("alpha beta alpha\n");
+        app.query_replace = Some(crate::app::QueryReplace {
+            re: regex::Regex::new("alpha").unwrap(),
+            template: "omega".into(),
+            regex: false,
+            current: (0, 5),
+            replaced: 3,
+            label: "alpha".into(),
+        });
+        let r = rows(&mut app, 100, 24);
+        assert!(has(&r, &t!("ui.qr_replace")), "{r:?}");
+        app.query_replace = None;
+
+        app.structural_replace = Some(crate::app::StructuralReplace {
+            pattern: vix_structural_replace::Pattern::compile("foo($X)").unwrap(),
+            template: "bar($X)".into(),
+            current: (0, 3),
+            bounds: None,
+            replaced: 2,
+            label: "foo($X)".into(),
+        });
+        let r = rows(&mut app, 100, 24);
+        assert!(has(&r, "«foo($X)»"), "{r:?}");
+        app.structural_replace = None;
+
+        app.chooser = Some(crate::app::chooser::Chooser::Macro(
+            crate::app::MacroChooser {
+                macros: vec![crate::macros::Macro {
+                    name: "wrap-in-quotes".into(),
+                    keys: vec!["\"".into()],
+                }],
+                selected: 0,
+            },
+        ));
+        let r = rows(&mut app, 100, 24);
+        assert!(has(&r, "wrap-in-quotes"), "{r:?}");
+        app.chooser = None;
+
+        app.spell_suggest = Some(crate::app::SpellSuggest {
+            word: "teh".into(),
+            span: (0, 3),
+            suggestions: vec!["the".into(), "tea".into()],
+            selected: 1,
+        });
+        let r = rows(&mut app, 100, 24);
+        assert!(has(&r, "tea"), "{r:?}");
+    }
+
+    /// Scroll-bar position helpers return zero for an empty track or range,
+    /// and a collapsed horizontal bar draws nothing.
+    #[test]
+    fn scrollbar_helpers_handle_empty_tracks() {
+        let area = Rect::new(0, 0, 1, 10);
+        assert_eq!(scrollbar_pos_from_row(area, 5, 0), 0);
+        assert_eq!(scrollbar_pos_from_row(Rect::new(0, 0, 1, 0), 5, 9), 0);
+        assert_eq!(scrollbar_pos_from_row(area, 9, 9), 9);
+        let bar = Rect::new(0, 0, 10, 1);
+        assert_eq!(scrollbar_pos_from_col(bar, 5, 0), 0);
+        assert_eq!(scrollbar_pos_from_col(Rect::new(0, 0, 0, 1), 5, 9), 0);
+        assert_eq!(scrollbar_pos_from_col(bar, 9, 9), 9);
+        let mut terminal = Terminal::new(TestBackend::new(10, 3)).unwrap();
+        terminal
+            .draw(|f| draw_hscrollbar(f, Rect::new(0, 0, 0, 1), 0, 5))
+            .unwrap();
+        terminal
+            .draw(|f| draw_hscrollbar(f, Rect::new(0, 0, 4, 0), 0, 5))
+            .unwrap();
+    }
+
+    /// Menu geometry: an unknown menu index has no dropdown; git badges use a
+    /// distinct color per change kind.
+    #[test]
+    fn menu_dropdown_of_a_missing_menu_is_empty_and_git_badges_have_colors() {
+        use crate::git::Change;
+        let app = app_at(&temp("r3-ui-menu"));
+        let defs = app.menu.defs();
+        let area = Rect::new(0, 0, 100, 30);
+        let bar = Rect::new(0, 0, 100, 1);
+        assert_eq!(
+            menu_dropdown_rect_for(defs, area, bar, defs.len() + 5, false),
+            Rect::default()
+        );
+        let colors: std::collections::BTreeSet<String> = [
+            Change::Added,
+            Change::Modified,
+            Change::Deleted,
+            Change::Renamed,
+            Change::Conflicted,
+        ]
+        .into_iter()
+        .map(|c| format!("{:?}", git_change_color(c)))
+        .collect();
+        assert_eq!(colors.len(), 5);
+        assert_eq!(
+            git_change_color(Change::Untracked),
+            git_change_color(Change::Added)
+        );
+    }
+
+    /// With the menu open and a submenu or sub-submenu showing, a mirrored
+    /// layout right-aligns each dropdown's rows.
+    #[test]
+    fn reflecting_panels_covers_the_open_menu_levels() {
+        let mut app = app_at(&temp("r3-ui-reflect"));
+        app.layout.explorer = Rect::new(0, 1, 20, 10);
+        app.layout.menu_dropdown = Rect::new(0, 1, 20, 6);
+        app.layout.submenu_dropdown = Rect::new(20, 1, 20, 6);
+        app.layout.subsubmenu_dropdown = Rect::new(40, 1, 20, 6);
+        app.menu.open_index(0);
+        app.menu.sub_open = true;
+        app.menu.sub = Some(0);
+        app.menu.subsub_open = true;
+        app.menu.subsub = Some(0);
+        let mut buf = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 80, 12));
+        for x in 21..39 {
+            buf[(x, 2)].set_symbol(if x == 21 { "A" } else { " " });
+        }
+        reflect_panels(&app, &mut buf);
+        // The submenu's row text moved to the right edge of its inner area.
+        assert_eq!(buf[(21, 2)].symbol(), " ");
+        assert_eq!(buf[(38, 2)].symbol(), "A");
+        assert_eq!(buf[(0, 11)].symbol(), " ");
     }
 }

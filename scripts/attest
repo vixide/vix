@@ -116,7 +116,7 @@ attest() {
 
 	start=$(date +%s)
 	echo "scripts/attest: running scripts/check --tier full on tree $tree"
-	scripts/check --tier full || die "the gate failed; nothing was attested"
+	scripts/check --tier full --scope all || die "the gate failed; nothing was attested"
 	end=$(date +%s)
 	{ [ "$(git rev-parse 'HEAD^{tree}')" = "$tree" ] && [ -z "$(git status --porcelain)" ]; } ||
 		die "the tree changed while the gate ran; nothing was attested"

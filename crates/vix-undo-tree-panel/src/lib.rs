@@ -30,7 +30,61 @@
 //! assert_eq!(graph, ["o", "o", "|\\", "o |", "  @"]);
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::collections::HashMap;
+
+/// The column of a lane: lanes are two columns apart.
+fn col(lane: usize) -> usize {
+    mul_or(lane, 2, usize::MAX)
+}
+
+/// Draw `ch` at column `at`; a column outside the row draws nothing.
+fn put(cells: &mut [char], at: usize, ch: char) {
+    if let Some(c) = cells.get_mut(at) {
+        *c = ch;
+    }
+}
+
+/// Turn the blanks in columns `from..to` into dashes.
+fn dash(cells: &mut [char], from: usize, to: usize) {
+    if let Some(gap) = cells.get_mut(from..to) {
+        for c in gap {
+            if *c == ' ' {
+                *c = '-';
+            }
+        }
+    }
+}
+
+/// `a * b`, or the declared `fallback` when the product does not fit.
+fn mul_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_mul(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// One state of the undo tree, as the host's history reports it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +149,7 @@ pub fn layout(nodes: &[TreeNode], mark: usize) -> Vec<Row> {
     // stored value is only a busy marker today; `Some` draws a `|` on that lane.
     let mut lanes: Vec<Option<usize>> = Vec::new();
     let mut lane_of: HashMap<usize, usize> = HashMap::new();
-    let mut rows = Vec::with_capacity(sorted.len() * 2);
+    let mut rows = Vec::new();
     for node in &sorted {
         let lane = if let Some(&l) = lane_of.get(&node.seq) {
             l
@@ -106,9 +160,11 @@ pub fn layout(nodes: &[TreeNode], mark: usize) -> Vec<Row> {
             l
         };
         let mut cells: Vec<char> = cells_for(&lanes);
-        if let Some(c) = cells.get_mut(lane * 2) {
-            *c = if node.seq == mark { MARK } else { NODE };
-        }
+        put(
+            &mut cells,
+            col(lane),
+            if node.seq == mark { MARK } else { NODE },
+        );
         rows.push(Row {
             graph: trimmed(&cells),
             seq: Some(node.seq),
@@ -153,21 +209,24 @@ pub fn layout(nodes: &[TreeNode], mark: usize) -> Vec<Row> {
 /// Take the lowest free lane (or a new one) for a branch ending at `end`.
 fn claim(lanes: &mut Vec<Option<usize>>, end: usize) -> usize {
     if let Some(i) = lanes.iter().position(Option::is_none) {
-        lanes[i] = Some(end);
+        if let Some(slot) = lanes.get_mut(i) {
+            *slot = Some(end);
+        }
         i
     } else {
         lanes.push(Some(end));
-        lanes.len() - 1
+        // The lane just pushed.
+        sub_or(lanes.len(), 1, 0)
     }
 }
 
 /// The base cells for a row: `|` on every busy lane, spaces elsewhere.
 fn cells_for(lanes: &[Option<usize>]) -> Vec<char> {
-    let width = (lanes.len() * 2).saturating_sub(1);
+    let width = sub_or(mul_or(lanes.len(), 2, 0), 1, 0);
     let mut cells = vec![' '; width];
     for (i, l) in lanes.iter().enumerate() {
         if l.is_some() {
-            cells[i * 2] = '|';
+            put(&mut cells, col(i), '|');
         }
     }
     cells
@@ -180,25 +239,21 @@ fn connector(lanes: &[Option<usize>], from: usize, opened: &[usize]) -> String {
     // A just-opened lane has no state yet on this row, so blank its `|` before
     // the branch glyph is drawn into the gap next to it.
     for &to in opened {
-        cells[to * 2] = ' ';
+        put(&mut cells, col(to), ' ');
     }
     for &to in opened {
         // Branching right: dashes along the gap, then `\` into the new lane.
         // Branching left (a freed lower lane was reused): `/` then dashes.
         if to > from {
-            for c in &mut cells[from * 2 + 1..to * 2 - 1] {
-                if *c == ' ' {
-                    *c = '-';
-                }
-            }
-            cells[to * 2 - 1] = '\\';
+            dash(
+                &mut cells,
+                add_or(col(from), 1, usize::MAX),
+                sub_or(col(to), 1, 0),
+            );
+            put(&mut cells, sub_or(col(to), 1, 0), '\\');
         } else {
-            cells[to * 2 + 1] = '/';
-            for c in &mut cells[to * 2 + 2..from * 2] {
-                if *c == ' ' {
-                    *c = '-';
-                }
-            }
+            put(&mut cells, add_or(col(to), 1, usize::MAX), '/');
+            dash(&mut cells, add_or(col(to), 2, usize::MAX), col(from));
         }
     }
     trimmed(&cells)
@@ -240,7 +295,7 @@ impl Panel {
             .collect();
         let selected = states
             .iter()
-            .position(|&i| rows[i].seq == Some(current))
+            .position(|&i| rows.get(i).is_some_and(|r| r.seq == Some(current)))
             .unwrap_or(0);
         Self {
             rows,
@@ -312,7 +367,7 @@ impl Panel {
 
     /// Select the last (newest) state.
     pub fn end(&mut self) {
-        self.selected = self.states.len().saturating_sub(1);
+        self.selected = sub_or(self.states.len(), 1, 0);
     }
 
     /// Select the state on row `row` (a click). Returns `false` for a

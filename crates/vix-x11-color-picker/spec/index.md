@@ -13,3 +13,7 @@ rows, maps clicks to rows, and inserts the chosen hex.
 ## See also
 
 - [ascii-character-picker spec](../../vix-ascii-character-picker/spec/) — shared character-picker behavior
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The selected-color lookups (`selected_color`, `selected_hex`, `selected_name`) use `get` and return `Option`: a public `selected` past the last color is not moved to the nearest one, it is `None`. The app reports it.

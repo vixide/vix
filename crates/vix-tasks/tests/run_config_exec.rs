@@ -1,5 +1,5 @@
 //! Runs a rendered run-configuration plan under a real POSIX shell: a failed
-//! step in a stage must stop its dependents and fail the whole plan (T810).
+//! step in a stage must stop its dependents and fail the whole plan (T817).
 //! Lives here, not in `src/`, because it starts a child process.
 #![cfg(unix)]
 

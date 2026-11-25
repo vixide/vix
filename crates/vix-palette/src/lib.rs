@@ -9,6 +9,18 @@
 //! | `@`    | Symbols (file)     |
 //! | `@@`   | Symbols (workspace)|
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Shared workspace i18n: brings `t!` into scope unqualified and surfaces the
 // translation lookup fns at this crate root (see the vix_i18n crate).
 #[macro_use]
@@ -26,6 +38,25 @@ pub use preview::{
     MIN_PREVIEW_WIDTH, PREVIEW_BYTES, PREVIEW_RADIUS, Preview, preview_from_bytes,
     preview_from_lines,
 };
+
+/// `a + b` of two relevance scores; a sum past the top of the scale is the top.
+fn add_score(a: i32, b: i32) -> i32 {
+    a.checked_add(b).unwrap_or(i32::MAX)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// Which palette sub-mode is active, chosen by the input's leading prefix.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -158,15 +189,14 @@ impl Palette {
 
     /// Move the highlight up one row.
     pub fn up(&mut self) {
-        if self.selected > 0 {
-            self.selected -= 1;
-        }
+        self.selected = sub_or(self.selected, 1, 0);
     }
 
     /// Move the highlight down one row.
     pub fn down(&mut self) {
-        if self.selected + 1 < self.entries.len() {
-            self.selected += 1;
+        let next = add_or(self.selected, 1, usize::MAX);
+        if next < self.entries.len() {
+            self.selected = next;
         }
     }
 
@@ -586,7 +616,7 @@ pub fn symbols(text: &str) -> Vec<Symbol> {
             out.push(Symbol {
                 kind,
                 name: name.as_str().to_string(),
-                line: i + 1,
+                line: add_or(i, 1, usize::MAX),
                 text: line.trim_start().chars().take(120).collect(),
             });
         }
@@ -617,7 +647,7 @@ pub fn fuzzy_score(haystack: &str, query: &str) -> Option<i32> {
     let hay_len = hay.chars().count();
     let mut total = 0;
     for term in query.split_whitespace() {
-        total += term_score(&hay, hay_len, &term.to_lowercase())?;
+        total = add_score(total, term_score(&hay, hay_len, &term.to_lowercase())?);
     }
 
     // Bonus for matching the whole (whitespace-normalized) query.
@@ -631,9 +661,9 @@ pub fn fuzzy_score(haystack: &str, query: &str) -> Option<i32> {
     let q = q.to_lowercase();
     if !q.is_empty() {
         if hay == q {
-            total += 100; // exact match
+            total = add_score(total, 100); // exact match
         } else if hay.starts_with(&q) {
-            total += 40; // prefix match
+            total = add_score(total, 40); // prefix match
         }
     }
     Some(total)
@@ -670,16 +700,21 @@ fn term_score(hay: &str, hay_len: usize, needle: &str) -> Option<i32> {
         if first.is_none() {
             first = Some(idx);
         }
-        if prev.is_some_and(|p| p + 1 == idx) {
-            score += 15; // contiguous with the previous matched char
+        if prev.is_some_and(|p| p.checked_add(1) == Some(idx)) {
+            score = add_score(score, 15); // contiguous with the previous matched char
         }
         if preceding.is_none_or(|c| !c.is_alphanumeric()) {
-            score += 10; // start of a word (or of the haystack)
+            score = add_score(score, 10); // start of a word (or of the haystack)
         }
         prev = Some(idx);
     }
-    score -= i32::try_from(first.unwrap_or(0)).unwrap_or(0); // earlier is better
-    score -= i32::try_from(hay_len).unwrap_or(0) / 4; // shorter is slightly better
+    // Earlier is better, and a shorter haystack is slightly better.
+    let early = i32::try_from(first.unwrap_or(0)).unwrap_or(i32::MAX);
+    let length = i32::try_from(hay_len).unwrap_or(i32::MAX);
+    score = score.checked_sub(early).unwrap_or(i32::MIN);
+    score = score
+        .checked_sub(length.checked_div(4).unwrap_or(0))
+        .unwrap_or(i32::MIN);
     Some(score)
 }
 
@@ -711,15 +746,10 @@ pub fn parse_path_target(input: &str) -> (String, Option<(usize, usize)>) {
 /// one. Anything else with a colon early in the string (a relative path, a
 /// URL-ish scheme, …) is left alone.
 fn windows_drive_prefix_len(input: &str) -> usize {
-    let bytes = input.as_bytes();
-    if bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && matches!(bytes[2], b'\\' | b'/')
-    {
-        2
-    } else {
-        0
+    let mut bytes = input.bytes();
+    match (bytes.next(), bytes.next(), bytes.next()) {
+        (Some(letter), Some(b':'), Some(b'\\' | b'/')) if letter.is_ascii_alphabetic() => 2,
+        _ => 0,
     }
 }
 

@@ -551,3 +551,149 @@ fn serve_answers_each_request_line() {
     let second: Value = serde_json::from_str(lines[1]).unwrap();
     assert_eq!(second["id"], 2);
 }
+
+/// A host that implements only the required methods, so the optional
+/// database methods keep their trait defaults.
+struct BareHost;
+
+impl Host for BareHost {
+    fn open_buffers(&self, _root: &Path) -> Vec<PathBuf> {
+        Vec::new()
+    }
+
+    fn sqlite_schema(&self, _path: &Path) -> Option<Result<Vec<Table>, crate::HostError>> {
+        None
+    }
+}
+
+#[test]
+fn the_optional_host_methods_default_to_no_database_support() {
+    let host = BareHost;
+    assert!(host.shared_connections().is_none());
+    assert!(host.db_tables("app", None).is_none());
+    assert!(host.db_describe("app", Some("main"), "users").is_none());
+    assert!(host.db_query("app", "select 1").is_none());
+}
+
+#[test]
+fn a_bare_host_reports_no_sql_capability_for_every_db_tool() {
+    let root = workspace("bare-host");
+    let mut s = Server::new(&root, BareHost, "1.0.0").unwrap();
+    s.handle(&json!({"jsonrpc": "2.0", "id": 0, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18"}}));
+    let mut ask = |tool: &str, args: Value| {
+        s.handle(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": tool, "arguments": args}}))
+            .unwrap()["result"]
+            .clone()
+    };
+    for (tool, args) in [
+        ("db_tables", json!({"connection": "app"})),
+        ("db_describe", json!({"connection": "app", "table": "t"})),
+        ("db_query", json!({"connection": "app", "sql": "select 1"})),
+    ] {
+        let result = ask(tool, args);
+        assert_eq!(result["isError"], true, "{tool}");
+        assert_eq!(
+            result["content"][0]["text"], "this vix build has no `sql` capability",
+            "{tool}"
+        );
+    }
+}
+
+#[test]
+fn a_server_needs_a_directory_root() {
+    let root = workspace("not-a-dir");
+    let file = root.join("README.md");
+    let err = Server::new(&file, BareHost, "1.0.0").err().unwrap();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    assert!(err.to_string().contains("is not a directory"), "{err}");
+    let err = Server::new(&root.join("missing"), BareHost, "1.0.0")
+        .err()
+        .unwrap();
+    assert_eq!(err.kind(), io::ErrorKind::NotFound);
+}
+
+#[test]
+fn a_host_failure_is_the_tool_error_and_its_own_source() {
+    use crate::tools::ToolError;
+    let err = ToolError::Host("refused statement".into());
+    assert_eq!(err.to_string(), "refused statement");
+    let source = std::error::Error::source(&err).expect("host errors chain");
+    assert_eq!(source.to_string(), "refused statement");
+    assert!(std::error::Error::source(&ToolError::MissingPath).is_none());
+    assert!(std::error::Error::source(&ToolError::NoSqlCapability).is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn open_buffers_with_non_utf8_paths_are_skipped() {
+    use std::os::unix::ffi::OsStrExt;
+    let root = workspace("non-utf8");
+    let weird = PathBuf::from(std::ffi::OsStr::from_bytes(b"/tmp/\xff\xfe.rs"));
+    let host = FakeHost {
+        buffers: vec![weird, root.join("README.md")],
+        schema: None,
+    };
+    let mut s = Server::new(&root, host, "1.0.0").unwrap();
+    s.handle(&json!({"jsonrpc": "2.0", "id": 0, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18"}}));
+    let reply = s
+        .handle(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "list_open_buffers", "arguments": {}}}))
+        .unwrap();
+    assert_eq!(
+        reply["result"]["structuredContent"]["buffers"],
+        json!(["README.md"])
+    );
+}
+
+#[test]
+fn an_open_buffer_that_vanished_is_skipped_by_diagnostics_but_an_explicit_one_errors() {
+    let root = workspace("vanished");
+    let gone = root.join("gone.txt");
+    fs::write(&gone, "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n").unwrap();
+    let host = FakeHost {
+        buffers: vec![gone.clone(), root.join("merge.txt")],
+        schema: None,
+    };
+    let mut s = Server::new(&root, host, "1.0.0").unwrap();
+    s.handle(&json!({"jsonrpc": "2.0", "id": 0, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18"}}));
+    fs::remove_file(&gone).unwrap();
+    let all = call(&mut s, "diagnostics", &json!({}));
+    let paths: Vec<_> = all["structuredContent"]["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["path"].clone())
+        .collect();
+    assert_eq!(paths, vec![json!("merge.txt")]);
+    let one = call(&mut s, "diagnostics", &json!({"path": "gone.txt"}));
+    assert_eq!(one["isError"], true);
+}
+
+#[test]
+fn a_host_database_error_is_reported_per_database() {
+    struct Failing;
+    impl Host for Failing {
+        fn open_buffers(&self, _root: &Path) -> Vec<PathBuf> {
+            Vec::new()
+        }
+        fn sqlite_schema(&self, _path: &Path) -> Option<Result<Vec<Table>, crate::HostError>> {
+            Some(Err("database is locked".into()))
+        }
+    }
+    let root = workspace("db-error");
+    let mut s = Server::new(&root, Failing, "1.0.0").unwrap();
+    s.handle(&json!({"jsonrpc": "2.0", "id": 0, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18"}}));
+    let reply = s
+        .handle(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "db_schema", "arguments": {}}}))
+        .unwrap();
+    assert_eq!(
+        reply["result"]["structuredContent"]["databases"],
+        json!([{"path": "app.db", "error": "database is locked"}])
+    );
+}

@@ -12,6 +12,12 @@
 use super::catalog::{quote_ident, quote_value};
 use super::connect::Kind;
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A row-search operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
@@ -244,42 +250,46 @@ pub fn parse_list(value: &str) -> Result<Vec<String>, FilterError> {
     let mut i = 0;
     while i <= chars.len() {
         while chars.get(i).is_some_and(|c| c.is_whitespace()) {
-            i += 1;
+            i = add_or(i, 1, usize::MAX);
         }
         if let Some(&q @ ('\'' | '"')) = chars.get(i) {
             let mut item = String::new();
-            i += 1;
+            i = add_or(i, 1, usize::MAX);
             loop {
                 let c = *chars.get(i).ok_or(FilterError::UnclosedQuote)?;
                 if c == q {
-                    if chars.get(i + 1) == Some(&q) {
+                    if chars.get(add_or(i, 1, usize::MAX)) == Some(&q) {
                         item.push(q);
-                        i += 2;
+                        i = add_or(i, 2, usize::MAX);
                         continue;
                     }
-                    i += 1;
+                    i = add_or(i, 1, usize::MAX);
                     break;
                 }
                 item.push(c);
-                i += 1;
+                i = add_or(i, 1, usize::MAX);
             }
             out.push(item);
             // Skip to the next comma (text after a closing quote is ignored).
             while chars.get(i).is_some_and(|&c| c != ',') {
-                i += 1;
+                i = add_or(i, 1, usize::MAX);
             }
         } else {
             let start = i.min(chars.len());
             while chars.get(i).is_some_and(|&c| c != ',') {
-                i += 1;
+                i = add_or(i, 1, usize::MAX);
             }
-            let item: String = chars[start..i.min(chars.len())].iter().collect();
+            let item: String = chars
+                .get(start..i.min(chars.len()))
+                .unwrap_or(&[])
+                .iter()
+                .collect();
             let item = item.trim();
             if !item.is_empty() {
                 out.push(item.to_string());
             }
         }
-        i += 1;
+        i = add_or(i, 1, usize::MAX);
     }
     if out.is_empty() {
         return Err(FilterError::EmptyList);
@@ -309,7 +319,9 @@ impl FilterForm {
     /// The selected operator.
     #[must_use]
     pub fn op(&self) -> Op {
-        OPS[self.op % OPS.len()]
+        // An operator index past the list wraps around it.
+        let at = self.op.checked_rem(OPS.len()).unwrap_or(0);
+        OPS.get(at).copied().unwrap_or(Op::Contains)
     }
 
     /// The condition this form describes for `kind`, given the grid's
@@ -445,5 +457,19 @@ mod tests {
             "\"name\" = 'ada'"
         );
         assert!(OPS.iter().all(|op| !op.label().is_empty()));
+    }
+
+    #[test]
+    fn filter_errors_have_distinct_messages_and_wildcards_are_escaped() {
+        let all = [
+            FilterError::MissingValue,
+            FilterError::BadRange,
+            FilterError::EmptyList,
+            FilterError::UnclosedQuote,
+        ];
+        let texts: std::collections::BTreeSet<String> =
+            all.iter().map(ToString::to_string).collect();
+        assert_eq!(texts.len(), 4);
+        assert_eq!(like_pattern("50%_!"), "%50!%!_!!%");
     }
 }

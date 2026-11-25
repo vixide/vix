@@ -1,5 +1,18 @@
 //! Inline ghost text (T618): the suggestion drawn dimmed after the cursor.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use unicode_width::UnicodeWidthChar as _;
 
@@ -36,7 +49,7 @@ pub(super) fn draw_ghost(app: &App, frame: &mut Frame, area: Rect) {
         if width == 0 {
             continue;
         }
-        if col + width > area.right() {
+        if col.plus(width) > area.right() {
             break;
         }
         let ch = if ch == '\t' { ' ' } else { ch };
@@ -44,6 +57,6 @@ pub(super) fn draw_ghost(app: &App, frame: &mut Frame, area: Rect) {
         buf[(col, y)]
             .set_symbol(ch.encode_utf8(&mut utf8))
             .set_style(style);
-        col += width;
+        col = col.plus(width);
     }
 }

@@ -11,6 +11,18 @@
 //! Rendering lives in `src/ui.rs`; this crate only supplies the lines to draw.
 //! Owning spec: `crates/vix-ai-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Who authored a turn in the transcript.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Role {
@@ -47,6 +59,14 @@ impl Default for Panel {
     fn default() -> Self {
         Self::open()
     }
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
 }
 
 impl Panel {
@@ -114,12 +134,12 @@ impl Panel {
 
     /// Scroll one line toward older messages.
     pub fn scroll_up(&mut self) {
-        self.scroll = self.scroll.saturating_add(1);
+        self.scroll = self.scroll.checked_add(1).unwrap_or(self.scroll); // AIP-F1: stay put at the top
     }
 
     /// Scroll one line toward newer messages.
     pub fn scroll_down(&mut self) {
-        self.scroll = self.scroll.saturating_sub(1);
+        self.scroll = sub_or(self.scroll, 1, 0); // AIP-F2: stay at the bottom
     }
 
     /// Every transcript line, word-wrapped to `width` columns, tagged by role.
@@ -154,15 +174,20 @@ impl Panel {
     pub fn visible(&mut self, width: usize, height: usize) -> Vec<(Role, String)> {
         let all = self.wrapped(width);
         let height = height.max(1);
-        let max_scroll = all.len().saturating_sub(height);
+        let max_scroll = sub_or(all.len(), height, 0); // AIP-F2: short transcript, no scroll
         if self.scroll > max_scroll {
             self.scroll = max_scroll;
         }
         // `scroll` counts up from the bottom, so the window ends `scroll`
         // lines before the last line and extends `height` lines upward.
-        let end = all.len().saturating_sub(self.scroll);
-        let start = end.saturating_sub(height);
-        all[start..end].to_vec()
+        let end = sub_or(all.len(), self.scroll, 0); // AIP-F2
+        let start = sub_or(end, height, 0); // AIP-F2
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: scroll was clamped to at most all.len() - height just above, so start <= end <= all.len()"
+        )]
+        let window = all[start..end].to_vec();
+        window
     }
 }
 

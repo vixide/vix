@@ -7,6 +7,19 @@
 //! was sanitized when it entered the inbox; nothing here turns it into an
 //! escape sequence or a hyperlink.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use unicode_width::UnicodeWidthChar as _;
@@ -21,7 +34,7 @@ use super::ClampFit as _;
 /// `HH:MM` in the system time zone for a UTC millisecond time.
 fn clock(time_utc: i64) -> String {
     jiff::Timestamp::from_millisecond(time_utc).map_or_default(|t| {
-        t.to_zoned(jiff::tz::TimeZone::system())
+        t.to_zoned_datetime(jiff::tz::TimeZone::system())
             .strftime("%H:%M")
             .to_string()
     })
@@ -54,14 +67,14 @@ fn wrap(text: &str, width: usize) -> Vec<String> {
     let mut used = 0;
     for c in text.chars() {
         let w = c.width().unwrap_or(0);
-        if used + w > width && used > 0 {
+        if used.plus(w) > width && used > 0 {
             rows.push(String::new());
             used = 0;
         }
         if let Some(last) = rows.last_mut() {
             last.push(c);
         }
-        used += w;
+        used = used.plus(w);
     }
     rows
 }
@@ -106,7 +119,7 @@ pub(super) fn draw_im_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     let count = app.im.inbox.conversations().len();
     let list_h = u16::try_from(count)
         .unwrap_or(u16::MAX)
-        .clamp_fit(1, (inner.height / 4).max(1));
+        .clamp_fit(1, inner.height.quot(4).max(1));
     // The session's participants and where they are (T759), above its
     // messages, only while the session conversation is selected.
     let roster = if app
@@ -121,7 +134,7 @@ pub(super) fn draw_im_dock(app: &mut App, frame: &mut Frame, area: Rect) {
     };
     let roster_h = u16::try_from(roster.len())
         .unwrap_or(u16::MAX)
-        .min(inner.height / 4);
+        .min(inner.height.quot(4));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -132,16 +145,16 @@ pub(super) fn draw_im_dock(app: &mut App, frame: &mut Frame, area: Rect) {
             Constraint::Length(1),
         ])
         .split(inner);
-    draw_list(app, frame, chunks[0]);
-    draw_roster(&roster, frame, chunks[1]);
-    draw_messages(app, frame, chunks[2]);
-    draw_input(app, frame, chunks[3], focused);
+    draw_list(app, frame, chunk(&chunks, 0));
+    draw_roster(&roster, frame, chunk(&chunks, 1));
+    draw_messages(app, frame, chunk(&chunks, 2));
+    draw_input(app, frame, chunk(&chunks, 3), focused);
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             t!("ui.im_hint").to_string(),
             theme::dim(),
         ))),
-        chunks[4],
+        chunk(&chunks, 4),
     );
 }
 
@@ -160,9 +173,9 @@ fn draw_roster(roster: &[String], frame: &mut Frame, area: Rect) {
 
 /// The conversation list, scrolled to keep the selection in view.
 fn draw_list(app: &mut App, frame: &mut Frame, area: Rect) {
-    let rows = area.height as usize;
+    let rows = usize::from(area.height);
     let selected = app.im.panel.selected_index();
-    let top = selected.saturating_sub(rows.saturating_sub(1));
+    let top = selected.minus(rows.minus(1));
     app.im.list_top = top;
     app.layout.im_list = area;
     let lines: Vec<Line> = (top..app.im.inbox.conversations().len())
@@ -182,8 +195,8 @@ fn draw_list(app: &mut App, frame: &mut Frame, area: Rect) {
 /// The selected conversation's messages, newest at the bottom. With a
 /// message highlighted the view keeps it on screen.
 fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
-    let height = area.height as usize;
-    let width = area.width as usize;
+    let height = usize::from(area.height);
+    let width = usize::from(area.width);
     app.im.panel.ensure_visible(&app.im.inbox, height);
     let Some(conversation) = app.im.panel.conversation(&app.im.inbox) else {
         return;
@@ -200,7 +213,7 @@ fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
     }
     let id = conversation.id.clone();
     let highlighted = app.im.panel.selected_message();
-    let anchor = highlighted.unwrap_or(conversation.messages.len() - 1);
+    let anchor = highlighted.unwrap_or(conversation.messages.len().minus(1));
     // Each message's wrapped rows, from the panel's scroll offset on; then
     // start later while the anchor's last row would fall off the bottom.
     let wrapped: Vec<Vec<(String, bool)>> = conversation
@@ -214,8 +227,16 @@ fn draw_messages(app: &mut App, frame: &mut Frame, area: Rect) {
         })
         .collect();
     let mut start = app.im.panel.scroll().min(anchor);
-    while start < anchor && wrapped[start..=anchor].iter().map(Vec::len).sum::<usize>() > height {
-        start += 1;
+    while start < anchor
+        && wrapped
+            .get(start..=anchor)
+            .unwrap_or(&[])
+            .iter()
+            .map(Vec::len)
+            .sum::<usize>()
+            > height
+    {
+        start = start.plus(1);
     }
     let mut lines: Vec<Line> = Vec::new();
     for (i, rows) in wrapped.iter().enumerate().skip(start) {
@@ -259,9 +280,9 @@ fn draw_input(app: &App, frame: &mut Frame, area: Rect, focused: bool) {
 /// the key hint.
 fn thread_lines(app: &App, ids: &[String], selected: usize, area: Rect) -> Vec<Line<'static>> {
     let rows = app.im_thread_rows(ids);
-    let width = usize::from(area.width.saturating_sub(4)).clamp(20, 100);
-    let list_height = (usize::from(area.height) / 3).max(3);
-    let top = selected.saturating_sub(list_height.saturating_sub(1));
+    let width = usize::from(area.width.minus(4)).clamp(20, 100);
+    let list_height = usize::from(area.height).quot(3).max(3);
+    let top = selected.minus(list_height.minus(1));
     let mut lines: Vec<Line<'static>> = Vec::new();
     for (i, (thread, outdated)) in rows.iter().enumerate().skip(top).take(list_height) {
         let glyph = if thread.resolved {
@@ -294,14 +315,14 @@ fn thread_lines(app: &App, ids: &[String], selected: usize, area: Rect) -> Vec<L
     }
     if let Some((thread, _)) = rows.get(selected) {
         lines.push(Line::from(""));
-        let budget = usize::from(area.height).saturating_sub(lines.len() + 4);
+        let budget = usize::from(area.height).minus(lines.len().plus(4));
         let mut detail: Vec<Line<'static>> = Vec::new();
         for m in &thread.messages {
             let text = format!("{} {}: {}", clock(m.time_utc), m.author, m.body);
             detail.extend(wrap(&text, width).into_iter().map(Line::from));
         }
         // Keep the newest messages when they do not all fit.
-        let skip = detail.len().saturating_sub(budget);
+        let skip = detail.len().minus(budget);
         lines.extend(detail.into_iter().skip(skip));
     }
     lines.push(Line::from(Span::styled(
@@ -366,15 +387,15 @@ pub(super) fn draw_im_dialog(app: &App, frame: &mut Frame, area: Rect) {
         ),
     };
     let widest = body.iter().map(Line::width).max().unwrap_or(0);
-    let width = u16::try_from(widest + 4)
+    let width = u16::try_from(widest.plus(4))
         .unwrap_or(u16::MAX)
         .clamp_fit(30, area.width);
-    let height = u16::try_from(body.len() + 2)
+    let height = u16::try_from(body.len().plus(2))
         .unwrap_or(u16::MAX)
         .clamp_fit(3, area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 3,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(3)),
         width,
         height,
     };
@@ -402,3 +423,6 @@ mod tests {
         assert_eq!(wrap("", 4), vec![""]);
     }
 }
+
+#[cfg(test)]
+mod cov_r3;

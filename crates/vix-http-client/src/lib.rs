@@ -28,6 +28,18 @@
 //!
 //! Owning spec: `crates/vix-http-client/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod aad;
 pub mod env;
 pub mod rest;
@@ -390,5 +402,120 @@ mod tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod net_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// Serve `reply` (raw bytes) to the first connection on a local port, then
+    /// hang up. Returns the URL and the thread to join (it yields the request).
+    fn serve(reply: &'static [u8]) -> (String, std::thread::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/path", listener.local_addr().unwrap());
+        let handle = std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut seen = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !seen.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = sock.read(&mut buf).unwrap();
+                if n == 0 {
+                    break;
+                }
+                seen.extend_from_slice(&buf[..n]);
+            }
+            sock.write_all(reply).unwrap();
+            String::from_utf8_lossy(&seen).into_owned()
+        });
+        (url, handle)
+    }
+
+    fn get(url: &str) -> Request {
+        Request {
+            method: "GET".into(),
+            url: url.into(),
+            headers: vec![("X-Test".into(), "yes".into())],
+            body: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_local_server_reply_becomes_a_structured_response() {
+        let (url, server) = serve(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello",
+        );
+        let resp = send_response(&get(&url)).unwrap();
+        let seen = server.join().unwrap();
+        assert!(seen.starts_with("GET /path HTTP/1.1"), "{seen}");
+        assert!(seen.to_ascii_lowercase().contains("x-test: yes"));
+        assert_eq!(resp.status, 200);
+        assert_eq!(resp.reason, "OK");
+        assert_eq!(resp.version, "HTTP/1.1");
+        assert_eq!(resp.body, "hello");
+        assert!(
+            resp.headers
+                .iter()
+                .any(|(n, v)| n == "content-type" && v == "text/plain")
+        );
+    }
+
+    #[test]
+    fn an_error_status_is_a_response_not_an_error() {
+        let (url, server) =
+            serve(b"HTTP/1.1 404 Not Found\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnope");
+        let text = send(&get(&url)).unwrap();
+        server.join().unwrap();
+        assert!(text.starts_with("HTTP/1.1 404 Not Found\n"), "{text}");
+        assert!(text.ends_with("\n\nnope"));
+    }
+
+    #[test]
+    fn a_truncated_body_is_shown_in_place_of_the_body() {
+        // Promises 100 bytes, delivers 3, then hangs up.
+        let (url, server) =
+            serve(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\nabc");
+        let resp = send_response(&get(&url)).unwrap();
+        server.join().unwrap();
+        assert_eq!(resp.status, 200);
+        assert!(
+            resp.body.starts_with("<failed to read body"),
+            "{}",
+            resp.body
+        );
+    }
+
+    #[test]
+    fn a_refused_connection_is_a_transport_error() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        drop(listener);
+        let err = send_response(&get(&url)).unwrap_err();
+        assert!(matches!(err, HttpError::Transport(_)), "{err}");
+        assert_ne!(err.to_string(), "");
+    }
+
+    #[test]
+    fn unbuildable_requests_and_foreign_schemes_are_rejected_up_front() {
+        let mut bad = get("http://127.0.0.1:1/");
+        bad.method = "NOT A METHOD".into();
+        let err = send_response(&bad).unwrap_err();
+        assert!(matches!(err, HttpError::InvalidRequest(_)), "{err}");
+        let file = get("file:///etc/passwd");
+        let err = send_response(&file).unwrap_err();
+        assert!(matches!(err, HttpError::UnsupportedScheme(_)));
+        assert!(err.to_string().contains("file:///etc/passwd"));
+    }
+
+    #[test]
+    fn header_lines_without_a_colon_and_comment_lines_are_ignored() {
+        let req = parse_request(
+            "GET https://e.com/x\n# comment\n// another\nno colon here\nAccept: */*\n\nbody",
+        )
+        .unwrap();
+        assert_eq!(req.headers, vec![("Accept".to_string(), "*/*".to_string())]);
+        assert_eq!(req.body, "body");
     }
 }

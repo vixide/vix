@@ -2607,6 +2607,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ego-tree"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bd50d24b1b75aa817bb0339cb9f2e0e664bdfab1e160a69a0fda9145b77fab2"
+
+[[package]]
 name = "egui"
 version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3939,7 +3945,7 @@ dependencies = [
  "itertools 0.13.0",
  "lsp-types",
  "markdown",
- "markup5ever_rcdom 0.3.0",
+ "markup5ever_rcdom",
  "num-traits",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
@@ -4749,13 +4755,12 @@ dependencies = [
 
 [[package]]
 name = "htmd"
-version = "0.5.6"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efd66117e0b1eac329399e316f30b9530afcb7cfbd0df59a007023b6673a6c37"
+checksum = "7d39c7ad9c654a43bdc1235259b4e78c84406576b231c1ac37cd06e0af878250"
 dependencies = [
- "html5ever 0.38.0",
- "markup5ever_rcdom 0.38.0+unofficial",
- "phf 0.13.1",
+ "ego-tree",
+ "html5ever 0.40.1",
 ]
 
 [[package]]
@@ -4774,12 +4779,13 @@ dependencies = [
 
 [[package]]
 name = "html5ever"
-version = "0.38.0"
+version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1054432bae2f14e0061e33d23402fbaa67a921d319d56adc6bcf887ddad1cbc2"
+checksum = "456a1a377e608e555d22ddab27ac0114bc7a7b4199078108e34c2aeae6c9b130"
 dependencies = [
  "log",
- "markup5ever 0.38.0",
+ "markup5ever 0.40.0",
+ "memchr",
 ]
 
 [[package]]
@@ -5808,9 +5814,9 @@ checksum = "3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4"
 
 [[package]]
 name = "jiff"
-version = "0.2.41"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcefdcefac59ac8f8401852e3427d55610481fc41e6625c39bac62d2d771623a"
+checksum = "c5e77cbfb9fff4798e283c2d69dff39fc2c45e7da017e5ce95b654e46ea41236"
 dependencies = [
  "jiff-core",
  "jiff-static",
@@ -5824,36 +5830,36 @@ dependencies = [
 
 [[package]]
 name = "jiff-core"
-version = "0.1.4"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77a24020db0ee88d1c681d677681bd31f9f4ea189a455425223d52ce4f1508aa"
+checksum = "b6b46a105a9874634dd96231021526bf24ca04955a5998c59a9c7666e634b7b8"
 dependencies = [
  "log",
 ]
 
 [[package]]
 name = "jiff-static"
-version = "0.2.41"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "203edf9b0ce4083ec8fbf4adc823eac89768ea994b4953fc0dab1b90083234dd"
+checksum = "e9067a0b23e5be3147d56b2dcf652b18e6b1364caca93fb157653b6fbcab23a9"
 dependencies = [
  "jiff-core",
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.10",
 ]
 
 [[package]]
 name = "jiff-tzdb"
-version = "0.1.9"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa8377070c6bae868759445e5a77f66d84f0b72f3a054bfb00e6d038b8282da7"
+checksum = "12e71a1b68a875a44a33bb7a1dd84392cb77145a3367a552a3cfe6a4f5cf3afc"
 
 [[package]]
 name = "jiff-tzdb-platform"
-version = "0.1.3"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875a5a69ac2bab1a891711cf5eccbec1ce0341ea805560dcd90b7a2e925132e8"
+checksum = "dc65b284afcfa8f6cf189c7274c805505314a7ab975c60e1f548bff56525420e"
 dependencies = [
  "jiff-tzdb",
 ]
@@ -6414,13 +6420,13 @@ dependencies = [
 
 [[package]]
 name = "markup5ever"
-version = "0.38.0"
+version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8983d30f2915feeaaab2d6babdd6bc7e9ed1a00b66b5e6d74df19aa9c0e91862"
+checksum = "0ab3dc68ac4a0f5719e560136778c1ee716e296030d75dbd4484e37e39e3a842"
 dependencies = [
  "log",
  "tendril 0.5.1",
- "web_atoms",
+ "web_atoms 0.3.0",
 ]
 
 [[package]]
@@ -6432,19 +6438,7 @@ dependencies = [
  "html5ever 0.27.0",
  "markup5ever 0.12.1",
  "tendril 0.4.3",
- "xml5ever 0.18.1",
-]
-
-[[package]]
-name = "markup5ever_rcdom"
-version = "0.38.0+unofficial"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "333171ccdf66e915257740d44e38ea5b1b19ce7b45d33cc35cb6f118fbd981ff"
-dependencies = [
- "html5ever 0.38.0",
- "markup5ever 0.38.0",
- "tendril 0.5.1",
- "xml5ever 0.38.0",
+ "xml5ever",
 ]
 
 [[package]]
@@ -6862,6 +6856,18 @@ dependencies = [
  "cfg_aliases 0.2.2",
  "libc",
  "memoffset",
+]
+
+[[package]]
+name = "nix"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77730ed34f01f4990cb2ea67fec715ecebc6fab9a6396cf83c5529b13f581bdc"
+dependencies = [
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases 0.2.2",
+ "libc",
 ]
 
 [[package]]
@@ -8026,6 +8032,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "phf_codegen"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41b585a510fb76fdebead6897982ef2a03a21d8e6cbcca904999742a4afc6ffe"
+dependencies = [
+ "phf_generator 0.14.0",
+ "phf_shared 0.14.0",
+]
+
+[[package]]
 name = "phf_generator"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8483,9 +8499,9 @@ dependencies = [
 
 [[package]]
 name = "qrcode"
-version = "0.14.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+checksum = "ace1a365f55004297f2cf24acfd96d02966246ca423385273b58a7dc873ee14d"
 
 [[package]]
 name = "quantette"
@@ -10522,6 +10538,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "string_cache"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffa8a5dbe8b3f0bbe29d4c3225daafaeead63afdc1b65fc4c01a1384166038e6"
+dependencies = [
+ "new_debug_unreachable",
+ "parking_lot",
+ "phf_shared 0.14.0",
+ "precomputed-hash",
+]
+
+[[package]]
 name = "string_cache_codegen"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10541,6 +10569,18 @@ checksum = "585635e46db231059f76c5849798146164652513eb9e8ab2685939dd90f29b69"
 dependencies = [
  "phf_generator 0.13.1",
  "phf_shared 0.13.1",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "string_cache_codegen"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "928dcdf75e47626b3617a976ec205d9f057584c371c1f23b782129268d0e6edc"
+dependencies = [
+ "phf_generator 0.14.0",
+ "phf_shared 0.14.0",
  "proc-macro2",
  "quote",
 ]
@@ -10637,7 +10677,7 @@ dependencies = [
  "url",
  "void",
  "walkdir",
- "web_atoms",
+ "web_atoms 0.2.6",
 ]
 
 [[package]]
@@ -12029,22 +12069,22 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vix-acp"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "vix-action-catalog"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-affix"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-ai-core"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "keyring-core",
  "serde_json",
@@ -12053,32 +12093,32 @@ dependencies = [
 
 [[package]]
 name = "vix-ai-diff"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "similar",
 ]
 
 [[package]]
 name = "vix-ai-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-greedy-wrap",
 ]
 
 [[package]]
 name = "vix-align"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-ascii-character-picker"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-authority"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "ignore",
  "sha2 0.11.1",
@@ -12087,11 +12127,11 @@ dependencies = [
 
 [[package]]
 name = "vix-base-tool"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-base16"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-hex-rgb",
  "vix-theme-model",
@@ -12099,18 +12139,18 @@ dependencies = [
 
 [[package]]
 name = "vix-base64-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "base64 0.23.1",
 ]
 
 [[package]]
 name = "vix-bottom-dock"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-bui"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "blenderui",
  "clap",
@@ -12128,18 +12168,18 @@ dependencies = [
 
 [[package]]
 name = "vix-byte-size"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-calculator-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "evalexpr",
 ]
 
 [[package]]
 name = "vix-calendar-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "jiff",
  "rust-i18n",
@@ -12148,15 +12188,15 @@ dependencies = [
 
 [[package]]
 name = "vix-capped-stack"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-case"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-checksum-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "crc32fast",
  "md-5 0.11.0",
@@ -12165,18 +12205,18 @@ dependencies = [
 
 [[package]]
 name = "vix-choice-list"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-civil-date"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-clipboard"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -12185,7 +12225,7 @@ dependencies = [
 
 [[package]]
 name = "vix-clock-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "jiff",
  "vix-time-zone-model",
@@ -12193,11 +12233,11 @@ dependencies = [
 
 [[package]]
 name = "vix-color-converter-tool"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-column-view"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-input",
  "vix-org",
@@ -12205,35 +12245,35 @@ dependencies = [
 
 [[package]]
 name = "vix-conflict-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-contact-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-convert-from-csv-into-json-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
 name = "vix-convert-from-csv-into-tsv-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
 name = "vix-convert-from-html-into-markdown-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "htmd",
  "vix-convert-tabular",
@@ -12241,14 +12281,14 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-json-into-csv-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
 name = "vix-convert-from-json-into-toml-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "toml 1.2.1+spec-1.1.0",
@@ -12257,14 +12297,14 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-json-into-tsv-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
 name = "vix-convert-from-json-into-yaml-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "serde_norway",
@@ -12273,7 +12313,7 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-markdown-into-html-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "pulldown-cmark",
  "vix-convert-tabular",
@@ -12281,7 +12321,7 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-toml-into-json-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "toml 1.2.1+spec-1.1.0",
@@ -12290,21 +12330,21 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-tsv-into-csv-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
 name = "vix-convert-from-tsv-into-json-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-convert-tabular",
 ]
 
 [[package]]
 name = "vix-convert-from-yaml-into-json-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "serde_norway",
@@ -12313,14 +12353,14 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-tabular"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "vix-coverage"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "regex",
  "vix-authority",
@@ -12328,7 +12368,7 @@ dependencies = [
 
 [[package]]
 name = "vix-dap"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "bitflags 2.13.2",
  "serde_json",
@@ -12339,7 +12379,7 @@ dependencies = [
 
 [[package]]
 name = "vix-db"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "confy",
  "futures-util",
@@ -12362,14 +12402,14 @@ dependencies = [
 
 [[package]]
 name = "vix-diff-view"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "similar",
 ]
 
 [[package]]
 name = "vix-doctor"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "rust-i18n",
  "vix-i18n",
@@ -12379,7 +12419,7 @@ dependencies = [
 
 [[package]]
 name = "vix-edit-bytes"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-capped-stack",
  "vix-input",
@@ -12388,7 +12428,7 @@ dependencies = [
 
 [[package]]
 name = "vix-edit-outline"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-capped-stack",
  "vix-input",
@@ -12397,7 +12437,7 @@ dependencies = [
 
 [[package]]
 name = "vix-edit-sql"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-capped-stack",
  "vix-input",
@@ -12406,7 +12446,7 @@ dependencies = [
 
 [[package]]
 name = "vix-edit-table"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-capped-stack",
  "vix-convert-tabular",
@@ -12415,7 +12455,7 @@ dependencies = [
 
 [[package]]
 name = "vix-edit-value"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "serde_norway",
@@ -12426,7 +12466,7 @@ dependencies = [
 
 [[package]]
 name = "vix-editor"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "bitflags 2.13.2",
  "ratatui",
@@ -12443,7 +12483,7 @@ dependencies = [
 
 [[package]]
 name = "vix-editor-core"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "bitflags 2.13.2",
@@ -12468,7 +12508,7 @@ dependencies = [
 
 [[package]]
 name = "vix-editorconfig"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "regex",
  "vix-authority",
@@ -12476,7 +12516,7 @@ dependencies = [
 
 [[package]]
 name = "vix-egui"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "clap",
  "eframe",
@@ -12493,11 +12533,11 @@ dependencies = [
 
 [[package]]
 name = "vix-emmet"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-encoding"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -12505,7 +12545,7 @@ dependencies = [
 
 [[package]]
 name = "vix-fhir"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -12515,7 +12555,7 @@ dependencies = [
 
 [[package]]
 name = "vix-file-browser-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-authority",
  "vix-list-state",
@@ -12524,7 +12564,7 @@ dependencies = [
 
 [[package]]
 name = "vix-file-information-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "rust-i18n",
  "vix-byte-size",
@@ -12535,18 +12575,21 @@ dependencies = [
 
 [[package]]
 name = "vix-fileops"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
+ "confy",
+ "etcetera 0.11.0",
  "globset",
  "jiff",
- "nix 0.31.3",
+ "nix 0.32.0",
+ "serde",
  "trash",
  "vix-encoding",
 ]
 
 [[package]]
 name = "vix-find-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "bitflags 2.13.2",
  "regex",
@@ -12554,7 +12597,7 @@ dependencies = [
 
 [[package]]
 name = "vix-format-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "serde_norway",
@@ -12564,7 +12607,7 @@ dependencies = [
 
 [[package]]
 name = "vix-git"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "similar",
  "vix-authority",
@@ -12574,7 +12617,7 @@ dependencies = [
 
 [[package]]
 name = "vix-git-graph"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-authority",
  "vix-list-state",
@@ -12582,7 +12625,7 @@ dependencies = [
 
 [[package]]
 name = "vix-gpui"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "clap",
  "gpui-kit",
@@ -12596,11 +12639,11 @@ dependencies = [
 
 [[package]]
 name = "vix-greedy-wrap"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-gtk4"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "cairo-rs",
  "clap",
@@ -12615,25 +12658,25 @@ dependencies = [
 
 [[package]]
 name = "vix-hex-rgb"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-hl7"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-html-character-picker"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-http-client"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",
@@ -12646,7 +12689,7 @@ dependencies = [
 
 [[package]]
 name = "vix-i18n"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "rust-i18n",
  "rust-i18n-support",
@@ -12655,7 +12698,7 @@ dependencies = [
 
 [[package]]
 name = "vix-iced"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "clap",
  "iced",
@@ -12671,7 +12714,7 @@ dependencies = [
 
 [[package]]
 name = "vix-im"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -12679,7 +12722,7 @@ dependencies = [
 
 [[package]]
 name = "vix-im-irc"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "base64 0.23.1",
  "rustls",
@@ -12690,7 +12733,7 @@ dependencies = [
 
 [[package]]
 name = "vix-im-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-im",
  "vix-input",
@@ -12699,7 +12742,7 @@ dependencies = [
 
 [[package]]
 name = "vix-input"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "bitflags 2.13.2",
  "crossterm",
@@ -12707,7 +12750,7 @@ dependencies = [
 
 [[package]]
 name = "vix-jwt-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "base64 0.23.1",
  "serde_json",
@@ -12715,11 +12758,11 @@ dependencies = [
 
 [[package]]
 name = "vix-keybinding-editor-panel"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-keybindings"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "toml 1.2.1+spec-1.1.0",
@@ -12727,15 +12770,15 @@ dependencies = [
 
 [[package]]
 name = "vix-keyboard-shortcut-panel"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-keymap-model"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-large-file"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "memchr",
  "vix-input",
@@ -12743,7 +12786,7 @@ dependencies = [
 
 [[package]]
 name = "vix-left-dock"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "regex",
  "vix-authority",
@@ -12752,22 +12795,22 @@ dependencies = [
 
 [[package]]
 name = "vix-list-state"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-locale-model"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "unicode-bidi",
 ]
 
 [[package]]
 name = "vix-lorem"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-lsp"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "vix-authority",
@@ -12778,7 +12821,7 @@ dependencies = [
 
 [[package]]
 name = "vix-lsp-core"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "globset",
  "serde_json",
@@ -12786,7 +12829,7 @@ dependencies = [
 
 [[package]]
 name = "vix-macros"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "toml 1.2.1+spec-1.1.0",
@@ -12796,7 +12839,7 @@ dependencies = [
 
 [[package]]
 name = "vix-markdown-preview"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "pulldown-cmark",
  "vix-outline-panel",
@@ -12804,7 +12847,7 @@ dependencies = [
 
 [[package]]
 name = "vix-matrix-protocol"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -12813,7 +12856,7 @@ dependencies = [
 
 [[package]]
 name = "vix-mcp-server"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "vix-conflict-tool",
@@ -12825,14 +12868,14 @@ dependencies = [
 
 [[package]]
 name = "vix-media-type"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-menu"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "rust-i18n",
  "vix-i18n",
@@ -12843,25 +12886,26 @@ dependencies = [
 
 [[package]]
 name = "vix-modal"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-textops",
 ]
 
 [[package]]
 name = "vix-nerd-font-picker"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-oci"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
+ "vix-civil-date",
 ]
 
 [[package]]
 name = "vix-oci-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-input",
  "vix-list-state",
@@ -12870,7 +12914,7 @@ dependencies = [
 
 [[package]]
 name = "vix-org"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "bitflags 2.13.2",
  "regex",
@@ -12879,32 +12923,32 @@ dependencies = [
 
 [[package]]
 name = "vix-org-capture"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-settings",
 ]
 
 [[package]]
 name = "vix-org-contacts"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-org-table"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "evalexpr",
 ]
 
 [[package]]
 name = "vix-outline-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-palette"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "regex",
  "rust-i18n",
@@ -12913,11 +12957,11 @@ dependencies = [
 
 [[package]]
 name = "vix-pomodoro-tool"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-project-env"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -12926,21 +12970,21 @@ dependencies = [
 
 [[package]]
 name = "vix-qr-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "qrcode",
 ]
 
 [[package]]
 name = "vix-regex-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "vix-review"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -12950,18 +12994,18 @@ dependencies = [
 
 [[package]]
 name = "vix-right-dock"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-roam"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "vix-script"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "jiff",
  "rhai",
@@ -12974,7 +13018,7 @@ dependencies = [
 
 [[package]]
 name = "vix-session"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "confy",
  "serde",
@@ -12984,10 +13028,9 @@ dependencies = [
 
 [[package]]
 name = "vix-settings"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "confy",
- "etcetera 0.11.0",
  "serde",
  "toml 1.2.1+spec-1.1.0",
  "vix-fileops",
@@ -12995,7 +13038,7 @@ dependencies = [
 
 [[package]]
 name = "vix-settings-bundle"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -13006,7 +13049,7 @@ dependencies = [
 
 [[package]]
 name = "vix-slint"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "clap",
  "image",
@@ -13022,11 +13065,11 @@ dependencies = [
 
 [[package]]
 name = "vix-snippet-tool"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-snippets"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde_json",
  "vix-list-state",
@@ -13036,22 +13079,22 @@ dependencies = [
 
 [[package]]
 name = "vix-spellcheck"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "spellbook",
 ]
 
 [[package]]
 name = "vix-status-bar-panel"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-structural-replace"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-system-information-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "rust-i18n",
  "sysinfo 0.40.1",
@@ -13062,11 +13105,11 @@ dependencies = [
 
 [[package]]
 name = "vix-tags"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-tasks"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "regex",
  "serde",
@@ -13078,7 +13121,7 @@ dependencies = [
 
 [[package]]
 name = "vix-terminal"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "portable-pty",
@@ -13089,11 +13132,11 @@ dependencies = [
 
 [[package]]
 name = "vix-test-runner"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-text-information-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "rust-i18n",
  "vix-i18n",
@@ -13101,11 +13144,11 @@ dependencies = [
 
 [[package]]
 name = "vix-textops"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-theme"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "ratatui",
  "vix-theme-model",
@@ -13113,7 +13156,7 @@ dependencies = [
 
 [[package]]
 name = "vix-theme-editor-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
  "vix-theme-model",
@@ -13121,7 +13164,7 @@ dependencies = [
 
 [[package]]
 name = "vix-theme-model"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "ratatui",
  "serde",
@@ -13130,11 +13173,11 @@ dependencies = [
 
 [[package]]
 name = "vix-time-zone-model"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-todo-tree"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
  "vix-textops",
@@ -13142,7 +13185,7 @@ dependencies = [
 
 [[package]]
 name = "vix-tui"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "apple-native-keyring-store",
  "bitflags 2.13.2",
@@ -13154,7 +13197,7 @@ dependencies = [
  "jiff",
  "keyring-core",
  "mimalloc",
- "nix 0.31.3",
+ "nix 0.32.0",
  "ratatui",
  "ratatui-image",
  "regex",
@@ -13310,11 +13353,11 @@ dependencies = [
 
 [[package]]
 name = "vix-tutor"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-undo-store"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -13327,32 +13370,32 @@ dependencies = [
 
 [[package]]
 name = "vix-undo-tree-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-unit-converter-tool"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-url-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "percent-encoding",
 ]
 
 [[package]]
 name = "vix-uuid-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "uuid",
 ]
 
 [[package]]
 name = "vix-vcard-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
  "vix-vcard-parser",
@@ -13360,18 +13403,18 @@ dependencies = [
 
 [[package]]
 name = "vix-vcard-parser"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-welcome-panel"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-greedy-wrap",
 ]
 
 [[package]]
 name = "vix-workspace"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "toml 1.2.1+spec-1.1.0",
@@ -13380,11 +13423,11 @@ dependencies = [
 
 [[package]]
 name = "vix-workspace-dashboard-panel"
-version = "2.1.0"
+version = "3.0.0"
 
 [[package]]
 name = "vix-workspace-search"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "bitflags 2.13.2",
  "regex",
@@ -13396,14 +13439,14 @@ dependencies = [
 
 [[package]]
 name = "vix-x11-color-picker"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-zgui"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "clap",
  "ratatui",
@@ -13417,7 +13460,7 @@ dependencies = [
 
 [[package]]
 name = "vix-zid-tool"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "getrandom 0.4.3",
 ]
@@ -13794,6 +13837,18 @@ dependencies = [
  "phf_codegen 0.13.1",
  "string_cache 0.9.0",
  "string_cache_codegen 0.6.1",
+]
+
+[[package]]
+name = "web_atoms"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7572660c8890448ba236b7376f27e389c6a7e1c70195622faced601f855c0ada"
+dependencies = [
+ "phf 0.14.0",
+ "phf_codegen 0.14.0",
+ "string_cache 0.11.0",
+ "string_cache_codegen 0.11.2",
 ]
 
 [[package]]
@@ -15301,16 +15356,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "xml5ever"
-version = "0.38.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3dc9559429edf0cd3f327cc0afd9d6b36fa8cec6d93107b7fbe64f806b5f2d9"
-dependencies = [
- "log",
- "markup5ever 0.38.0",
-]
-
-[[package]]
 name = "xmlwriter"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15845,7 +15890,7 @@ dependencies = [
  "stylo_atoms",
  "stylo_dom",
  "tracing",
- "web_atoms",
+ "web_atoms 0.2.6",
  "zgui-arena",
  "zgui-bits",
  "zgui-geom",

@@ -23,6 +23,23 @@
 use regex::{Captures, Regex};
 use std::sync::LazyLock;
 
+/// `a + b`, or `i64::MAX` when the sum does not fit: a nesting depth that large
+/// is past any real file, and stays "deeper than anything".
+fn add_or_i64(a: i64, b: i64) -> i64 {
+    a.checked_add(b).unwrap_or(i64::MAX)
+}
+
+/// `a - b`, or `i64::MIN` when the difference does not fit.
+fn sub_or_i64(a: i64, b: i64) -> i64 {
+    a.checked_sub(b).unwrap_or(i64::MIN)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// The test found by [`test_at_point`]: its name and the shell command that
 /// runs just that one test.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,13 +147,11 @@ fn scan_upward<'a>(
     cursor_line: usize,
     re: &Regex,
 ) -> Option<(usize, Captures<'a>)> {
-    if lines.is_empty() {
-        return None;
-    }
-    let start = cursor_line.min(lines.len() - 1);
+    let last = lines.len().checked_sub(1)?;
+    let start = cursor_line.min(last);
     (0..=start)
         .rev()
-        .find_map(|i| re.captures(lines[i]).map(|c| (i, c)))
+        .find_map(|i| re.captures(lines.get(i)?).map(|c| (i, c)))
 }
 
 /// The first non-empty capture group among `indices`, as an owned `String`
@@ -165,14 +180,15 @@ fn dir_of(path: &str) -> &str {
 /// that, never the bare function name).
 fn rust_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     let (attr_line, _) = scan_upward(lines, cursor_line, &RUST_TEST_ATTR)?;
-    let name = lines[attr_line..]
+    let name = lines
+        .get(attr_line..)?
         .iter()
         .find_map(|line| RUST_FN_NAME.captures(line))?
         .get(1)?
         .as_str()
         .to_string();
     let mut segments = rust_file_module(path);
-    segments.extend(rust_inline_modules(&lines[..attr_line]));
+    segments.extend(rust_inline_modules(lines.get(..attr_line)?));
     segments.push(name.clone());
     Some(TestMatch {
         command: format!("cargo test -- --exact {}", segments.join("::")),
@@ -213,8 +229,11 @@ fn rust_inline_modules(lines: &[&str]) -> Vec<String> {
         if let Some(caps) = RUST_MOD_OPEN.captures(line) {
             open.push((caps[1].to_string(), before));
         }
-        depth += i64::try_from(line.matches('{').count()).unwrap_or(0);
-        depth -= i64::try_from(line.matches('}').count()).unwrap_or(0);
+        // Braces on one line are counted in `usize`; a count past `i64` is not a line of code.
+        let opens = i64::try_from(line.matches('{').count()).unwrap_or(i64::MAX);
+        let closes = i64::try_from(line.matches('}').count()).unwrap_or(i64::MAX);
+        depth = add_or_i64(depth, opens);
+        depth = sub_or_i64(depth, closes);
         while open.last().is_some_and(|(_, at)| *at >= depth) {
             open.pop();
         }
@@ -287,7 +306,7 @@ fn ruby_test_at_point(
 fn elixir_test_at_point(path: &str, lines: &[&str], cursor_line: usize) -> Option<TestMatch> {
     let (line_idx, caps) = scan_upward(lines, cursor_line, &ELIXIR_TEST_CALL)?;
     let name = caps[1].to_string();
-    let line_number = line_idx + 1;
+    let line_number = add_or(line_idx, 1, usize::MAX);
     Some(TestMatch {
         command: format!("mix test {path}:{line_number}"),
         name,
@@ -392,10 +411,10 @@ pub fn tests_in_file(
             continue;
         }
         let name_line = if file_extension == "rs" {
-            let Some(off) = lines[i..].iter().position(|l| RUST_FN_NAME.is_match(l)) else {
+            let Some(off) = lines.iter().skip(i).position(|l| RUST_FN_NAME.is_match(l)) else {
                 continue;
             };
-            i + off
+            add_or(i, off, usize::MAX)
         } else {
             i
         };
@@ -644,5 +663,65 @@ mod tests {
                 vec![]
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn names(ext: &str, text: &str, hint: TestFrameworkHint) -> Vec<(usize, String)> {
+        let lines: Vec<&str> = text.lines().collect();
+        tests_in_file(ext, "t", &lines, hint)
+            .into_iter()
+            .map(|(l, m)| (l, m.name))
+            .collect()
+    }
+
+    #[test]
+    fn tests_in_file_covers_every_supported_language() {
+        let u = TestFrameworkHint::Unknown;
+        assert_eq!(
+            names("go", "func helper() {}\nfunc TestA(t *testing.T) {}\n", u),
+            [(1, "TestA".to_string())]
+        );
+        assert_eq!(
+            names(
+                "ts",
+                "describe('suite', () => {\n  it('works', () => {})\n})\n",
+                u
+            ),
+            [(0, "suite".to_string()), (1, "works".to_string())]
+        );
+        assert_eq!(
+            names("jsx", "test(\"x\", () => {})\n", u),
+            [(0, "x".to_string())]
+        );
+        assert_eq!(
+            names(
+                "rb",
+                "describe 'thing' do\n  it 'does' do\n",
+                TestFrameworkHint::RubyRspec
+            ),
+            [(0, "thing".to_string()), (1, "does".to_string())]
+        );
+        assert_eq!(
+            names("rb", "def test_a\nend\n", TestFrameworkHint::RubyMinitest),
+            [(0, "test_a".to_string())]
+        );
+        assert_eq!(
+            names("exs", "  test \"adds up\" do\n  end\n", u),
+            [(0, "adds up".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_rust_test_attribute_without_a_following_fn_is_skipped() {
+        let found = names(
+            "rs",
+            "#[test]\n// no function follows\n",
+            TestFrameworkHint::Unknown,
+        );
+        assert_eq!(found, []);
     }
 }

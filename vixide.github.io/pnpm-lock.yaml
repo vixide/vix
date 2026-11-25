@@ -15,39 +15,39 @@ importers:
   .:
     dependencies:
       '@lilydesignsystem/svelte-headless':
-        specifier: ^0.11.0
-        version: 0.11.0(svelte@5.58.0)
+        specifier: ^0.13.1
+        version: 0.13.1(svelte@5.59.1)
       '@lilydesignsystem/svelte-picker-bar':
-        specifier: ^0.7.0
-        version: 0.7.0(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
+        specifier: ^0.9.0
+        version: 0.9.0(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
       '@lilydesignsystem/svelte-share-picker':
         specifier: ^0.3.2
-        version: 0.3.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
+        version: 0.3.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
       '@lilydesignsystem/svelte-theme-picker':
         specifier: ^0.4.0
-        version: 0.4.0(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
+        version: 0.4.0(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
       '@lilydesignsystem/themes':
-        specifier: ^0.6.2
-        version: 0.6.2
+        specifier: ^0.8.0
+        version: 0.8.0
     devDependencies:
       '@sveltejs/adapter-static':
         specifier: ^4.0.1
-        version: 4.0.1(@sveltejs/kit@3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.58.0)(vite@8.3.8))(svelte@5.58.0)(typescript@6.0.3)(vite@8.3.8))
+        version: 4.0.1(@sveltejs/kit@3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.59.1)(vite@8.3.8))(svelte@5.59.1)(typescript@6.0.3)(vite@8.3.8))
       '@sveltejs/kit':
         specifier: ^3.4.0
-        version: 3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.58.0)(vite@8.3.8))(svelte@5.58.0)(typescript@6.0.3)(vite@8.3.8)
+        version: 3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.59.1)(vite@8.3.8))(svelte@5.59.1)(typescript@6.0.3)(vite@8.3.8)
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.3.1
-        version: 7.3.1(svelte@5.58.0)(vite@8.3.8)
+        version: 7.3.1(svelte@5.59.1)(vite@8.3.8)
       svelte:
-        specifier: ^5.58.0
-        version: 5.58.0
+        specifier: ^5.59.1
+        version: 5.59.1
       svelte-check:
         specifier: ^4.7.8
-        version: 4.7.8(picomatch@4.0.7)(svelte@5.58.0)(typescript@6.0.3)
+        version: 4.7.8(picomatch@4.0.7)(svelte@5.59.1)(typescript@6.0.3)
       syncpack:
-        specifier: ^15.3.3
-        version: 15.3.3
+        specifier: ^15.3.4
+        version: 15.3.4
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -82,8 +82,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@lilydesignsystem/svelte-headless@0.11.0':
-    resolution: {integrity: sha512-7CXWeVNLPa43rULv8YVtmaXBHIKuMX5IITUlUbSKZDiy7Iv7ZXzQdr8MimyBgfAz4rD80XmJSbqjozsC0qupBg==}
+  '@lilydesignsystem/svelte-headless@0.13.1':
+    resolution: {integrity: sha512-Ye3CIn6zAiFSFPlgxtwnYW6oud/nhDknL2SxusEsokMy6zusWFNc5TtMrtKkOhR7HwwvoXv7OlKQyoXMHONlTQ==}
     engines: {node: '>=26'}
     peerDependencies:
       svelte: ^5.0.0
@@ -102,8 +102,8 @@ packages:
       '@lilydesignsystem/svelte-headless': '>=0.4.0 <1.0.0'
       svelte: ^5.0.0
 
-  '@lilydesignsystem/svelte-picker-bar@0.7.0':
-    resolution: {integrity: sha512-XCrtCojh2Zp0ZUo/8CUDbNZeGFlS0+XzbbvyhKrWYN7UqhSpYfFd69DKZT4KHJdlDjdtI+QBOaoVyWk6xjrpEw==}
+  '@lilydesignsystem/svelte-picker-bar@0.9.0':
+    resolution: {integrity: sha512-3obkTUNxkwo6XdCJdCSzJ5glHzw3yZXkbmEkT0deoYNQaizT/7zcxtWBEVTb3O+r+RYv50V56NEhM2QSPWKNyA==}
     engines: {node: '>=26'}
     peerDependencies:
       '@lilydesignsystem/svelte-headless': '>=0.4.0 <1.0.0'
@@ -144,8 +144,8 @@ packages:
       '@lilydesignsystem/svelte-headless': '>=0.4.0 <1.0.0'
       svelte: ^5.0.0
 
-  '@lilydesignsystem/themes@0.6.2':
-    resolution: {integrity: sha512-FqAOSVlouio6+KUZjfSN9duPMMAu0y0/e+2v1ya/7gBJMzrS2DoW1+OMOvwDe9TA014xMyqmaWoUgM/6QNcnAg==}
+  '@lilydesignsystem/themes@0.8.0':
+    resolution: {integrity: sha512-HhHMU0AE/DOtzDgX6qgSA/p2IO/08G8I+ftQQSFkE2TlWXwtIve8b4MbJ7gEGMhOYHkSTnKGfQp7dawsqIidcQ==}
     engines: {node: '>=26'}
 
   '@napi-rs/wasm-runtime@1.2.6':
@@ -507,9 +507,9 @@ packages:
     resolution: {integrity: sha512-2wcC/oGxHis/BoHkkPwldgiPSYcpZK3JU28WoMVv55yHJgcZ8rlXvuG9iZggz+sU1d4bRgIGASwyWqjxu3FM0g==}
     engines: {node: '>=18'}
 
-  source-map-js@1.2.3:
-    resolution: {integrity: sha512-xj+WrAkyv5Qp+t7r9N5HvCBu7g1qOe6CKRNpq22X1GGcPEQADFU54v5qsPVs3/vrUFQ7XivFrcAVKA2stI0kWA==}
-    engines: {node: '>=0.10.0'}
+  source-map-js@1.2.4:
+    resolution: {integrity: sha512-J7ZjMvHd9O1fcT/5V09QWaaSl2BbWx3F6O08spde82Namf9UB0GxRVIPiNbVsdKkoizHiSpTodo3vp2bAy91MA==}
+    engines: {node: '>=6.0.0'}
 
   svelte-check@4.7.8:
     resolution: {integrity: sha512-laZ49GFHZ3b0z2PWinJWL0syehc/PTR8aHaUaTiBkWJ+4Y38nhxjmXsSz7CbGa3VdKopViVbrBH3bGNqIAI0bQ==}
@@ -519,52 +519,52 @@ packages:
       svelte: ^4.0.0 || ^5.0.0-next.0
       typescript: ^5.0.0 || ^6.0.0
 
-  svelte@5.58.0:
-    resolution: {integrity: sha512-rOMKTD9WP2C6ahWDmntey4p+JqUxtup1w9G3KdVuTbNGHi5u97iMw0CIc8a+F5rZtiH7x98kVniDlBRRR5e98w==}
+  svelte@5.59.1:
+    resolution: {integrity: sha512-ADG20W/jYSQut/79AavRRfbXQYebFKMVWT/xAbjVVZfZA4XzIoFfcpanEfYTyN+uWQUaPP+nstFx4qVKwEVnQQ==}
     engines: {node: '>=18'}
 
-  syncpack-darwin-arm64@15.3.3:
-    resolution: {integrity: sha512-sFnHOUT7ZYShxAXfzK8zIxNvY5ciW6c71fHYOJIgZ8Ry25IMWkaGfyLc894wxIPaYTbgEmeeZN6BV7G5Gu27mA==}
+  syncpack-darwin-arm64@15.3.4:
+    resolution: {integrity: sha512-hkajipwYSSS6ngwfBOR5ei3ObZ0sE9Qb1VWpR/m+PF8s8OMUc0icxhCH8u5Ctz04vFBKh/vcPuKoiH3V2fff8w==}
     cpu: [arm64]
     os: [darwin]
 
-  syncpack-darwin-x64@15.3.3:
-    resolution: {integrity: sha512-gtWysFMwG3W8ieF8+aLMy1qVkehdy40hc02LGEjckmejZxtjDbTKE9vDhBAaXcLbqIsvQ1ImEymHU5N2I4llWQ==}
+  syncpack-darwin-x64@15.3.4:
+    resolution: {integrity: sha512-FrxMjCH5pFPQTGxYJkrONkiea+VFyv/WmBUAeYI7VZ+yE8RJQIE0DU7jz1x803+boksIbIjARiAes8E+p5v9LQ==}
     cpu: [x64]
     os: [darwin]
 
-  syncpack-linux-arm64-musl@15.3.3:
-    resolution: {integrity: sha512-mvj6TGhdwO5bHo1cM638esCx9+7ur0BA+RTdg+YiOD/CZJMP8iMj6ruF8htFNPEOKpAEOmfkOVKNs4yCbvkgyQ==}
+  syncpack-linux-arm64-musl@15.3.4:
+    resolution: {integrity: sha512-HswAwaVtFUw/DpC6cmZzN64/J538LWqypMekesTpTKjapMy53zHqe1j9mnx/0vSMePZUfvg588p8kOp9yQV+KQ==}
     cpu: [arm64]
     os: [linux]
 
-  syncpack-linux-arm64@15.3.3:
-    resolution: {integrity: sha512-6hlHPrG+V457fpKEURqshNLaFQENkC416IZ4ngFY+2uBjFsmlA7ax4p4EJlFsxuHiQbx/4Yo27pVXmNJEs/bZQ==}
+  syncpack-linux-arm64@15.3.4:
+    resolution: {integrity: sha512-dD7fevAPTb+LCtwJqxKO1E9P6cnty6XwGy0EllFAdporJgKwdJ25CJXNhlTC9A4wbjjk+FJHPrqo+0r0eLWB6A==}
     cpu: [arm64]
     os: [linux]
 
-  syncpack-linux-x64-musl@15.3.3:
-    resolution: {integrity: sha512-7KHIb9b9VCSyQq2GwoshVU9Pt/2qCqhOPusuwkXadI+p1qW7fK5FukjZbG0Y4VRa6mszrD2W28OxWAswwrn1lQ==}
+  syncpack-linux-x64-musl@15.3.4:
+    resolution: {integrity: sha512-E0lvelfYwCNtP8rGeq3Fj26NFS+MibjtUQSxsProUCCS7/9XV61Lo5ptx2zD2ux2rSpiBdLzPT5vGJ1mpj49bA==}
     cpu: [x64]
     os: [linux]
 
-  syncpack-linux-x64@15.3.3:
-    resolution: {integrity: sha512-DcnZPKFGEFoktzIrufGGwk2ARTEhlvII6yQsETCaO/Z1xagOjJquxiDvagKnb4GQsQQCuih2ouzQZFCiKImrXA==}
+  syncpack-linux-x64@15.3.4:
+    resolution: {integrity: sha512-Ep7jAeFwS5GUTzeb981ixsPiPoHjzKE6YBT0WriyfB21Tg2z1qaFHZrShAYALjOL31BMH8MCJHvZUAblwAt41Q==}
     cpu: [x64]
     os: [linux]
 
-  syncpack-windows-arm64@15.3.3:
-    resolution: {integrity: sha512-6pPWh3+uTO7g1FF8ugC+UqektaNXphdmDXqG3rWepFdCS+DrWj/7Gfbtlx/zISTdx//T7zoZZ2fvW4fzN/6ztQ==}
+  syncpack-windows-arm64@15.3.4:
+    resolution: {integrity: sha512-UcB72GOXMPogye2gswk/Z3cXuWvYZMLbaZpScLddUUvsmU5gNkJge6KUFCvhi5EO6DMT7DO2uq4Qf8JJXF0z2w==}
     cpu: [arm64]
     os: [win32]
 
-  syncpack-windows-x64@15.3.3:
-    resolution: {integrity: sha512-9CrrEzXE/MdWJuxyB7JvR1b6kiTNQPZh1dDJbWiRgtpNyCbEiddM1/viOsyaufftWDrQFV6RCGQzqCvWEas45g==}
+  syncpack-windows-x64@15.3.4:
+    resolution: {integrity: sha512-nqSEAPNPMNrnQKkJXRIxLBUZkj0Uc6m9HwEuHP7mC2crlD1uxxN6ovMRTxRYPc4MOUlLGz0jKsgIVF8svK4UTw==}
     cpu: [x64]
     os: [win32]
 
-  syncpack@15.3.3:
-    resolution: {integrity: sha512-MC99meBhgc/E5xbB5mFUS99wj4bquTbKLKHLXYh3qPbmPZl2HD8KA4ls29a9Xv67oZ03isCaJaqSl+JIfXIfpA==}
+  syncpack@15.3.4:
+    resolution: {integrity: sha512-QbCyCAscOKrp1wmF1zqA1jEgsGiPNjogMVn/S5wRC9Jtvljkeq2kebWtvgzAIRl48ukEzE88uCHF0NwnNq6o/w==}
     engines: {node: '>=14.17.0'}
     hasBin: true
 
@@ -627,8 +627,8 @@ packages:
       yaml:
         optional: true
 
-  vitefu@1.1.3:
-    resolution: {integrity: sha512-ub4okH7Z5KLjb6hDyjqrGXqWtWvoYdU3IGm/NorpgHncKoLTCfRIbvlhBm7r0YstIaQRYlp4yEbFqDcKSzXSSg==}
+  vitefu@1.1.4:
+    resolution: {integrity: sha512-qbEIDswfXH3x3IYRMScl/bf1AVW0dn7Z8qkr7g7nohkusfuC7tcFa7t5EoTOz60AunosLM9sDrDjHxsX+Up+CQ==}
     peerDependencies:
       vite: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
@@ -675,59 +675,59 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.3
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0)':
+  '@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1)':
     dependencies:
       aria-query: 5.3.2
-      svelte: 5.58.0
+      svelte: 5.59.1
 
-  '@lilydesignsystem/svelte-link-picker@0.2.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)':
+  '@lilydesignsystem/svelte-link-picker@0.2.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.11.0(svelte@5.58.0)
-      svelte: 5.58.0
+      '@lilydesignsystem/svelte-headless': 0.13.1(svelte@5.59.1)
+      svelte: 5.59.1
 
-  '@lilydesignsystem/svelte-locale-picker@0.3.3(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)':
+  '@lilydesignsystem/svelte-locale-picker@0.3.3(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.11.0(svelte@5.58.0)
-      svelte: 5.58.0
+      '@lilydesignsystem/svelte-headless': 0.13.1(svelte@5.59.1)
+      svelte: 5.59.1
 
-  '@lilydesignsystem/svelte-picker-bar@0.7.0(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)':
+  '@lilydesignsystem/svelte-picker-bar@0.9.0(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.11.0(svelte@5.58.0)
-      '@lilydesignsystem/svelte-link-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
-      '@lilydesignsystem/svelte-locale-picker': 0.3.3(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
-      '@lilydesignsystem/svelte-search-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
-      '@lilydesignsystem/svelte-share-picker': 0.3.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
-      '@lilydesignsystem/svelte-text-size-picker': 0.3.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
-      '@lilydesignsystem/svelte-theme-picker': 0.4.0(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
-      '@lilydesignsystem/svelte-time-zone-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)
-      svelte: 5.58.0
+      '@lilydesignsystem/svelte-headless': 0.13.1(svelte@5.59.1)
+      '@lilydesignsystem/svelte-link-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
+      '@lilydesignsystem/svelte-locale-picker': 0.3.3(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
+      '@lilydesignsystem/svelte-search-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
+      '@lilydesignsystem/svelte-share-picker': 0.3.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
+      '@lilydesignsystem/svelte-text-size-picker': 0.3.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
+      '@lilydesignsystem/svelte-theme-picker': 0.4.0(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
+      '@lilydesignsystem/svelte-time-zone-picker': 0.2.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)
+      svelte: 5.59.1
 
-  '@lilydesignsystem/svelte-search-picker@0.2.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)':
+  '@lilydesignsystem/svelte-search-picker@0.2.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.11.0(svelte@5.58.0)
-      svelte: 5.58.0
+      '@lilydesignsystem/svelte-headless': 0.13.1(svelte@5.59.1)
+      svelte: 5.59.1
 
-  '@lilydesignsystem/svelte-share-picker@0.3.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)':
+  '@lilydesignsystem/svelte-share-picker@0.3.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.11.0(svelte@5.58.0)
-      svelte: 5.58.0
+      '@lilydesignsystem/svelte-headless': 0.13.1(svelte@5.59.1)
+      svelte: 5.59.1
 
-  '@lilydesignsystem/svelte-text-size-picker@0.3.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)':
+  '@lilydesignsystem/svelte-text-size-picker@0.3.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.11.0(svelte@5.58.0)
-      svelte: 5.58.0
+      '@lilydesignsystem/svelte-headless': 0.13.1(svelte@5.59.1)
+      svelte: 5.59.1
 
-  '@lilydesignsystem/svelte-theme-picker@0.4.0(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)':
+  '@lilydesignsystem/svelte-theme-picker@0.4.0(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.11.0(svelte@5.58.0)
-      svelte: 5.58.0
+      '@lilydesignsystem/svelte-headless': 0.13.1(svelte@5.59.1)
+      svelte: 5.59.1
 
-  '@lilydesignsystem/svelte-time-zone-picker@0.2.2(@lilydesignsystem/svelte-headless@0.11.0(svelte@5.58.0))(svelte@5.58.0)':
+  '@lilydesignsystem/svelte-time-zone-picker@0.2.2(@lilydesignsystem/svelte-headless@0.13.1(svelte@5.59.1))(svelte@5.59.1)':
     dependencies:
-      '@lilydesignsystem/svelte-headless': 0.11.0(svelte@5.58.0)
-      svelte: 5.58.0
+      '@lilydesignsystem/svelte-headless': 0.13.1(svelte@5.59.1)
+      svelte: 5.59.1
 
-  '@lilydesignsystem/themes@0.6.2': {}
+  '@lilydesignsystem/themes@0.8.0': {}
 
   '@napi-rs/wasm-runtime@1.2.6(@emnapi/core@2.0.0-beta.2)(@emnapi/runtime@2.0.0-beta.2)':
     dependencies:
@@ -800,37 +800,37 @@ snapshots:
     dependencies:
       acorn: 8.19.0
 
-  '@sveltejs/adapter-static@4.0.1(@sveltejs/kit@3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.58.0)(vite@8.3.8))(svelte@5.58.0)(typescript@6.0.3)(vite@8.3.8))':
+  '@sveltejs/adapter-static@4.0.1(@sveltejs/kit@3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.59.1)(vite@8.3.8))(svelte@5.59.1)(typescript@6.0.3)(vite@8.3.8))':
     dependencies:
-      '@sveltejs/kit': 3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.58.0)(vite@8.3.8))(svelte@5.58.0)(typescript@6.0.3)(vite@8.3.8)
+      '@sveltejs/kit': 3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.59.1)(vite@8.3.8))(svelte@5.59.1)(typescript@6.0.3)(vite@8.3.8)
 
-  '@sveltejs/kit@3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.58.0)(vite@8.3.8))(svelte@5.58.0)(typescript@6.0.3)(vite@8.3.8)':
+  '@sveltejs/kit@3.4.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.59.1)(vite@8.3.8))(svelte@5.59.1)(typescript@6.0.3)(vite@8.3.8)':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@rolldown/pluginutils': 1.1.1
       '@standard-schema/spec': 1.1.0
-      '@sveltejs/vite-plugin-svelte': 7.3.1(svelte@5.58.0)(vite@8.3.8)
+      '@sveltejs/vite-plugin-svelte': 7.3.1(svelte@5.59.1)(vite@8.3.8)
       cookie: 2.0.2
       devalue: 5.9.4
       esm-env: 1.2.2
       magic-string: 1.4.5
       mrmime: 2.0.1
       sirv: 3.0.2
-      svelte: 5.58.0
+      svelte: 5.59.1
       vite: 8.3.8
     optionalDependencies:
       typescript: 6.0.3
 
   '@sveltejs/load-config@0.2.3': {}
 
-  '@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.58.0)(vite@8.3.8)':
+  '@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.59.1)(vite@8.3.8)':
     dependencies:
       deepmerge: 4.3.1
       magic-string: 1.4.5
       obug: 2.2.1
-      svelte: 5.58.0
+      svelte: 5.59.1
       vite: 8.3.8
-      vitefu: 1.1.3(vite@8.3.8)
+      vitefu: 1.1.4(vite@8.3.8)
 
   '@tybys/wasm-util@0.10.5':
     dependencies:
@@ -953,7 +953,7 @@ snapshots:
     dependencies:
       nanoid: 3.3.20
       picocolors: 1.1.1
-      source-map-js: 1.2.3
+      source-map-js: 1.2.4
 
   readdirp@4.1.2: {}
 
@@ -989,9 +989,9 @@ snapshots:
       mrmime: 2.0.1
       totalist: 3.0.1
 
-  source-map-js@1.2.3: {}
+  source-map-js@1.2.4: {}
 
-  svelte-check@4.7.8(picomatch@4.0.7)(svelte@5.58.0)(typescript@6.0.3):
+  svelte-check@4.7.8(picomatch@4.0.7)(svelte@5.59.1)(typescript@6.0.3):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@sveltejs/load-config': 0.2.3
@@ -999,12 +999,12 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.7)
       picocolors: 1.1.1
       sade: 1.8.1
-      svelte: 5.58.0
+      svelte: 5.59.1
       typescript: 6.0.3
     transitivePeerDependencies:
       - picomatch
 
-  svelte@5.58.0:
+  svelte@5.59.1:
     dependencies:
       '@jridgewell/remapping': 2.3.5
       '@jridgewell/sourcemap-codec': 1.6.0
@@ -1024,40 +1024,40 @@ snapshots:
     transitivePeerDependencies:
       - '@typescript-eslint/types'
 
-  syncpack-darwin-arm64@15.3.3:
+  syncpack-darwin-arm64@15.3.4:
     optional: true
 
-  syncpack-darwin-x64@15.3.3:
+  syncpack-darwin-x64@15.3.4:
     optional: true
 
-  syncpack-linux-arm64-musl@15.3.3:
+  syncpack-linux-arm64-musl@15.3.4:
     optional: true
 
-  syncpack-linux-arm64@15.3.3:
+  syncpack-linux-arm64@15.3.4:
     optional: true
 
-  syncpack-linux-x64-musl@15.3.3:
+  syncpack-linux-x64-musl@15.3.4:
     optional: true
 
-  syncpack-linux-x64@15.3.3:
+  syncpack-linux-x64@15.3.4:
     optional: true
 
-  syncpack-windows-arm64@15.3.3:
+  syncpack-windows-arm64@15.3.4:
     optional: true
 
-  syncpack-windows-x64@15.3.3:
+  syncpack-windows-x64@15.3.4:
     optional: true
 
-  syncpack@15.3.3:
+  syncpack@15.3.4:
     optionalDependencies:
-      syncpack-darwin-arm64: 15.3.3
-      syncpack-darwin-x64: 15.3.3
-      syncpack-linux-arm64: 15.3.3
-      syncpack-linux-arm64-musl: 15.3.3
-      syncpack-linux-x64: 15.3.3
-      syncpack-linux-x64-musl: 15.3.3
-      syncpack-windows-arm64: 15.3.3
-      syncpack-windows-x64: 15.3.3
+      syncpack-darwin-arm64: 15.3.4
+      syncpack-darwin-x64: 15.3.4
+      syncpack-linux-arm64: 15.3.4
+      syncpack-linux-arm64-musl: 15.3.4
+      syncpack-linux-x64: 15.3.4
+      syncpack-linux-x64-musl: 15.3.4
+      syncpack-windows-arm64: 15.3.4
+      syncpack-windows-x64: 15.3.4
 
   tinyglobby@0.2.17:
     dependencies:
@@ -1081,7 +1081,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  vitefu@1.1.3(vite@8.3.8):
+  vitefu@1.1.4(vite@8.3.8):
     optionalDependencies:
       vite: 8.3.8
 

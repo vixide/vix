@@ -15,8 +15,34 @@
 //!
 //! Spec: `crates/vix-im-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_im::{CodeRef, Command, CommandError, Conversation, ConversationId, Inbox, Input};
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
+
+/// The index of the last of `len` items; with none, 0 (the declared position
+/// of an empty list).
+fn last_index(len: usize) -> usize {
+    sub_or(len, 1, 0)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// Which part of the panel has the keyboard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -129,11 +155,15 @@ impl Panel {
     /// the input and put the highlight on its newest message. Shared by every
     /// way of changing conversation so they behave identically.
     fn select_index(&mut self, inbox: &mut Inbox, at: usize) {
+        let Some(conversation) = inbox.conversations().get(at) else {
+            return;
+        };
+        let id = conversation.id.clone();
+        let newest = last_index(conversation.messages.len());
         self.selected = at;
         self.focus = Focus::Input;
-        let id = inbox.conversations()[at].id.clone();
         inbox.mark_read(&id);
-        self.message = inbox.conversations()[at].messages.len().saturating_sub(1);
+        self.message = newest;
         self.scroll = 0;
     }
 
@@ -143,8 +173,11 @@ impl Panel {
         if len == 0 {
             return None;
         }
-        // `min(len - 1)` first: `selected` may be stale after removals.
-        self.select_index(inbox, (self.selected.min(len - 1) + 1) % len);
+        // `selected` may be stale after removals, so bring it in range first;
+        // after the last conversation the selection wraps to the first.
+        let current = self.selected.min(last_index(len));
+        let next = current.checked_add(1).filter(|n| *n < len).unwrap_or(0);
+        self.select_index(inbox, next);
         self.selected_id(inbox).cloned()
     }
 
@@ -155,18 +188,19 @@ impl Panel {
         if len == 0 {
             return None;
         }
-        // `+ len - 1` is `-1` mod `len` without underflowing at index 0.
-        self.select_index(inbox, (self.selected.min(len - 1) + len - 1) % len);
+        // Before the first conversation the selection wraps to the last.
+        let last = last_index(len);
+        let current = self.selected.min(last);
+        let previous = current.checked_sub(1).unwrap_or(last);
+        self.select_index(inbox, previous);
         self.selected_id(inbox).cloned()
     }
 
     /// Keep the selection in range after conversations were removed.
     pub fn clamp(&mut self, inbox: &Inbox) {
-        self.selected = self
-            .selected
-            .min(inbox.conversations().len().saturating_sub(1));
+        self.selected = self.selected.min(last_index(inbox.conversations().len()));
         let len = self.conversation(inbox).map_or(0, |c| c.messages.len());
-        self.message = self.message.min(len.saturating_sub(1));
+        self.message = self.message.min(last_index(len));
         if len == 0 {
             self.focus = Focus::Input;
         }
@@ -196,7 +230,7 @@ impl Panel {
         let len = self.conversation(inbox).map_or(0, |c| c.messages.len());
         let target = match self.focus {
             Focus::Messages => self.message,
-            Focus::Input => len.saturating_sub(1),
+            Focus::Input => last_index(len),
         };
         self.scroll = vix_list_state::ensure_visible(target, self.scroll, height, len);
     }
@@ -209,7 +243,7 @@ impl Panel {
         match self.focus {
             Focus::Input if self.input.is_empty() && len > 0 => {
                 self.focus = Focus::Messages;
-                self.message = len - 1;
+                self.message = last_index(len);
             }
             Focus::Input => {}
             Focus::Messages => self.message = vix_list_state::up(self.message),
@@ -220,7 +254,7 @@ impl Panel {
     pub fn down(&mut self, inbox: &Inbox) {
         let len = self.conversation(inbox).map_or(0, |c| c.messages.len());
         if self.focus == Focus::Messages {
-            if self.message + 1 >= len {
+            if self.message.checked_add(1).is_none_or(|next| next >= len) {
                 self.focus = Focus::Input;
             } else {
                 self.message = vix_list_state::down(self.message, len);
@@ -262,7 +296,13 @@ impl Panel {
         }
         self.focus = Focus::Input;
         self.input.insert(self.cursor, c);
-        self.cursor += c.len_utf8();
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: the cursor is a byte offset in the input, and after the insert the input is at least cursor + len_utf8 long"
+        )]
+        {
+            self.cursor += c.len_utf8();
+        }
     }
 
     /// Insert pasted text at the cursor, sanitized to one line.
@@ -272,7 +312,13 @@ impl Panel {
         // Sanitizing collapses to a single line, so the input never holds a
         // newline; `clean.len()` (bytes) keeps `cursor` on a boundary.
         self.input.insert_str(self.cursor, &clean);
-        self.cursor += clean.len();
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: after the insert the input is at least cursor + clean.len() long"
+        )]
+        {
+            self.cursor += clean.len();
+        }
     }
 
     /// Delete the character before the cursor.
@@ -322,7 +368,8 @@ impl Panel {
 
     /// Byte offset of the character before the cursor, if any.
     fn prev_boundary(&self) -> Option<usize> {
-        self.input[..self.cursor]
+        self.input
+            .get(..self.cursor)?
             .char_indices()
             .next_back()
             .map(|(i, _)| i)
@@ -330,10 +377,8 @@ impl Panel {
 
     /// Byte offset just past the character under the cursor, if any.
     fn next_boundary(&self) -> Option<usize> {
-        self.input[self.cursor..]
-            .chars()
-            .next()
-            .map(|c| self.cursor + c.len_utf8())
+        let c = self.input.get(self.cursor..)?.chars().next()?;
+        self.cursor.checked_add(c.len_utf8())
     }
 
     /// Submit the input line. Text and valid commands clear the line; an

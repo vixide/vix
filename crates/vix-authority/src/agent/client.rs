@@ -355,7 +355,7 @@ impl AgentClient {
         })? {
             Reply::Data {
                 complete: false, ..
-            } if max.saturating_add(1) > MAX_DATA => Err(Fail::Unavailable),
+            } if max.checked_add(1).is_none_or(|m| m > MAX_DATA) => Err(Fail::Unavailable),
             Reply::Data { bytes, .. } => Ok(bytes),
             _ => Err(unexpected()),
         }
@@ -364,7 +364,7 @@ impl AgentClient {
     /// Plain truncating write; data over [`MAX_DATA`] is [`Fail::Unavailable`]
     /// without being sent.
     pub(crate) fn write(&self, path: &Path, data: &[u8]) -> Result<(), Fail> {
-        if data.len() as u64 > MAX_DATA {
+        if !u64::try_from(data.len()).is_ok_and(|n| n <= MAX_DATA) {
             return Err(Fail::Unavailable);
         }
         unit(self.call(Op::Write {
@@ -381,7 +381,7 @@ impl AgentClient {
         data: &[u8],
         expect: Expect,
     ) -> Result<(), Fail> {
-        if data.len() as u64 > MAX_DATA {
+        if !u64::try_from(data.len()).is_ok_and(|n| n <= MAX_DATA) {
             return Err(Fail::Unavailable);
         }
         unit(self.call(Op::WriteAtomic {

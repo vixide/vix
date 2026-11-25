@@ -8,6 +8,19 @@
 //! module moving would have broken. `dropdown_width` is `pub(super)` for the
 //! same reason: `ui::menu_dropdown_rect` (also staying) still calls it.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 
@@ -99,7 +112,7 @@ pub(super) fn dropdown_width(items: &[crate::menu::Item]) -> u16 {
             }
             let right = item_right(it).chars().count();
             let gap = usize::from(it.has_submenu() || !it.shortcut.is_empty());
-            it.label().chars().count() + right + 4 + gap
+            it.label().chars().count().plus(right).plus(4).plus(gap)
         })
         .max()
         .unwrap_or(12)
@@ -125,11 +138,13 @@ fn render_dropdown(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let inner_h = inner.height as usize;
+    let inner_h = usize::from(inner.height);
     let offset = dropdown_scroll(selected, inner_h, items.len());
-    let end = (offset + inner_h).min(items.len());
-    let text_w = inner.width as usize;
-    let rows: Vec<Line> = items[offset..end]
+    let end = offset.plus(inner_h).min(items.len());
+    let text_w = usize::from(inner.width);
+    let rows: Vec<Line> = items
+        .get(offset..end)
+        .unwrap_or(&[])
         .iter()
         .enumerate()
         .map(|(vis, it)| {
@@ -138,8 +153,8 @@ fn render_dropdown(
             }
             let label = it.label();
             let right = item_right(it);
-            let pad = text_w.saturating_sub(label.chars().count() + right.chars().count() + 2);
-            let style = if selected == Some(offset + vis) {
+            let pad = text_w.minus(label.chars().count().plus(right.chars().count()).plus(2));
+            let style = if selected == Some(offset.plus(vis)) {
                 theme::selected()
             } else {
                 theme::base()
@@ -149,7 +164,7 @@ fn render_dropdown(
                 Span::styled(" ".repeat(pad), style),
                 Span::styled(
                     format!("{right} "),
-                    if selected == Some(offset + vis) {
+                    if selected == Some(offset.plus(vis)) {
                         style
                     } else {
                         theme::dim()
@@ -163,17 +178,12 @@ fn render_dropdown(
     if items.len() > inner_h {
         // Draw the thumb over the right border column.
         let sb = Rect {
-            x: area.x + area.width - 1,
+            x: area.x.plus(area.width).minus(1),
             y: inner.y,
             width: 1,
             height: inner.height,
         };
-        draw_scrollbar(
-            frame,
-            sb,
-            selected.unwrap_or(0),
-            items.len().saturating_sub(1),
-        );
+        draw_scrollbar(frame, sb, selected.unwrap_or(0), items.len().minus(1));
     }
 }
 
@@ -183,7 +193,10 @@ fn render_dropdown(
 pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
     let Some(i) = app.menu.open else { return };
     let area = app.layout.menu_dropdown;
-    render_dropdown(frame, area, app.menu.defs()[i].items, app.menu.item);
+    let Some(def) = app.menu.defs().get(i) else {
+        return;
+    };
+    render_dropdown(frame, area, def.items, app.menu.item);
 
     // An open submenu is drawn to the right of its parent item. It may be open
     // with nothing highlighted yet (`app.menu.sub == None`).
@@ -192,20 +205,20 @@ pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
     {
         let fa = frame.area();
         let sub_w = dropdown_width(subitems);
-        let sub_h = u16::try_from(subitems.len()).unwrap_or(u16::MAX) + 2;
+        let sub_h = (u16::try_from(subitems.len()).unwrap_or(u16::MAX)).plus(2);
         let mirrored = super::layout_mirrored(app);
         let sub_x = if mirrored {
-            area.x.saturating_sub(sub_w)
+            area.x.minus(sub_w)
         } else {
-            (area.x + area.width).min(fa.width.saturating_sub(sub_w))
+            area.x.plus(area.width).min(fa.width.minus(sub_w))
         };
         let parent_row = u16::try_from(app.menu.item.unwrap_or(0)).unwrap_or(u16::MAX);
-        let sub_y = (area.y + parent_row).min(fa.height.saturating_sub(sub_h));
+        let sub_y = area.y.plus(parent_row).min(fa.height.minus(sub_h));
         let sub_area = Rect {
             x: sub_x,
             y: sub_y,
             width: sub_w.min(fa.width),
-            height: sub_h.min(fa.height.saturating_sub(sub_y)),
+            height: sub_h.min(fa.height.minus(sub_y)),
         };
         app.layout.submenu_dropdown = sub_area;
         render_dropdown(frame, sub_area, subitems, app.menu.sub);
@@ -215,19 +228,19 @@ pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
             && let Some(ssitems) = app.menu.subsubmenu_items()
         {
             let ss_w = dropdown_width(ssitems);
-            let ss_h = u16::try_from(ssitems.len()).unwrap_or(u16::MAX) + 2;
+            let ss_h = (u16::try_from(ssitems.len()).unwrap_or(u16::MAX)).plus(2);
             let ss_x = if mirrored {
-                sub_area.x.saturating_sub(ss_w)
+                sub_area.x.minus(ss_w)
             } else {
-                (sub_area.x + sub_area.width).min(fa.width.saturating_sub(ss_w))
+                sub_area.x.plus(sub_area.width).min(fa.width.minus(ss_w))
             };
             let prow = u16::try_from(app.menu.sub.unwrap_or(0)).unwrap_or(u16::MAX);
-            let ss_y = (sub_area.y + prow).min(fa.height.saturating_sub(ss_h));
+            let ss_y = sub_area.y.plus(prow).min(fa.height.minus(ss_h));
             let ss_area = Rect {
                 x: ss_x,
                 y: ss_y,
                 width: ss_w.min(fa.width),
-                height: ss_h.min(fa.height.saturating_sub(ss_y)),
+                height: ss_h.min(fa.height.minus(ss_y)),
             };
             app.layout.subsubmenu_dropdown = ss_area;
             render_dropdown(frame, ss_area, ssitems, app.menu.subsub);
@@ -239,9 +252,11 @@ pub(super) fn draw_menu_dropdown(app: &mut App, frame: &mut Frame) {
 /// Absolute screen row of dropdown item `idx` in dropdown `rect`, accounting for
 /// scroll given the current `selected` highlight and item count `len`.
 fn menu_row_y(rect: Rect, idx: usize, selected: Option<usize>, len: usize) -> u16 {
-    let inner_h = rect.height.saturating_sub(2) as usize;
+    let inner_h = usize::from(rect.height.minus(2));
     let offset = dropdown_scroll(selected, inner_h, len);
-    rect.y + 1 + u16::try_from(idx.saturating_sub(offset)).unwrap_or(0)
+    rect.y
+        .plus(1)
+        .plus(u16::try_from(idx.minus(offset)).unwrap_or(0))
 }
 
 /// The deepest currently-highlighted menu entry's help text, the dropdown it
@@ -271,7 +286,7 @@ fn menu_tooltip_target(app: &App) -> Option<(String, Rect, u16)> {
             .map(|h| (h, rect, menu_row_y(rect, idx, app.menu.sub, items.len())));
     }
     if let Some(idx) = app.menu.item {
-        let items = app.menu.defs()[mi].items;
+        let items = app.menu.defs().get(mi)?.items;
         let rect = app.layout.menu_dropdown;
         return items
             .get(idx)
@@ -279,7 +294,7 @@ fn menu_tooltip_target(app: &App) -> Option<(String, Rect, u16)> {
             .map(|h| (h, rect, menu_row_y(rect, idx, app.menu.item, items.len())));
     }
     let rect = app.layout.menu_dropdown;
-    app.menu.defs()[mi].help().map(|h| (h, rect, rect.y))
+    app.menu.defs().get(mi)?.help().map(|h| (h, rect, rect.y))
 }
 
 /// Draw a help tooltip for the deepest currently-highlighted menu entry, placed
@@ -296,22 +311,25 @@ fn draw_menu_tooltip(app: &App, frame: &mut Frame) {
     if fa.width < 16 {
         return;
     }
-    let width = u16::try_from(text.chars().count() + 2)
+    let width = u16::try_from(text.chars().count().plus(2))
         .unwrap_or(u16::MAX)
         .clamp(12, 44)
         .min(fa.width);
-    let inner_w = width.saturating_sub(2).max(1) as usize;
+    let inner_w = usize::from(width.minus(2).max(1));
     let rows = text.chars().count().div_ceil(inner_w).max(1);
-    let height = (u16::try_from(rows).unwrap_or(u16::MAX) + 2).min(fa.height);
+    let height = u16::try_from(rows)
+        .unwrap_or(u16::MAX)
+        .plus(2)
+        .min(fa.height);
     // Prefer the right of the dropdown; fall back to its left; else clamp.
-    let x = if anchor.x + anchor.width + width <= fa.width {
-        anchor.x + anchor.width
+    let x = if anchor.x.plus(anchor.width).plus(width) <= fa.width {
+        anchor.x.plus(anchor.width)
     } else if anchor.x >= width {
-        anchor.x - width
+        anchor.x.minus(width)
     } else {
-        fa.width.saturating_sub(width)
+        fa.width.minus(width)
     };
-    let y = row_y.min(fa.height.saturating_sub(height));
+    let y = row_y.min(fa.height.minus(height));
     let rect = Rect {
         x,
         y,

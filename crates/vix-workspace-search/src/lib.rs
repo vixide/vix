@@ -13,6 +13,18 @@
 //!
 //! Owning spec: `crates/vix-workspace-search/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 // Shared workspace i18n (see the vix_i18n crate).
 #[macro_use]
 extern crate vix_i18n;
@@ -23,6 +35,20 @@ use std::path::PathBuf;
 pub mod tool;
 
 use vix_find_panel::Field;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// One matching line.
 pub struct Hit {
@@ -130,14 +156,13 @@ pub fn rewrite_lines(content: &str, edits: &[LineEdit]) -> LineRewrite {
     let mut segments: Vec<(String, &str)> = content
         .split_inclusive('\n')
         .map(|seg| {
-            let body_len = if seg.ends_with("\r\n") {
-                seg.len() - 2
-            } else if seg.ends_with('\n') {
-                seg.len() - 1
+            if let Some(body) = seg.strip_suffix("\r\n") {
+                (body.to_string(), "\r\n")
+            } else if let Some(body) = seg.strip_suffix('\n') {
+                (body.to_string(), "\n")
             } else {
-                seg.len()
-            };
-            (seg[..body_len].to_string(), &seg[body_len..])
+                (seg.to_string(), "")
+            }
         })
         .collect();
     let mut applied = Vec::new();
@@ -157,12 +182,16 @@ pub fn rewrite_lines(content: &str, edits: &[LineEdit]) -> LineRewrite {
         // and cut at CLIP_CHARS); splice only that part, keeping the original
         // indent and any text beyond the cut.
         let trimmed = body.trim_start();
-        let indent = &body[..body.len() - trimmed.len()];
+        // `trimmed` is a suffix of `body`, so what precedes it is the indent.
+        let indent = body.strip_suffix(trimmed).unwrap_or("");
+        // Past the clip there may be no text at all: then the tail is empty.
         let tail = trimmed
             .char_indices()
             .nth(CLIP_CHARS)
-            .map_or("", |(at, _)| &trimmed[at..]);
-        *body = format!("{indent}{}{tail}", edit.new_text);
+            .and_then(|(at, _)| trimmed.get(at..))
+            .unwrap_or("");
+        let rewritten = format!("{indent}{}{tail}", edit.new_text);
+        *body = rewritten;
         applied.push(edit.line);
     }
     let content = segments.iter().fold(
@@ -294,14 +323,15 @@ impl WorkspaceSearch {
 
     /// Move the selection up one hit.
     pub fn up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        self.selected = sub_or(self.selected, 1, 0);
     }
 
     /// Move the selection down one hit.
     pub fn down(&mut self) {
         // Clamp at the last hit (no wrap-around).
-        if self.selected + 1 < self.hits.len() {
-            self.selected += 1;
+        let next = add_or(self.selected, 1, usize::MAX);
+        if next < self.hits.len() {
+            self.selected = next;
         }
     }
 

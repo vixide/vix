@@ -238,7 +238,8 @@ pub fn is_secret(rel: &Path) -> bool {
     let extension = Path::new(&lower)
         .extension()
         .and_then(|e| e.to_str())
-        .unwrap_or_default();
+        // RCA-IN-3: absent only. A file with no extension has the empty one.
+        .unwrap_or("");
     lower == ".env"
         || lower.starts_with(".env.")
         || matches!(extension, "pem" | "key" | "p12" | "pfx")
@@ -328,7 +329,12 @@ fn walk(root: &Path, dir: &Path, depth: usize, found: &mut Vec<PathBuf>) {
         let path = entry.path();
         if kind.is_dir() {
             if !name.starts_with('.') && !SKIP_DIRS.contains(&name.as_ref()) {
-                walk(root, &path, depth + 1, found);
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: walk returns when depth exceeds MAX_DB_DEPTH, so depth + 1 is at most MAX_DB_DEPTH + 1"
+                )]
+                let next_depth = depth + 1;
+                walk(root, &path, next_depth, found);
             }
         } else if kind.is_file() && is_sqlite_candidate(root, &path) {
             found.push(path);

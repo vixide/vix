@@ -15,6 +15,16 @@ use crate::presence::PresenceBoard;
 use crate::wire::{ChatKind, ChatLine, ErrorCode, MAX_CHAT_BYTES, Message, Presence};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// A terminal dimension as sent on the wire: at least 1 and at most `max`
+/// (a larger terminal shows its top-left `max` part).
+fn within(value: u16, max: u16) -> u16 {
+    match value {
+        0 => 1,
+        v if v > max => max,
+        v => v,
+    }
+}
+
 /// A message and who it is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Outbound {
@@ -216,8 +226,8 @@ impl HostSession {
     /// `input` tells the guest whether the host allows typing into it.
     fn terminal_screen(share: TerminalShare, rows: u16, cols: u16, screen: &[u8]) -> Message {
         Message::TerminalScreen {
-            rows: rows.clamp(1, crate::wire::MAX_TERMINAL_ROWS),
-            cols: cols.clamp(1, crate::wire::MAX_TERMINAL_COLS),
+            rows: within(rows, crate::wire::MAX_TERMINAL_ROWS),
+            cols: within(cols, crate::wire::MAX_TERMINAL_COLS),
             input: share.input,
             screen: screen.to_vec(),
         }
@@ -465,7 +475,13 @@ impl HostSession {
         permission: Permission,
     ) -> Result<(Peer, Vec<Outbound>), CoworkError> {
         let mut peer = Peer::new(PeerId::guest(self.next_guest), name);
-        self.next_guest += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: one step per guest that joins one session, so a u64 cannot overflow"
+        )]
+        {
+            self.next_guest += 1;
+        }
         peer.permission = permission;
         let id = peer.id;
         let mut out = vec![Outbound {
@@ -941,7 +957,7 @@ impl GuestSession {
                 self.board.join(peer, &name);
                 let news = self.joined && peer != self.me;
                 self.joined |= peer == self.me;
-                let shown = self.board.name(peer).unwrap_or_default().to_string();
+                let shown = self.board.name(peer).unwrap_or("").to_string();
                 if news {
                     vec![GuestEvent::Presence, GuestEvent::PeerJoined(peer, shown)]
                 } else {

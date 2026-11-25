@@ -13,6 +13,19 @@
 //! prefilled GitHub issue in the browser, where the user reviews it and
 //! decides whether to submit.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -129,20 +142,27 @@ pub fn redact_quoted(message: &str) -> String {
     let mut out = String::with_capacity(message.len());
     let mut rest = message;
     while let Some(open) = rest.find(['`', '"']) {
-        let quote = rest[open..].chars().next().unwrap_or('`');
-        let Some(len) = rest[open + 1..].find(quote) else {
+        let Some((before, from_open)) = rest.split_at_checked(open) else {
             break;
         };
-        let inner = &rest[open + 1..open + 1 + len];
-        out.push_str(&rest[..open]);
+        let quote = from_open.chars().next().unwrap_or('`');
+        // The quote is one ASCII byte, so skipping a byte lands on a boundary.
+        let after_open = from_open.get(1..).unwrap_or("");
+        let Some(len) = after_open.find(quote) else {
+            break;
+        };
+        let inner = after_open.get(..len).unwrap_or("");
+        out.push_str(before);
         if quote == '`' || inner.chars().count() > 40 {
             out.push(quote);
             out.push_str("<removed>");
             out.push(quote);
         } else {
-            out.push_str(&rest[open..=open + 1 + len]);
+            out.push(quote);
+            out.push_str(inner);
+            out.push(quote);
         }
-        rest = &rest[open + 2 + len..];
+        rest = after_open.get(len.plus(1)..).unwrap_or("");
     }
     out.push_str(rest);
     out
@@ -229,17 +249,21 @@ pub fn issue_url(repository: &str, report: &str) -> String {
     )
 }
 
+/// The upper-case hex digit for a nibble (`0..=15`; larger values cannot occur).
+fn hex_digit(nibble: u8) -> char {
+    char::from_digit(u32::from(nibble), 16).map_or('0', |c| c.to_ascii_uppercase())
+}
+
 /// Percent-encode `text` for a URL query value.
 fn encode(text: &str) -> String {
-    const HEX: &[u8; 16] = b"0123456789ABCDEF";
-    let mut out = String::with_capacity(text.len() * 3);
+    let mut out = String::with_capacity(text.len().times(3));
     for &b in text.as_bytes() {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
             out.push(char::from(b));
         } else {
             out.push('%');
-            out.push(char::from(HEX[usize::from(b >> 4)]));
-            out.push(char::from(HEX[usize::from(b & 0xF)]));
+            out.push(hex_digit(b >> 4));
+            out.push(hex_digit(b & 0xF));
         }
     }
     out
@@ -364,5 +388,85 @@ mod tests {
     #[test]
     fn encode_escapes_everything_but_unreserved() {
         assert_eq!(encode("a b/é&"), "a%20b%2F%C3%A9%26");
+    }
+
+    #[test]
+    fn timestamp_is_a_sortable_utc_stamp() {
+        let stamp = timestamp();
+        assert_eq!(stamp.len(), 16, "{stamp}");
+        assert_eq!(stamp.as_bytes().get(8), Some(&b'T'));
+        assert!(stamp.ends_with('Z'));
+        assert!(
+            stamp
+                .chars()
+                .filter(|c| *c != 'T' && *c != 'Z')
+                .all(|c| c.is_ascii_digit())
+        );
+    }
+
+    #[test]
+    fn redact_quoted_keeps_an_unterminated_quote_as_is() {
+        assert_eq!(
+            redact_quoted("left: \"open and never closed"),
+            "left: \"open and never closed"
+        );
+        assert_eq!(redact_quoted("a `tick"), "a `tick");
+        assert_eq!(redact_quoted("no quotes at all"), "no quotes at all");
+    }
+
+    #[test]
+    fn home_and_user_come_from_the_environment() {
+        let var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+        let expected = std::env::var_os(var).map(|h| h.to_string_lossy().into_owned());
+        assert_eq!(home_dir(), expected);
+        let var = if cfg!(windows) { "USERNAME" } else { "USER" };
+        let expected = std::env::var_os(var).map(|h| h.to_string_lossy().into_owned());
+        assert_eq!(user_name(), expected);
+    }
+
+    /// The panic hook writes a scrubbed report under the data directory and
+    /// still chains to the previous hook. Only runs against a throwaway data
+    /// dir (`XDG_DATA_HOME` set and honoured); otherwise it would write into
+    /// the developer's real one.
+    #[test]
+    fn the_installed_hook_saves_a_report_and_chains_to_the_previous_hook() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let Some(xdg) = std::env::var_os("XDG_DATA_HOME").filter(|v| !v.is_empty()) else {
+            return;
+        };
+        let Some(dir) = crashes_dir().filter(|d| d.starts_with(&xdg)) else {
+            return;
+        };
+        let before = reports(&dir).len();
+
+        let original = std::panic::take_hook();
+        let chained = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&chained);
+        std::panic::set_hook(Box::new(move |_| flag.store(true, Ordering::SeqCst)));
+        install_hook();
+        let caught = std::panic::catch_unwind(|| {
+            panic!("r4 hook test \"short secret\"");
+        });
+        // Restore: drop our hook, put back the harness's.
+        let _ = std::panic::take_hook();
+        std::panic::set_hook(original);
+
+        assert!(caught.is_err());
+        assert!(
+            chained.load(Ordering::SeqCst),
+            "the previous hook still ran"
+        );
+        let after = reports(&dir);
+        assert!(after.len() <= KEEP);
+        assert!(!after.is_empty() && (before < KEEP || after.len() == KEEP));
+        // Another test panicking at the same moment may have written a
+        // newer report, so look for ours among them.
+        let ours = after
+            .iter()
+            .filter_map(|p| fs::read_to_string(p).ok())
+            .find(|text| text.contains("r4 hook test"))
+            .expect("a report for this panic was written");
+        assert!(ours.starts_with("Vix crash report"), "{ours}");
     }
 }

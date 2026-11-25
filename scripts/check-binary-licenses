@@ -2,7 +2,7 @@
 """Per-binary license gate for Vix (T648; spec/license/index.md).
 
 Vix's source is offered under any of seven licenses (five software licenses, plus
-OGL-UK-3.0 and CC-BY-NC-SA-4.0 for source and documentation). A *binary* links
+OGL-UK-3.0 and CC-BY-SA-4.0 for source and documentation). A *binary* links
 many third-party crates, and it can be distributed only under those of the five
 software licenses
 that every crate linked into it allows: a GUI toolkit (or any dependency)
@@ -30,7 +30,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Vix's own five software licenses, in the order its binary `license` fields list
-# them. OGL-UK-3.0 and CC-BY-NC-SA-4.0 are also offered, for source and
+# them. OGL-UK-3.0 and CC-BY-SA-4.0 are also offered, for source and
 # documentation only; they are never offered for a binary, so they are not
 # computed here, and a binary `license` that lists them fails the check.
 FIVE = ["Apache-2.0", "BSD-3-Clause", "MIT", "GPL-2.0-only", "GPL-3.0-only"]

@@ -6,6 +6,18 @@
 //! is already reloaded when the user looks back. Losing focus saves every
 //! dirty buffer when `auto_save = "focus_lost"`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::App;
 use crate::settings::AutoSave;
 

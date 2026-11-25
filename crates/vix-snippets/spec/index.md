@@ -135,3 +135,7 @@ variable `$ITEM` substituted, `$` in the expression escaped). The expression
 is an identifier/path with balanced `()`/`[]` groups. The host
 (`expand_postfix` in `tui/src/app/ide_parity.rs`) tries it before prefix
 snippets on Tab and inserts the body through the tabstop engine.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The postfix expansion scans with `get`, `checked_*` and `split`-free lookups; the JSON export uses the alternate display of a JSON value (pretty, infallible) instead of an `unwrap_or_default` over a serializer. **Declared (SNIP-F1):** an expression whose length cannot be computed is length 0, so no expansion is offered.

@@ -2,6 +2,19 @@
 //! (language/line-ending/encoding/selection), git branch, and cursor
 //! position.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Paragraph};
 
@@ -65,7 +78,8 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     // Mirrored layouts swap the two segments: the cursor/git segment sits at
     // the left edge and the status text hugs the right edge (T564).
     let mirrored = super::layout_mirrored(app);
-    let right_w = Constraint::Length(u16::try_from(right.chars().count()).unwrap_or(u16::MAX) + 1);
+    let right_w =
+        Constraint::Length((u16::try_from(right.chars().count()).unwrap_or(u16::MAX)).plus(1));
     let right_col = if mirrored {
         let c = Layout::default()
             .direction(Direction::Horizontal)
@@ -73,13 +87,13 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
             .split(inner);
         frame.render_widget(
             Paragraph::new(left).style(bg).alignment(Alignment::Right),
-            c[1],
+            chunk(&c, 1),
         );
         frame.render_widget(
             Paragraph::new(right).style(bg).alignment(Alignment::Left),
-            c[0],
+            chunk(&c, 0),
         );
-        c[0]
+        chunk(&c, 0)
     } else {
         let c = Layout::default()
             .direction(Direction::Horizontal)
@@ -87,13 +101,13 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
             .split(inner);
         frame.render_widget(
             Paragraph::new(left).style(bg).alignment(Alignment::Left),
-            c[0],
+            chunk(&c, 0),
         );
         frame.render_widget(
             Paragraph::new(right).style(bg).alignment(Alignment::Right),
-            c[1],
+            chunk(&c, 1),
         );
-        c[1]
+        chunk(&c, 1)
     };
 
     // Record the git/branch segment's rectangle (the leftmost part of the
@@ -105,9 +119,9 @@ pub(super) fn draw_status_bar(app: &mut App, frame: &mut Frame, area: Rect) {
     app.layout.git_status_bar = if git_w > 0 {
         Rect {
             x: if mirrored {
-                right_col.x.saturating_add(lead)
+                right_col.x.plus(lead)
             } else {
-                right_col.x.saturating_add(1).saturating_add(lead)
+                right_col.x.plus(1).plus(lead)
             },
             y: right_col.y,
             width: git_w.min(right_col.width),
@@ -134,10 +148,10 @@ fn fit_segments(
     use crate::status_bar_panel::{fit_left_segment, left_segment, right_segment};
     let mut right = right_segment(segments, line, col, icon::CALENDAR);
     let wanted = left_segment(mode, path, dirty_flag, &app.status);
-    if wanted.chars().count() + right.chars().count() + 1 > width {
+    if wanted.chars().count().plus(right.chars().count()).plus(1) > width {
         right = right_segment(short_segments, line, col, icon::CALENDAR);
     }
-    let left_room = width.saturating_sub(right.chars().count() + 1);
+    let left_room = width.minus(right.chars().count().plus(1));
     let left = fit_left_segment(mode, path, dirty_flag, &app.status, left_room);
     (left, right)
 }
@@ -154,7 +168,10 @@ fn editor_info(app: &App) -> String {
             };
             let sel = t.editor.selection_span().map(|(s, e)| {
                 let code = t.editor.code_ref();
-                (e - s, code.char_to_line(e) - code.char_to_line(s) + 1)
+                (
+                    e.minus(s),
+                    code.char_to_line(e).minus(code.char_to_line(s)).plus(1),
+                )
             });
             crate::status_bar_panel::info_segment(
                 Some(lang),

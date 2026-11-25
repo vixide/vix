@@ -86,3 +86,7 @@ with no recorded time (from an undo file written before T638) shows none.
 - In the App shell, `tui/src/app/undo_tree.rs` opens the panel (refusing a
   shared buffer), previews on every move, and commits or restores;
   `tui/src/ui/undo_tree.rs` draws it.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Lane drawing writes through bounds-checked helpers. **Declared (UNDO-F1):** a column outside the drawn row draws no glyph (rows built from the tree never have one); the last state of an empty list is index 0, and a current state not among the rows selects the first.

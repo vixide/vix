@@ -20,6 +20,14 @@ use crate::split::{self, MAX_LINE, TextError};
 /// IRCv3 capabilities this client asks for when the server offers them.
 pub const WANTED_CAPS: [&str; 4] = ["server-time", "message-tags", "sasl", "account-tag"];
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// A secret that never shows in `Debug` output and is wiped from memory when
 /// dropped.
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -322,7 +330,12 @@ const MAX_NICK_RETRIES: u8 = 5;
 /// server adds when it relays our message, so others receive it whole.
 fn relay_reserve(nick: &str, user: &str) -> usize {
     // ':' nick '!' '~' user '@' host(<=63) ' '
-    nick.len() + user.len() + 63 + 5
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: two live strings plus 68 cannot exceed the address space"
+    )]
+    let reserve = nick.len() + user.len() + 63 + 5;
+    reserve
 }
 
 impl Client {
@@ -418,14 +431,14 @@ impl Client {
                 if self.phase == Phase::Sasl {
                     step.event(Event::Error {
                         kind: ErrorKind::SaslFailed,
-                        detail: line.params.last().cloned().unwrap_or_default(),
+                        detail: line.params.last().map_or_else(String::new, Clone::clone),
                     });
                     self.end_cap(&mut step);
                 }
             }
             "001" => self.on_welcome(&line, &mut step),
             "005" => {
-                let tokens = line.params.get(1..).unwrap_or_default();
+                let tokens = line.params.get(1..).map_or(&[][..], |t| t);
                 self.isupport.apply(tokens);
             }
             "433" if self.phase != Phase::Registered && self.nick_retries < MAX_NICK_RETRIES => {
@@ -568,7 +581,8 @@ impl Client {
 
     /// The most text one outgoing message may carry: the 512-byte line limit minus what the server will prepend when relaying (our `nick!user@host` prefix, see `relay_reserve`).
     fn max_line(&self) -> usize {
-        MAX_LINE.saturating_sub(relay_reserve(&self.nick, &self.config.user))
+        // A prefix longer than the whole line leaves no room for text.
+        sub_or(MAX_LINE, relay_reserve(&self.nick, &self.config.user), 0)
     }
 
     /// The IRCv3 `server-time` tag of `line` in Unix milliseconds, if present and well formed.
@@ -664,7 +678,7 @@ impl Client {
             return;
         };
         // authzid NUL authcid NUL passwd; authzid empty (same as authcid).
-        let mut plain = Vec::with_capacity(sasl.user.len() * 2 + sasl.password.0.len() + 2);
+        let mut plain = Vec::new();
         plain.push(0);
         plain.extend_from_slice(sasl.user.as_bytes());
         plain.push(0);
@@ -698,13 +712,21 @@ impl Client {
     /// Appends `_`; when the server's `NICKLEN` would be exceeded the last character
     /// is replaced instead so the retry is always legal.
     fn retry_nick(&mut self, step: &mut Step) {
-        self.nick_retries += 1;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: callers retry only while nick_retries < MAX_NICK_RETRIES, so the u8 cannot overflow"
+        )]
+        {
+            self.nick_retries += 1;
+        }
         let mut next = format!("{}_", self.nick);
         if let Some(max) = self.isupport.nicklen
             && next.len() > max
         {
             // Out of room: replace the last character instead.
-            next = self.nick.chars().take(max.saturating_sub(1)).collect();
+            // NICKLEN is parsed as non-zero (isupport.rs), so max is at least 1.
+            let keep = sub_or(max, 1, 0);
+            next = self.nick.chars().take(keep).collect();
             next.push('_');
             if next == self.nick {
                 next.pop();
@@ -857,7 +879,7 @@ impl Client {
             ErrorKind::Numeric(code)
         };
         // Skip our own nick (param 0); the rest names the subject and reason.
-        let detail = line.params.get(1..).unwrap_or_default().join(" ");
+        let detail = line.params.get(1..).map_or(&[][..], |t| t).join(" ");
         step.event(Event::Error { kind, detail });
     }
 }
@@ -1265,5 +1287,232 @@ mod tests {
             }]
         );
         assert!(c.is_me("ANA"));
+    }
+}
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn cfg(realname: &str) -> Config {
+        Config {
+            nick: "ana".into(),
+            user: "ana".into(),
+            realname: realname.into(),
+            channels: Vec::new(),
+            sasl: None,
+        }
+    }
+
+    fn registered() -> Client {
+        let mut c = Client::new(cfg("Ana"));
+        let _ = c.start().unwrap();
+        let _ = c.handle_line(":srv 001 ana :Welcome");
+        c
+    }
+
+    #[test]
+    fn empty_realname_falls_back_to_nick() {
+        let mut c = Client::new(cfg("\0\r"));
+        let s = c.start().unwrap();
+        assert_eq!(s.send.last().map(String::as_str), Some("USER ana 0 * ana"));
+    }
+
+    #[test]
+    fn isupport_accessor_reflects_005() {
+        let mut c = registered();
+        assert_eq!(c.isupport(), &Isupport::default());
+        let _ = c.handle_line(":srv 005 ana NICKLEN=12 CHANTYPES=# :are supported");
+        assert_eq!(c.isupport().nicklen, Some(12));
+    }
+
+    #[test]
+    fn welcome_without_nick_param_keeps_configured_nick() {
+        let mut c = Client::new(cfg("Ana"));
+        let _ = c.start().unwrap();
+        let s = c.handle_line(":srv 001");
+        assert_eq!(s.events, vec![Event::Connected { nick: "ana".into() }]);
+        assert_eq!(c.nick(), "ana");
+    }
+
+    #[test]
+    fn cap_ack_disables_and_other_subcommands_are_ignored() {
+        let mut c = Client::new(cfg("Ana"));
+        let _ = c.start().unwrap();
+        let _ = c.handle_line("CAP * LS :server-time away-notify");
+        let _ = c.handle_line("CAP * ACK :server-time away-notify");
+        assert_eq!(c.enabled_caps(), ["server-time", "away-notify"]);
+        let _ = c.handle_line("CAP * ACK :-away-notify server-time");
+        assert_eq!(c.enabled_caps(), ["server-time"]);
+        let s = c.handle_line("CAP * LIST :server-time");
+        assert_eq!(s, Step::default());
+        assert_eq!(c.enabled_caps(), ["server-time"]);
+    }
+
+    #[test]
+    fn authenticate_without_credentials_aborts() {
+        let mut c = Client::new(cfg("Ana"));
+        let _ = c.start().unwrap();
+        // Force the SASL phase with credentials that are then consumed.
+        let mut with = cfg("Ana");
+        with.sasl = Some(Sasl {
+            user: "ana".into(),
+            password: Password::new("pw".into()),
+        });
+        let mut c2 = Client::new(with);
+        let _ = c2.start().unwrap();
+        let _ = c2.handle_line("CAP * LS :sasl");
+        let _ = c2.handle_line("CAP * ACK :sasl");
+        let first = c2.handle_line("AUTHENTICATE +");
+        assert_eq!(first.send.len(), 1);
+        // A second challenge finds the credentials gone and aborts with `*`.
+        let second = c2.handle_line("AUTHENTICATE +");
+        assert_eq!(second.send, vec!["AUTHENTICATE *"]);
+        // Outside the SASL phase, or for a non-`+` challenge, nothing happens.
+        assert_eq!(c.handle_line("AUTHENTICATE +"), Step::default());
+        assert_eq!(c2.handle_line("AUTHENTICATE abc"), Step::default());
+    }
+
+    #[test]
+    fn sasl_payload_of_exactly_400_base64_bytes_ends_with_plus() {
+        let mut config = cfg("Ana");
+        // "\0u\0" + 297 bytes = 300 plain bytes = 400 base64 characters.
+        config.sasl = Some(Sasl {
+            user: "u".into(),
+            password: Password::new("p".repeat(297)),
+        });
+        let mut c = Client::new(config);
+        let _ = c.start().unwrap();
+        let _ = c.handle_line("CAP * LS :sasl");
+        let _ = c.handle_line("CAP * ACK :sasl");
+        let s = c.handle_line("AUTHENTICATE +");
+        assert_eq!(s.send.len(), 2);
+        assert_eq!(s.send[0].len(), "AUTHENTICATE ".len() + 400);
+        assert_eq!(s.send[1], "AUTHENTICATE +");
+    }
+
+    #[test]
+    fn empty_topic_numeric_topic_change_and_notice() {
+        let mut c = registered();
+        let s = c.handle_line(":srv 331 ana #vix :No topic is set");
+        assert_eq!(
+            s.events,
+            vec![Event::Topic {
+                channel: "#vix".into(),
+                topic: None,
+                set_by: None
+            }]
+        );
+        let s = c.handle_line(":bob!b@h TOPIC #vix :new topic");
+        assert_eq!(
+            s.events,
+            vec![Event::Topic {
+                channel: "#vix".into(),
+                topic: Some("new topic".into()),
+                set_by: Some("bob".into())
+            }]
+        );
+        let s = c.handle_line(":bob!b@h TOPIC #vix :");
+        assert!(matches!(&s.events[0], Event::Topic { topic: None, .. }));
+        let s = c.handle_line("@time=1970-01-01T00:00:01Z :bob!b@h NOTICE ana :psst");
+        assert_eq!(
+            s.events,
+            vec![Event::Notice {
+                target: "ana".into(),
+                from: "bob".into(),
+                text: "psst".into(),
+                time: Some(1000)
+            }]
+        );
+    }
+
+    #[test]
+    fn part_forms_and_nick_before_registration() {
+        let mut c = registered();
+        let s = c.command(Command::Part {
+            channel: "#vix".into(),
+            reason: None,
+        });
+        assert_eq!(s.send, vec!["PART #vix"]);
+        let s = c.command(Command::Part {
+            channel: "#vix".into(),
+            reason: Some("\0\r".into()),
+        });
+        assert_eq!(s.send, vec!["PART #vix"]);
+        let s = c.command(Command::Part {
+            channel: "#vix".into(),
+            reason: Some("bye now".into()),
+        });
+        assert_eq!(s.send, vec!["PART #vix :bye now"]);
+
+        let mut fresh = Client::new(cfg("Ana"));
+        let _ = fresh.start().unwrap();
+        let s = fresh.command(Command::Nick("zed".into()));
+        assert_eq!(s.send, vec!["NICK zed"]);
+        assert_eq!(fresh.nick(), "zed");
+        // Once registered the nick only changes when the server confirms it.
+        let mut c = registered();
+        let s = c.command(Command::Nick("zed".into()));
+        assert_eq!(s.send, vec!["NICK zed"]);
+        assert_eq!(c.nick(), "ana");
+    }
+
+    #[test]
+    fn own_part_kick_and_nick_events() {
+        let mut c = registered();
+        let s = c.handle_line(":ana!a@h PART #vix :later");
+        assert_eq!(
+            s.events,
+            vec![Event::Parted {
+                channel: "#vix".into(),
+                reason: Some("later".into())
+            }]
+        );
+        let s = c.handle_line(":bob!b@h PART #vix");
+        assert_eq!(
+            s.events,
+            vec![Event::UserParted {
+                channel: "#vix".into(),
+                nick: "bob".into(),
+                reason: None
+            }]
+        );
+        let s = c.handle_line(":bob!b@h KICK #vix ana :out");
+        assert!(matches!(&s.events[0], Event::Parted { reason: Some(r), .. } if r == "out"));
+        let s = c.handle_line(":bob!b@h KICK #vix cat :spam");
+        assert_eq!(
+            s.events,
+            vec![Event::UserParted {
+                channel: "#vix".into(),
+                nick: "cat".into(),
+                reason: Some("spam".into())
+            }]
+        );
+        let s = c.handle_line(":ana!a@h NICK :ana2");
+        assert_eq!(
+            s.events,
+            vec![Event::NickChanged {
+                old: "ana".into(),
+                new: "ana2".into(),
+                is_self: true
+            }]
+        );
+        assert_eq!(c.nick(), "ana2");
+    }
+
+    #[test]
+    fn numeric_errors_map_to_kinds_and_non_errors_are_ignored() {
+        let mut c = registered();
+        let s = c.handle_line(":srv 404 ana #vix :Cannot send to channel");
+        assert_eq!(
+            s.events,
+            vec![Event::Error {
+                kind: ErrorKind::Numeric(404),
+                detail: "#vix Cannot send to channel".into()
+            }]
+        );
+        assert_eq!(c.handle_line(":srv 372 ana :motd"), Step::default());
+        assert_eq!(c.handle_line(":srv 0404 ana :x"), Step::default());
+        assert_eq!(c.handle_line(":srv FOO ana :x"), Step::default());
     }
 }

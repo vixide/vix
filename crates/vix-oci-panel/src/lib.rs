@@ -22,9 +22,29 @@
 //!
 //! Owning spec: `crates/vix-oci-panel/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 use vix_oci::argv::{self, ComposeOp, ContainerOp, Kind, RunOptions};
 use vix_oci::{Container, Engine, Image, Network, OciError, Pod, Volume};
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
 
 /// A command ready to run, with the line to show the user first.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,7 +215,7 @@ impl Panel {
     /// One row as display text, columns separated by two spaces.
     #[must_use]
     pub fn row(&self, i: usize) -> String {
-        match self.kind {
+        let found = match self.kind {
             Kind::Container => self.containers.get(i).map(|c| {
                 format!(
                     "{}  {}  {}  {}  {}",
@@ -219,7 +239,8 @@ impl Panel {
                     m.created,
                     // Image ids are ASCII (`sha256:` + hex), so byte slicing
                     // is char-safe; 19 shows the prefix plus a short digest.
-                    &m.id[..m.id.len().min(19)]
+                    // OCI-F1: a shorter (or non-ASCII) id is shown whole.
+                    m.id.get(..19).unwrap_or(&m.id)
                 )
             }),
             Kind::Volume => self
@@ -235,8 +256,12 @@ impl Panel {
                 .get(i)
                 .map(|p| format!("{}  {}  {}", p.name, p.status, p.containers)),
             _ => None,
-        }
-        .unwrap_or_default()
+        };
+        // OCI-F2: no row is the empty text (`unwrap_or_default` is forbidden).
+        let Some(row) = found else {
+            return String::new();
+        };
+        row
     }
 
     /// The name or reference an engine command should use for the highlighted
@@ -272,7 +297,7 @@ impl Panel {
             Rows::Networks(v) => self.networks = v,
             Rows::Pods(v) => self.pods = v,
         }
-        self.selected = self.selected.min(self.len().saturating_sub(1));
+        self.selected = self.selected.min(sub_or(self.len(), 1, 0)); // OCI-F3: no rows, row 0
     }
 
     /// Switch to `kind`, resetting the highlight.
@@ -287,12 +312,17 @@ impl Panel {
     pub fn cycle_kind(&mut self, forward: bool) {
         let kinds = self.kinds();
         let at = kinds.iter().position(|k| *k == self.kind).unwrap_or(0);
+        // OCI-F4: stepping past either end wraps; an empty list keeps the kind.
         let next = if forward {
-            (at + 1) % kinds.len()
+            at.checked_add(1).filter(|n| *n < kinds.len()).unwrap_or(0)
         } else {
-            (at + kinds.len() - 1) % kinds.len()
+            at.checked_sub(1)
+                .or_else(|| kinds.len().checked_sub(1))
+                .unwrap_or(0)
         };
-        self.set_kind(kinds[next]);
+        if let Some(kind) = kinds.get(next).copied() {
+            self.set_kind(kind);
+        }
     }
 
     /// Move the highlight up one row.
@@ -968,5 +998,328 @@ mod tests {
         p.set_rows(Rows::Containers(vec![ctr("zzz", "running")]));
         assert_eq!(p.selected, 0);
         assert!(p.select_index(0) && !p.select_index(1));
+    }
+
+    fn full_container() -> Container {
+        Container {
+            id: "0123456789abcdef".into(),
+            name: "web".into(),
+            image: "nginx:1".into(),
+            state: "running".into(),
+            status: "Up 2 hours".into(),
+            ports: "0.0.0.0:8080->80/tcp".into(),
+            host_ports: vec![8080],
+            created: String::new(),
+        }
+    }
+
+    fn image(id: &str, repo: &str, tag: &str) -> Image {
+        Image {
+            id: id.into(),
+            repository: repo.into(),
+            tag: tag.into(),
+            size: "10MB".into(),
+            created: "now".into(),
+        }
+    }
+
+    #[test]
+    fn rows_render_each_kind_as_two_space_columns() {
+        let mut p = Panel::new(Engine::Podman, Kind::Container, false);
+        p.set_rows(Rows::Containers(vec![full_container(), {
+            let mut c = full_container();
+            c.status = String::new();
+            c.state = "exited".into();
+            c
+        }]));
+        assert_eq!(
+            p.row(0),
+            "web  nginx:1  Up 2 hours  0.0.0.0:8080->80/tcp  0123456789ab"
+        );
+        assert!(
+            p.row(1).contains("  exited  "),
+            "state stands in for a blank status"
+        );
+        assert_eq!(p.row(9), "");
+
+        p.set_kind(Kind::Image);
+        p.set_rows(Rows::Images(vec![
+            image("sha256:0123456789abcdef0123", "nginx", "1.27"),
+            image("short", "app", "dev"),
+        ]));
+        assert_eq!(p.row(0), "nginx:1.27  10MB  now  sha256:0123456789ab");
+        assert_eq!(p.row(1), "app:dev  10MB  now  short");
+
+        p.set_kind(Kind::Volume);
+        p.set_rows(Rows::Volumes(vec![Volume {
+            name: "data".into(),
+            driver: "local".into(),
+            mountpoint: "/v/data".into(),
+        }]));
+        assert_eq!(p.row(0), "data  local  /v/data");
+
+        p.set_kind(Kind::Network);
+        p.set_rows(Rows::Networks(vec![Network {
+            id: "n1".into(),
+            name: "bridge".into(),
+            driver: "bridge".into(),
+            scope: "local".into(),
+        }]));
+        assert_eq!(p.row(0), "bridge  bridge  local  n1");
+
+        p.set_kind(Kind::Pod);
+        p.set_rows(Rows::Pods(vec![Pod {
+            id: "p1".into(),
+            name: "pod-a".into(),
+            status: "Running".into(),
+            containers: 3,
+        }]));
+        assert_eq!(p.row(0), "pod-a  Running  3");
+        assert_eq!(p.len(), 1);
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn selected_ref_and_len_follow_the_current_kind() {
+        let mut p = Panel::new(Engine::Podman, Kind::Container, false);
+        assert!(p.is_empty());
+        assert_eq!(p.selected_ref(), None);
+        p.set_rows(Rows::Containers(vec![full_container()]));
+        assert_eq!(p.selected_ref().as_deref(), Some("0123456789abcdef"));
+        assert!(p.selected_container().is_some());
+
+        p.set_kind(Kind::Image);
+        assert!(p.selected_container().is_none());
+        p.set_rows(Rows::Images(vec![image("sha256:1", "app", "dev")]));
+        assert_eq!(p.selected_ref().as_deref(), Some("app:dev"));
+
+        p.set_kind(Kind::Volume);
+        p.set_rows(Rows::Volumes(vec![Volume {
+            name: "vol".into(),
+            ..Volume::default()
+        }]));
+        assert_eq!(p.selected_ref().as_deref(), Some("vol"));
+
+        p.set_kind(Kind::Network);
+        p.set_rows(Rows::Networks(vec![Network {
+            name: "net".into(),
+            ..Network::default()
+        }]));
+        assert_eq!(p.selected_ref().as_deref(), Some("net"));
+
+        p.set_kind(Kind::Pod);
+        p.set_rows(Rows::Pods(vec![Pod {
+            id: "pid".into(),
+            ..Pod::default()
+        }]));
+        assert_eq!(p.selected_ref().as_deref(), Some("pid"));
+    }
+
+    #[test]
+    fn cycle_kind_wraps_forward_and_back() {
+        let mut p = Panel::new(Engine::Docker, Kind::Network, false);
+        p.cycle_kind(true);
+        assert_eq!(p.kind, Kind::Container, "forward past the last kind wraps");
+        p.cycle_kind(false);
+        assert_eq!(p.kind, Kind::Network, "back past the first kind wraps");
+    }
+
+    #[test]
+    fn paging_and_scrolling_move_the_highlight() {
+        let mut p = panel(false);
+        p.page_down(5);
+        assert_eq!(p.selected, 2);
+        p.page_up(5);
+        assert_eq!(p.selected, 0);
+        p.up();
+        assert_eq!(p.selected, 0);
+        p.selected = 2;
+        p.ensure_visible(1);
+        assert_eq!(p.scroll, 2);
+        assert_eq!(p.key(press(KeyCode::PageUp), 5), Request::None);
+        assert_eq!(p.selected, 0);
+        assert_eq!(p.key(press(KeyCode::PageDown), 5), Request::None);
+        assert_eq!(p.key(press(KeyCode::Up), 5), Request::None);
+        assert_eq!(p.key(press(KeyCode::Down), 5), Request::None);
+        assert_eq!(p.key(press(KeyCode::F(5)), 5), Request::None);
+    }
+
+    #[test]
+    fn browse_keys_close_reload_and_ignore_ctrl() {
+        let mut p = panel(false);
+        assert_eq!(p.key(press(KeyCode::Esc), 5), Request::Close);
+        assert_eq!(p.key(press(KeyCode::Char('q')), 5), Request::Close);
+        assert_eq!(p.key(press(KeyCode::Char('r')), 5), Request::Reload);
+        assert_eq!(
+            p.key(press(KeyCode::Char('i')), 5),
+            Request::Inspect(Kind::Container, "aaa".into())
+        );
+        assert_eq!(
+            p.key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL), 5),
+            Request::None
+        );
+        assert_eq!(p.mode, Mode::Browse);
+        assert_eq!(p.key(press(KeyCode::Char('Z')), 5), Request::None);
+        // 'a' toggles show-all and reloads.
+        assert!(p.show_all);
+        assert_eq!(p.key(press(KeyCode::Char('a')), 5), Request::Reload);
+        assert!(!p.show_all);
+        // Unmapped letter on a container, and letters on a volume list.
+        assert_eq!(p.key(press(KeyCode::Char('z')), 5), Request::None);
+        p.set_kind(Kind::Volume);
+        assert_eq!(p.key(press(KeyCode::Char('l')), 5), Request::None);
+        assert_eq!(
+            p.key(press(KeyCode::Enter), 5),
+            Request::None,
+            "no row to inspect"
+        );
+        assert_eq!(
+            p.key(press(KeyCode::Delete), 5),
+            Request::None,
+            "no row to remove"
+        );
+    }
+
+    #[test]
+    fn container_keys_without_a_row_do_nothing() {
+        let mut p = Panel::new(Engine::Docker, Kind::Container, false);
+        for c in ['l', 'e', 's', 'o'] {
+            assert_eq!(p.key(press(KeyCode::Char(c)), 5), Request::None, "{c}");
+        }
+    }
+
+    #[test]
+    fn open_workspace_uses_the_id_when_the_name_is_empty_and_port_needs_a_port() {
+        let mut p = Panel::new(Engine::Docker, Kind::Container, false);
+        let mut c = full_container();
+        c.name = String::new();
+        c.host_ports = Vec::new();
+        p.set_rows(Rows::Containers(vec![c]));
+        assert_eq!(
+            p.key(press(KeyCode::Char('w')), 5),
+            Request::OpenWorkspace("0123456789abcdef".into())
+        );
+        assert_eq!(p.key(press(KeyCode::Char('c')), 5), Request::None);
+        assert_eq!(
+            exec_args(p.key(press(KeyCode::Char('t')), 5)),
+            ["restart", "0123456789abcdef"]
+        );
+        assert_eq!(
+            exec_args(p.key(press(KeyCode::Char('p')), 5)),
+            ["pause", "0123456789abcdef"]
+        );
+    }
+
+    #[test]
+    fn confirm_ignores_nothing_but_runs_on_enter_and_disarms_otherwise() {
+        let mut p = panel(false);
+        p.key(press(KeyCode::Char('d')), 5);
+        assert_eq!(
+            exec_args(p.key(press(KeyCode::Enter), 5)),
+            ["rm", "-f", "aaa"]
+        );
+        assert_eq!(p.mode, Mode::Browse);
+    }
+
+    #[test]
+    fn image_keys_cover_pull_run_tag_push_and_read_only() {
+        // Empty image list: only pull is available.
+        let mut p = Panel::new(Engine::Docker, Kind::Image, false);
+        assert_eq!(p.key(press(KeyCode::Char('u')), 5), Request::None);
+        assert_eq!(p.mode, Mode::Browse);
+        assert_eq!(p.key(press(KeyCode::Char('p')), 5), Request::None);
+        assert!(
+            matches!(&p.mode, Mode::Input { purpose: Purpose::Pull, text, .. } if text.is_empty())
+        );
+        p.key(press(KeyCode::Esc), 5);
+        assert_eq!(p.mode, Mode::Browse);
+
+        // With an image: pull is seeded with the reference.
+        p.set_rows(Rows::Images(vec![image("sha256:1", "app", "dev")]));
+        p.key(press(KeyCode::Char('p')), 5);
+        assert!(
+            matches!(&p.mode, Mode::Input { purpose: Purpose::Pull, text, .. } if text == "app:dev")
+        );
+        // Backspace edits, Ctrl chars are ignored, other keys do nothing.
+        p.key(press(KeyCode::Backspace), 5);
+        p.key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL), 5);
+        p.key(press(KeyCode::Left), 5);
+        assert!(matches!(&p.mode, Mode::Input { text, .. } if text == "app:de"));
+        p.key(press(KeyCode::Char('v')), 5);
+        assert_eq!(p.key(press(KeyCode::Enter), 5), Request::None);
+        assert!(
+            matches!(&p.mode, Mode::Confirm(c) if c.rendered == "docker pull app:dev" && c.stream)
+        );
+        p.mode = Mode::Browse;
+        assert_eq!(p.key(press(KeyCode::Char('z')), 5), Request::None);
+
+        // Read-only refuses u, g, p, P and a submitted prompt.
+        let mut ro = Panel::new(Engine::Docker, Kind::Image, true);
+        ro.set_rows(Rows::Images(vec![image("sha256:1", "app", "dev")]));
+        for c in ['u', 'g', 'p', 'P'] {
+            assert_eq!(ro.key(press(KeyCode::Char(c)), 5), Request::ReadOnly, "{c}");
+        }
+        ro.start_input(Purpose::Pull, "alpine", "");
+        assert_eq!(ro.key(press(KeyCode::Enter), 5), Request::ReadOnly);
+        assert_eq!(ro.mode, Mode::Browse);
+    }
+
+    #[test]
+    fn build_and_run_prompts_validate_each_word() {
+        let mut p = Panel::new(Engine::Docker, Kind::Image, false);
+        p.start_input(Purpose::Build, "Dockerfile tag=app:1", "");
+        assert_eq!(p.key(press(KeyCode::Enter), 5), Request::None);
+        assert!(matches!(&p.mode, Mode::Confirm(c)
+            if c.rendered == "docker build -f Dockerfile -t app:1 ." && c.stream));
+        p.mode = Mode::Browse;
+        p.start_input(Purpose::Build, "a b", "");
+        assert!(matches!(
+            p.key(press(KeyCode::Enter), 5),
+            Request::Invalid(_)
+        ));
+
+        assert!(
+            parse_run("alpine extra").is_err(),
+            "a stray second word is refused"
+        );
+        let opts = parse_run("alpine name=x port=1:2").expect("valid");
+        assert_eq!(opts.image, "alpine");
+        assert_eq!(opts.name.as_deref(), Some("x"));
+        assert_eq!(opts.ports, ["1:2"]);
+        assert!(opts.detach);
+    }
+
+    #[test]
+    fn prune_kind_words_accept_singular_and_plural() {
+        assert_eq!(parse_prune_kind(" Containers ").ok(), Some(Kind::Container));
+        assert_eq!(parse_prune_kind("image").ok(), Some(Kind::Image));
+        assert_eq!(parse_prune_kind("volume").ok(), Some(Kind::Volume));
+        assert_eq!(parse_prune_kind("networks").ok(), Some(Kind::Network));
+        assert_eq!(parse_prune_kind("container").ok(), Some(Kind::Container));
+        assert_eq!(parse_prune_kind("images").ok(), Some(Kind::Image));
+        assert_eq!(parse_prune_kind("volumes").ok(), Some(Kind::Volume));
+        assert_eq!(parse_prune_kind("network").ok(), Some(Kind::Network));
+        assert!(parse_prune_kind("pods").is_err());
+    }
+
+    #[test]
+    fn compose_and_file_name_constants() {
+        let up = compose_pending(Engine::Docker, &ComposeOp::Up, None).expect("valid");
+        assert_eq!(up.rendered, "docker compose up -d");
+        assert!(up.stream);
+        assert_eq!(COMPOSE_FILES[0], "compose.yaml");
+        assert_eq!(BUILD_FILES, ["Containerfile", "Dockerfile"]);
+        assert!(prune_pending(Engine::Podman, Kind::Pod).is_err());
+    }
+
+    #[test]
+    fn remove_for_non_container_kinds_uses_plain_remove() {
+        let mut p = Panel::new(Engine::Docker, Kind::Volume, false);
+        p.set_rows(Rows::Volumes(vec![Volume {
+            name: "data".into(),
+            ..Volume::default()
+        }]));
+        p.key(press(KeyCode::Char('d')), 5);
+        assert!(matches!(&p.mode, Mode::Confirm(c) if c.rendered == "docker volume rm data"));
     }
 }

@@ -4,6 +4,18 @@
 //! never be open together. Each variant still has its own row in
 //! [`super::overlays::OVERLAYS`]. See `spec/overlay-priority/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::{AsciiPanel, FileInfoPanel, NerdPalette, SystemInfoPanel, TextInfoPanel};
 use crate::app::lsp_status::LspStatusPanel;
 use crate::media_type::Panel as MediaTypePanel;

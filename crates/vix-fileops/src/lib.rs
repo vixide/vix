@@ -1,6 +1,20 @@
 //! Filesystem helpers for the explorer's copy / cut / paste / delete, plus a
 //! crash-safe atomic writer used across the app for saving files.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice,
+        clippy::unreachable,
+        clippy::panic
+    )
+)]
+
 pub mod dir_edit;
 /// The freedesktop.org trash, written here so it needs no `chrono`. Built where
 /// it is used (Linux and the BSDs) and, for its tests, on every Unix.
@@ -14,6 +28,7 @@ pub mod dir_edit;
     all(test, unix)
 ))]
 mod freedesktop_trash;
+pub mod user_dirs;
 
 use std::fs;
 use std::io;
@@ -155,8 +170,14 @@ pub fn which_on_path(name: &str) -> Option<PathBuf> {
 /// # Errors
 ///
 /// Returns an error if the platform's trash mechanism rejects the move (no
-/// trash available, permission denied, the path doesn't exist, …).
+/// trash available, permission denied, …). A path that does not exist is
+/// [`io::ErrorKind::NotFound`] on every platform.
 pub fn trash_path(path: &Path) -> io::Result<()> {
+    // Look before moving anything: trashing a path that is not there is
+    // `NotFound` on every platform, not whatever the OS mechanism makes of it
+    // (macOS and the fallback reported `Other`). `symlink_metadata`, so a
+    // dangling symlink, which is trashed rather than followed, still counts.
+    fs::symlink_metadata(path)?;
     // On macOS the crate's default asks Finder through an `osascript` child
     // process; the `NSFileManager` call does the same job without starting one.
     #[cfg(target_os = "macos")]
@@ -585,10 +606,22 @@ pub fn write_private_temp(prefix: &str, data: &[u8]) -> io::Result<PathBuf> {
         .unwrap_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "temp name unavailable")))
 }
 
+/// `a + b`, or the declared `fallback` when the sum does not fit. The
+/// fallback is a parameter so each call site names (and cites) its
+/// declaration; written inline, `checked_add(..).unwrap_or(u64::MAX)` is
+/// rewritten by Clippy to `saturating_add`, which the checked-arithmetic spec
+/// forbids (RCA-INT-4).
+fn add_or(a: u64, b: u64, fallback: u64) -> u64 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A name in `dir` derived from `original` that doesn't yet exist, appending
 /// " copy", " copy 2", … before the extension. Used for same-directory copies.
+///
+/// Returns `None` only if every one of the four billion numbered names is
+/// taken: no existing name is ever handed back.
 #[must_use]
-pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
+pub fn unique_copy_name(dir: &Path, original: &Path) -> Option<PathBuf> {
     let stem = original
         .file_stem()
         .map_or_default(|s| s.to_string_lossy().into_owned());
@@ -596,22 +629,20 @@ pub fn unique_copy_name(dir: &Path, original: &Path) -> PathBuf {
         .extension()
         .map(|e| e.to_string_lossy().into_owned());
 
-    for n in 1.. {
-        let suffix = if n == 1 {
-            " copy".to_string()
-        } else {
-            format!(" copy {n}")
-        };
-        let name = match &ext {
-            Some(e) => format!("{stem}{suffix}.{e}"),
-            None => format!("{stem}{suffix}"),
-        };
-        let candidate = dir.join(name);
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-    unreachable!("the loop returns once a free name is found")
+    let named = |suffix: &str| match &ext {
+        Some(e) => dir.join(format!("{stem}{suffix}.{e}")),
+        None => dir.join(format!("{stem}{suffix}")),
+    };
+    // " copy", " copy 2", " copy 3", ...: the first that is free.
+    (1_u32..=u32::MAX)
+        .map(|n| {
+            if n == 1 {
+                named(" copy")
+            } else {
+                named(&format!(" copy {n}"))
+            }
+        })
+        .find(|candidate| !candidate.exists())
 }
 
 /// Whether `path` exists but this user can't write it (T572). The metadata
@@ -747,11 +778,15 @@ pub fn read_text_guarded(path: &Path, max_bytes: u64) -> io::Result<TextFile> {
     // file's size from `read_to_end`, which otherwise grows the buffer by
     // doubling (a 100 MB file cost ~264 MB of allocations, T749). One spare
     // byte lets the read see EOF without growing.
-    let capacity = usize::try_from(meta.len().saturating_add(1)).unwrap_or(0);
+    let capacity = meta
+        .len()
+        .checked_add(1)
+        .and_then(|n| usize::try_from(n).ok())
+        .unwrap_or(0); // FOPS-F2: the capacity is only a hint
     let mut bytes = Vec::with_capacity(capacity);
     // `take` bounds the read even if the file grows after the stat.
     fs::File::open(path)?
-        .take(max_bytes + 1)
+        .take(add_or(max_bytes, 1, u64::MAX)) // FOPS-F3
         .read_to_end(&mut bytes)?;
     decode_text(bytes, max_bytes)
 }
@@ -800,7 +835,7 @@ pub fn stream_text_guarded(
     let whole = || read_text_guarded(path, max_bytes).map(TextStream::Whole);
     // `take(max + 1)`: one byte over the cap lets us detect a file that grew
     // after the metadata check without ever reading unbounded data.
-    let mut file = fs::File::open(path)?.take(max_bytes + 1);
+    let mut file = fs::File::open(path)?.take(add_or(max_bytes, 1, u64::MAX)); // FOPS-F3
     let mut buf = vec![0u8; BLOCK];
     // Bytes of a character split across two blocks, kept at the front.
     let mut carry = 0;
@@ -809,19 +844,39 @@ pub fn stream_text_guarded(
     loop {
         // Fill the block (a read may return less than asked).
         let mut filled = carry;
-        while filled < buf.len() {
-            match file.read(&mut buf[filled..]) {
+        while let Some(room) = buf.get_mut(filled..).filter(|room| !room.is_empty()) {
+            match file.read(room) {
                 Ok(0) => break,
-                Ok(n) => filled += n,
+                // A read never returns more than the room it was given.
+                Ok(n) => {
+                    #[expect(
+                        clippy::arithmetic_side_effects,
+                        reason = "RCA-EXC-2: a read returns at most the room it was given, so filled + n is at most buf.len()"
+                    )]
+                    let next = filled + n;
+                    filled = next;
+                }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),
             }
         }
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: filled starts at carry and only grows"
+        )]
         let read = filled - carry;
-        total += read as u64;
+        // A total that does not fit `u64` is over any cap: the file is refused.
+        total = u64::try_from(read)
+            .ok()
+            .and_then(|n| total.checked_add(n))
+            .ok_or_else(|| refuse(TextReadError::TooLarge))?;
         if total > max_bytes {
             return Err(refuse(TextReadError::TooLarge));
         }
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: the fill loop stops at buf.len(), so filled is at most buf.len()"
+        )]
         let block = &buf[..filled];
         if first {
             first = false;
@@ -840,13 +895,22 @@ pub fn stream_text_guarded(
             // A character cut off by the block's end: keep its bytes.
             Err(e) => {
                 let valid = e.valid_up_to();
+                #[expect(
+                    clippy::indexing_slicing,
+                    reason = "RCA-EXC-2: valid_up_to is at most the block length"
+                )]
                 if let Ok(text) = std::str::from_utf8(&block[..valid]) {
                     sink(text);
                 }
                 valid
             }
         };
-        carry = filled - valid;
+        #[expect(
+            clippy::arithmetic_side_effects,
+            reason = "RCA-EXC-2: valid is a prefix length of the block, so at most filled"
+        )]
+        let left_over = filled - valid;
+        carry = left_over;
         if read == 0 {
             // End of file: a character still cut off is invalid UTF-8.
             return if carry == 0 {
@@ -855,6 +919,7 @@ pub fn stream_text_guarded(
                 whole()
             };
         }
+        // `valid <= filled <= buf.len()` (see above), so the range is in bounds.
         buf.copy_within(valid..filled, 0);
     }
 }
@@ -869,7 +934,7 @@ pub fn stream_text_guarded(
 /// [`TextReadError::Binary`].
 pub fn decode_text(mut bytes: Vec<u8>, max_bytes: u64) -> io::Result<TextFile> {
     let refuse = |why| io::Error::new(io::ErrorKind::InvalidData, why);
-    if bytes.len() as u64 > max_bytes {
+    if u64::try_from(bytes.len()).map_or(true, |len| len > max_bytes) {
         return Err(refuse(TextReadError::TooLarge));
     }
     let bom = vix_encoding::sniff_bom(&bytes);
@@ -1379,6 +1444,19 @@ mod tests {
     }
 
     #[test]
+    fn trashing_a_missing_path_is_not_found_on_every_platform() {
+        // The macOS and fallback mechanisms used to report this as `Other`.
+        let missing = std::env::temp_dir().join(format!(
+            "vix-trash-missing-{}-{}",
+            std::process::id(),
+            TMP_SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
+        assert!(!missing.exists());
+        let err = trash_path(&missing).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound, "{err}");
+    }
+
+    #[test]
     fn read_text_guarded_refuses_non_text_and_decodes_lossily() {
         let dir = std::env::temp_dir().join(format!("vix-guard-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
@@ -1476,6 +1554,267 @@ mod tests {
         let new = dir.join("new");
         write_text_in_file_encoding(&new, "é").unwrap();
         assert_eq!(fs::read(&new).unwrap(), "é".as_bytes());
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("vix-fileops-cov-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn copy_recursive_creates_missing_parents_for_files_and_links() {
+        let base = scratch("copy-parents");
+        let file = base.join("a.txt");
+        fs::write(&file, b"hello").unwrap();
+        let dst = base.join("x").join("y").join("a.txt");
+        copy_recursive(&file, &dst).unwrap();
+        assert_eq!(fs::read(&dst).unwrap(), b"hello");
+        #[cfg(unix)]
+        {
+            let link = base.join("link");
+            std::os::unix::fs::symlink("a.txt", &link).unwrap();
+            let copied = base.join("p").join("q").join("link");
+            copy_recursive(&link, &copied).unwrap();
+            assert_eq!(fs::read_link(&copied).unwrap(), Path::new("a.txt"));
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn move_path_renames_or_merges_then_removes_the_source() {
+        let base = scratch("move");
+        let src = base.join("src");
+        fs::create_dir_all(src.join("sub")).unwrap();
+        fs::write(src.join("sub").join("f.txt"), b"data").unwrap();
+        let dst = base.join("dst");
+        move_path(&src, &dst).unwrap();
+        assert!(!src.exists());
+        assert_eq!(fs::read(dst.join("sub").join("f.txt")).unwrap(), b"data");
+
+        // A rename onto a non-empty directory fails, so the copy+remove
+        // fallback merges the source into it and still removes the source.
+        let src2 = base.join("src2");
+        fs::create_dir_all(&src2).unwrap();
+        fs::write(src2.join("g.txt"), b"more").unwrap();
+        move_path(&src2, &dst).unwrap();
+        assert!(!src2.exists());
+        assert_eq!(fs::read(dst.join("g.txt")).unwrap(), b"more");
+        assert_eq!(fs::read(dst.join("sub").join("f.txt")).unwrap(), b"data");
+        assert!(move_path(&base.join("missing"), &base.join("nowhere")).is_err());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn remove_path_deletes_files_and_directory_trees() {
+        let base = scratch("remove");
+        let tree = base.join("tree");
+        fs::create_dir_all(tree.join("deep")).unwrap();
+        fs::write(tree.join("deep").join("f"), b"x").unwrap();
+        remove_path(&tree).unwrap();
+        assert!(!tree.exists());
+        let file = base.join("f");
+        fs::write(&file, b"x").unwrap();
+        remove_path(&file).unwrap();
+        assert!(!file.exists());
+        assert!(remove_path(&file).is_err());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn which_on_path_finds_a_standard_tool_and_not_a_missing_one() {
+        let sh = which_on_path("sh").expect("sh is on PATH");
+        assert!(sh.is_file());
+        assert_eq!(sh.file_name().unwrap(), "sh");
+        assert_eq!(which_on_path("vix-definitely-not-a-program-xyz"), None);
+    }
+
+    #[test]
+    fn identity_refusal_and_text_refusals_describe_themselves() {
+        assert!(
+            RenameWouldChangeIdentity
+                .to_string()
+                .contains("hard links or owner")
+        );
+        let all = [
+            TextReadError::NotRegular.to_string(),
+            TextReadError::TooLarge.to_string(),
+            TextReadError::Binary.to_string(),
+        ];
+        assert_eq!(all[0], "not a regular file");
+        assert_eq!(all[2], "binary file");
+        assert!(all[1].contains("too large"));
+        let wrapped = io::Error::new(io::ErrorKind::InvalidData, TextReadError::Binary);
+        assert_eq!(
+            TextReadError::from_io(&wrapped),
+            Some(TextReadError::Binary)
+        );
+        assert_eq!(TextReadError::from_io(&io::Error::other("x")), None);
+    }
+
+    #[test]
+    fn recoveries_skip_junk_and_report_malformed_copies() {
+        let dir = scratch("recover");
+        assert_eq!(pending_recoveries(&dir.join("missing")), []);
+        fs::write(dir.join("notes.txt"), b"ignored: wrong extension").unwrap();
+        fs::write(dir.join("a.vixrecover"), b"WRONG MAGIC\n/x\ndata").unwrap();
+        fs::write(dir.join("b.vixrecover"), RECOVERY_MAGIC.as_bytes()).unwrap();
+        assert_eq!(pending_recoveries(&dir), []);
+
+        let good = dir.join("c.vixrecover");
+        let original = dir.join("orig.txt");
+        let body = format!("{RECOVERY_MAGIC}\n{}\nsaved bytes", original.display());
+        fs::write(&good, body).unwrap();
+        let found = pending_recoveries(&dir);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].original, original);
+        assert_eq!(found[0].contents().unwrap(), b"saved bytes");
+
+        let bad = Recovery {
+            copy: dir.join("b.vixrecover"),
+            original: original.clone(),
+        };
+        assert_eq!(
+            bad.contents().unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        let gone = Recovery {
+            copy: dir.join("nope.vixrecover"),
+            original,
+        };
+        assert_eq!(gone.contents().unwrap_err().kind(), io::ErrorKind::NotFound);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn private_atomic_write_falls_back_in_place_and_keeps_the_mode() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = scratch("private-fallback");
+        let p = dir.join("secret.txt");
+        fs::write(&p, b"old").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o644)).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let result = write_atomic_private(&p, b"new");
+        let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o755));
+        result.expect("falls back to an in-place write");
+        assert_eq!(fs::read(&p).unwrap(), b"new");
+        // An existing file keeps its own mode.
+        assert_eq!(
+            fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn writing_over_a_directory_fails_with_both_attempts_reported() {
+        let dir = scratch("write-dir");
+        let target = dir.join("is-a-dir");
+        fs::create_dir_all(&target).unwrap();
+        assert!(write_atomic(&target, b"x").is_err());
+        assert!(target.is_dir());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn private_temp_reports_errors_other_than_name_clashes() {
+        let err = write_private_temp("no-such-dir/prefix", b"x").unwrap_err();
+        assert_ne!(err.kind(), io::ErrorKind::AlreadyExists);
+    }
+
+    #[test]
+    fn unique_copy_names_count_up_and_keep_the_extension() {
+        let dir = scratch("copyname");
+        let original = dir.join("a.txt");
+        fs::write(&original, b"x").unwrap();
+        assert_eq!(
+            unique_copy_name(&dir, &original),
+            Some(dir.join("a copy.txt"))
+        );
+        fs::write(dir.join("a copy.txt"), b"x").unwrap();
+        fs::write(dir.join("a copy 2.txt"), b"x").unwrap();
+        assert_eq!(
+            unique_copy_name(&dir, &original),
+            Some(dir.join("a copy 3.txt"))
+        );
+        let bare = dir.join("Makefile");
+        assert_eq!(
+            unique_copy_name(&dir, &bare),
+            Some(dir.join("Makefile copy"))
+        );
+        fs::write(dir.join("Makefile copy"), b"x").unwrap();
+        assert_eq!(
+            unique_copy_name(&dir, &bare),
+            Some(dir.join("Makefile copy 2"))
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn decode_text_applies_its_guards_and_decodes_legacy_bytes() {
+        let too_big = decode_text(vec![b'a'; 10], 5).unwrap_err();
+        assert_eq!(
+            TextReadError::from_io(&too_big),
+            Some(TextReadError::TooLarge)
+        );
+        let binary = decode_text(b"ab\0cd".to_vec(), 100).unwrap_err();
+        assert_eq!(TextReadError::from_io(&binary), Some(TextReadError::Binary));
+        let plain = decode_text("héllo".as_bytes().to_vec(), 100).unwrap();
+        assert_eq!(plain.text, "héllo");
+        assert!(!plain.lossy);
+        // Not UTF-8: the legacy detector or the lossy fallback still yields text.
+        let legacy = decode_text(b"caf\xe9".to_vec(), 100).unwrap();
+        assert!(legacy.text.starts_with("caf"));
+        // A UTF-16 BOM skips the raw NUL check, but NULs once decoded are binary.
+        let utf16_nuls = decode_text(vec![0xff, 0xfe, 0, 0, 0, 0], 100).unwrap_err();
+        assert_eq!(
+            TextReadError::from_io(&utf16_nuls),
+            Some(TextReadError::Binary)
+        );
+    }
+
+    #[test]
+    fn encode_like_follows_the_existing_file_and_passes_errors_through() {
+        let missing = Err(io::Error::from(io::ErrorKind::NotFound));
+        assert_eq!(encode_like(missing, "é").unwrap(), "é".as_bytes());
+        let other = Err(io::Error::from(io::ErrorKind::PermissionDenied));
+        assert_eq!(
+            encode_like(other, "x").unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        let lossy = TextFile {
+            text: String::new(),
+            lossy: true,
+            encoding: vix_encoding::TextEncoding::UTF8,
+        };
+        assert_eq!(
+            encode_like(Ok(lossy), "x").unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+    }
+
+    #[test]
+    fn read_to_string_guarded_reads_text_and_refuses_directories() {
+        let dir = scratch("guarded");
+        let f = dir.join("t.txt");
+        fs::write(&f, "hello\n").unwrap();
+        assert_eq!(read_to_string_guarded(&f).unwrap(), "hello\n");
+        let err = read_to_string_guarded(&dir).unwrap_err();
+        assert_eq!(
+            TextReadError::from_io(&err),
+            Some(TextReadError::NotRegular)
+        );
+        assert!(read_to_string_guarded(&dir.join("missing")).is_err());
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -12,6 +12,18 @@ use crate::peer::PeerId;
 use crate::wire::Presence;
 use std::collections::BTreeMap;
 
+/// The palette entry for `peer`: peers cycle through the palette from the host
+/// (peer 1) onward. A peer id of 0, which no session hands out, takes the first entry.
+fn palette_entry(peer: PeerId) -> Rgb {
+    let first = PALETTE.first().copied().unwrap_or(Rgb(128, 128, 128));
+    let slot = u64::try_from(PALETTE.len())
+        .ok()
+        .and_then(|len| peer.index().checked_sub(1)?.checked_rem(len))
+        .and_then(|slot| usize::try_from(slot).ok());
+    slot.and_then(|slot| PALETTE.get(slot).copied())
+        .unwrap_or(first)
+}
+
 /// An sRGB color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rgb(pub u8, pub u8, pub u8);
@@ -61,10 +73,17 @@ pub fn contrast_ratio(a: Rgb, b: Rgb) -> f64 {
 }
 
 /// Move `c` toward `target` by `step` twentieths (integer math, no casts).
+#[expect(
+    clippy::integer_division,
+    clippy::arithmetic_side_effects,
+    reason = "RCA-EXC-2: step is 0 to 20, so the mix lies between the channel and the target, both bytes; no sum or product leaves i32"
+)]
 fn mix(c: Rgb, target: u8, step: i32) -> Rgb {
     let m = |x: u8| {
         let (x, t) = (i32::from(x), i32::from(target));
-        u8::try_from((x + (t - x) * step / 20).clamp(0, 255)).unwrap_or(target)
+        // Between the channel and the target, so always a byte; the target
+        // stands in should that ever not hold.
+        u8::try_from(x + (t - x) * step / 20).unwrap_or(target)
     };
     Rgb(m(c.0), m(c.1), m(c.2))
 }
@@ -75,8 +94,7 @@ fn mix(c: Rgb, target: u8, step: i32) -> Rgb {
 #[must_use]
 pub fn peer_color(peer: PeerId, background: Rgb) -> Rgb {
     // The host is peer 1 and the first guest peer 2, so index from 0.
-    let slot = usize::try_from(peer.index().wrapping_sub(1) % PALETTE.len() as u64).unwrap_or(0);
-    let base = PALETTE[slot];
+    let base = palette_entry(peer);
     let dark_bg = luminance(background) < 0.179;
     let target = if dark_bg { 255 } else { 0 };
     let mut best = base;
@@ -339,6 +357,28 @@ mod tests {
         assert_eq!(f.target(), None);
         f.start(PeerId(2));
         f.on_peer_left(PeerId(2));
+        assert_eq!(f.target(), None);
+    }
+
+    #[test]
+    fn follow_starts_stops_and_unpins_on_scroll_or_departure() {
+        let mut f = Follow::default();
+        assert_eq!(f.target(), None);
+        f.start(PeerId(7));
+        assert_eq!(f.target(), Some(PeerId(7)));
+        f.on_peer_left(PeerId(8));
+        assert_eq!(
+            f.target(),
+            Some(PeerId(7)),
+            "another peer leaving changes nothing"
+        );
+        f.on_peer_left(PeerId(7));
+        assert_eq!(f.target(), None);
+        f.start(PeerId(7));
+        f.on_local_scroll();
+        assert_eq!(f.target(), None);
+        f.start(PeerId(9));
+        f.stop();
         assert_eq!(f.target(), None);
     }
 }

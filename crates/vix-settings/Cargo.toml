@@ -9,10 +9,13 @@ description = "User settings, persisted with `confy`."
 
 [dependencies]
 confy = { workspace = true }
-etcetera = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 vix-fileops = { workspace = true }
+
+# Tests never read or write the real ~/.config/vix (crates/vix-fileops user_dirs).
+[dev-dependencies]
+vix-fileops = { workspace = true, features = ["isolated-user-dirs"] }
 
 [lints]
 workspace = true

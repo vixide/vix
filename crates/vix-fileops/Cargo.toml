@@ -7,8 +7,17 @@ license.workspace = true
 repository.workspace = true
 description = "Filesystem helpers for the explorer's copy / cut / paste / delete."
 
+[features]
+# Swap the user's real configuration and data directories for a per-process
+# directory under the system temporary directory (see `user_dirs`). Only
+# dev-dependencies enable it, so tests can never rewrite the real `~/.config/vix`.
+isolated-user-dirs = []
+
 [dependencies]
+confy = { workspace = true }
+etcetera = { workspace = true }
 globset = { workspace = true }
+serde = { workspace = true }
 vix-encoding = { workspace = true }
 
 # macOS and Windows trash through the `trash` crate. Linux and the BSDs use

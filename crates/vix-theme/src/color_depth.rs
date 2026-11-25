@@ -18,6 +18,11 @@
 use ratatui::buffer::Buffer;
 use ratatui::style::Color;
 
+/// `a - b`, or the declared `fallback` when it would go below zero.
+fn sub_or(a: u16, b: u16, fallback: u16) -> u16 {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// How many colors a terminal can show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ColorDepth {
@@ -152,6 +157,10 @@ const ANSI16: [(Color, (u8, u8, u8)); 16] = [
 const CUBE: [u8; 6] = [0, 95, 135, 175, 215, 255];
 
 /// Squared distance between two RGB colors.
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "RCA-EXC-2: each term is at most 255 squared, so the sum of three is below u32::MAX"
+)]
 fn distance2(a: (u8, u8, u8), b: (u8, u8, u8)) -> u32 {
     let d = |x: u8, y: u8| u32::from(x.abs_diff(y)).pow(2);
     d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2)
@@ -160,6 +169,10 @@ fn distance2(a: (u8, u8, u8), b: (u8, u8, u8)) -> u32 {
 /// The index (0–5) of the cube level nearest `v`. The levels are uneven
 /// (a 95 step after 0, then 40s), so this compares against each rather than
 /// dividing.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "RCA-EXC-2: best is always an index of CUBE (0 to 5), starting at 0 and set only from the zip over CUBE"
+)]
 fn cube_index(v: u8) -> u8 {
     let mut best = 0u8;
     for (i, level) in (0u8..).zip(CUBE) {
@@ -171,6 +184,12 @@ fn cube_index(v: u8) -> u8 {
 }
 
 /// The RGB value of xterm palette entry `i`.
+#[expect(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::integer_division,
+    reason = "RCA-EXC-2: each arm's range keeps the offsets and the cube and ANSI16 indices in range: 0..=15 indexes ANSI16 (16 entries), n is at most 215 so n/36, n/6%6 and n%6 are at most 5, and i-232 is at most 23 so the gray level is at most 238"
+)]
 fn indexed_rgb(i: u8) -> (u8, u8, u8) {
     match i {
         0..=15 => ANSI16[usize::from(i)].1,
@@ -192,6 +211,11 @@ fn indexed_rgb(i: u8) -> (u8, u8, u8) {
 
 /// The nearest xterm 256-palette entry (cube or gray ramp) to `rgb`. The
 /// first 16 entries are skipped: terminals let users redefine them.
+#[expect(
+    clippy::arithmetic_side_effects,
+    clippy::integer_division,
+    reason = "RCA-EXC-2: the cube indexes are at most 5, so 16+36r+6g+b is at most 231, the average of three bytes is at most 255, and 232 plus a step of at most 23 is at most 255"
+)]
 fn nearest_256(rgb: (u8, u8, u8)) -> u8 {
     let (r, g, b) = (cube_index(rgb.0), cube_index(rgb.1), cube_index(rgb.2));
     let cube = 16 + 36 * r + 6 * g + b;
@@ -199,7 +223,7 @@ fn nearest_256(rgb: (u8, u8, u8)) -> u8 {
     // closer: near-grays are matched far better by the 24-step ramp.
     let avg = (u16::from(rgb.0) + u16::from(rgb.1) + u16::from(rgb.2)) / 3;
     // The gray ramp is 8, 18, …, 238 (24 steps).
-    let step = u8::try_from((avg.saturating_sub(3) / 10).min(23)).unwrap_or(23);
+    let step = u8::try_from((sub_or(avg, 3, 0) / 10).min(23)).unwrap_or(23);
     let gray = 232 + step;
     if distance2(rgb, indexed_rgb(gray)) < distance2(rgb, indexed_rgb(cube)) {
         gray
@@ -241,8 +265,11 @@ pub fn downsample(color: Color, depth: ColorDepth) -> Color {
     match (depth, color) {
         (ColorDepth::Ansi256, Color::Rgb(r, g, b)) => Color::Indexed(nearest_256((r, g, b))),
         (ColorDepth::Ansi16, Color::Rgb(r, g, b)) => nearest_16((r, g, b)),
-        (ColorDepth::Ansi16, Color::Indexed(i)) if i < 16 => ANSI16[usize::from(i)].0,
-        (ColorDepth::Ansi16, Color::Indexed(i)) => nearest_16(indexed_rgb(i)),
+        // The first 16 entries are the ANSI colors themselves.
+        (ColorDepth::Ansi16, Color::Indexed(i)) => match ANSI16.get(usize::from(i)) {
+            Some(entry) => entry.0,
+            None => nearest_16(indexed_rgb(i)),
+        },
         _ => color,
     }
 }

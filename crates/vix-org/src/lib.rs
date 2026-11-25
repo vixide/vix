@@ -8,7 +8,17 @@
 //!
 //! All functions are pure so they can be unit-tested without a live editor.
 
-#![cfg_attr(not(test), warn(clippy::string_slice))]
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
 
 mod columns;
 pub use columns::{
@@ -18,6 +28,8 @@ pub use columns::{
     update_all_columnview_dblocks, update_columnview_dblock,
 };
 
+#[cfg(test)]
+mod cov_tests;
 mod headline_nav;
 use headline_nav::{governing, relevel};
 pub use headline_nav::{
@@ -54,6 +66,29 @@ pub use agenda::{
 mod export;
 pub use export::{to_html, to_ics, to_latex, to_markdown};
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (a line index
+/// or count that large is past any text).
+pub(crate) fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when `b` is larger (an explicit
+/// fallback parameter keeps Clippy from rewriting it to a saturating call).
+pub(crate) fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `from + 1`, past the top of `usize` when it overflows.
+pub(crate) fn next(from: usize) -> usize {
+    add_or(from, 1, usize::MAX)
+}
+
+/// Line `i` of `lines`, or the empty line when `i` is past the end. Callers
+/// check `i < lines.len()` first, so the empty line is never observed.
+pub(crate) fn line_at<'a>(lines: &[&'a str], i: usize) -> &'a str {
+    lines.get(i).copied().unwrap_or("")
+}
+
 /// The TODO keywords Org cycles through (besides the empty state).
 const TODO: &str = "TODO";
 /// The terminal state of the TODO cycle.
@@ -63,7 +98,7 @@ const DONE: &str = "DONE";
 /// a non-headline line.
 #[must_use]
 pub fn headline_level(line: &str) -> Option<usize> {
-    let stars = line.len() - line.trim_start_matches('*').len();
+    let stars = sub_or(line.len(), line.trim_start_matches('*').len(), 0);
     if stars > 0 && line.get(stars..).unwrap_or_default().starts_with(' ') {
         Some(stars)
     } else {
@@ -77,12 +112,12 @@ pub fn headline_level(line: &str) -> Option<usize> {
 #[must_use]
 pub fn subtree_range(lines: &[&str], line: usize) -> Option<(usize, usize)> {
     let level = headline_level(lines.get(line)?)?;
-    let mut end = line + 1;
-    while end < lines.len() {
-        if headline_level(lines[end]).is_some_and(|l| l <= level) {
+    let mut end = next(line);
+    while let Some(text) = lines.get(end) {
+        if headline_level(text).is_some_and(|l| l <= level) {
             break;
         }
-        end += 1;
+        end = next(end);
     }
     Some((line, end))
 }
@@ -98,9 +133,9 @@ pub fn fold_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
     for (i, line) in lines.iter().enumerate() {
         if headline_level(line).is_some() {
             if let Some((start, end)) = subtree_range(lines, i)
-                && end > start + 1
+                && end > next(start)
             {
-                out.push((start, end - 1));
+                out.push((start, sub_or(end, 1, 0)));
             }
         } else if let Some(range) = drawer_range(lines, i) {
             out.push(range);
@@ -142,15 +177,15 @@ pub fn drawer_range(lines: &[&str], line: usize) -> Option<(usize, usize)> {
     if !is_drawer_header(lines.get(line)?) {
         return None;
     }
-    let mut end = line + 1;
-    while end < lines.len() {
-        if headline_level(lines[end]).is_some() {
+    let mut end = next(line);
+    while let Some(text) = lines.get(end) {
+        if headline_level(text).is_some() {
             return None; // a headline closes the section before any :END:
         }
-        if lines[end].trim().eq_ignore_ascii_case(":END:") {
+        if text.trim().eq_ignore_ascii_case(":END:") {
             return Some((line, end));
         }
-        end += 1;
+        end = next(end);
     }
     None
 }
@@ -174,7 +209,8 @@ fn reindent_subtree(text: &str, line: usize, deeper: bool) -> Option<String> {
     let lines: Vec<&str> = text.split('\n').collect();
     let (start, end) = subtree_range(&lines, line)?;
     if !deeper
-        && lines[start..end]
+        && lines
+            .get(start..end)?
             .iter()
             .any(|l| headline_level(l) == Some(1))
     {
@@ -200,7 +236,7 @@ pub fn cycle_todo(text: &str, line: usize) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
     let target = lines.get(line)?;
     let stars = headline_level(target)?;
-    let (prefix, rest) = target.split_at(stars + 1); // include the space
+    let (prefix, rest) = target.split_at_checked(next(stars))?; // include the space
     let new_rest = if let Some(after) = rest.strip_prefix(&format!("{TODO} ")) {
         format!("{DONE} {after}")
     } else if rest == TODO {
@@ -212,7 +248,8 @@ pub fn cycle_todo(text: &str, line: usize) -> Option<String> {
     } else {
         format!("{TODO} {rest}")
     };
-    lines[line] = format!("{prefix}{new_rest}");
+    let rewritten = format!("{prefix}{new_rest}");
+    *lines.get_mut(line)? = rewritten;
     Some(lines.join("\n"))
 }
 
@@ -223,7 +260,9 @@ fn set_headline_keyword(headline: &str, keyword: &str) -> String {
     let Some(stars) = headline_level(headline) else {
         return headline.to_string();
     };
-    let (prefix, rest) = headline.split_at(stars + 1); // include the space
+    let Some((prefix, rest)) = headline.split_at_checked(next(stars)) else {
+        return headline.to_string();
+    }; // include the space
     let body = rest
         .strip_prefix(&format!("{TODO} "))
         .or_else(|| rest.strip_prefix(&format!("{DONE} ")))
@@ -287,6 +326,44 @@ mod tests {
         assert_eq!(lines[3], "** Child A");
         assert_eq!(lines[4], "** Child B");
         assert_eq!(lines[2], "body", "parent body stays before children");
+    }
+
+    #[test]
+    fn sort_children_keeps_the_final_newline_at_the_end() {
+        // The newline that ends the buffer used to travel with the last block,
+        // landing as a blank line in the middle and leaving the text unterminated.
+        assert_eq!(
+            sort_children("* P\n** beta\n** alpha\n", 0).as_deref(),
+            Some("* P\n** alpha\n** beta\n")
+        );
+        // Without a final newline the result has none either.
+        assert_eq!(
+            sort_children("* P\n** beta\n** alpha", 0).as_deref(),
+            Some("* P\n** alpha\n** beta")
+        );
+    }
+
+    #[test]
+    fn sort_children_carries_bodies_and_blank_lines_with_their_headline() {
+        let text = "* P\n** b\nbody b\n\n** a\nbody a\n";
+        assert_eq!(
+            sort_children(text, 0).as_deref(),
+            Some("* P\n** a\nbody a\n** b\nbody b\n\n")
+        );
+    }
+
+    #[test]
+    fn sort_children_of_top_level_trees_keeps_the_final_newline() {
+        // A cursor before the first headline sorts the top-level trees.
+        assert_eq!(
+            sort_children("intro\n* b\n* a\n", 0).as_deref(),
+            Some("intro\n* a\n* b\n")
+        );
+    }
+
+    #[test]
+    fn sort_children_with_fewer_than_two_children_changes_nothing() {
+        assert_eq!(sort_children("* P\n** only\n", 0), None);
     }
 
     #[test]
@@ -942,6 +1019,15 @@ mod tests {
         assert!(out.contains("\n  CLOCK:"));
         // No open clock → None.
         assert!(clock_out(&out, "2024-08-23 Fri 12:00").is_none());
+    }
+
+    #[test]
+    fn clock_out_refuses_an_end_it_cannot_measure() {
+        let text = "CLOCK: [2024-08-23 Fri 10:00]";
+        // An end that is before the start is not a duration.
+        assert!(clock_out(text, "2024-08-23 Fri 09:00").is_none());
+        // An end that is not a timestamp is not a duration either.
+        assert!(clock_out(text, "later").is_none());
     }
 
     #[test]

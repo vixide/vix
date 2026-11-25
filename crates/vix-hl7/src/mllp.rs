@@ -51,7 +51,7 @@ pub fn to_wire(text: &str) -> Vec<u8> {
 /// Wrap `payload` in an MLLP frame.
 #[must_use]
 pub fn frame(payload: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(payload.len() + 3);
+    let mut out = Vec::new();
     out.push(START);
     out.extend_from_slice(payload);
     out.push(END);
@@ -156,5 +156,15 @@ mod tests {
         // Independently written expected bytes: VT, segments each CR-terminated, FS, CR.
         let expected = b"\x0bMSH|^~\\&|A\rPID|1\r\x1c\r".to_vec();
         assert_eq!(frame(&to_wire("MSH|^~\\&|A\nPID|1")), expected);
+    }
+
+    #[test]
+    fn too_large_error_has_a_fixed_message() {
+        assert_eq!(
+            MllpError::TooLarge.to_string(),
+            "MLLP frame exceeds the size limit"
+        );
+        let boxed: Box<dyn std::error::Error> = Box::new(MllpError::TooLarge);
+        assert!(boxed.to_string().contains("size limit"));
     }
 }

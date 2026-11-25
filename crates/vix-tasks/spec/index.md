@@ -318,3 +318,7 @@ one line for the host's single command pipeline: stages joined by `&&`, a
 stage's members run as background jobs and `wait` on POSIX, in order on
 `cmd.exe`; `cwd` and `env` are applied with quoting. Pure: no I/O besides
 `load`. Documented in `docs/ide-parity/index.md`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Discovery scans, matcher stepping and test-at-point lookups use `get`, `windows`, `floor_char_boundary` and `checked_*`. **Declared (DISCOVERY-F1):** a stray Ruby `end` with nothing open leaves the block depth at 0; a configuration with no command is the empty command; brace depth that would overflow `i64` stays at its extreme (deeper than any real file).

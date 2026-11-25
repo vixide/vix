@@ -28,3 +28,7 @@ From the overlay you can:
 This is a pragmatic helper for organizing and tidying SQL files, not a full SQL
 parser or query engine. The `edit_sql` module is unit-tested
 (`split_statements`, `format_sql`, kind detection, reorder/delete/undo).
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The keyword formatter walks with `get` and a checked step; selection movement and statement reordering use `checked_*`. **Declared (SELECT-F1):** selection stops at the first and last statement, and the last index of an empty list is 0.

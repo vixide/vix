@@ -26,10 +26,36 @@
 //! assert!(lines.contains(&"• one".to_string()));
 //! ```
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt::Write;
 
 use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
 use vix_outline_panel::Entry;
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
 
 /// A rendered Markdown preview: display lines, each line's originating
 /// 1-based source line, and a heading table of contents.
@@ -85,7 +111,14 @@ fn line_start_offsets(text: &str) -> Vec<usize> {
         text.bytes()
             .enumerate()
             .filter(|&(_, b)| b == b'\n')
-            .map(|(i, _)| i + 1),
+            .map(|(i, _)| {
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: i is the index of a newline byte inside the text, so i + 1 is at most the text length"
+                )]
+                let next = i + 1;
+                next
+            }),
     );
     starts
 }
@@ -175,7 +208,14 @@ impl RenderState {
                     name: text.clone(),
                     // 1-based row of the heading text itself, i.e. the line pushed
                     // just below (the rule and blank follow it).
-                    line: self.out.len() + 1,
+                    line: {
+                        #[expect(
+                            clippy::arithmetic_side_effects,
+                            reason = "RCA-EXC-2: out is a Vec of lines in memory, so its length is below usize::MAX"
+                        )]
+                        let line = self.out.len() + 1;
+                        line
+                    },
                 });
                 self.push_line(text);
                 self.push_line(rule_ch.to_string().repeat(width));
@@ -196,11 +236,12 @@ impl RenderState {
             }
             Event::Start(Tag::Item) => {
                 self.flush();
-                let indent = "  ".repeat(self.list_stack.len().saturating_sub(1));
+                let indent = "  ".repeat(sub_or(self.list_stack.len(), 1, 0)); // MDP-F2: no list, no indent
                 match self.list_stack.last_mut() {
                     Some(Some(n)) => {
                         write!(self.cur, "{indent}{n}. ").unwrap();
-                        *n += 1;
+                        // MDP-F1: a list number that does not fit stays put.
+                        *n = n.checked_add(1).unwrap_or(*n);
                     }
                     _ => write!(self.cur, "{indent}• ").unwrap(),
                 }
@@ -285,13 +326,13 @@ impl Panel {
 
     /// Scroll up by `n` lines.
     pub fn up(&mut self, n: usize) {
-        self.scroll = self.scroll.saturating_sub(n);
+        self.scroll = sub_or(self.scroll, n, 0); // MDP-F2: stop at the top
     }
 
     /// Scroll down by `n` lines, keeping at least one line visible.
     pub fn down(&mut self, n: usize) {
-        let max = self.lines.len().saturating_sub(1);
-        self.scroll = (self.scroll + n).min(max);
+        let max = sub_or(self.lines.len(), 1, 0); // MDP-F2
+        self.scroll = add_or(self.scroll, n, max).min(max); // MDP-F1: past the end is the end
     }
 
     /// Scroll directly to preview line `line` (1-based) -- for a TOC jump,
@@ -302,7 +343,8 @@ impl Panel {
         if self.lines.is_empty() {
             return;
         }
-        self.scroll = line.saturating_sub(1).min(self.lines.len() - 1);
+        let last = sub_or(self.lines.len(), 1, 0); // MDP-F2
+        self.scroll = sub_or(line, 1, 0).min(last);
     }
 
     /// Scroll to the preview line rendered from `source_line` (1-based) --
@@ -328,7 +370,7 @@ impl Panel {
             Some(t) => self.source_lines.iter().position(|&l| l == t).unwrap_or(0),
             None => 0,
         };
-        self.scroll = idx.min(self.lines.len().saturating_sub(1));
+        self.scroll = idx.min(sub_or(self.lines.len(), 1, 0)); // MDP-F2
     }
 }
 

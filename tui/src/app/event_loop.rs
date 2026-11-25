@@ -7,6 +7,18 @@
 //! auto-save, DB queries, …) behave identically in both; only reading input
 //! and presenting a frame differ.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::io;
 use std::path::PathBuf;
 use std::time::Duration;

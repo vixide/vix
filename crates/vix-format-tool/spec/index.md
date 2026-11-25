@@ -50,3 +50,7 @@ Tests use a fake `prettier` shell script in a temp directory, never real Node.
 | `Render { format, message }` | the parsed value cannot be written back out |
 
 The type is `#[non_exhaustive]` with a hand-written `Display`/`Error` (no `thiserror`). `Display` is the same text the earlier `String` error carried, so the translated `status.convert_failed` line is unchanged.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The command deadline uses `Instant::checked_add`. A timeout too long to become a deadline is `PrettierError::BadTimeout`, returned before anything is spawned, instead of running with no deadline.

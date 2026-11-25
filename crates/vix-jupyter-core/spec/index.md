@@ -200,3 +200,7 @@ Org insert-then-clear restores the buffer) and fixture tests in the shape
 ipykernel 7 sends. The `jupyter_wire` fuzz target
 ([`fuzz/README.md`](../../../fuzz/README.md)) fuzzes the decoder, typed
 contents, outputs and `strip_ansi`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Header parsing, cell lookup, image sizing, Org results editing, the wire codec and the connection file use `get`, `split_once`, `split_first_chunk`, `try_into` and `checked_*`. **Declared (WIRE-F1):** a bundle with no text form has empty text; a connection value that cannot be serialized is empty text; an edit range past the end of the buffer reads as empty text; frame totals stop at the top of `usize` (and then exceed the cap).

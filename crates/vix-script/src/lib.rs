@@ -13,6 +13,18 @@
 //! script's `bind_key` requests into the real keymap (`crates/
 //! vix-keybindings`, tasks.md T104a–j) is done too, as of T104j.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 mod catalog;
 mod discovery;
 mod engine;
@@ -133,30 +145,42 @@ mod tests {
         assert!(!state.buffer_text_written);
     }
 
-    /// `set_cursor_offset` clamps to the buffer's character length, per
-    /// § API v1's "clamped in range".
+    /// `set_cursor_offset` accepts 0 up to the buffer's character length and
+    /// rejects anything else with an error that names the figure and range; the
+    /// cursor is never moved to the nearest end.
     #[test]
-    fn set_cursor_offset_clamps_to_buffer_length() {
+    fn set_cursor_offset_rejects_an_offset_outside_the_buffer() {
         let runtime = Runtime::new();
         let script = runtime
-            .load("clamp", r"fn run(n) { set_cursor_offset(n); }")
+            .load("offset", r"fn run(n) { set_cursor_offset(n); }")
             .unwrap();
-
-        let state = HostState {
+        let state = || HostState {
             buffer_text: "hello".to_string(),
+            cursor_offset: 2,
             ..Default::default()
         };
-        let outcome = runtime.invoke(&script, "run", vec![Dynamic::from(999_i64)], state);
-        let InvokeOutcome::Ran(state) = outcome else {
-            panic!("expected Ran")
-        };
-        assert_eq!(state.cursor_offset, 5); // "hello".chars().count()
-
-        let outcome = runtime.invoke(&script, "run", vec![Dynamic::from(-5_i64)], state);
-        let InvokeOutcome::Ran(state) = outcome else {
-            panic!("expected Ran")
-        };
-        assert_eq!(state.cursor_offset, 0);
+        // The two ends are accepted.
+        for (n, expected) in [(0_i64, 0_usize), (5, 5)] {
+            let outcome = runtime.invoke(&script, "run", vec![Dynamic::from(n)], state());
+            let InvokeOutcome::Ran(done) = outcome else {
+                panic!("expected Ran for {n}")
+            };
+            assert_eq!(done.cursor_offset, expected);
+            assert!(done.cursor_offset_written);
+        }
+        // One past each end, and the extremes, are errors that leave the cursor.
+        for n in [-1_i64, 6, 999, i64::MIN, i64::MAX] {
+            let outcome = runtime.invoke(&script, "run", vec![Dynamic::from(n)], state());
+            let InvokeOutcome::Error { message, state } = outcome else {
+                panic!("expected Error for {n}")
+            };
+            assert!(
+                message.contains(&format!("set_cursor_offset: {n} is not an offset in 0..=5")),
+                "{message}"
+            );
+            assert_eq!(state.cursor_offset, 2, "the cursor did not move");
+            assert!(!state.cursor_offset_written);
+        }
     }
 
     /// `prompt` records a request rather than blocking; answering it is a
@@ -241,7 +265,7 @@ mod tests {
         };
         assert_eq!(
             state.buffer_text,
-            jiff::Zoned::now().strftime("%Y-%m-%d").to_string()
+            jiff::ZonedDateTime::now().strftime("%Y-%m-%d").to_string()
         );
     }
 

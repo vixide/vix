@@ -1,7 +1,20 @@
 //! HTTP client: send the active `.http`-style buffer and poll the response.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use super::{App, Focus, HttpEnvChooser};
 use crate::app::chooser::ChooserSlot;
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 /// The local zone's offset from UTC, in minutes, at `now_ms`.
@@ -9,7 +22,10 @@ fn local_offset_minutes(now_ms: i64) -> i32 {
     jiff::Timestamp::from_millisecond(now_ms)
         .ok()
         .map_or(0, |ts| {
-            jiff::tz::TimeZone::system().to_offset(ts).seconds() / 60
+            jiff::tz::TimeZone::system()
+                .to_offset(ts)
+                .seconds()
+                .quot(60)
         })
 }
 
@@ -124,7 +140,7 @@ impl App {
         let names: Vec<String> = envs.names().into_iter().map(String::from).collect();
         let selected = env::read_active(&self.root)
             .and_then(|a| names.iter().position(|n| *n == a))
-            .map_or(0, |i| i + 1);
+            .map_or(0, |i| i.plus(1));
         self.chooser
             .open_http_env(HttpEnvChooser { names, selected });
     }
@@ -135,12 +151,12 @@ impl App {
         match key.code {
             KeyCode::Up => {
                 if let Some(c) = self.chooser.http_env_mut() {
-                    c.selected = c.selected.saturating_sub(1);
+                    c.selected = c.selected.minus(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.chooser.http_env_mut() {
-                    c.selected = (c.selected + 1).min(c.names.len());
+                    c.selected = c.selected.plus(1).min(c.names.len());
                 }
             }
             KeyCode::Enter => self.apply_http_env(),
@@ -248,3 +264,7 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_http.rs"]
+mod r3_tests;

@@ -50,3 +50,7 @@ opens or draws anything.
 
 `Open` carries the reference as written; the App must pass it through
 `vix_im::resolve_in_root` and open it only inside the workspace root.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Selection and cursor arithmetic uses `checked_*` and `get`. **Declared:** the index of the last item of an empty list is 0 (the position of an empty list); `Tab` and `Shift+Tab` wrap around the conversation list; `clamp` brings a selection left stale by removed conversations back into range (it repairs the panel's own state, not caller input). Cursor offsets after an insert carry `RCA-EXC-2` proofs.

@@ -1,6 +1,18 @@
 //! Outgoing text: validate names, clean message bodies, and split a long
 //! body into lines that each fit IRC's 512-byte limit.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::fmt;
 
 /// IRC's maximum line length in bytes, including the closing CRLF.
@@ -86,13 +98,25 @@ pub fn split_utf8(text: &str, budget: usize) -> Vec<&str> {
     while rest.len() > budget {
         let mut cut = budget;
         while !rest.is_char_boundary(cut) {
-            cut -= 1;
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: index 0 is always a char boundary, so the loop stops before cut reaches 0"
+            )]
+            {
+                cut -= 1;
+            }
         }
         // Prefer the last space inside the window (keep it on this chunk).
-        if let Some(space) = rest[..cut].rfind(' ')
+        if let Some(space) = rest.get(..cut).and_then(|window| window.rfind(' '))
             && space > 0
         {
-            cut = space + 1;
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: space is an index inside the window of length cut, so space + 1 is at most cut"
+            )]
+            {
+                cut = space + 1;
+            }
         }
         let (head, tail) = rest.split_at(cut);
         out.push(head);
@@ -119,6 +143,10 @@ pub fn privmsg_lines(
     max_line: usize,
 ) -> Result<Vec<String>, TextError> {
     check_name(target)?;
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: the target is a validated name of at most a few hundred bytes, so the sum with small constants fits usize"
+    )]
     let overhead = "PRIVMSG ".len()
         + target.len()
         + " :".len()
@@ -128,7 +156,10 @@ pub fn privmsg_lines(
         } else {
             0
         };
-    let budget = max_line.saturating_sub(overhead);
+    // No room for even the fixed parts of a line is the same error as too little.
+    let Some(budget) = max_line.checked_sub(overhead) else {
+        return Err(TextError::TooLong);
+    };
     if budget < 4 {
         return Err(TextError::TooLong);
     }
@@ -152,6 +183,15 @@ pub fn privmsg_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_limit_below_the_fixed_overhead_is_too_long() {
+        // The fixed parts of the line alone exceed the limit: an error, not a zero budget.
+        assert_eq!(
+            privmsg_lines("#vix", "hi", false, 3),
+            Err(TextError::TooLong)
+        );
+    }
 
     #[test]
     fn names() {
@@ -207,5 +247,38 @@ mod tests {
         );
         let two = privmsg_lines("ana", "a\nb", false, MAX_LINE).unwrap();
         assert_eq!(two, vec!["PRIVMSG ana :a", "PRIVMSG ana :b"]);
+    }
+}
+
+#[cfg(test)]
+mod cov_tests {
+    use super::*;
+
+    #[test]
+    fn text_errors_have_distinct_messages() {
+        let msgs: Vec<String> = [
+            TextError::BadName,
+            TextError::Empty,
+            TextError::TooLong,
+            TextError::NotRegistered,
+        ]
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+        for (i, a) in msgs.iter().enumerate() {
+            for b in msgs.iter().skip(i + 1) {
+                assert_ne!(a, b);
+            }
+        }
+    }
+
+    #[test]
+    fn too_little_budget_is_too_long() {
+        // Overhead is "PRIVMSG #a :" + CRLF = 14 bytes; 16 leaves a budget of 2 (< 4).
+        assert_eq!(
+            privmsg_lines("#a", "hi", false, 16),
+            Err(TextError::TooLong)
+        );
+        assert!(privmsg_lines("#a", "hi", false, 18).is_ok());
     }
 }

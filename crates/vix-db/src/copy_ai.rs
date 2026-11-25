@@ -24,6 +24,12 @@ use super::{Browser, catalog, connect, export};
 /// chat prompt.
 pub(crate) const ROW_CAP: usize = 50;
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// A fenced `sql` block whose fence is longer than any run of backticks in
 /// `sql`, so the statement cannot close it early.
 fn sql_block(sql: &str) -> String {
@@ -31,13 +37,13 @@ fn sql_block(sql: &str) -> String {
     let mut run = 0;
     for c in sql.chars() {
         if c == '`' {
-            run += 1;
+            run = add_or(run, 1, usize::MAX);
             longest = longest.max(run);
         } else {
             run = 0;
         }
     }
-    let fence = "`".repeat((longest + 1).max(3));
+    let fence = "`".repeat(add_or(longest, 1, usize::MAX).max(3));
     format!("{fence}sql\n{}\n{fence}\n", sql.trim())
 }
 
@@ -82,10 +88,12 @@ pub(crate) fn results(
             .iter()
             .enumerate()
             .map(|(i, h)| {
-                vec![
-                    h.clone(),
-                    types.get(i).cloned().flatten().unwrap_or_default(),
-                ]
+                // A column with no known type has an empty type cell.
+                let mut kind = String::new();
+                if let Some(Some(known)) = types.get(i) {
+                    kind.clone_from(known);
+                }
+                vec![h.clone(), kind]
             })
             .collect();
         let refs: Vec<&Vec<String>> = pairs.iter().collect();
@@ -137,10 +145,11 @@ impl Browser {
         let types = self.result_column_types();
         let order = self.grid.filtered();
         let start = self.grid.scroll.min(order.len());
-        let rows: Vec<&Vec<String>> = order[start..]
+        let rows: Vec<&Vec<String>> = order
             .iter()
+            .skip(start)
             .take(ROW_CAP)
-            .map(|&i| &self.grid.rows[i])
+            .filter_map(|&i| self.grid.rows.get(i))
             .collect();
         let labels = ResultLabels {
             query: t!("ui.db_copy_ai_query").to_string(),
@@ -335,5 +344,100 @@ mod tests {
         assert!(out.contains("### Keys\n\n—\n"));
         assert!(out.contains(&format!("| {} |", ROW_CAP - 1)));
         assert!(!out.contains(&format!("| {ROW_CAP} |")), "rows are capped");
+    }
+
+    mod browser {
+        use crate::test_support::{family, press, preview, select_table};
+        use crate::{Pane, View};
+        use vix_input::KeyCode;
+
+        #[test]
+        fn a_with_no_results_says_there_is_nothing_to_copy() {
+            let mut b = family(false);
+            b.focus = Pane::Results;
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(b.message, Some(t!("msg.db_copy_ai_empty").to_string()));
+        }
+
+        #[test]
+        fn a_copies_the_visible_result_rows_for_an_assistant() {
+            let mut b = family(false);
+            preview(&mut b, "parent");
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 2).to_string())
+            );
+            // A filtered grid copies only what matches.
+            press(&mut b, KeyCode::Char('/'));
+            press(&mut b, KeyCode::Char('b'));
+            press(&mut b, KeyCode::Enter);
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 1).to_string())
+            );
+        }
+
+        #[test]
+        fn column_types_come_from_the_previewed_table_only() {
+            let mut b = family(false);
+            preview(&mut b, "child");
+            assert_eq!(
+                b.result_column_types(),
+                [
+                    Some("INTEGER".into()),
+                    Some("INTEGER".into()),
+                    Some("TEXT".into())
+                ]
+            );
+            b.grid_source = Some(("SELECT 1".into(), None));
+            assert_eq!(b.result_column_types(), [None, None, None]);
+            b.grid_source = Some(("x".into(), Some(("main".into(), "nope".into()))));
+            assert_eq!(
+                b.result_column_types(),
+                [None, None, None],
+                "a table without a report has no types"
+            );
+            b.conn = None;
+            assert_eq!(b.result_column_types(), [None, None, None]);
+        }
+
+        #[test]
+        fn a_in_the_tree_copies_the_table_structure() {
+            let mut b = family(false);
+            select_table(&mut b, "child");
+            b.focus = Pane::Tree;
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 2).to_string())
+            );
+            b.tree.sel = 0;
+            press(&mut b, KeyCode::Char('A'));
+            assert_eq!(b.message, Some(t!("msg.db_copy_ai_empty").to_string()));
+            select_table(&mut b, "child");
+            b.conn = None;
+            b.copy_table_for_ai();
+            assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+            assert_eq!(b.view, View::Workbench);
+        }
+
+        #[test]
+        fn a_table_whose_reports_fail_still_copies_with_dashes() {
+            let mut b = family(false);
+            select_table(&mut b, "parent");
+            b.session.as_mut().unwrap().run("DROP TABLE child").unwrap();
+            b.session
+                .as_mut()
+                .unwrap()
+                .run("DROP TABLE parent")
+                .unwrap();
+            b.copy_table_for_ai();
+            assert_eq!(
+                b.message,
+                Some(t!("msg.db_copied_ai", rows = 0).to_string())
+            );
+        }
     }
 }

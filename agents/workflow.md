@@ -29,7 +29,11 @@ implements it. Cross-cutting / app-level specs live at the repo-root `spec/`.
    pedantic with `-D warnings`, tests, feature combinations, headless
    examples, `cargo doc` with warnings denied, generated reference docs and
    man page current, semver, `scripts/check-docs` with CSpell, per-binary
-   licenses). It ends with `OK: … all passed`. It runs in a **clean room**
+   licenses). It ends with `OK (scope changed, …)` by default, because locally
+   `cargo doc` and semver cover only the crates changed since `main` plus their
+   dependents (a root, toolchain or lint file change widens this to the whole
+   workspace; `--scope all` forces it, and CI and the attestation use it), or
+   with `OK: … all passed` for the whole workspace. It runs in a **clean room**
    (T764): no `kache`/`sccache` wrapper on PATH or in `RUSTC_WRAPPER`,
    `HOST_CC=cc`, `HOST_CXX=c++`, set by `scripts/check` itself (opt out with
    `VIX_CLEAN_ROOM=0`), so do not strip them by hand. Give every gate that runs

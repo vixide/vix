@@ -3,6 +3,18 @@
 //! `edit.insert_command_output` inserts that output at the cursor. See
 //! `crates/vix-editor/spec/pipe-selection/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use std::cell::RefCell;
 
 use super::{App, Prompt, PromptKind, Visible, run_shell_filter};

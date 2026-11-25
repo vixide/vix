@@ -13,8 +13,9 @@ use crate::prettier::PrettierError;
 /// matches what the user gets on the command line.
 ///
 /// # Errors
-/// [`PrettierError::Io`] if it cannot be spawned, [`PrettierError::TimedOut`]
-/// after `timeout`, [`PrettierError::Failed`] on a non-zero exit, and
+/// [`PrettierError::BadTimeout`] if `timeout` is too long to become a deadline
+/// (nothing is spawned), [`PrettierError::Io`] if it cannot be spawned,
+/// [`PrettierError::TimedOut`] after `timeout`, [`PrettierError::Failed`] on a non-zero exit, and
 /// [`PrettierError::BadOutput`] if the output is not UTF-8.
 pub fn format(
     binary: &Path,
@@ -24,6 +25,11 @@ pub fn format(
 ) -> Result<String, PrettierError> {
     // Built by the workspace authority (T710): Prettier runs where the
     // file is.
+    // An unrepresentable timeout is an invalid input: refuse it before anything
+    // is spawned, instead of running with no deadline.
+    let deadline = Instant::now()
+        .checked_add(timeout)
+        .ok_or(PrettierError::BadTimeout)?;
     let auth = vix_authority::current();
     let mut spec = vix_authority::ProcessSpec::new(binary)
         .arg("--stdin-filepath")
@@ -62,7 +68,6 @@ pub fn format(
         }
         buf
     });
-    let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait().map_err(PrettierError::Io)? {
             Some(s) => break s,

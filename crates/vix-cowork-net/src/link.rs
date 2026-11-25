@@ -107,7 +107,7 @@ pub(crate) fn split(
 /// Errors with [`NetError::TooLarge`] if `body` does not fit in a `u16`.
 pub(crate) fn write_frame(stream: &mut TcpStream, body: &[u8]) -> Result<(), NetError> {
     let len = u16::try_from(body.len()).map_err(|_| NetError::TooLarge)?;
-    let mut out = Vec::with_capacity(2 + body.len());
+    let mut out = Vec::new();
     out.extend_from_slice(&len.to_be_bytes());
     out.extend_from_slice(body);
     stream.write_all(&out)?;
@@ -163,19 +163,22 @@ impl Link {
         } else {
             data.chunks(CHUNK).collect()
         };
-        let last = chunks.len() - 1;
+        // There is always at least one chunk (see above); with none, nothing is sent.
+        let Some(last) = chunks.len().checked_sub(1) else {
+            return Ok(());
+        };
         for (i, chunk) in chunks.into_iter().enumerate() {
             if w.nonce == u64::MAX {
                 return Err(NetError::Crypto);
             }
             // Flag byte: 1 marks the final chunk of the message.
-            let mut plain = Vec::with_capacity(1 + chunk.len());
+            let mut plain = Vec::new();
             plain.push(u8::from(i == last));
             plain.extend_from_slice(chunk);
-            let mut ct = vec![0u8; plain.len() + TAG];
+            let mut ct = vec![0u8; plain.len().checked_add(TAG).ok_or(NetError::TooLarge)?];
             let n = self.state.write_message(w.nonce, &plain, &mut ct)?;
-            w.nonce += 1;
-            write_frame(&mut w.stream, &ct[..n])?;
+            w.nonce = w.nonce.checked_add(1).ok_or(NetError::Crypto)?;
+            write_frame(&mut w.stream, ct.get(..n).ok_or(NetError::Crypto)?)?;
         }
         Ok(())
     }
@@ -225,9 +228,16 @@ impl LinkReader {
             }
             let mut plain = vec![0u8; ct.len()];
             let n = self.state.read_message(self.nonce, &ct, &mut plain)?;
-            self.nonce += 1;
-            let (flag, body) = plain[..n].split_first().ok_or(NetError::Crypto)?;
-            if assembled.len() + body.len() > MAX_MESSAGE_BYTES {
+            self.nonce = self.nonce.checked_add(1).ok_or(NetError::Crypto)?;
+            let (flag, body) = plain
+                .get(..n)
+                .and_then(<[u8]>::split_first)
+                .ok_or(NetError::Crypto)?;
+            if assembled
+                .len()
+                .checked_add(body.len())
+                .is_none_or(|total| total > MAX_MESSAGE_BYTES)
+            {
                 return Err(NetError::TooLarge);
             }
             assembled.extend_from_slice(body);

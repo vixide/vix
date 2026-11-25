@@ -40,6 +40,11 @@ const MAX_FAILURES: u8 = 3;
 /// The prefix of the invite string.
 const PREFIX: &str = "vix-cowork:1:";
 
+/// Where the id starts in a decoded invite token.
+const ID_AT: usize = KEY_LEN;
+/// Where the secret starts in a decoded invite token.
+const SECRET_AT: usize = KEY_LEN + ID_LEN;
+
 /// A parsed invite.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Invite {
@@ -87,12 +92,21 @@ impl FromStr for Invite {
         if raw.len() != KEY_LEN + ID_LEN + SECRET_LEN {
             return Err(NetError::BadInvite);
         }
-        let mut host_key = [0u8; KEY_LEN];
-        let mut id = [0u8; ID_LEN];
-        let mut secret = [0u8; SECRET_LEN];
-        host_key.copy_from_slice(&raw[..KEY_LEN]);
-        id.copy_from_slice(&raw[KEY_LEN..KEY_LEN + ID_LEN]);
-        secret.copy_from_slice(&raw[KEY_LEN + ID_LEN..]);
+        // The length was checked above, so each part is exactly its size.
+        let part = |from: usize, len: usize| {
+            raw.get(from..)
+                .and_then(|rest| rest.get(..len))
+                .ok_or(NetError::BadInvite)
+        };
+        let host_key: [u8; KEY_LEN] = part(0, KEY_LEN)?
+            .try_into()
+            .map_err(|_| NetError::BadInvite)?;
+        let id: [u8; ID_LEN] = part(ID_AT, ID_LEN)?
+            .try_into()
+            .map_err(|_| NetError::BadInvite)?;
+        let secret: [u8; SECRET_LEN] = part(SECRET_AT, SECRET_LEN)?
+            .try_into()
+            .map_err(|_| NetError::BadInvite)?;
         Ok(Self {
             addr: addr.to_string(),
             host_key,
@@ -159,11 +173,13 @@ impl InviteTable {
         let mut secret = [0u8; SECRET_LEN];
         random(&mut id)?;
         random(&mut secret)?;
+        // A lifetime too long to be a deadline is not a valid lifetime.
+        let expires = now.checked_add(ttl).ok_or(NetError::TooLarge)?;
         map.insert(
             id,
             Entry {
                 secret,
-                expires: now + ttl,
+                expires,
                 failures: 0,
             },
         );
@@ -187,7 +203,13 @@ impl InviteTable {
     pub fn record_failure(&self, id: &[u8; ID_LEN]) {
         let mut map = self.lock();
         if let Some(e) = map.get_mut(id) {
-            e.failures += 1;
+            #[expect(
+                clippy::arithmetic_side_effects,
+                reason = "RCA-EXC-2: the entry is removed when failures reaches MAX_FAILURES, so the count never gets near the top of its type"
+            )]
+            {
+                e.failures += 1;
+            }
             if e.failures >= MAX_FAILURES {
                 map.remove(id);
             }

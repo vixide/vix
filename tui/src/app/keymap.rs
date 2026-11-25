@@ -12,6 +12,19 @@
 //! a method is *defined* never has to happen in lockstep with everything it
 //! calls.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use super::{App, AppFlags, Focus, Keymap, display_key, menu_index_for_alt};
@@ -23,7 +36,7 @@ impl App {
     /// A key while the help panel is open: type to filter, arrows and paging
     /// scroll, `Esc`/`F1` closes. It takes every key.
     pub(super) fn help_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.help_body.height as usize).max(1);
+        let page = (usize::from(self.layout.help_body.height)).max(1);
         match key.code {
             KeyCode::Esc | KeyCode::F(1) => self.help = None,
             KeyCode::Backspace => {
@@ -97,9 +110,15 @@ impl App {
             KeyCode::Down => self.clock.down(),
             KeyCode::Enter => {
                 let now = crate::clock::now_local();
-                if let Some(text) = self.clock.selected_value(&now) {
-                    let area = self.editor_view();
-                    self.editor.insert_str(&text, area);
+                match self.clock.selected_value(&now) {
+                    Some(Ok(text)) => {
+                        let area = self.editor_view();
+                        self.editor.insert_str(&text, area);
+                    }
+                    Some(Err(e)) => self
+                        .messages
+                        .error(t!("msg.command_failed", error = e.to_string()).to_string()),
+                    None => {}
                 }
                 self.visible.set(crate::app::Visible::CLOCK, false);
             }
@@ -139,10 +158,10 @@ impl App {
                 } else {
                     -1
                 };
-                if ctrl && shift {
-                    self.calendar.move_years(sign); // Ctrl+Shift+arrows: year
+                let moved = if ctrl && shift {
+                    self.calendar.move_years(sign) // Ctrl+Shift+arrows: year
                 } else if ctrl {
-                    self.calendar.move_months(sign); // Ctrl+arrows: month
+                    self.calendar.move_months(sign) // Ctrl+arrows: month
                 } else {
                     // Plain arrows move the selected day: Left/Right by a day,
                     // Up/Down by a week.
@@ -151,7 +170,11 @@ impl App {
                     } else {
                         1
                     };
-                    self.calendar.move_days(sign * step);
+                    self.calendar.move_days(sign.times(step))
+                };
+                if let Err(e) = moved {
+                    self.messages
+                        .error(t!("msg.command_failed", error = e.to_string()).to_string());
                 }
             }
             KeyCode::Enter => self.calendar_accept(),
@@ -510,7 +533,7 @@ impl App {
                     })
                     .map(|b| {
                         (
-                            display_key(&b.key_token[seq.len()..]),
+                            display_key(b.key_token.get(seq.len()..).unwrap_or("")),
                             b.action_id.to_string(),
                         )
                     })
@@ -1486,3 +1509,662 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::cov4::*;
+    use crate::app::{EmacsChord, Visible};
+    use ratatui::layout::Rect;
+
+    fn with_keymap(tag: &str, keymap: &str) -> App {
+        let dir = temp(tag);
+        let mut s = crate::settings::Settings::default();
+        s.keymap = keymap.to_string();
+        app_with(&dir, s)
+    }
+
+    fn open_help(app: &mut App) {
+        app.run_action("help.shortcuts");
+        assert!(app.help.is_some());
+    }
+
+    #[test]
+    fn help_panel_keys_filter_scroll_and_close() {
+        let mut app = with_keymap("km-help", "apple");
+        open_help(&mut app);
+        app.layout.help_body = Rect::new(0, 0, 40, 5);
+        for c in "sav".chars() {
+            app.help_key(key(c));
+        }
+        assert_eq!(app.help.as_ref().unwrap().query, "sav");
+        app.help_key(code(KeyCode::Backspace));
+        assert_eq!(app.help.as_ref().unwrap().query, "sa");
+        // Modified characters are not typed into the filter.
+        app.help_key(ctrl('x'));
+        app.help_key(alt('x'));
+        assert_eq!(app.help.as_ref().unwrap().query, "sa");
+        app.help.as_mut().unwrap().query.clear();
+        app.help.as_mut().unwrap().scroll = 3;
+        app.help_key(code(KeyCode::Up));
+        assert_eq!(app.help.as_ref().unwrap().scroll, 2);
+        app.help_key(code(KeyCode::Down));
+        assert_eq!(app.help.as_ref().unwrap().scroll, 3);
+        app.help_key(code(KeyCode::PageUp));
+        assert_eq!(app.help.as_ref().unwrap().scroll, 0);
+        app.help_key(code(KeyCode::PageDown));
+        assert_eq!(app.help.as_ref().unwrap().scroll, 5);
+        app.help_key(code(KeyCode::Tab)); // ignored
+        assert!(app.help.is_some());
+        app.help_key(code(KeyCode::Esc));
+        assert!(app.help.is_none());
+        open_help(&mut app);
+        app.help_key(code(KeyCode::F(1)));
+        assert!(app.help.is_none());
+        // With no panel the handlers are no-ops.
+        app.help_key(key('a'));
+        app.help_key(code(KeyCode::Up));
+        app.help_key(code(KeyCode::Backspace));
+    }
+
+    #[test]
+    fn plain_and_text_field_dialogs_close_on_their_own_keys() {
+        let mut app = with_keymap("km-dialog", "apple");
+        for close in [
+            KeyCode::Enter,
+            KeyCode::Esc,
+            KeyCode::Char(' '),
+            KeyCode::Char('o'),
+        ] {
+            app.dialog = Some(crate::app::Dialog {
+                title: "About".into(),
+                body: "v".into(),
+                editor: None,
+            });
+            app.dialog_key(code(KeyCode::Tab));
+            assert!(app.dialog.is_some(), "Tab does not close a plain dialog");
+            app.dialog_key(code(close));
+            assert!(app.dialog.is_none(), "{close:?}");
+        }
+        app.open_text_dialog("Website".into(), "https://example.invalid");
+        app.layout.dialog_body = Rect::new(0, 0, 30, 1);
+        app.dialog_key(code(KeyCode::Right)); // navigates the field
+        assert!(app.dialog.is_some());
+        app.dialog_key(ctrl('c')); // copies the (empty) selection
+        assert!(app.dialog.is_some());
+        app.dialog_key(code(KeyCode::Enter)); // not a close key for a field
+        assert!(app.dialog.is_some());
+        app.dialog_key(code(KeyCode::Esc));
+        assert!(app.dialog.is_none());
+    }
+
+    #[test]
+    fn clock_box_moves_inserts_the_selected_time_and_closes() {
+        let mut app = with_keymap("km-clock", "apple");
+        buffer_with(&mut app, "", 0);
+        app.visible.set(Visible::CLOCK, true);
+        app.clock_key(code(KeyCode::Down));
+        app.clock_key(code(KeyCode::Up));
+        app.clock_key(code(KeyCode::Tab)); // ignored
+        assert!(app.visible.contains(Visible::CLOCK));
+        app.clock_key(code(KeyCode::Enter));
+        assert!(!app.visible.contains(Visible::CLOCK));
+        assert!(!content(&mut app).is_empty(), "the time was inserted");
+        for close in [KeyCode::Esc, KeyCode::Char('q')] {
+            app.visible.set(Visible::CLOCK, true);
+            app.clock_key(code(close));
+            assert!(!app.visible.contains(Visible::CLOCK));
+        }
+    }
+
+    #[test]
+    fn dashboard_and_qr_boxes_close_on_their_keys_only() {
+        let mut app = with_keymap("km-boxes", "apple");
+        app.dashboard = Some(crate::app::Dashboard::new("w"));
+        app.dashboard_key(key('x'));
+        assert!(app.dashboard.is_some());
+        app.dashboard_key(code(KeyCode::Enter));
+        assert!(app.dashboard.is_none());
+        app.dashboard = Some(crate::app::Dashboard::new("w"));
+        app.dashboard_key(code(KeyCode::Esc));
+        assert!(app.dashboard.is_none());
+        for close in [KeyCode::Esc, KeyCode::Enter, KeyCode::Char('q')] {
+            app.qrcode = Some("data".into());
+            app.qrcode_key(key('x'));
+            assert!(app.qrcode.is_some());
+            app.qrcode_key(code(close));
+            assert!(app.qrcode.is_none());
+        }
+    }
+
+    #[test]
+    fn calendar_arrows_page_days_weeks_months_and_years() {
+        let mut app = with_keymap("km-cal", "apple");
+        app.visible.set(Visible::CALENDAR, true);
+        let d0 = app.calendar.selected();
+        app.calendar_key(code(KeyCode::Right));
+        assert_eq!(app.calendar.selected(), d0.tomorrow().unwrap());
+        app.calendar_key(code(KeyCode::Left));
+        assert_eq!(app.calendar.selected(), d0);
+        app.calendar_key(code(KeyCode::Down));
+        assert_eq!(
+            app.calendar.selected(),
+            d0.checked_add(jiff::Span::new().days(7)).unwrap()
+        );
+        app.calendar_key(code(KeyCode::Up));
+        assert_eq!(app.calendar.selected(), d0);
+        app.calendar_key(KeyEvent::new(KeyCode::Right, KeyModifiers::CONTROL));
+        assert_eq!(
+            app.calendar.selected(),
+            d0.checked_add(jiff::Span::new().months(1)).unwrap()
+        );
+        app.calendar_key(KeyEvent::new(KeyCode::Left, KeyModifiers::CONTROL));
+        assert_eq!(app.calendar.selected(), d0);
+        app.calendar_key(KeyEvent::new(
+            KeyCode::Right,
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(
+            app.calendar.selected(),
+            d0.checked_add(jiff::Span::new().years(1)).unwrap()
+        );
+        app.calendar_key(key('z')); // ignored
+        assert!(app.visible.contains(Visible::CALENDAR));
+        app.flags.insert(AppFlags::CALENDAR_DAILIES);
+        app.calendar_key(code(KeyCode::Esc));
+        assert!(!app.visible.contains(Visible::CALENDAR));
+        assert!(!app.flags.contains(AppFlags::CALENDAR_DAILIES));
+        app.visible.set(Visible::CALENDAR, true);
+        app.calendar_key(key('q'));
+        assert!(!app.visible.contains(Visible::CALENDAR));
+    }
+
+    #[test]
+    fn calendar_enter_inserts_the_selected_date_at_the_cursor() {
+        let mut app = with_keymap("km-cal-enter", "apple");
+        buffer_with(&mut app, "", 0);
+        app.visible.set(Visible::CALENDAR, true);
+        app.calendar_key(code(KeyCode::Enter));
+        assert!(!app.visible.contains(Visible::CALENDAR));
+        let text = content(&mut app);
+        let year = app.calendar.selected().year().to_string();
+        assert!(text.contains(&year), "{text}");
+    }
+
+    #[test]
+    fn the_mode_indicator_shows_each_pending_emacs_chord() {
+        let mut app = with_keymap("km-indicator", "emacs");
+        assert_eq!(app.mode_indicator(), None);
+        for (chord, text) in [
+            (EmacsChord::CtrlX, "C-x-"),
+            (EmacsChord::CtrlCCtrlX, "C-c C-x-"),
+            (EmacsChord::CtrlCPCM, "C-c p c m-"),
+            (EmacsChord::CtrlCPC, "C-c p c-"),
+            (EmacsChord::CtrlCP, "C-c p-"),
+            (EmacsChord::CtrlC, "C-c-"),
+        ] {
+            app.emacs_chord = chord;
+            assert_eq!(app.mode_indicator().as_deref(), Some(text));
+        }
+    }
+
+    #[test]
+    fn which_key_titles_the_pending_emacs_chord_with_its_bindings() {
+        let mut app = with_keymap("km-whichkey", "emacs");
+        assert!(app.which_key().is_none());
+        for (chord, title) in [
+            (EmacsChord::CtrlX, "C-x"),
+            (EmacsChord::CtrlCCtrlX, "C-c C-x"),
+            (EmacsChord::CtrlCPCM, "C-c p c m"),
+            (EmacsChord::CtrlCPC, "C-c p c"),
+            (EmacsChord::CtrlCP, "C-c p"),
+            (EmacsChord::CtrlC, "C-c"),
+        ] {
+            app.emacs_chord = chord;
+            let (got, rows) = app.which_key().expect("a hint for a pending chord");
+            assert_eq!(got, title);
+            assert!(!rows.is_empty(), "{title} lists its continuations");
+        }
+        app.emacs_chord = EmacsChord::CtrlCPC;
+        let (_, rows) = app.which_key().unwrap();
+        assert!(rows.contains(&("m".to_string(), "project.subproject.*".to_string())));
+        // A non-chorded keymap shows nothing.
+        let apple = with_keymap("km-whichkey-apple", "apple");
+        assert!(apple.which_key().is_none());
+    }
+
+    #[test]
+    fn a_non_character_key_ends_every_emacs_chord_with_a_no_chord_status() {
+        let mut app = with_keymap("km-nochord", "emacs");
+        for chord in [
+            EmacsChord::CtrlX,
+            EmacsChord::CtrlC,
+            EmacsChord::CtrlCCtrlX,
+            EmacsChord::CtrlCP,
+            EmacsChord::CtrlCPC,
+            EmacsChord::CtrlCPCM,
+        ] {
+            app.status.clear();
+            app.emacs_chord = chord;
+            app.on_key(code(KeyCode::F(5)));
+            assert_eq!(app.emacs_chord, EmacsChord::None);
+            assert_eq!(
+                app.status,
+                t!("status.emacs_no_chord").to_string(),
+                "{chord:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unbound_character_ends_an_emacs_chord_with_a_no_chord_status() {
+        let mut app = with_keymap("km-unbound", "emacs");
+        for chord in [
+            EmacsChord::CtrlX,
+            EmacsChord::CtrlC,
+            EmacsChord::CtrlCCtrlX,
+            EmacsChord::CtrlCP,
+            EmacsChord::CtrlCPC,
+            EmacsChord::CtrlCPCM,
+        ] {
+            app.status.clear();
+            app.emacs_chord = chord;
+            app.on_key(key('~'));
+            assert_eq!(app.emacs_chord, EmacsChord::None);
+            assert_eq!(
+                app.status,
+                t!("status.emacs_no_chord").to_string(),
+                "{chord:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn emacs_chord_prefixes_walk_the_c_c_p_c_m_tree() {
+        let mut app = with_keymap("km-prefix", "emacs");
+        app.on_key(ctrl('c'));
+        assert_eq!(app.emacs_chord, EmacsChord::CtrlC);
+        app.on_key(key('p'));
+        assert_eq!(app.emacs_chord, EmacsChord::CtrlCP);
+        app.on_key(key('c'));
+        assert_eq!(app.emacs_chord, EmacsChord::CtrlCPC);
+        app.on_key(key('m'));
+        assert_eq!(app.emacs_chord, EmacsChord::CtrlCPCM);
+        app.on_key(key('~'));
+        assert_eq!(app.emacs_chord, EmacsChord::None);
+        app.on_key(ctrl('c'));
+        app.on_key(ctrl('x'));
+        assert_eq!(app.emacs_chord, EmacsChord::CtrlCCtrlX);
+    }
+
+    #[test]
+    fn ctrl_u_arms_a_universal_argument_that_any_other_key_cancels() {
+        let mut app = with_keymap("km-universal", "emacs");
+        app.on_key(ctrl('u'));
+        assert!(app.flags.contains(AppFlags::EMACS_UNIVERSAL));
+        assert_eq!(app.status, t!("status.emacs_universal").to_string());
+        app.on_key(key('a'));
+        assert!(!app.flags.contains(AppFlags::EMACS_UNIVERSAL));
+    }
+
+    #[test]
+    fn vim_command_line_edits_cancels_and_runs_commands() {
+        let mut app = with_keymap("km-vimcmd", "vi");
+        app.vim_cmd = Some(String::new());
+        assert_eq!(app.mode_indicator().as_deref(), Some(":"));
+        app.vim_cmd_key(key('q'));
+        app.vim_cmd_key(key('!'));
+        assert_eq!(app.vim_cmd.as_deref(), Some("q!"));
+        assert_eq!(app.mode_indicator().as_deref(), Some(":q!"));
+        app.vim_cmd_key(code(KeyCode::Tab)); // ignored
+        app.vim_cmd_key(code(KeyCode::Backspace));
+        app.vim_cmd_key(code(KeyCode::Backspace));
+        assert_eq!(app.vim_cmd.as_deref(), Some(""));
+        app.vim_cmd_key(code(KeyCode::Backspace));
+        assert!(
+            app.vim_cmd.is_none(),
+            "backspacing past the colon closes it"
+        );
+        // Esc cancels.
+        app.vim_cmd = Some("w".into());
+        app.vim_cmd_key(code(KeyCode::Esc));
+        assert!(app.vim_cmd.is_none());
+        // Keys with no command line open do nothing.
+        app.vim_cmd_key(key('x'));
+        app.vim_cmd_key(code(KeyCode::Backspace));
+        assert!(app.vim_cmd.is_none());
+        // `:q!` force-quits.
+        app.vim_cmd = Some(" q! ".into());
+        app.vim_cmd_key(code(KeyCode::Enter));
+        assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
+    }
+
+    #[test]
+    fn vim_ex_commands_go_to_a_line_open_the_explorer_or_report_unknowns() {
+        let mut app = with_keymap("km-vimex", "vi");
+        buffer_with(&mut app, "a\nb\nc\nd\n", 0);
+        app.run_vim_command("3");
+        let cursor = app.editor.active_tab_mut().unwrap().editor.get_cursor();
+        assert_eq!(cursor, 4, "line 3 starts after \"a\\nb\\n\"");
+        app.visible.set(Visible::EXPLORER, false);
+        app.run_vim_command("Ex");
+        assert!(app.visible.contains(Visible::EXPLORER));
+        assert_eq!(app.focus, Focus::Explorer);
+        app.run_vim_command("");
+        app.run_vim_command("frobnicate");
+        assert_eq!(
+            app.status,
+            t!("status.vim_no_command", cmd = "frobnicate").to_string()
+        );
+        let file = app.root.join("opened.txt");
+        std::fs::write(&file, "from disk").unwrap();
+        app.run_vim_command("e opened.txt");
+        assert_eq!(content(&mut app), "from disk");
+        // `:wq` saves the file and closes the tab.
+        app.run_vim_command("wq");
+    }
+
+    #[test]
+    fn vim_pending_operators_complete_with_a_repeat_or_cancel() {
+        let mut app = with_keymap("km-vimop", "vi");
+        buffer_with(&mut app, "one\ntwo\n", 0);
+        app.vim_normal_key(key('d'));
+        assert_eq!(app.vim_pending, Some('d'));
+        app.vim_normal_key(key('x')); // not a continuation: silently cancels
+        assert_eq!(app.vim_pending, None);
+        assert_eq!(content(&mut app), "one\ntwo\n");
+        app.vim_normal_key(key('d'));
+        app.vim_normal_key(key('d'));
+        assert_eq!(app.vim_pending, None);
+        assert_eq!(content(&mut app), "two\n");
+        app.vim_normal_key(key('g'));
+        assert_eq!(app.vim_pending, Some('g'));
+        app.vim_normal_key(key('g'));
+        assert_eq!(app.vim_pending, None);
+    }
+
+    #[test]
+    fn paste_goes_to_the_editor_unless_read_only_or_an_overlay_wants_keys() {
+        let mut app = with_keymap("km-paste", "apple");
+        buffer_with(&mut app, "", 0);
+        app.on_paste("");
+        assert_eq!(content(&mut app), "");
+        app.on_paste("hello\nworld");
+        assert_eq!(content(&mut app), "hello\nworld");
+        app.editor.active_tab_mut().unwrap().read_only = true;
+        app.on_paste("more");
+        assert_eq!(content(&mut app), "hello\nworld");
+        assert_eq!(app.status, t!("status.read_only_blocked").to_string());
+    }
+
+    #[test]
+    fn paste_into_a_prompt_replays_as_keystrokes_with_line_breaks_as_enter() {
+        let mut app = with_keymap("km-paste-prompt", "apple");
+        app.prompt = Some(crate::app::Prompt::new(
+            crate::app::PromptKind::AiInstruction,
+            "Title".into(),
+        ));
+        app.on_paste("abc");
+        assert_eq!(app.prompt.as_ref().unwrap().input, "abc");
+        app.on_paste("\td");
+        assert!(app.prompt.is_some());
+        // A CRLF is one Enter, which submits (closes) the prompt once.
+        app.on_paste("\r\nxyz");
+        assert!(app.prompt.is_none());
+    }
+
+    #[test]
+    fn editing_keys_in_other_keymaps_reach_the_editor() {
+        for keymap in [
+            "vscode-windows",
+            "intellij-macos",
+            "sublime",
+            "zed",
+            "eclipse",
+        ] {
+            let mut app = with_keymap("km-others", keymap);
+            buffer_with(&mut app, "x", 1);
+            app.on_key(key('y'));
+            assert_eq!(content(&mut app), "xy", "{keymap}");
+            assert_eq!(app.mode_indicator(), None, "{keymap}");
+        }
+    }
+
+    #[test]
+    fn command_folds_into_control_only_on_macos() {
+        let k = KeyEvent::new(
+            KeyCode::Char('c'),
+            KeyModifiers::SUPER | KeyModifiers::SHIFT,
+        );
+        let folded = App::command_as_control(k);
+        if cfg!(target_os = "macos") {
+            assert!(folded.modifiers.contains(KeyModifiers::CONTROL));
+            assert!(!folded.modifiers.contains(KeyModifiers::SUPER));
+            assert!(folded.modifiers.contains(KeyModifiers::SHIFT));
+        } else {
+            assert_eq!(folded.modifiers, k.modifiers);
+        }
+    }
+
+    #[test]
+    fn editor_motion_only_moves_when_the_editor_has_focus() {
+        let mut app = with_keymap("km-motion", "apple");
+        buffer_with(&mut app, "abc", 0);
+        app.focus = Focus::Editor;
+        app.editor_motion(KeyCode::Right);
+        assert_eq!(app.editor.active_tab_mut().unwrap().editor.get_cursor(), 1);
+        app.focus = Focus::Explorer;
+        app.editor_motion(KeyCode::Right);
+        assert_eq!(app.editor.active_tab_mut().unwrap().editor.get_cursor(), 1);
+    }
+
+    #[test]
+    fn alt_arrows_move_lines_and_alt_shift_arrows_add_a_column_cursor() {
+        let mut app = with_keymap("km-altarrows", "apple");
+        buffer_with(&mut app, "one\ntwo\nthree\n", 4);
+        app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        assert_eq!(content(&mut app), "two\none\nthree\n");
+        app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+        assert_eq!(content(&mut app), "one\ntwo\nthree\n");
+        app.on_key(KeyEvent::new(
+            KeyCode::Down,
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(app.editor.active_tab().unwrap().editor.caret_count(), 2);
+        app.on_key(KeyEvent::new(
+            KeyCode::Up,
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(
+            content(&mut app),
+            "one\ntwo\nthree\n",
+            "selecting never edits"
+        );
+    }
+
+    #[test]
+    fn ctrl_shift_arrows_grow_and_shrink_the_structural_selection() {
+        let mut app = with_keymap("km-selmore", "apple");
+        buffer_with(&mut app, "foo(bar, baz)", 5);
+        let ctrl_shift = KeyModifiers::CONTROL | KeyModifiers::SHIFT;
+        app.on_key(KeyEvent::new(KeyCode::Right, ctrl_shift));
+        let first = app
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
+        assert!(first.is_some(), "select_more selected something");
+        app.on_key(KeyEvent::new(KeyCode::Right, ctrl_shift));
+        let wider = app
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
+        assert!(wider.as_ref().unwrap().len() >= first.as_ref().unwrap().len());
+        app.on_key(KeyEvent::new(KeyCode::Left, ctrl_shift));
+        let back = app
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
+        assert!(back.as_ref().unwrap().len() < wider.as_ref().unwrap().len());
+    }
+
+    #[test]
+    fn the_mode_indicator_names_every_modal_mode() {
+        let mut app = with_keymap("km-modes", "vi");
+        for (mode, text) in [
+            (vix_modal::Mode::Insert, t!("status.vim_insert")),
+            (vix_modal::Mode::Visual, t!("status.vim_visual")),
+            (vix_modal::Mode::VisualLine, t!("status.vim_visual_line")),
+            (vix_modal::Mode::Normal, t!("status.vim_normal")),
+        ] {
+            app.modal_mode = mode;
+            assert_eq!(app.mode_indicator(), Some(text.to_string()));
+        }
+        app.vim_cmd = Some("wq".into());
+        assert_eq!(app.mode_indicator(), Some(":wq".to_string()));
+        let mut helix = with_keymap("km-helix", "helix");
+        helix.modal_mode = vix_modal::Mode::Visual;
+        assert_eq!(
+            helix.mode_indicator(),
+            Some(t!("status.helix_select").to_string())
+        );
+        helix.modal_mode = vix_modal::Mode::Normal;
+        assert_eq!(
+            helix.mode_indicator(),
+            Some(t!("status.vim_normal").to_string())
+        );
+        assert_eq!(with_keymap("km-apple", "apple").mode_indicator(), None);
+    }
+
+    #[test]
+    fn vim_ex_commands_save_quit_navigate_and_report_unknown_ones() {
+        let mut app = with_keymap("km-ex", "vi");
+        buffer_with(&mut app, "a\nb\nc\nd\n", 0);
+        app.run_vim_command("3");
+        assert_eq!(app.editor.cursor_line(), 2, ":N goes to line N");
+        app.run_vim_command("");
+        app.run_vim_command("bogus");
+        assert_eq!(
+            app.status,
+            t!("status.vim_no_command", cmd = "bogus").to_string()
+        );
+        app.run_vim_command("Ex");
+        assert_eq!(app.focus, Focus::Explorer);
+        assert!(app.visible.contains(Visible::EXPLORER));
+        app.run_vim_command("q!");
+        assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
+        // `:e path` opens that file, relative to the workspace.
+        let dir = temp("km-ex-open");
+        std::fs::write(dir.join("opened.txt"), "contents\n").unwrap();
+        let mut app = app_with(&dir, {
+            let mut s = crate::settings::Settings::default();
+            s.keymap = "vi".into();
+            s
+        });
+        app.run_vim_command("e opened.txt");
+        assert_eq!(content(&mut app), "contents\n");
+    }
+
+    #[test]
+    fn colon_opens_the_vim_command_line_from_any_pane_and_enter_runs_it() {
+        let mut app = with_keymap("km-colon", "vi");
+        app.modal_mode = vix_modal::Mode::Normal;
+        buffer_with(&mut app, "a\nb\nc\n", 0);
+        app.on_key(key(':'));
+        assert_eq!(app.vim_cmd.as_deref(), Some(""));
+        app.on_key(key('2'));
+        app.on_key(code(KeyCode::Enter));
+        assert!(app.vim_cmd.is_none());
+        assert_eq!(app.editor.cursor_line(), 1);
+        // Outside the editor, other Normal-mode keys are left to the pane.
+        app.focus = Focus::Explorer;
+        assert!(!app.vim_key(key('j')) || app.focus == Focus::Explorer);
+    }
+
+    #[test]
+    fn spacemacs_leader_sequences_run_wait_or_abort() {
+        let mut app = with_keymap("km-spacemacs", "spacemacs");
+        app.modal_mode = vix_modal::Mode::Normal;
+        buffer_with(&mut app, "text", 0);
+        app.focus = Focus::Editor;
+        app.on_key(key(' '));
+        assert_eq!(app.spacemacs_leader.as_deref(), Some(""));
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.spacemacs_leader.is_none(), "Esc abandons the leader");
+        app.on_key(key(' '));
+        app.on_key(code(KeyCode::Tab)); // not a character: ignored, still waiting
+        assert!(app.spacemacs_leader.is_some());
+        app.on_key(key('~')); // no such leader sequence
+        assert!(app.spacemacs_leader.is_none());
+        assert_eq!(
+            app.status,
+            t!("status.spacemacs_no_leader", seq = "~").to_string()
+        );
+        // `:` opens the shared command line, and a pane other than the editor
+        // keeps its own keys.
+        app.on_key(key(':'));
+        assert_eq!(app.vim_cmd.as_deref(), Some(""));
+        app.on_key(code(KeyCode::Esc));
+        app.vim_cmd = None;
+        app.focus = Focus::Explorer;
+        assert!(!app.spacemacs_key(key('j')));
+    }
+
+    #[test]
+    fn emacs_org_chords_run_table_commands() {
+        let mut app = with_keymap("km-cc", "emacs");
+        buffer_with(&mut app, "| a | b |\n| 1 | 2 |\n", 2);
+        // `C-c RET` adds a horizontal line and moves on.
+        assert!(app.emacs_c_chord_key(code(KeyCode::Enter)));
+        // A key that is not a character is no chord.
+        assert!(app.emacs_c_chord_key(code(KeyCode::F(5))));
+        assert_eq!(app.status, t!("status.emacs_no_chord").to_string());
+        // `C-c C-x` opens the third-key family, `C-c p` the project family.
+        assert!(app.emacs_c_chord_key(ctrl('x')));
+        assert_eq!(app.emacs_chord, EmacsChord::CtrlCCtrlX);
+        assert!(app.emacs_c_chord_key(key('p')));
+        assert_eq!(app.emacs_chord, EmacsChord::CtrlCP);
+        // Unknown second keys report instead of acting.
+        app.emacs_chord = EmacsChord::None;
+        assert!(app.emacs_c_chord_key(key('~')));
+        assert_eq!(app.status, t!("status.emacs_no_chord").to_string());
+        // `C-u C-c C-c` force-recalculates the table; `C-u C-c C-t` closes with a note.
+        app.flags.insert(AppFlags::EMACS_UNIVERSAL);
+        assert!(app.emacs_c_chord_key(ctrl('c')));
+        assert!(
+            !app.flags.contains(AppFlags::EMACS_UNIVERSAL),
+            "the prefix is consumed"
+        );
+        app.flags.insert(AppFlags::EMACS_UNIVERSAL);
+        assert!(app.emacs_c_chord_key(ctrl('t')));
+    }
+
+    #[test]
+    fn the_org_table_rectangle_chords_only_apply_inside_a_table() {
+        let mut app = with_keymap("km-cx", "emacs");
+        let dir = temp("km-cx-org");
+        let file = dir.join("t.org");
+        std::fs::write(&file, "| a | b |\n| 1 | 2 |\n\ntext\n").unwrap();
+        app.open_path(&file, false);
+        app.editor.active_tab_mut().unwrap().editor.set_cursor(2);
+        assert!(app.org_table_active_at_cursor());
+        for k in [
+            KeyEvent::new(KeyCode::Char('w'), KeyModifiers::ALT),
+            KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL),
+            KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL),
+        ] {
+            assert!(app.emacs_c_x_chord_key(k), "{k:?} is a table chord");
+        }
+        // An unrelated key inside a table falls through to the general lookup.
+        assert!(app.emacs_c_x_chord_key(key('~')));
+    }
+}
+
+#[cfg(test)]
+#[path = "keymap_tests_r4.rs"]
+mod tests_r4;

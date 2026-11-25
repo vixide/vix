@@ -5,7 +5,7 @@
   "description": "Development is specification-driven: each crate owns a spec at crates/<crate>/spec/index.md; cross-cutting and app-level specs live under spec/. When behavior and spec disagree, decide which is correct and make them match. AGENTS.md is the canonical entry point for both human and AI contributors — read it first. The workspace version is 2.0.2 (released 2026-11-07).",
   "repository": "https://github.com/vixide/vix",
   "version": "2.0.2",
-  "license": "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-NC-SA-4.0",
+  "license": "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-2.0-only OR GPL-3.0-only OR OGL-UK-3.0 OR CC-BY-SA-4.0",
   "sections": [
     {
       "title": "Start here",
@@ -318,7 +318,7 @@
         {
           "title": "LICENSE",
           "url": "https://github.com/vixide/vix/blob/main/LICENSE",
-          "notes": "Apache-2.0, BSD-3-Clause, MIT, GPL-2.0-only, GPL-3.0-only, OGL-UK-3.0 or CC-BY-NC-SA-4.0, at your option"
+          "notes": "Apache-2.0, BSD-3-Clause, MIT, GPL-2.0-only, GPL-3.0-only, OGL-UK-3.0 or CC-BY-SA-4.0, at your option"
         }
       ]
     }

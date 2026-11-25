@@ -8,12 +8,26 @@
 //! of "tools", another large genuinely contiguous block like org core
 //! was, no cherry-picking needed).
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 use crate::app::info_panel::InfoSlot;
-use vix_input::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use crate::app::picker_panels::list_panel_full_nav_key;
+use crate::geo::Geo;
+use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
 use super::{
     App, ContactPanel, FileInfoPanel, MarkdownPreview, Outline, Prompt, PromptKind, SnippetSession,
-    SystemInfoPanel, TextInfoPanel, VcardPanel, rect_contains,
+    SystemInfoPanel, TextInfoPanel, VcardPanel,
 };
 use crate::editor::Tab;
 
@@ -34,38 +48,11 @@ impl App {
     /// Handle a key in the contacts browser: Up/Down/PageUp/PageDown/Home/End move, Enter opens
     /// the selected contact's vCard, Esc closes.
     pub(super) fn contacts_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.contacts.height as usize).max(1);
+        let page = (usize::from(self.layout.contacts.height)).max(1);
+        if list_panel_full_nav_key(self.contacts.as_mut(), key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.page_up(p.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(p) = self.contacts.as_mut() {
-                    p.page_down(p.len());
-                }
-            }
             KeyCode::Enter => self.open_selected_vcard(),
             KeyCode::Esc => self.contacts = None,
             _ => {}
@@ -75,18 +62,14 @@ impl App {
     /// Handle a mouse event in the contacts browser: a left click on a row opens that contact's
     /// vCard.
     pub(super) fn contacts_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.contacts;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         let hit = self
             .contacts
             .as_mut()
-            .is_some_and(|p| p.select_index(p.scroll + row_in_view));
+            .is_some_and(|p| p.select_index(p.scroll.plus(row_in_view)));
         if hit {
             self.open_selected_vcard();
         }
@@ -95,38 +78,11 @@ impl App {
     /// Handle a key in the vCard detail panel: movement keys scroll the selection, Enter
     /// inserts the highlighted value into the editor, Esc closes the panel.
     pub(super) fn vcard_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.vcard.height as usize).max(1);
+        let page = (usize::from(self.layout.vcard.height)).max(1);
+        if list_panel_full_nav_key(self.vcard.as_mut(), key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.page_up(p.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(p) = self.vcard.as_mut() {
-                    p.page_down(p.len());
-                }
-            }
             KeyCode::Enter => self.insert_selected_vcard_value(),
             // Esc returns to the contact browser (or closes if opened directly).
             KeyCode::Esc => self.vcard = None,
@@ -137,18 +93,14 @@ impl App {
     /// Handle a mouse event in the vCard panel: a left click on a row inserts that value into
     /// the editor.
     pub(super) fn vcard_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.vcard;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         let hit = self
             .vcard
             .as_mut()
-            .is_some_and(|p| p.select_index(p.scroll + row_in_view));
+            .is_some_and(|p| p.select_index(p.scroll.plus(row_in_view)));
         if hit {
             self.insert_selected_vcard_value();
         }
@@ -211,38 +163,11 @@ impl App {
     /// Handle a key in the file-information panel: movement keys select, Enter inserts the
     /// highlighted value into the editor (panel stays open), Esc closes.
     pub(super) fn file_info_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.file_info.height as usize).max(1);
+        let page = (usize::from(self.layout.file_info.height)).max(1);
+        if list_panel_full_nav_key(self.info.file_info_mut(), key.code, page) {
+            return;
+        }
         match key.code {
-            KeyCode::Up => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.up();
-                }
-            }
-            KeyCode::Down => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.down();
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.page_up(page);
-                }
-            }
-            KeyCode::PageDown => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.page_down(page);
-                }
-            }
-            KeyCode::Home => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.page_up(p.len());
-                }
-            }
-            KeyCode::End => {
-                if let Some(p) = self.info.file_info_mut() {
-                    p.page_down(p.len());
-                }
-            }
             KeyCode::Enter => self.insert_selected_file_info(),
             KeyCode::Esc => self.info.close_file_info(),
             _ => {}
@@ -252,16 +177,12 @@ impl App {
     /// Handle a mouse event in the file-information panel: a left click on a row inserts its
     /// value.
     pub(super) fn file_info_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.file_info;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         if let Some(p) = self.info.file_info_mut() {
-            let idx = p.scroll + row_in_view;
+            let idx = p.scroll.plus(row_in_view);
             if p.select_index(idx) {
                 self.insert_selected_file_info();
             }
@@ -329,14 +250,10 @@ impl App {
     /// Handle a mouse event in the text-statistics panel: a left click on a row inserts its
     /// value. The panel is short, so rows are not scrolled.
     pub(super) fn text_info_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.text_info;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         if let Some(p) = self.info.text_info_mut()
             && p.select_index(row_in_view)
         {
@@ -379,9 +296,7 @@ impl App {
     /// Handle a key in the Markdown preview: arrows and paging scroll, `t` opens the table of
     /// contents (T206), Esc/`q` closes the preview.
     pub(super) fn markdown_preview_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.editor.height as usize)
-            .max(1)
-            .saturating_sub(2);
+        let page = (usize::from(self.layout.editor.height)).max(1).minus(2);
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.markdown_preview.as_mut() {
@@ -425,7 +340,7 @@ impl App {
         let mut toc = Outline::new(entries);
         if let Some(scroll) = self.markdown_preview.as_ref().map(|p| p.scroll) {
             // 0-based scroll -> 1-based "current line" for select_nearest.
-            toc.select_nearest(scroll + 1);
+            toc.select_nearest(scroll.plus(1));
         }
         self.markdown_toc = Some(toc);
     }
@@ -433,9 +348,7 @@ impl App {
     /// Handle a key in the Markdown table of contents: movement keys select a heading, Enter
     /// scrolls the preview to it, Esc closes the list.
     pub(super) fn markdown_toc_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.editor.height as usize)
-            .max(1)
-            .saturating_sub(2);
+        let page = (usize::from(self.layout.editor.height)).max(1).minus(2);
         match key.code {
             KeyCode::Up => {
                 if let Some(o) = self.markdown_toc.as_mut() {
@@ -571,7 +484,7 @@ impl App {
     /// Handle a key in the snippet picker: arrows and paging move, typing filters by prefix
     /// (Backspace edits), Enter inserts the snippet, Esc closes.
     pub(super) fn snippets_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.snippets.height as usize).max(1);
+        let page = (usize::from(self.layout.snippets.height)).max(1);
         let lib = &self.snippet_library;
         match key.code {
             KeyCode::Up => {
@@ -612,15 +525,11 @@ impl App {
 
     /// Handle a mouse event in the snippet picker: a left click on a row inserts that snippet.
     pub(super) fn snippets_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.snippets;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row = (mouse.row - r.y) as usize;
-        let idx = self.snippets.as_ref().map_or(0, |p| p.scroll) + row;
+        };
+        let idx = self.snippets.as_ref().map_or(0, |p| p.scroll).plus(row);
         let hit = self
             .snippets
             .as_mut()
@@ -667,13 +576,13 @@ impl App {
         let chars: Vec<char> = tab.editor.get_content().chars().collect();
         let is_word = |c: char| c.is_alphanumeric() || c == '_';
         let mut start = cursor;
-        while start > 0 && chars.get(start - 1).copied().is_some_and(is_word) {
-            start -= 1;
+        while start > 0 && chars.get(start.minus(1)).copied().is_some_and(is_word) {
+            start = start.minus(1);
         }
         if start == cursor {
             return false;
         }
-        let word: String = chars[start..cursor].iter().collect();
+        let word: String = chars.get(start..cursor).unwrap_or(&[]).iter().collect();
         let Some(snippet) = crate::snippets::find_by_prefix(&self.snippet_library, &word) else {
             return false;
         };
@@ -724,7 +633,7 @@ impl App {
         }
         let stops: Vec<(usize, usize)> = stops
             .iter()
-            .map(|s| (base + s.start, base + s.end))
+            .map(|s| (base.plus(s.start), base.plus(s.end)))
             .collect();
         let single = stops.len() == 1;
         self.snippet_session = Some(SnippetSession { stops, index: 0 });
@@ -762,7 +671,9 @@ impl App {
             let Some(sess) = self.snippet_session.as_mut() else {
                 return;
             };
-            let (cur_start, cur_end) = sess.stops[sess.index];
+            let Some(&(cur_start, cur_end)) = sess.stops.get(sess.index) else {
+                return;
+            };
             // A later stop nested inside the current field (`${1:a ${2:b}}`)
             // was typed over once the user edited that field: drop it.
             if cursor != cur_end {
@@ -771,7 +682,7 @@ impl App {
                 sess.stops.retain(|&(s, e)| {
                     let nested = s >= cur_start && e <= cur_end && s < cur_end;
                     let keep = i <= current || !nested;
-                    i += 1;
+                    i = i.plus(1);
                     keep
                 });
             }
@@ -780,17 +691,17 @@ impl App {
             for (s, e) in &mut sess.stops {
                 if *s >= cur_end {
                     if cursor >= cur_end {
-                        let add = cursor - cur_end;
-                        *s += add;
-                        *e += add;
+                        let add = cursor.minus(cur_end);
+                        *s = s.plus(add);
+                        *e = e.plus(add);
                     } else {
-                        let sub = cur_end - cursor;
-                        *s = s.saturating_sub(sub);
-                        *e = e.saturating_sub(sub);
+                        let sub = cur_end.minus(cursor);
+                        *s = s.minus(sub);
+                        *e = e.minus(sub);
                     }
                 }
             }
-            let next = sess.index + 1;
+            let next = sess.index.plus(1);
             if next >= sess.stops.len() {
                 None
             } else {
@@ -817,7 +728,7 @@ impl App {
     /// Handle a key in the system-information panel: movement keys select, Enter inserts the
     /// highlighted value (panel stays open), Esc closes.
     pub(super) fn system_info_key(&mut self, key: KeyEvent) {
-        let page = (self.layout.system_info.height as usize).max(1);
+        let page = (usize::from(self.layout.system_info.height)).max(1);
         match key.code {
             KeyCode::Up => {
                 if let Some(p) = self.info.system_info_mut() {
@@ -859,16 +770,12 @@ impl App {
     /// Handle a mouse event in the system-information panel: a left click on a row inserts its
     /// value.
     pub(super) fn system_info_mouse(&mut self, mouse: MouseEvent) {
-        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
-            return;
-        }
         let r = self.layout.system_info;
-        if !rect_contains(r, mouse.column, mouse.row) {
+        let Some(row_in_view) = crate::app::hit::left_click_row(r, mouse) else {
             return;
-        }
-        let row_in_view = (mouse.row - r.y) as usize;
+        };
         if let Some(p) = self.info.system_info_mut() {
-            let idx = p.scroll + row_in_view;
+            let idx = p.scroll.plus(row_in_view);
             if p.select_index(idx) {
                 self.insert_selected_system_info();
             }
@@ -889,5 +796,540 @@ impl App {
         if self.editor.insert_str(&value, area) {
             self.status = t!("status.ascii_inserted", name = value).to_string();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::Settings;
+    use ratatui::{Terminal, backend::TestBackend, layout::Rect};
+    use std::path::PathBuf;
+    use vix_input::{KeyModifiers, MouseButton, MouseEventKind};
+
+    fn app() -> App {
+        let mut a = App::new(std::env::temp_dir(), Settings::default());
+        a.layout.editor = Rect::new(0, 0, 80, 24);
+        a
+    }
+
+    fn press(a: &mut App, code: KeyCode) {
+        a.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+    }
+
+    /// Draw a full frame so the panels record their hit areas in `layout`.
+    fn draw(a: &mut App) {
+        let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();
+        terminal.draw(|f| crate::ui::draw(a, f)).unwrap();
+    }
+
+    fn click(a: &mut App, rect: Rect, row: u16) {
+        a.on_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x.plus(1),
+            row: rect.y.plus(row),
+            modifiers: KeyModifiers::NONE,
+        });
+    }
+
+    fn tab_text(a: &App) -> String {
+        a.editor.active_tab().unwrap().text()
+    }
+
+    fn vcf_dir(tag: &str) -> (PathBuf, Vec<crate::contact_panel::Contact>) {
+        let dir = std::env::temp_dir().join(format!("vix-r2c-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut list = Vec::new();
+        for (i, name) in ["Ada Lovelace", "Grace Hopper"].iter().enumerate() {
+            let path = dir.join(format!("c{i}.vcf"));
+            std::fs::write(
+                &path,
+                format!("BEGIN:VCARD\nVERSION:3.0\nFN:{name}\nEMAIL:c{i}@example.org\nEND:VCARD\n"),
+            )
+            .unwrap();
+            list.push(crate::contact_panel::Contact {
+                name: (*name).to_string(),
+                path,
+            });
+        }
+        (dir, list)
+    }
+
+    #[test]
+    fn contacts_keys_navigate_open_a_card_and_close() {
+        let (dir, list) = vcf_dir("contacts-keys");
+        let mut a = app();
+        a.contacts = Some(ContactPanel::open(list));
+        draw(&mut a);
+        press(&mut a, KeyCode::Down);
+        assert_eq!(a.contacts.as_ref().unwrap().selected, 1);
+        press(&mut a, KeyCode::Home);
+        assert_eq!(a.contacts.as_ref().unwrap().selected, 0);
+        press(&mut a, KeyCode::End);
+        assert_eq!(a.contacts.as_ref().unwrap().selected, 1);
+        press(&mut a, KeyCode::Enter);
+        let card = a.vcard.as_ref().expect("Enter opens the selected card");
+        assert!(card.title().contains("Grace Hopper"));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.vcard.is_none());
+        press(&mut a, KeyCode::Esc);
+        assert!(a.contacts.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn contacts_click_opens_that_contact_and_a_missing_file_reports() {
+        let (dir, mut list) = vcf_dir("contacts-click");
+        list.push(crate::contact_panel::Contact {
+            name: "Ghost".to_string(),
+            path: dir.join("missing.vcf"),
+        });
+        let mut a = app();
+        a.contacts = Some(ContactPanel::open(list));
+        draw(&mut a);
+        let rect = a.layout.contacts;
+        click(&mut a, rect, 1);
+        assert!(a.vcard.as_ref().unwrap().title().contains("Grace Hopper"));
+        a.vcard = None;
+        // A click outside the rows does nothing; the unreadable card reports.
+        a.on_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert!(a.vcard.is_none());
+        click(&mut a, rect, 2);
+        assert!(a.vcard.is_none(), "an unreadable card is not opened");
+        assert!(!a.messages.items.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn vcard_enter_and_click_insert_the_highlighted_value() {
+        let (dir, list) = vcf_dir("vcard");
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.contacts = Some(ContactPanel::open(list));
+        draw(&mut a);
+        press(&mut a, KeyCode::Enter);
+        draw(&mut a);
+        let value = a.vcard.as_ref().unwrap().selected_value();
+        assert_ne!(value, "");
+        press(&mut a, KeyCode::Enter);
+        assert_eq!(tab_text(&a), value);
+        assert_eq!(
+            a.status,
+            t!("status.ascii_inserted", name = value).to_string()
+        );
+        // Navigation keys move the selection; a click inserts that row.
+        press(&mut a, KeyCode::Down);
+        let second = a.vcard.as_ref().unwrap().selected_value();
+        let rect = a.layout.vcard;
+        click(&mut a, rect, 1);
+        assert!(tab_text(&a).contains(&second));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.vcard.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn vcard_with_an_empty_value_inserts_nothing() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        let mut p = VcardPanel::open(crate::vcard_parser::parse("BEGIN:VCARD\nEND:VCARD\n"));
+        p.selected = p.len();
+        a.vcard = Some(p);
+        press(&mut a, KeyCode::Enter);
+        assert_eq!(tab_text(&a), "");
+    }
+
+    #[test]
+    fn file_info_keys_and_clicks_insert_values_and_esc_closes() {
+        let dir = std::env::temp_dir().join(format!("vix-r2c-fi-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("note.txt");
+        std::fs::write(&file, "alpha beta\ngamma\n").unwrap();
+        let mut a = App::new(dir.clone(), Settings::default());
+        a.layout.editor = Rect::new(0, 0, 80, 24);
+        a.open_initial(&file);
+        a.run_action("tools.file_info");
+        draw(&mut a);
+        let panel = a.info.file_info().unwrap();
+        let rows: Vec<(String, String)> = panel
+            .rows
+            .iter()
+            .map(|r| (r.label.clone(), r.value.clone()))
+            .collect();
+        assert!(rows.iter().any(|(_, v)| v.contains("note.txt")));
+        // Keys move the selection and Enter inserts the highlighted value.
+        press(&mut a, KeyCode::Down);
+        let value = a.info.file_info().unwrap().selected_value();
+        press(&mut a, KeyCode::Enter);
+        if !value.is_empty() {
+            assert!(tab_text(&a).contains(&value));
+        }
+        press(&mut a, KeyCode::PageDown);
+        press(&mut a, KeyCode::PageUp);
+        // A click on the first row inserts it too, and the panel stays open.
+        let rect = a.layout.file_info;
+        let before = tab_text(&a);
+        click(&mut a, rect, 0);
+        assert!(a.info.file_info().is_some());
+        let first = a.info.file_info().unwrap().selected_value();
+        if !first.is_empty() {
+            assert!(tab_text(&a).len() > before.len());
+        }
+        press(&mut a, KeyCode::Esc);
+        assert!(a.info.file_info().is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn file_info_of_an_unsaved_buffer_still_counts_the_text() {
+        let mut a = app();
+        a.editor.new_tab_with_content("one two\nthree\n");
+        a.open_file_info();
+        let rows = &a.info.file_info().unwrap().rows;
+        assert!(rows.iter().any(|r| r.value == "3" || r.value == "2"));
+    }
+
+    #[test]
+    fn text_info_uses_the_selection_and_keys_insert_values() {
+        let mut a = app();
+        a.editor
+            .new_tab_with_content("alpha beta gamma\nsecond line\n");
+        a.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(0, 10);
+        assert_eq!(a.selected_or_all_text(), "alpha beta");
+        a.run_action("tools.text_info");
+        draw(&mut a);
+        // Down then Enter inserts the second statistic and keeps the panel.
+        press(&mut a, KeyCode::Down);
+        let value = a.info.text_info().unwrap().selected_value();
+        assert_ne!(value, "");
+        press(&mut a, KeyCode::Enter);
+        assert!(tab_text(&a).contains(&value));
+        press(&mut a, KeyCode::Up);
+        assert_eq!(a.info.text_info().unwrap().selected, 0);
+        // Clicking a row inserts that row's value.
+        let rect = a.layout.text_info;
+        click(&mut a, rect, 1);
+        assert_eq!(a.info.text_info().unwrap().selected, 1);
+        press(&mut a, KeyCode::Esc);
+        assert!(a.info.text_info().is_none());
+    }
+
+    #[test]
+    fn markdown_preview_keys_scroll_open_the_toc_and_close() {
+        let mut a = app();
+        let mut body = String::new();
+        for i in 0..30 {
+            std::fmt::Write::write_fmt(&mut body, format_args!("# Heading {i}\n\ntext {i}\n\n"))
+                .unwrap();
+        }
+        a.editor.new_tab_with_content(&body);
+        a.run_action("tools.markdown_preview");
+        draw(&mut a);
+        press(&mut a, KeyCode::Down);
+        assert_eq!(a.markdown_preview.as_ref().unwrap().scroll, 1);
+        press(&mut a, KeyCode::Up);
+        assert_eq!(a.markdown_preview.as_ref().unwrap().scroll, 0);
+        press(&mut a, KeyCode::PageDown);
+        let after_page = a.markdown_preview.as_ref().unwrap().scroll;
+        assert!(after_page > 1);
+        press(&mut a, KeyCode::PageUp);
+        assert!(a.markdown_preview.as_ref().unwrap().scroll < after_page);
+
+        // `t` opens the table of contents; its keys walk the headings and
+        // Enter scrolls the preview to the chosen one.
+        press(&mut a, KeyCode::Char('t'));
+        assert!(a.markdown_toc.is_some());
+        press(&mut a, KeyCode::Down);
+        press(&mut a, KeyCode::Down);
+        press(&mut a, KeyCode::PageDown);
+        press(&mut a, KeyCode::PageUp);
+        press(&mut a, KeyCode::Up);
+        let sel = a.markdown_toc.as_ref().unwrap().selected;
+        assert!(sel > 0);
+        let line = a.markdown_toc.as_ref().unwrap().selected_line().unwrap();
+        press(&mut a, KeyCode::Enter);
+        assert!(a.markdown_toc.is_none());
+        assert!(a.markdown_preview.is_some(), "back in the preview");
+        let _ = line;
+        press(&mut a, KeyCode::Char('t'));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.markdown_toc.is_none());
+        press(&mut a, KeyCode::Char('q'));
+        assert!(a.markdown_preview.is_none());
+    }
+
+    #[test]
+    fn markdown_toc_without_headings_says_so() {
+        let mut a = app();
+        a.editor.new_tab_with_content("just a paragraph\n");
+        a.run_action("tools.markdown_preview");
+        press(&mut a, KeyCode::Char('T'));
+        assert!(a.markdown_toc.is_none());
+        assert_eq!(a.status, t!("status.markdown_toc_empty").to_string());
+        press(&mut a, KeyCode::Esc);
+        assert!(a.markdown_preview.is_none());
+    }
+
+    #[test]
+    fn markdown_preview_of_no_tab_opens_nothing() {
+        let mut a = app();
+        a.open_markdown_preview();
+        // The scratch tab App::new opens is text, so a preview exists...
+        assert!(a.markdown_preview.is_some());
+        a.markdown_preview = None;
+        // ...but a key with no panel open is simply ignored.
+        a.markdown_preview_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        a.markdown_toc_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        assert!(a.markdown_preview.is_none() && a.markdown_toc.is_none());
+    }
+
+    fn snippet(name: &str, prefix: &str, body: &str) -> crate::snippets::Snippet {
+        crate::snippets::Snippet {
+            name: name.to_string(),
+            prefixes: vec![prefix.to_string()],
+            body: body.to_string(),
+            description: String::new(),
+            scope: crate::snippets::Scope::Global,
+        }
+    }
+
+    #[test]
+    fn snippets_picker_filters_and_enter_inserts_the_body() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.run_action("tools.snippets");
+        a.snippet_library = vec![
+            snippet("alpha", "al", "ALPHA-BODY"),
+            snippet("beta", "be", "BETA-BODY"),
+        ];
+        draw(&mut a);
+        for c in "bet".chars() {
+            press(&mut a, KeyCode::Char(c));
+        }
+        press(&mut a, KeyCode::Backspace);
+        press(&mut a, KeyCode::Char('t'));
+        press(&mut a, KeyCode::Down);
+        press(&mut a, KeyCode::PageDown);
+        press(&mut a, KeyCode::Up);
+        press(&mut a, KeyCode::PageUp);
+        press(&mut a, KeyCode::Enter);
+        assert!(a.snippets.is_none());
+        assert_eq!(tab_text(&a), "BETA-BODY");
+        assert_eq!(a.status, t!("status.snippet_inserted").to_string());
+        a.run_action("tools.snippets");
+        press(&mut a, KeyCode::Esc);
+        assert!(a.snippets.is_none());
+    }
+
+    #[test]
+    fn snippets_click_inserts_the_clicked_row() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.run_action("tools.snippets");
+        a.snippet_library = vec![
+            snippet("alpha", "al", "ALPHA-BODY"),
+            snippet("beta", "be", "BETA-BODY"),
+        ];
+        draw(&mut a);
+        let rect = a.layout.snippets;
+        click(&mut a, rect, 1);
+        assert_eq!(tab_text(&a), "BETA-BODY");
+        assert!(a.snippets.is_none());
+    }
+
+    #[test]
+    fn a_snippet_prefix_expands_and_tab_walks_its_stops() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.snippet_library = vec![snippet("loop", "lp", "for ${1:i} in ${2:xs} { $0 }")];
+        a.snippet_library_key = Some(String::new());
+        for c in "lp".chars() {
+            press(&mut a, KeyCode::Char(c));
+        }
+        assert!(a.expand_snippet_prefix());
+        assert_eq!(tab_text(&a), "for i in xs {  }");
+        assert!(a.snippet_active());
+        // The first field is selected; typing replaces it, Tab moves on.
+        let sel = a
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
+        assert_eq!(sel.as_deref(), Some("i"));
+        press(&mut a, KeyCode::Char('n'));
+        a.snippet_tab();
+        let sel = a
+            .editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .get_selection_text();
+        assert_eq!(sel.as_deref(), Some("xs"));
+        a.snippet_tab();
+        a.snippet_tab();
+        assert!(!a.snippet_active(), "the session ends after the last stop");
+        assert!(tab_text(&a).starts_with("for n in xs"));
+    }
+
+    #[test]
+    fn a_word_that_is_no_snippet_prefix_does_not_expand() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.snippet_library_key = Some(String::new());
+        assert!(!a.expand_snippet_prefix(), "an empty line has no word");
+        for c in "zzz".chars() {
+            press(&mut a, KeyCode::Char(c));
+        }
+        assert!(!a.expand_snippet_prefix());
+        assert_eq!(tab_text(&a), "zzz");
+        a.snippet_tab();
+        assert!(!a.snippet_active());
+    }
+
+    #[test]
+    fn new_snippet_from_selection_needs_a_selection() {
+        let mut a = app();
+        a.editor.new_tab_with_content("some text");
+        a.new_snippet_from_selection();
+        assert_eq!(a.status, t!("status.no_selection").to_string());
+        assert!(a.prompt.is_none());
+        a.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_selection_range(0, 4);
+        a.new_snippet_from_selection();
+        assert!(a.prompt.is_some());
+        assert_eq!(a.pending_snippet_body.as_deref(), Some("some"));
+        // An empty prefix saves nothing and an absent capture is ignored.
+        a.save_snippet_from_selection("");
+        assert!(a.pending_snippet_body.is_none());
+        a.save_snippet_from_selection("anything");
+    }
+
+    #[test]
+    fn media_type_comes_from_the_file_extension() {
+        let mut a = app();
+        assert_eq!(a.active_media_type(), None);
+        a.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("main.rs"));
+        assert!(a.active_media_type().is_some());
+        a.editor.active_tab_mut().unwrap().path = Some(PathBuf::from("noext"));
+        assert_eq!(a.active_media_type(), None);
+    }
+
+    #[test]
+    fn system_info_keys_and_clicks_walk_and_insert() {
+        let mut a = app();
+        a.editor.new_tab_with_content("");
+        a.run_action("tools.system_info");
+        draw(&mut a);
+        let n = a.info.system_info().unwrap().len();
+        press(&mut a, KeyCode::End);
+        assert!(a.info.system_info().unwrap().selected > 0);
+        press(&mut a, KeyCode::Home);
+        assert_eq!(a.info.system_info().unwrap().selected, 0);
+        press(&mut a, KeyCode::PageDown);
+        assert!(a.info.system_info().unwrap().selected > 0);
+        press(&mut a, KeyCode::PageUp);
+        press(&mut a, KeyCode::Down);
+        press(&mut a, KeyCode::Up);
+        assert!(n > 3);
+        // Walk to a row that has a value and insert it with Enter.
+        let mut value = String::new();
+        for _ in 0..n {
+            press(&mut a, KeyCode::Down);
+            value = a.info.system_info().unwrap().selected_value();
+            if !value.is_empty() {
+                break;
+            }
+        }
+        assert_ne!(value, "");
+        press(&mut a, KeyCode::Enter);
+        assert!(tab_text(&a).contains(&value));
+        // A click on a heading row inserts nothing.
+        let before = tab_text(&a);
+        a.info.system_info_mut().unwrap().scroll = 0;
+        let rect = a.layout.system_info;
+        click(&mut a, rect, 0);
+        assert_eq!(tab_text(&a), before);
+        press(&mut a, KeyCode::Esc);
+        assert!(a.info.system_info().is_none());
+    }
+
+    /// Every info panel's key and mouse handler is harmless when its panel is
+    /// not open: nothing opens, nothing is inserted, and the status is untouched.
+    #[test]
+    fn handlers_of_closed_panels_do_nothing() {
+        let mut a = app();
+        a.status.clear();
+        let before = a.editor.active_tab().unwrap().editor.get_content();
+        let keys = [
+            KeyCode::Up,
+            KeyCode::Down,
+            KeyCode::PageUp,
+            KeyCode::PageDown,
+            KeyCode::Home,
+            KeyCode::End,
+            KeyCode::Backspace,
+            KeyCode::Enter,
+            KeyCode::Esc,
+            KeyCode::Char('x'),
+        ];
+        let click = |a: &mut App, rect: Rect| {
+            a.layout.editor = Rect::new(0, 0, 80, 24);
+            let m = MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: rect.x,
+                row: rect.y,
+                modifiers: KeyModifiers::NONE,
+            };
+            (m, rect)
+        };
+        for code in keys {
+            let k = KeyEvent::new(code, KeyModifiers::NONE);
+            a.contacts_key(k);
+            a.vcard_key(k);
+            a.file_info_key(k);
+            a.text_info_key(k);
+            a.markdown_preview_key(k);
+            a.markdown_toc_key(k);
+            a.snippets_key(k);
+            a.system_info_key(k);
+        }
+        a.layout.contacts = Rect::new(0, 0, 20, 5);
+        a.layout.vcard = Rect::new(0, 0, 20, 5);
+        a.layout.snippets = Rect::new(0, 0, 20, 5);
+        for rect in [
+            a.layout.contacts,
+            a.layout.vcard,
+            a.layout.file_info,
+            a.layout.text_info,
+            a.layout.snippets,
+            a.layout.system_info,
+        ] {
+            let (m, _) = click(&mut a, Rect::new(rect.x, rect.y.plus(1), 5, 5));
+            a.contacts_mouse(m);
+            a.vcard_mouse(m);
+            a.file_info_mouse(m);
+            a.text_info_mouse(m);
+            a.snippets_mouse(m);
+            a.system_info_mouse(m);
+        }
+        assert!(a.contacts.is_none() && a.vcard.is_none() && a.snippets.is_none());
+        assert!(a.info.file_info().is_none() && a.info.text_info().is_none());
+        assert!(a.info.system_info().is_none());
+        assert!(a.markdown_preview.is_none() && a.markdown_toc.is_none());
+        assert_eq!(a.status, "");
+        assert_eq!(a.editor.active_tab().unwrap().editor.get_content(), before);
     }
 }

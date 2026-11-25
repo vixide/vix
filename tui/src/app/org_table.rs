@@ -13,6 +13,19 @@
 //! levels of the tree. Two contiguous clusters, bundled together since
 //! Column View renders interactive `TBLFM` tables.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent};
 
 use super::edit_surface::EditSlot;
@@ -27,8 +40,8 @@ impl App {
         let cursor = tab.editor.get_cursor();
         let line = code.char_to_line(cursor);
         let line_start = code.line_to_char(line);
-        let char_col = cursor - line_start;
-        let line_text = code.slice(line_start, line_start + code.line_len(line));
+        let char_col = cursor.minus(line_start);
+        let line_text = code.slice(line_start, line_start.plus(code.line_len(line)));
         let byte_col = line_text
             .char_indices()
             .nth(char_col)
@@ -41,12 +54,12 @@ impl App {
     /// *current* content — call this only after `set_content`).
     pub(super) fn org_table_set_cursor(tab: &mut crate::editor::Tab, line: usize, byte_col: usize) {
         let code = tab.editor.code_ref();
-        let line = line.min(code.len_lines().saturating_sub(1));
+        let line = line.min(code.len_lines().minus(1));
         let line_start = code.line_to_char(line);
-        let line_text = code.slice(line_start, line_start + code.line_len(line));
+        let line_text = code.slice(line_start, line_start.plus(code.line_len(line)));
         let b = byte_col.min(line_text.len());
-        let char_col = line_text[..b].chars().count();
-        tab.editor.set_cursor(line_start + char_col);
+        let char_col = line_text.get(..b).unwrap_or("").chars().count();
+        tab.editor.set_cursor(line_start.plus(char_col));
     }
 
     /// The 0-indexed `|`-delimited field that byte offset `col` falls into on
@@ -59,7 +72,7 @@ impl App {
         if delims.len() < 2 {
             return 0;
         }
-        let max_field = delims.len() - 2;
+        let max_field = delims.len().minus(2);
         let mut idx = 0;
         for (i, &p) in delims.iter().enumerate() {
             if p < col {
@@ -202,7 +215,7 @@ impl App {
         if let Some(new) = f(&text, line) {
             tab.editor.set_content(&new);
             tab.editor
-                .set_cursor_line(line.min(new.split('\n').count().saturating_sub(1)));
+                .set_cursor_line(line.min(new.split('\n').count().minus(1)));
             tab.dirty = true;
         } else {
             self.status = t!("status.org_table_no_table").to_string();
@@ -301,7 +314,7 @@ impl App {
             return false;
         }
         if let Some(new) = crate::org_table::recalc(&text, target_line) {
-            let new_last = new.split('\n').count().saturating_sub(1);
+            let new_last = new.split('\n').count().minus(1);
             tab.editor.set_content(&new);
             tab.editor.set_cursor_line(line.min(new_last));
             tab.dirty = true;
@@ -334,12 +347,21 @@ impl App {
         }
     }
 
+    /// `v` rounded to the nearest integer.
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        reason = "RCA-EXC-2: the caller checked `v` is within 1e-9 of an integer, and table sums are small; float-to-int `as` saturates, never wraps"
+    )]
+    fn rounded_to_i64(v: f64) -> i64 {
+        v.round() as i64
+    }
+
     /// Format a table-formula-style number: integers with no decimal point,
     /// non-integers to 2 decimal places with trailing zeros trimmed.
     fn format_table_number(v: f64) -> String {
         if v.fract().abs() < 1e-9 {
-            #[allow(clippy::cast_possible_truncation, reason = "table sums are small")]
-            return (v.round() as i64).to_string();
+            return Self::rounded_to_i64(v).to_string();
         }
         let s = format!("{v:.2}");
         let trimmed = s.trim_end_matches('0').trim_end_matches('.');
@@ -370,7 +392,7 @@ impl App {
                 PromptKind::OrgTableSort,
                 t!("prompt.org_table_sort").to_string(),
             )
-            .with_input((column + 1).to_string()),
+            .with_input(column.plus(1).to_string()),
         );
     }
 
@@ -383,7 +405,9 @@ impl App {
         };
         let line = tab.editor.cursor_line();
         let text = tab.editor.get_content();
-        let Some((first, last)) = crate::org_table::table_range(&text, line) else {
+        // Org's `C-c ^` sorts the rows between the nearest horizontal rules, so a
+        // header above a rule is not sorted in with the body below it.
+        let Some((first, last)) = crate::org_table::section_range(&text, line) else {
             self.status = t!("status.org_table_no_table").to_string();
             return;
         };
@@ -391,7 +415,7 @@ impl App {
         let column = parts
             .next()
             .and_then(|s| s.parse::<usize>().ok())
-            .map_or(0, |n| n.saturating_sub(1));
+            .map_or(0, |n| n.minus(1));
         let mut kind = crate::org_table::SortKind::Alphabetic;
         let mut reverse = false;
         for tok in parts {
@@ -464,14 +488,14 @@ impl App {
         let selection = tab.editor.get_selection();
         let code = tab.editor.code_ref();
         let (a_char, b_char) = match selection {
-            Some(sel) if !sel.is_empty() => (sel.start, sel.end.saturating_sub(1).max(sel.start)),
+            Some(sel) if !sel.is_empty() => (sel.start, sel.end.minus(1).max(sel.start)),
             _ => (cursor, cursor),
         };
         let to_field = |ch: usize| -> (usize, usize) {
             let line = code.char_to_line(ch.min(code.len_chars()));
             let line_start = code.line_to_char(line);
-            let line_text = code.slice(line_start, line_start + code.line_len(line));
-            let char_col = ch.saturating_sub(line_start);
+            let line_text = code.slice(line_start, line_start.plus(code.line_len(line)));
+            let char_col = ch.minus(line_start);
             let byte_col = line_text
                 .char_indices()
                 .nth(char_col)
@@ -748,7 +772,7 @@ impl App {
             crate::org::update_all_columnview_dblocks(&text, today, file_name.as_deref());
         if new_text != text {
             let line = tab.editor.cursor_line();
-            let clamped = line.min(new_text.split('\n').count().saturating_sub(1));
+            let clamped = line.min(new_text.split('\n').count().minus(1));
             tab.editor.set_content(&new_text);
             tab.editor.set_cursor_line(clamped);
             tab.dirty = true;
@@ -756,3 +780,6 @@ impl App {
         self.status = t!("status.org_columns_dblocks_updated_all").to_string();
     }
 }
+
+#[cfg(test)]
+mod tests;

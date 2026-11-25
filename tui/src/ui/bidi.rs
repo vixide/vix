@@ -7,6 +7,19 @@
 //! of two or more spaces, so borders, panes and column gaps stay put. A cell
 //! keeps its style when it moves; a wide character keeps its trailing cell.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::Rect;
 use vix_locale_model::visual_order;
@@ -32,9 +45,13 @@ fn is_border(c: char) -> bool {
     ('\u{2500}'..='\u{259F}').contains(&c)
 }
 
-/// One screen unit: a cell plus the empty continuation cells of a wide glyph.
-fn unit_char(cells: &[Cell]) -> char {
-    cells[0].symbol().chars().next().unwrap_or(' ')
+/// The character of the screen unit starting at `at`: a cell plus the empty
+/// continuation cells of a wide glyph. A blank for a position off the row.
+fn unit_char(cells: &[Cell], at: usize) -> char {
+    cells
+        .get(at)
+        .and_then(|c| c.symbol().chars().next())
+        .unwrap_or(' ')
 }
 
 /// Reorder every right-to-left stretch in `buf`.
@@ -48,8 +65,8 @@ pub(super) fn reorder_buffer(buf: &mut Buffer) {
         let mut changed = false;
         let mut x = 0;
         while x < cells.len() {
-            if is_border(unit_char(&cells[x..])) {
-                x += 1;
+            if is_border(unit_char(&cells, x)) {
+                x = x.plus(1);
                 continue;
             }
             // Collect units of one stretch.
@@ -57,43 +74,52 @@ pub(super) fn reorder_buffer(buf: &mut Buffer) {
             let mut units: Vec<(usize, usize)> = Vec::new();
             let mut spaces = 0;
             while x < cells.len() {
-                let c = unit_char(&cells[x..]);
+                let c = unit_char(&cells, x);
                 if is_border(c) {
                     break;
                 }
-                spaces = if c == ' ' { spaces + 1 } else { 0 };
+                spaces = if c == ' ' { spaces.plus(1) } else { 0 };
                 if spaces >= 2 {
                     break;
                 }
-                let mut end = x + 1;
-                while end < cells.len() && cells[end].symbol().is_empty() {
-                    end += 1;
+                let mut end = x.plus(1);
+                while cells.get(end).is_some_and(|c| c.symbol().is_empty()) {
+                    end = end.plus(1);
                 }
                 units.push((x, end));
                 x = end;
             }
             if units.is_empty() {
-                x = start + 1;
+                x = start.plus(1);
                 continue;
             }
-            let chars: Vec<char> = units.iter().map(|&(s, _)| unit_char(&cells[s..])).collect();
-            let order = visual_order(&chars);
+            let chars: Vec<char> = units.iter().map(|&(s, _)| unit_char(&cells, s)).collect();
+            // The renderer cannot report an error; a row whose order cannot be
+            // computed is left in logical order, and the library error is the
+            // only reason it can happen.
+            let Ok(order) = visual_order(&chars) else {
+                continue;
+            };
             if order.iter().enumerate().all(|(i, &o)| i == o) {
                 continue;
             }
             changed = true;
             let mut at = start;
             for &src in &order {
-                let (s, e) = units[src];
-                for cell in &cells[s..e] {
-                    out[at] = cell.clone();
-                    at += 1;
+                let Some(&(s, e)) = units.get(src) else {
+                    continue;
+                };
+                for cell in cells.get(s..e).unwrap_or(&[]) {
+                    if let Some(slot) = out.get_mut(at) {
+                        *slot = cell.clone();
+                    }
+                    at = at.plus(1);
                 }
             }
         }
         if changed {
             for (i, cell) in out.into_iter().enumerate() {
-                buf[(area.left() + u16::try_from(i).unwrap_or(0), y)] = cell;
+                buf[(area.left().plus(u16::try_from(i).unwrap_or(0)), y)] = cell;
             }
         }
     }
@@ -110,12 +136,12 @@ pub(super) fn reflect_rows(buf: &mut Buffer, x0: u16, x1: u16, y0: u16, y1: u16)
     let (y0, y1) = (y0.max(area.top()), y1.min(area.bottom()));
     let mut reflection = Reflection {
         y0,
-        shifts: vec![0; usize::from(y1.saturating_sub(y0))],
+        shifts: vec![0; usize::from(y1.minus(y0))],
     };
     if x1 <= x0 {
         return reflection;
     }
-    let width = usize::from(x1 - x0);
+    let width = usize::from(x1.minus(x0));
     for y in y0..y1 {
         let cells: Vec<Cell> = (x0..x1).map(|x| buf[(x, y)].clone()).collect();
         if cells
@@ -131,24 +157,32 @@ pub(super) fn reflect_rows(buf: &mut Buffer, x0: u16, x1: u16, y0: u16, y1: u16)
         ) else {
             continue;
         };
-        let end = last + 1;
-        let new_end = width - start;
-        let new_start = new_end - (end - start);
+        let end = last.plus(1);
+        let new_end = width.minus(start);
+        let new_start = new_end.minus(end.minus(start));
         if new_start == start {
             continue;
         }
-        reflection.shifts[usize::from(y - y0)] =
-            i32::try_from(new_start).unwrap_or(0) - i32::try_from(start).unwrap_or(0);
+        if let Some(shift) = reflection.shifts.get_mut(usize::from(y.minus(y0))) {
+            *shift = i32::try_from(new_start)
+                .unwrap_or(0)
+                .minus(i32::try_from(start).unwrap_or(0));
+        }
         let mut blank = cells
             .iter()
             .find(|c| c.symbol() == " ")
             .cloned()
-            .unwrap_or_else(|| cells[start].clone());
+            .unwrap_or_else(|| cells.get(start).cloned().unwrap_or_default());
         blank.set_symbol(" ");
         let mut out = vec![blank; width];
-        out[new_start..new_end].clone_from_slice(&cells[start..end]);
+        // `end <= width`, so both ranges are in bounds and have the same length.
+        if let (Some(dst), Some(src)) = (out.get_mut(new_start..new_end), cells.get(start..end))
+            && dst.len() == src.len()
+        {
+            dst.clone_from_slice(src);
+        }
         for (i, cell) in out.into_iter().enumerate() {
-            buf[(x0 + u16::try_from(i).unwrap_or(0), y)] = cell;
+            buf[(x0.plus(u16::try_from(i).unwrap_or(0)), y)] = cell;
         }
     }
     reflection
@@ -171,7 +205,7 @@ impl Reflection {
         else {
             return;
         };
-        let x = i32::from(rect.x) + delta;
+        let x = i32::from(rect.x).plus(*delta);
         rect.x = u16::try_from(x.max(0)).unwrap_or(rect.x);
     }
 }

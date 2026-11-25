@@ -69,6 +69,12 @@ pub(super) mod code {
     pub(in crate::ssh) const SSH: i32 = 255;
 }
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// How [`SshAuthority`] runs `ssh`. Everything else (keys, agent,
 /// `ProxyJump`, host-key policy, `User`, `Port`) comes from the user's
 /// `ssh_config`, which `ssh` reads as always.
@@ -643,7 +649,11 @@ impl<T: Transport> ShellAuthority<T> {
                 .filter(|k| is_env_name(k))
                 .ok_or_else(|| invalid("invalid environment variable name"))?;
             if by_name {
-                let later = spec.envs()[i + 1..].iter().any(|(k, _)| k == key);
+                let later = spec
+                    .envs()
+                    .iter()
+                    .skip(add_or(i, 1, usize::MAX))
+                    .any(|(k, _)| k == key);
                 if later {
                     continue;
                 }
@@ -886,7 +896,7 @@ fn control_pattern(dir: &Path) -> Option<String> {
     let dir = dir.to_str()?;
     // `%C` is 40 hex digits; ssh appends about 20 more while connecting;
     // Unix socket paths hold 104 bytes on macOS and the BSDs.
-    if dir.len() + 64 > 104
+    if add_or(dir.len(), 64, usize::MAX) > 104
         || dir
             .chars()
             .any(|c| c.is_whitespace() || c == '"' || c == '\'')
@@ -942,7 +952,7 @@ impl<T: Transport> Authority for ShellAuthority<T> {
             .t(&format!(
                 "[ \"$(wc -c < \"$p\")\" -gt {max_bytes} ] && exit 109\n\
                  exec head -c {} -- \"$p\"\n",
-                max_bytes.saturating_add(1)
+                max_bytes.checked_add(1).unwrap_or(max_bytes)
             ))
             .done();
         vix_fileops::decode_text(self.run(&script, None)?, max_bytes)
@@ -1046,14 +1056,22 @@ impl<T: Transport> Authority for ShellAuthority<T> {
         Ok(out
             .split(|&b| b == 0)
             .filter(|rec| rec.len() > 2)
-            .map(|rec| {
-                let kind = match rec[0] {
+            .filter_map(|rec| {
+                let (kind_byte, dir_flag, name) = match rec {
+                    [kind, flag, name @ ..] => (*kind, *flag, name),
+                    _ => return None,
+                };
+                let kind = match kind_byte {
                     b'l' => FileKind::Symlink,
                     b'd' => FileKind::Dir,
                     b'f' => FileKind::File,
                     _ => FileKind::Other,
                 };
-                DirEntry::new(dir.join(bytes_path(&rec[2..])), kind, rec[1] == b'1')
+                Some(DirEntry::new(
+                    dir.join(bytes_path(name)),
+                    kind,
+                    dir_flag == b'1',
+                ))
             })
             .collect())
     }
@@ -1188,9 +1206,9 @@ impl<T: Transport> Authority for ShellAuthority<T> {
 
     fn walk_files(&self, root: &Path, opts: &WalkOptions) -> Vec<PathBuf> {
         if let Some(r) = self.via(|a| a.walk(root, opts)) {
-            return r.unwrap_or_default();
+            return r.unwrap_or_else(|_| Vec::new());
         }
-        self.walk(root, opts).unwrap_or_default()
+        self.walk(root, opts).unwrap_or_else(|_| Vec::new())
     }
 
     fn which(&self, name: &str) -> Option<PathBuf> {

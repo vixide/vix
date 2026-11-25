@@ -37,3 +37,7 @@ only its lines inside the range; an insertion, a deletion, or a block that
 grew or shrank is reverted whole when it touches the range.
 Errors are the typed `HistoryError` (`NotFound`, `Io`). The host is
 `tui/src/app/ide_parity.rs`; user docs are `docs/ide-parity/index.md`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Snapshot ids search upward from the clock with a bounded range and fail with an I/O error if none is free; the snapshot size uses `u64::try_from`; the prune count and diff headers are plain arithmetic under `RCA-EXC-2` expectations. `revert_range` returns `Result<String, HistoryError>`: a start at the top of `usize`, or a diff range outside the lines it diffed, is `HistoryError::Range { figure }`, never an empty line or an empty block. No fallbacks are declared.

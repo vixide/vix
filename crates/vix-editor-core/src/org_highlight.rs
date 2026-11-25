@@ -12,6 +12,25 @@ const TODO_WORDS: &[&str] = &["TODO", "NEXT", "WAIT", "WAITING", "HOLD"];
 /// Keywords drawn as a closed task.
 const DONE_WORDS: &[&str] = &["DONE", "CANCELED", "CANCELLED"];
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `line` from byte `i` on; empty when `i` is past the end or inside a character.
+fn tail(line: &str, i: usize) -> &str {
+    line.get(i..).unwrap_or("")
+}
+
 /// The styled byte ranges in one Org `line` (without its line break), most
 /// specific first: `(start, end, theme entry)`.
 #[must_use]
@@ -19,13 +38,12 @@ pub fn line_spans(line: &str) -> Vec<(usize, usize, &'static str)> {
     let mut spans = Vec::new();
     link_spans(line, &mut spans);
     let trimmed = line.trim_start();
-    let indent = line.len() - trimmed.len();
-    let stars = line.len() - line.trim_start_matches('*').len();
-    if stars > 0 && line[stars..].starts_with(' ') {
+    let indent = sub_or(line.len(), trimmed.len(), 0);
+    let stars = sub_or(line.len(), line.trim_start_matches('*').len(), 0);
+    if stars > 0 && tail(line, stars).starts_with(' ') {
         // A headline: its TODO keyword, then the whole line.
-        let after = &line[stars + 1..];
-        let word_end = after.find(' ').unwrap_or(after.len());
-        let word = &after[..word_end];
+        let after = tail(line, add_or(stars, 1, usize::MAX));
+        let word = after.split(' ').next().unwrap_or(after);
         let kind = if TODO_WORDS.contains(&word) {
             Some("org.todo")
         } else if DONE_WORDS.contains(&word) {
@@ -34,8 +52,8 @@ pub fn line_spans(line: &str) -> Vec<(usize, usize, &'static str)> {
             None
         };
         if let Some(kind) = kind {
-            let at = stars + 1;
-            spans.push((at, at + word.len(), kind));
+            let at = add_or(stars, 1, usize::MAX);
+            spans.push((at, add_or(at, word.len(), usize::MAX), kind));
         }
         spans.push((0, line.len(), "org.heading"));
     } else if trimmed.starts_with("#+") || trimmed.starts_with("# ") || trimmed == "#" {
@@ -49,23 +67,31 @@ pub fn line_spans(line: &str) -> Vec<(usize, usize, &'static str)> {
 /// target as `org.markup`.
 fn link_spans(line: &str, spans: &mut Vec<(usize, usize, &'static str)>) {
     let mut from = 0;
-    while let Some(open) = line[from..].find("[[").map(|i| from + i) {
-        let Some(close) = line[open + 2..].find("]]").map(|i| open + 2 + i) else {
+    while let Some(open) = tail(line, from)
+        .find("[[")
+        .map(|i| add_or(from, i, usize::MAX))
+    {
+        let inner_start = add_or(open, 2, usize::MAX);
+        let Some(close) = tail(line, inner_start)
+            .find("]]")
+            .map(|i| add_or(inner_start, i, usize::MAX))
+        else {
             break;
         };
-        let inner = &line[open + 2..close];
+        let inner = line.get(inner_start..close).unwrap_or("");
         if let Some(mid) = inner.find("][") {
             // `[[target][text]]`: the text is the link, the rest is markup.
-            let text_start = open + 2 + mid + 2;
+            let text_start = add_or(add_or(inner_start, mid, usize::MAX), 2, usize::MAX);
             spans.push((text_start, close, "org.link"));
             spans.push((open, text_start, "org.markup"));
         } else {
             // `[[target]]`: the target is what shows.
-            spans.push((open + 2, close, "org.link"));
-            spans.push((open, open + 2, "org.markup"));
+            spans.push((inner_start, close, "org.link"));
+            spans.push((open, inner_start, "org.markup"));
         }
-        spans.push((close, close + 2, "org.markup"));
-        from = close + 2;
+        let after_close = add_or(close, 2, usize::MAX);
+        spans.push((close, after_close, "org.markup"));
+        from = after_close;
     }
 }
 

@@ -44,6 +44,32 @@ has. `code::full_text_scans()` counts this thread's whole-buffer passes
 (`get_content`, `max_line_chars`) so tests can assert an idle frame makes
 none.
 
+## Grapheme segmentation across rope chunks
+
+`code::RopeGraphemes` walks a `RopeSlice` one grapheme cluster at a time
+without copying the text. A cluster that runs off the end of a rope chunk is
+decided on a window (the cluster's text so far and the next chunk, as one
+string starting at the cluster), never on a chunk that begins exactly where
+the segmenter now is: `unicode-segmentation`'s `GraphemeCursor` then asks for
+pre-context while already holding a running count of regional indicators and
+adds the two, which split a flag in two when a chunk boundary fell between its
+halves. The pre-context chunk handed back is cut to end exactly at the offset
+the segmenter asks for. The test sweeps flags, ZWJ emoji, combining marks and
+Indic conjuncts over many padding offsets so every alignment with a chunk
+boundary is hit, and checks the result against the `String` segmentation.
+
+## Mark layers under soft wrap
+
+Soft wrap draws the same mark layers as the no-wrap view: highlight marks,
+passive word-occurrence marks (reversed and dim), spell marks (red underline)
+and LSP diagnostic marks (an underline in the severity color), each painted
+per grapheme of every visual row, so a mark that crosses a wrap boundary
+continues on the next row. **Inlay hints are the exception:** they insert
+text into a line and so change the widths the wrap layout, the caret, scrolling
+and mouse hit-testing are computed from; they are drawn only in the no-wrap
+view (and, as there, only when the view is not horizontally scrolled). Hints
+under soft wrap would need `visual_rows` to count their widths first.
+
 ## Code lens rows (T726)
 
 `Editor::set_code_lenses(Vec<(line, label)>)` gives a line a **virtual row
@@ -437,3 +463,9 @@ Implemented in `crates/vix-editor-core/src/virtual_text.rs` (`VirtualTextLayer`,
 `Editor::set_eol_texts` / `clear_eol_texts` / `eol_texts`, `draw_eol_texts`), called from
 `draw_eol_note` in `crates/vix-editor-core/src/render.rs` and the soft-wrap
 `render_visual_row` in `crates/vix-editor-core/src/wrap.rs`.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The whole crate denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` outside tests. Every module reads through `get`, `get_mut`, iterators and small `checked_*` helpers (`sub_or`, `add_or`, `mul_or`; `add_u16`/`sub_u16` for screen columns; a `plus`/`minus` trait in `render`). **Declared (EDITOR-F1):** a coordinate past the top of its type is off-screen or past the text and a difference below zero is zero; movement and scrolling stop at the first and last line, column and row; a revision or generation counter that reached the top of `u64` restarts at 0; an unreadable theme entry has no style; a word or line lookup with no match is empty.
+
+`Editor::set_cursor_line(line)` moves the cursor to the start of the 0-based `line` and returns `true`; a line the buffer does not have returns `false` and changes nothing (it used to move to the last line).

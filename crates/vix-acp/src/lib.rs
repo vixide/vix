@@ -7,6 +7,18 @@
 //! (behind the `process` feature) starts the agent. See `spec/index.md` for the
 //! trust model.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 pub mod client;
 pub mod display;
 pub mod policy;

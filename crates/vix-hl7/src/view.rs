@@ -4,6 +4,18 @@ use crate::escape::unescape;
 use crate::message::{Field, Message};
 use crate::path::Path;
 
+/// The 1-based number of the item at 0-based position `index` (HL7 numbers
+/// fields, repetitions, components and subcomponents from 1). A position is an
+/// index of a list in memory, so the number cannot overflow.
+fn one_based(index: usize) -> usize {
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "RCA-EXC-2: index is a position in an in-memory list, so it is below usize::MAX"
+    )]
+    let number = index + 1;
+    number
+}
+
 /// What a [`Row`] stands for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RowKind {
@@ -74,7 +86,7 @@ pub fn rows(msg: &Message) -> Vec<Row> {
             if is_blank(f) {
                 continue;
             }
-            let path = Path::field(&seg.name, i + 1);
+            let path = Path::field(&seg.name, one_based(i));
             out.push(Row {
                 kind: RowKind::Field,
                 label: path.to_string(),
@@ -92,8 +104,8 @@ pub fn rows(msg: &Message) -> Vec<Row> {
                 }
                 for (ci, comp) in rep.components.iter().enumerate() {
                     let base = Path {
-                        repetition: many_reps.then_some(ri + 1),
-                        component: Some(ci + 1),
+                        repetition: many_reps.then_some(one_based(ri)),
+                        component: Some(one_based(ci)),
                         ..path.clone()
                     };
                     if comp.subcomponents.iter().all(String::is_empty) {
@@ -105,7 +117,7 @@ pub fn rows(msg: &Message) -> Vec<Row> {
                                 continue;
                             }
                             let p = Path {
-                                subcomponent: Some(si + 1),
+                                subcomponent: Some(one_based(si)),
                                 ..base.clone()
                             };
                             out.push(leaf(&p, sub, seg.line, f.col, msg));

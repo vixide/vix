@@ -2,6 +2,19 @@
 //! the current list, and a footer that is the key hint, the exact command
 //! awaiting a yes, or a text prompt.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use vix_oci::argv::Kind;
@@ -80,10 +93,10 @@ pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     let width = 120u16.min(area.width);
-    let height = area.height.saturating_sub(2).max(6).min(area.height);
+    let height = area.height.minus(2).max(6).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 2,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(2)),
         width,
         height,
     };
@@ -106,7 +119,7 @@ pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
         ])
         .split(inner);
 
-    let view_h = chunks[1].height as usize;
+    let view_h = usize::from(chunk(&chunks, 1).height);
     if let Some(p) = app.oc.as_mut() {
         p.ensure_visible(view_h);
     }
@@ -127,10 +140,10 @@ pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
             [Span::styled(name, style), Span::raw(" ")]
         })
         .collect();
-    frame.render_widget(Paragraph::new(Line::from(tabs)), chunks[0]);
+    frame.render_widget(Paragraph::new(Line::from(tabs)), chunk(&chunks, 0));
 
     let total = p.len();
-    let avail = chunks[1].width as usize;
+    let avail = usize::from(chunk(&chunks, 1).width);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     if total == 0 {
         lines.push(Line::from(Span::styled(
@@ -138,8 +151,8 @@ pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
             theme::dim(),
         )));
     }
-    for i in p.scroll..total.min(p.scroll + view_h) {
-        let text = trunc(&p.row(i), avail.saturating_sub(1));
+    for i in p.scroll..total.min(p.scroll.plus(view_h)) {
+        let text = trunc(&p.row(i), avail.minus(1));
         let style = if i == p.selected {
             theme::selected()
         } else {
@@ -147,26 +160,26 @@ pub(super) fn draw_oc(app: &mut App, frame: &mut Frame, area: Rect) {
         };
         lines.push(Line::from(Span::styled(text, style)));
     }
-    let show_bar = total > view_h && chunks[1].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 1).width > 1;
     let row_area = if show_bar {
         Rect {
-            width: chunks[1].width - 1,
-            ..chunks[1]
+            width: chunk(&chunks, 1).width.minus(1),
+            ..chunk(&chunks, 1)
         }
     } else {
-        chunks[1]
+        chunk(&chunks, 1)
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[1].x + chunks[1].width - 1,
-            ..chunks[1]
+            x: chunk(&chunks, 1).x.plus(chunk(&chunks, 1).width).minus(1),
+            ..chunk(&chunks, 1)
         };
-        draw_scrollbar(frame, sb_area, p.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, p.selected, total.minus(1));
     }
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(footer(p), theme::dim()))),
-        chunks[2],
+        chunk(&chunks, 2),
     );
     app.layout.oc = Rect {
         height: u16::try_from(view_h).unwrap_or(u16::MAX),

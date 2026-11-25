@@ -19,7 +19,7 @@ use std::path::Path;
 /// (which must not contain a NUL byte; no shell can carry one).
 #[must_use]
 pub fn sh_quote(word: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(word.len() + 2);
+    let mut out = Vec::new();
     out.push(b'\'');
     for &b in word {
         if b == b'\'' {
@@ -150,7 +150,7 @@ pub fn sh_argv(script: &[u8]) -> [String; 5] {
 /// Three octal digits per byte.
 fn octal(script: &[u8]) -> String {
     use std::fmt::Write as _;
-    let mut digits = String::with_capacity(script.len() * 3);
+    let mut digits = String::new();
     for b in script {
         let _ = write!(digits, "{b:03o}");
     }

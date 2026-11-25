@@ -29,6 +29,20 @@
 
 use super::connect::Kind;
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// The object folders under each schema.
 ///
 /// The enum order (tables, views, functions) is the display order and matches
@@ -160,6 +174,29 @@ pub struct Tree {
     pub filtering: bool,
 }
 
+impl Schema {
+    /// Whether `folder` is expanded in this schema.
+    #[must_use]
+    pub fn folder_flag(&self, folder: Folder) -> bool {
+        let [tables, views, functions] = &self.folder_expanded;
+        match folder {
+            Folder::Tables => *tables,
+            Folder::Views => *views,
+            Folder::Functions => *functions,
+        }
+    }
+
+    /// The expanded flag of `folder`, to change.
+    pub fn folder_flag_mut(&mut self, folder: Folder) -> &mut bool {
+        let [tables, views, functions] = &mut self.folder_expanded;
+        match folder {
+            Folder::Tables => tables,
+            Folder::Views => views,
+            Folder::Functions => functions,
+        }
+    }
+}
+
 impl Tree {
     /// Build a tree from `(schema, name, kind)` rows, where `kind` is one of
     /// `table`, `view`, `function`. The first schema and its Tables folder
@@ -192,9 +229,11 @@ impl Tree {
                         name: schema.clone(),
                         ..Schema::default()
                     });
-                    schemas.len() - 1
+                    sub_or(schemas.len(), 1, 0)
                 });
-            let entry = &mut schemas[idx];
+            let Some(entry) = schemas.get_mut(idx) else {
+                continue;
+            };
             match kind.as_str() {
                 "view" => entry.views.push(name.clone()),
                 "function" => entry.functions.push(name.clone()),
@@ -209,7 +248,7 @@ impl Tree {
         }
         if let Some(first) = schemas.first_mut() {
             first.expanded = true;
-            first.folder_expanded[Folder::Tables.index()] = true;
+            *first.folder_flag_mut(Folder::Tables) = true;
         }
         Tree {
             schemas,
@@ -244,24 +283,21 @@ impl Tree {
             // (folder, names, expanded) triples let one loop body build all
             // three folders instead of three near-identical blocks.
             for (folder, names, expanded) in [
-                (
-                    Folder::Tables,
-                    &s.tables,
-                    s.folder_expanded[Folder::Tables.index()],
-                ),
-                (
-                    Folder::Views,
-                    &s.views,
-                    s.folder_expanded[Folder::Views.index()],
-                ),
+                (Folder::Tables, &s.tables, s.folder_flag(Folder::Tables)),
+                (Folder::Views, &s.views, s.folder_flag(Folder::Views)),
                 (
                     Folder::Functions,
                     &s.functions,
-                    s.folder_expanded[Folder::Functions.index()],
+                    s.folder_flag(Folder::Functions),
                 ),
             ] {
                 let matches: Vec<usize> = (0..names.len())
-                    .filter(|&i| !searching || names[i].to_lowercase().contains(&needle))
+                    .filter(|&i| {
+                        !searching
+                            || names
+                                .get(i)
+                                .is_some_and(|name| name.to_lowercase().contains(&needle))
+                    })
                     .collect();
                 if names.is_empty() || (searching && matches.is_empty()) {
                     continue;
@@ -277,9 +313,12 @@ impl Tree {
                     continue;
                 }
                 for oi in matches {
+                    let Some(name) = names.get(oi) else {
+                        continue;
+                    };
                     out.push(RowView {
                         depth: 2,
-                        text: names[oi].clone(),
+                        text: name.clone(),
                         expandable: false,
                         expanded: false,
                         reference: RowRef::Object(si, folder, oi),
@@ -287,7 +326,7 @@ impl Tree {
                 }
             }
             // A searching schema with no matching objects disappears entirely.
-            if searching && out.len() == schema_at + 1 {
+            if searching && out.len() == add_or(schema_at, 1, usize::MAX) {
                 out.pop();
             }
         }
@@ -303,7 +342,7 @@ impl Tree {
                 self.filter.pop();
             }
         }
-        self.sel = self.sel.min(self.rows().len().saturating_sub(1));
+        self.sel = self.sel.min(sub_or(self.rows().len(), 1, 0));
     }
 
     /// Toggle (or set, when `expand` is given) the selected row's folder state.
@@ -317,12 +356,15 @@ impl Tree {
         };
         match row.reference {
             RowRef::Schema(si) => {
-                let cur = self.schemas[si].expanded;
-                self.schemas[si].expanded = expand.unwrap_or(!cur);
+                if let Some(schema) = self.schemas.get_mut(si) {
+                    schema.expanded = expand.unwrap_or(!schema.expanded);
+                }
             }
             RowRef::Folder(si, folder) => {
-                let flag = &mut self.schemas[si].folder_expanded[folder.index()];
-                *flag = expand.unwrap_or(!*flag);
+                if let Some(schema) = self.schemas.get_mut(si) {
+                    let flag = schema.folder_flag_mut(folder);
+                    *flag = expand.unwrap_or(!*flag);
+                }
             }
             RowRef::Object(..) => {}
         }
@@ -352,7 +394,7 @@ impl Tree {
         let rows = self.rows();
         let row = rows.get(self.sel)?;
         if let RowRef::Object(si, folder, oi) = row.reference {
-            let s = &self.schemas[si];
+            let s = self.schemas.get(si)?;
             let names = match folder {
                 Folder::Tables => &s.tables,
                 Folder::Views => &s.views,
@@ -760,7 +802,8 @@ pub fn primary_key_sql(kind: Kind, schema: &str, table: &str) -> String {
 }
 
 /// A query whose first row's **last** column is the `CREATE` statement for
-/// `schema`.`table`. `SQLite` reads it from `sqlite_master`, `MySQL` uses
+/// `schema`.`table` (a view too, in `SQLite`: its `sqlite_master` row has the
+/// `CREATE VIEW` text). `SQLite` reads it from `sqlite_master`, `MySQL` uses
 /// `SHOW CREATE TABLE`, and `PostgreSQL` reconstructs a basic definition from
 /// `information_schema` (columns and types; constraints are not reproduced).
 #[must_use]
@@ -768,7 +811,7 @@ pub fn ddl_sql(kind: Kind, schema: &str, table: &str) -> String {
     let (s, t) = (quote_str(schema), quote_str(table));
     match kind {
         Kind::Sqlite => {
-            format!("SELECT sql FROM sqlite_master WHERE type='table' AND name='{t}';")
+            format!("SELECT sql FROM sqlite_master WHERE type IN ('table', 'view') AND name='{t}';")
         }
         Kind::Mysql => format!("SHOW CREATE TABLE {};", quote_ident(kind, table)),
         Kind::Postgres => format!(
@@ -1195,5 +1238,168 @@ mod tests {
         ));
         assert!(scan_insight(Kind::Mysql, &rows(&["1", "ALL", "NULL"])));
         assert!(!scan_insight(Kind::Mysql, &rows(&["1", "ref", "idx"])));
+    }
+
+    #[test]
+    fn folders_have_labels_and_slots() {
+        for (folder, key, index) in [
+            (Folder::Tables, "ui.db_tree_tables", 0),
+            (Folder::Views, "ui.db_tree_views", 1),
+            (Folder::Functions, "ui.db_tree_functions", 2),
+        ] {
+            assert_eq!(folder.label_key(), key);
+            assert_eq!(folder.index(), index);
+        }
+    }
+
+    #[test]
+    fn folder_flags_are_read_and_changed_per_folder() {
+        let mut tree = sample();
+        let schema = &mut tree.schemas[0];
+        for folder in [Folder::Views, Folder::Functions] {
+            assert!(!schema.folder_flag(folder));
+            *schema.folder_flag_mut(folder) = true;
+            assert!(schema.folder_flag(folder));
+        }
+        assert!(schema.folder_flag(Folder::Tables));
+    }
+
+    #[test]
+    fn expanding_and_collapsing_rows_changes_what_is_visible() {
+        let mut tree = sample();
+        tree.sel = 4; // the Views folder, collapsed
+        assert_eq!(tree.rows().len(), 5);
+        tree.toggle(Some(true));
+        assert_eq!(tree.rows().len(), 6, "v_totals appears");
+        tree.toggle(None);
+        assert_eq!(tree.rows().len(), 5);
+        tree.sel = 0;
+        tree.toggle(Some(false));
+        assert_eq!(tree.rows().len(), 1, "a collapsed schema hides its folders");
+        tree.toggle(None);
+        assert_eq!(tree.rows().len(), 5);
+        // An object row and an out-of-range selection ignore the toggle.
+        tree.sel = 2;
+        tree.toggle(None);
+        assert_eq!(tree.rows().len(), 5);
+        tree.sel = 99;
+        tree.toggle(None);
+        assert!(tree.selected_object().is_none());
+    }
+
+    #[test]
+    fn searching_narrows_to_matches_and_forces_everything_open() {
+        let mut tree = sample();
+        tree.sel = 4;
+        for c in "TOT".chars() {
+            tree.filter_key(Some(c));
+        }
+        let texts: Vec<_> = tree.rows().into_iter().map(|r| r.text).collect();
+        assert_eq!(texts, ["main", "", "v_totals"], "folder header has no text");
+        assert_eq!(tree.sel, 2, "the selection is clamped to the shorter list");
+        tree.filter_key(None);
+        tree.filter_key(None);
+        tree.filter_key(None);
+        assert_eq!(tree.filter, "");
+        tree.filter_key(None);
+        for c in "zzz".chars() {
+            tree.filter_key(Some(c));
+        }
+        assert!(tree.rows().is_empty(), "a schema with no match disappears");
+    }
+
+    #[test]
+    fn stepping_clamps_and_scrolling_follows_the_selection() {
+        let mut tree = sample();
+        tree.step(false, 2);
+        assert_eq!(tree.sel, 2);
+        tree.step(false, 100);
+        assert_eq!(tree.sel, tree.rows().len() - 1);
+        tree.step(true, 100);
+        assert_eq!(tree.sel, 0);
+        tree.sel = 4;
+        tree.ensure_visible(2);
+        assert_eq!(tree.scroll, 3);
+    }
+
+    #[test]
+    fn every_engine_has_catalog_queries_for_the_assistant_and_editing() {
+        for kind in [Kind::Sqlite, Kind::Postgres, Kind::Mysql] {
+            assert!(columns_typed_sql(kind).contains("data_type") || kind == Kind::Sqlite);
+            assert!(columns_typed_sql(kind).ends_with(';'));
+            assert!(relationships_sql(kind).contains("parent_col"));
+            let pk = primary_key_sql(kind, "s", "o'brien");
+            assert!(pk.contains("o''brien"), "{pk}");
+            let ddl = ddl_sql(kind, "s", "o'brien");
+            assert!(
+                ddl.contains("o''brien") || ddl.contains("`o'brien`"),
+                "{ddl}"
+            );
+        }
+        assert!(primary_key_sql(Kind::Postgres, "s", "t").contains("indisprimary"));
+        assert!(primary_key_sql(Kind::Mysql, "s", "t").contains("'PRIMARY'"));
+        // SQLite stores a view's CREATE text beside the tables', so the lookup
+        // must not be limited to type='table'.
+        let sqlite = ddl_sql(Kind::Sqlite, "main", "v");
+        assert!(sqlite.contains("type IN ('table', 'view')"), "{sqlite}");
+        assert!(ddl_sql(Kind::Mysql, "s", "t").starts_with("SHOW CREATE TABLE `t`"));
+        assert!(ddl_sql(Kind::Postgres, "s", "t").contains("string_agg"));
+        assert!(relationships_sql(Kind::Postgres).contains("FOREIGN KEY"));
+        assert!(relationships_sql(Kind::Mysql).contains("referenced_table_name"));
+    }
+
+    #[test]
+    fn detail_reports_exist_for_every_engine_and_escape_the_names() {
+        let details = [
+            Detail::Columns,
+            Detail::Indexes,
+            Detail::ForeignKeys,
+            Detail::Triggers,
+            Detail::Constraints,
+            Detail::Stats,
+        ];
+        let needles = [
+            (
+                Kind::Sqlite,
+                [
+                    "table_info",
+                    "index_list",
+                    "foreign_key_list",
+                    "trigger",
+                    "sqlite_master",
+                    "row_count",
+                ],
+            ),
+            (
+                Kind::Postgres,
+                [
+                    "information_schema.columns",
+                    "pg_indexes",
+                    "FOREIGN KEY",
+                    "triggers",
+                    "table_constraints",
+                    "pg_class",
+                ],
+            ),
+            (
+                Kind::Mysql,
+                [
+                    "column_type",
+                    "statistics",
+                    "referenced_table_name",
+                    "triggers",
+                    "table_constraints",
+                    "table_rows",
+                ],
+            ),
+        ];
+        for (kind, expected) in needles {
+            for (detail, needle) in details.iter().zip(expected) {
+                let sql = detail_sql(kind, *detail, "sch'ema", "ta'ble");
+                assert!(sql.contains(needle), "{kind:?} {detail:?}: {sql}");
+                assert!(sql.contains("ta''ble"), "{kind:?} {detail:?}: {sql}");
+                assert!(sql.ends_with(';'));
+            }
+        }
     }
 }

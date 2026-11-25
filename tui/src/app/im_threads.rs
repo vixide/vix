@@ -20,6 +20,19 @@
 //! Like the rest of IM, nothing here opens or focuses anything on its own: a
 //! thread someone else committed shows only as a gutter mark.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -146,10 +159,10 @@ fn anchor_all<'a>(
 ) -> (Vec<String>, Vec<String>) {
     let (mut outdated, mut moved) = (Vec::new(), Vec::new());
     for thread in threads {
-        let start = usize::try_from(thread.start_line.max(1) - 1).unwrap_or(usize::MAX);
+        let start = usize::try_from(thread.start_line.max(1).minus(1)).unwrap_or(usize::MAX);
         let anchor_lines: Vec<&str> = thread.anchor_text.split('\n').collect();
         let here = lines
-            .get(start..start.saturating_add(anchor_lines.len()))
+            .get(start..start.plus(anchor_lines.len()))
             .is_some_and(|slice| {
                 slice
                     .iter()
@@ -279,7 +292,7 @@ impl App {
                 } else {
                     CommentMark::Open
                 };
-                let line = usize::try_from(t.start_line.saturating_sub(1)).unwrap_or(usize::MAX);
+                let line = usize::try_from(t.start_line.minus(1)).unwrap_or(usize::MAX);
                 (line, mark)
             })
             .collect();
@@ -393,8 +406,8 @@ impl App {
                 }
                 let code = t.editor.code_ref();
                 Some((
-                    code.char_to_line(s) + 1,
-                    code.char_to_line(e.saturating_sub(1).max(s)) + 1,
+                    code.char_to_line(s).plus(1),
+                    (code.char_to_line(e.minus(1).max(s))).plus(1),
                 ))
             })
             .unwrap_or_else(|| {
@@ -446,7 +459,13 @@ impl App {
                 let id = vix_im::thread::new_id(now_ms(), |id| {
                     store.get(id).is_some() || auth.exists(&dir.join(format!("{id}.json")))
                 });
-                let mut thread = Thread::new(id.clone(), path, &buffer_lines(&text), start, end);
+                let Some(mut thread) =
+                    Thread::new(id.clone(), path, &buffer_lines(&text), start, end)
+                else {
+                    self.status =
+                        t!("status.im_thread_range", start = start, end = end).to_string();
+                    return;
+                };
                 thread.reply(message);
                 self.status = t!("status.im_thread_started", line = thread.start_line).to_string();
                 self.im.threads.threads.push(thread);
@@ -490,11 +509,11 @@ impl App {
     ) -> Option<ImDialog> {
         match key.code {
             KeyCode::Up => Some(ImDialog::Threads {
-                selected: selected.saturating_sub(1),
+                selected: selected.minus(1),
                 ids,
             }),
             KeyCode::Down => {
-                let selected = (selected + 1).min(ids.len().saturating_sub(1));
+                let selected = selected.plus(1).min(ids.len().minus(1));
                 Some(ImDialog::Threads { ids, selected })
             }
             KeyCode::Enter => {
@@ -529,7 +548,8 @@ impl App {
             s.im_threads_refresh_active();
             let line = s.im.threads.get(id).map_or(1, |t| t.start_line);
             let area = s.editor_view();
-            s.editor.goto(line as usize, None, area);
+            s.editor
+                .goto(usize::try_from(line).unwrap_or(usize::MAX), None, area);
             s.focus = super::Focus::Editor;
         });
         if self.im.threads.outdated.contains(id) {
@@ -579,7 +599,8 @@ impl App {
             .map(|(id, _)| id.clone());
         self.with_jump(|s| {
             let area = s.editor_view();
-            s.editor.goto(line as usize, None, area);
+            s.editor
+                .goto(usize::try_from(line).unwrap_or(usize::MAX), None, area);
         });
         if let Some(id) = id {
             self.im_thread_status(&id);
@@ -684,8 +705,8 @@ mod tests {
     fn anchoring_moves_and_marks_outdated() {
         let old = buffer_lines("a\nb\nc\nd\ne\n");
         let mut threads = [
-            Thread::new("t1", "f", &old, 3, 3),
-            Thread::new("t2", "f", &old, 5, 5),
+            Thread::new("t1", "f", &old, 3, 3).unwrap(),
+            Thread::new("t2", "f", &old, 5, 5).unwrap(),
         ];
         let none: [String; 0] = [];
         // Unchanged: nothing moves.

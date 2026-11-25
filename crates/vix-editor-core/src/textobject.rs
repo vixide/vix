@@ -23,6 +23,25 @@ use std::rc::Rc;
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{Query, QueryCursor};
 
+/// `a * b`, or the declared `fallback` when the product does not fit.
+fn mul_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_mul(b).unwrap_or(fallback)
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// What a textobject selects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -113,7 +132,12 @@ impl Code {
             let mut around: Option<(usize, usize)> = None;
             let mut inside: Option<(usize, usize)> = None;
             for capture in m.captures() {
-                let name = names[capture.index as usize];
+                let Some(name) = usize::try_from(capture.index)
+                    .ok()
+                    .and_then(|i| names.get(i))
+                else {
+                    continue;
+                };
                 let Some(part) = name.strip_prefix(prefix).and_then(|n| n.strip_prefix('.')) else {
                     continue;
                 };
@@ -173,21 +197,25 @@ impl Code {
         let is_blank = |c: char| c == ' ' || c == '\t';
         let mut e = end;
         while e < len && is_blank(rope.char(e)) {
-            e += 1;
+            e = add_or(e, 1, usize::MAX);
         }
         if e < len && rope.char(e) == ',' {
-            e += 1;
+            e = add_or(e, 1, usize::MAX);
             while e < len && rope.char(e).is_whitespace() {
-                e += 1;
+                e = add_or(e, 1, usize::MAX);
             }
             return (start, e);
         }
         let mut s = start;
-        while s > 0 && rope.char(s - 1).is_whitespace() {
-            s -= 1;
+        while let Some(before) = s.checked_sub(1)
+            && rope.char(before).is_whitespace()
+        {
+            s = before;
         }
-        if s > 0 && rope.char(s - 1) == ',' {
-            return (s - 1, end);
+        if let Some(before) = s.checked_sub(1)
+            && rope.char(before) == ','
+        {
+            return (before, end);
         }
         (start, end)
     }
@@ -197,22 +225,25 @@ impl Code {
     /// the empty range just after `{`. Anything else is returned unchanged.
     fn trim_braces(&self, (start, end): (usize, usize)) -> (usize, usize) {
         let rope = self.rope();
-        if end < start + 2 || rope.char(start) != '{' || rope.char(end - 1) != '}' {
+        let (Some(last), true) = (end.checked_sub(1), end >= add_or(start, 2, usize::MAX)) else {
+            return (start, end);
+        };
+        if rope.char(start) != '{' || rope.char(last) != '}' {
             return (start, end);
         }
-        let mut s = start + 1;
-        let mut e = end - 1;
+        let inner = add_or(start, 1, usize::MAX);
+        let mut s = inner;
+        let mut e = last;
         while s < e && rope.char(s).is_whitespace() {
-            s += 1;
+            s = add_or(s, 1, usize::MAX);
         }
-        while e > s && rope.char(e - 1).is_whitespace() {
-            e -= 1;
+        while e > s
+            && let Some(before) = e.checked_sub(1)
+            && rope.char(before).is_whitespace()
+        {
+            e = before;
         }
-        if s == e {
-            (start + 1, start + 1)
-        } else {
-            (s, e)
-        }
+        if s == e { (inner, inner) } else { (s, e) }
     }
 
     /// Every `kind` textobject whose whole ("around") range contains the
@@ -229,14 +260,14 @@ impl Code {
         // A one-byte window at `pos` is enough: any object containing `pos`
         // intersects it, so the query touches only the nodes on that path.
         let mut found: Vec<TextObject> = self
-            .textobjects_in(kind, byte, (byte + 1).min(total).max(byte))
+            .textobjects_in(kind, byte, add_or(byte, 1, usize::MAX).min(total).max(byte))
             .into_iter()
             .map(|(a, i)| self.finish_textobject(kind, a, i))
             .filter(|o| o.around.0 <= pos && pos < o.around.1)
             .collect();
         // Smallest span first == innermost first (containing ranges nest).
         // Dedup because several query patterns can describe the same node.
-        found.sort_by_key(|o| (o.around.1 - o.around.0, o.around.0));
+        found.sort_by_key(|o| (sub_or(o.around.1, o.around.0, 0), o.around.0));
         found.dedup();
         found
     }
@@ -301,9 +332,9 @@ impl Code {
         let mut width = FIRST_WINDOW;
         loop {
             let (ws, we) = if forward {
-                (lo, lo.saturating_add(width).min(hi))
+                (lo, add_or(lo, width, usize::MAX).min(hi))
             } else {
-                (hi.saturating_sub(width).max(lo), hi)
+                (sub_or(hi, width, 0).max(lo), hi)
             };
             let starts = self
                 .textobjects_in(kind, ws, we.max(ws))
@@ -318,7 +349,7 @@ impl Code {
             if ws == lo && we == hi {
                 return None;
             }
-            width = width.saturating_mul(2);
+            width = mul_or(width, 2, usize::MAX);
         }
     }
 }

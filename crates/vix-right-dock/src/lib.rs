@@ -12,6 +12,18 @@
 //!
 //! Spec: `crates/vix-right-dock/spec/index.md`.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Severity of a message, which selects its icon.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Level {
@@ -40,6 +52,14 @@ pub struct Messages {
     pub items: Vec<Message>,
     /// Index of the highlighted message.
     pub selected: usize,
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
 }
 
 impl Messages {
@@ -73,13 +93,15 @@ impl Messages {
 
     /// Move the selection up one row.
     pub fn up(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
+        self.selected = sub_or(self.selected, 1, 0); // DOCK-F1: stop at the first message
     }
 
     /// Move the selection down one row, stopping at the last message.
     pub fn down(&mut self) {
-        if self.selected + 1 < self.items.len() {
-            self.selected += 1;
+        if let Some(next) = self.selected.checked_add(1)
+            && next < self.items.len()
+        {
+            self.selected = next;
         }
     }
 
@@ -92,7 +114,7 @@ impl Messages {
             // Removing the last row leaves `selected` one past the end; pull it
             // back so the invariant (valid index or 0 when empty) holds.
             if self.selected >= self.items.len() {
-                self.selected = self.items.len().saturating_sub(1);
+                self.selected = sub_or(self.items.len(), 1, 0); // DOCK-F1: empty list, row 0
             }
         }
     }

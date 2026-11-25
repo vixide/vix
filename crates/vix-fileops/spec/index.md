@@ -29,7 +29,8 @@ prompts for confirmation, then acts per the `explorer_delete` setting:
 
 - `"trash"` (the default) moves each path to the OS trash / Recycle Bin
   (`vix_fileops::trash_path`) — undoable from the platform's own
-  trash/recycle view. macOS and Windows use the
+  trash/recycle view. A path that is not there is `io::ErrorKind::NotFound`
+  on every platform (it is looked up before the OS mechanism runs). macOS and Windows use the
   [`trash`](https://docs.rs/trash) crate (macOS through `NSFileManager`, no
   `osascript` child). Linux and the BSDs use Vix's own
   [freedesktop.org Trash](https://specifications.freedesktop.org/trash-spec/latest/)
@@ -250,3 +251,18 @@ spans directories, `*` doesn't cross `/`, invalid patterns are skipped) and
 The host turns `TooLarge` and `Binary` into confirmations (`large_file_mb`; binary files
 open in the byte editor, which saves the bytes back exactly) rather than errors.
 
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Index and slice operations in the streaming reader carry `RCA-EXC-2` expectations that state their proofs (a read returns at most the room it was given, `valid_up_to` is at most the block length, and so on), so no invented fallback remains for them. A byte total that does not fit `u64` refuses the file as too large. `unique_copy_name` returns `Option<PathBuf>`: `None` only if all four billion numbered names are taken, and an existing name is never handed back.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `FOPS-F2` | The file size plus one does not fit a `usize` | capacity `0` | The capacity is only an allocation hint. |
+| `FOPS-F3` | `max_bytes + 1` overflows | `u64::MAX` | The read limit is one past the cap only to detect a file that grew; no cap can be above `u64::MAX`. |
+
+## User directories
+
+`user_dirs` is the one place that resolves where Vix keeps the user's configuration (`<config dir>/<app>/<name>.toml`, `~/.config/vix/` on Linux and macOS) and data (`<data dir>/<app>`): `config_file`, `data_dir`, and `load` and `store` for the TOML files. Settings, the saved session, the DB history and saved queries, and everything derived from the settings path (undo, local history, hot-exit backups, snippets, scripts, plugins, themes, crash reports, IM history) go through it.
+
+The `isolated-user-dirs` feature swaps the real directories for a per-process directory `vix-isolated-home-<pid>` under the system temporary directory; `is_isolated` reports it. Only dev-dependencies enable the feature (every crate whose tests can reach those directories declares it), so a normal build never has it and a test build can never read or write the real configuration. A test that writes configuration checks `is_isolated` first.

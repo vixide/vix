@@ -25,6 +25,17 @@
 use crate::OciError;
 use serde_json::Value;
 
+/// `a * b`, or the declared `fallback` when the product does not fit.
+fn mul_u64(a: u64, b: u64, fallback: u64) -> u64 {
+    a.checked_mul(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Split engine output into its JSON records, whichever shape it has.
 ///
 /// # Errors
@@ -78,47 +89,45 @@ fn text(v: &Value, keys: &[&str]) -> String {
 
 /// A creation time as text: strings as-is, a Unix-seconds number as an ISO date.
 fn created(v: &Value, keys: &[&str]) -> String {
-    keys.iter()
-        .find_map(|k| match field(v, &[k]) {
-            Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
-            Some(Value::Number(n)) => n.as_i64().map(iso_date),
-            _ => None,
-        })
-        .unwrap_or_default()
+    let found = keys.iter().find_map(|k| match field(v, &[k]) {
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::Number(n)) => n.as_i64().and_then(iso_date),
+        _ => None,
+    });
+    // No usable creation time is the empty text.
+    let Some(text) = found else {
+        return String::new();
+    };
+    text
 }
 
-/// `YYYY-MM-DD` for Unix seconds (proleptic Gregorian, UTC).
-fn iso_date(secs: i64) -> String {
-    // Howard Hinnant's `civil_from_days` algorithm: days since 1970-01-01 are
-    // shifted to 0000-03-01 so leap days fall at the end of the "year", then
-    // split into 400-year eras. Avoids a date-library dependency.
-    let z = secs.div_euclid(86_400) + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}")
+/// `YYYY-MM-DD` for Unix seconds (proleptic Gregorian, UTC); `None` when the
+/// time is too large for the calendar arithmetic.
+fn iso_date(secs: i64) -> Option<String> {
+    let (year, month, day) = vix_civil_date::civil_from_days(secs.div_euclid(86_400))?;
+    Some(format!("{year:04}-{month:02}-{day:02}"))
 }
 
 /// A byte count as `12.3MB` (decimal units, as Docker prints).
 fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
     // Work in tenths of a unit to get one decimal place with integers only;
-    // `>= 10_000` means "at least 1000.0 of this unit", so step up.
-    let mut tenths = bytes.saturating_mul(10);
-    let mut unit = 0;
-    while tenths >= 10_000 && unit + 1 < UNITS.len() {
-        tenths /= 1000;
-        unit += 1;
+    // `>= 10_000` means "at least 1000.0 of this unit", so step up. A size so
+    // large that tenths overflow shows as the largest representable count.
+    let mut tenths = mul_u64(bytes, 10, u64::MAX);
+    let mut unit = 0usize;
+    while tenths >= 10_000 {
+        let Some(next) = unit.checked_add(1).filter(|u| *u < UNITS.len()) else {
+            break;
+        };
+        tenths = tenths.div_euclid(1000);
+        unit = next;
     }
-    if unit == 0 {
-        format!("{bytes}B")
-    } else {
-        format!("{}.{}{}", tenths / 10, tenths % 10, UNITS[unit])
+    match UNITS.get(unit) {
+        Some(name) if unit > 0 => {
+            format!("{}.{}{name}", tenths.div_euclid(10), tenths.rem_euclid(10))
+        }
+        _ => format!("{bytes}B"),
     }
 }
 
@@ -158,12 +167,12 @@ impl Container {
 
     /// The shortened id engines display (12 characters).
     ///
-    /// Container ids are hexadecimal, so slicing by byte is safe for real
-    /// engine output; a non-ASCII id from a hostile source could in theory
-    /// split a character, which would panic.
+    /// Container ids are hexadecimal, so cutting at 12 bytes is exact for real
+    /// engine output; an id whose 12th byte is inside a multibyte character
+    /// is shown whole.
     #[must_use]
     pub fn short_id(&self) -> &str {
-        &self.id[..self.id.len().min(12)]
+        self.id.get(..self.id.len().min(12)).unwrap_or(&self.id)
     }
 }
 
@@ -265,10 +274,14 @@ impl Image {
 /// The `/` rule keeps a registry port (`localhost:5000/app`) from being read
 /// as a tag; a reference with no tag gets `latest`.
 fn split_reference(r: &str) -> (String, String) {
-    let slash = r.rfind('/').map_or(0, |i| i + 1);
-    match r[slash..].rfind(':') {
-        Some(i) => (r[..slash + i].to_string(), r[slash + i + 1..].to_string()),
-        None => (r.to_string(), "latest".to_string()),
+    let slash = r.rfind('/').map_or(0, |i| add_or(i, 1, 0));
+    let latest = || (r.to_string(), "latest".to_string());
+    let Some((head, tail)) = r.split_at_checked(slash) else {
+        return latest();
+    };
+    match tail.rsplit_once(':') {
+        Some((name, tag)) => (format!("{head}{name}"), tag.to_string()),
+        None => latest(),
     }
 }
 
@@ -444,8 +457,8 @@ mod tests {
 
     #[test]
     fn dates_and_sizes() {
-        assert_eq!(iso_date(0), "1970-01-01");
-        assert_eq!(iso_date(1_700_000_000), "2023-11-14");
+        assert_eq!(iso_date(0).as_deref(), Some("1970-01-01"));
+        assert_eq!(iso_date(1_700_000_000).as_deref(), Some("2023-11-14"));
         assert_eq!(human_size(512), "512B");
         assert_eq!(human_size(12_300_000), "12.3MB");
     }

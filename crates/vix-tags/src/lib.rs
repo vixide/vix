@@ -12,6 +12,18 @@
 //!
 //! All offsets are **char** offsets (not bytes), matching the editor buffer.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// One parsed tag occurrence in the document (private; produced by [`scan`]).
 struct Tag {
     /// Char offset of the `<`.
@@ -48,29 +60,40 @@ fn scan(text: &str) -> Vec<Tag> {
         if c != '<' || open < resume {
             continue;
         }
-        let closing = chars.get(open + 1) == Some(&'/');
-        let name_start = open + 1 + usize::from(closing);
-        let name_len = chars[name_start..]
-            .iter()
-            .take_while(|&&c| is_name_char(c))
-            .count();
-        if name_len == 0 {
-            continue;
-        }
-        let name_end = name_start + name_len;
-        // The tag's `>`; an unterminated tag runs to the end of the text.
-        let end = name_end + chars[name_end..].iter().take_while(|&&c| c != '>').count();
-        tags.push(Tag {
-            open,
-            end,
-            name: chars[name_start..name_end]
+        // Every offset below is at most `chars.len()`: each is an index of
+        // `chars` plus a count of chars taken from the rest of it.
+        #[expect(
+            clippy::arithmetic_side_effects,
+            clippy::indexing_slicing,
+            reason = "RCA-EXC-2: open is an index of chars, name_start is at most chars.len(), and each count is of chars after its start, so every sum and slice stays within chars.len()"
+        )]
+        let tag = {
+            let closing = chars.get(open + 1) == Some(&'/');
+            let name_start = open + 1 + usize::from(closing);
+            let name_len = chars[name_start..]
                 .iter()
-                .collect::<String>()
-                .to_ascii_lowercase(),
-            closing,
-            // `/` immediately before the `>`.
-            self_closing: chars[..end].last() == Some(&'/'),
-        });
+                .take_while(|&&c| is_name_char(c))
+                .count();
+            if name_len == 0 {
+                continue;
+            }
+            let name_end = name_start + name_len;
+            // The tag's `>`; an unterminated tag runs to the end of the text.
+            let end = name_end + chars[name_end..].iter().take_while(|&&c| c != '>').count();
+            Tag {
+                open,
+                end,
+                name: chars[name_start..name_end]
+                    .iter()
+                    .collect::<String>()
+                    .to_ascii_lowercase(),
+                closing,
+                // `/` immediately before the `>`.
+                self_closing: chars[..end].last() == Some(&'/'),
+            }
+        };
+        let end = tag.end;
+        tags.push(tag);
         resume = end;
     }
     tags
@@ -95,7 +118,7 @@ pub fn matching_tag(text: &str, cursor: usize) -> Option<usize> {
     let idx = tags
         .iter()
         .position(|t| cursor >= t.open && cursor <= t.end)?;
-    let tag = &tags[idx];
+    let tag = tags.get(idx)?;
     if tag.self_closing {
         return None;
     }
@@ -103,8 +126,8 @@ pub fn matching_tag(text: &str, cursor: usize) -> Option<usize> {
     // first: before the cursor's tag for a closer, after it for an opener.
     let partners = |t: &&Tag| t.name == tag.name && !t.self_closing;
     let (mut before, mut after) = (
-        tags[..idx].iter().rev().filter(partners),
-        tags[idx + 1..].iter().filter(partners),
+        tags.iter().take(idx).rev().filter(partners),
+        tags.iter().skip(idx.checked_add(1)?).filter(partners),
     );
     let side: &mut dyn Iterator<Item = &Tag> = if tag.closing { &mut before } else { &mut after };
     // The partner is the first tag of the opposite kind not paired with a
@@ -112,11 +135,12 @@ pub fn matching_tag(text: &str, cursor: usize) -> Option<usize> {
     let mut depth = 0u32;
     for t in side {
         if t.closing == tag.closing {
-            depth += 1;
-        } else if depth == 0 {
-            return Some(t.open);
+            // Nested same-kind tags are bounded by the number of tags.
+            depth = depth.checked_add(1)?;
+        } else if let Some(shallower) = depth.checked_sub(1) {
+            depth = shallower;
         } else {
-            depth -= 1;
+            return Some(t.open);
         }
     }
     None

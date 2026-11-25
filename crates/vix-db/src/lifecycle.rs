@@ -77,6 +77,20 @@ pub(crate) struct PendingConnect {
     password: String,
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 impl Browser {
     /// Keys on the saved-connections list: navigate (arrows or `j`/`k`),
     /// Enter to connect, `a`dd, `e`dit, `d`elete, Esc/`q` to leave.
@@ -87,12 +101,13 @@ impl Browser {
             return Outcome::Consumed;
         }
         match key.code {
-            KeyCode::Up | KeyCode::Char('k') => self.sel = self.sel.saturating_sub(1),
+            KeyCode::Up | KeyCode::Char('k') => self.sel = sub_or(self.sel, 1, 0),
             KeyCode::Down | KeyCode::Char('j') => {
-                self.sel = (self.sel + 1).min(self.connections.len().saturating_sub(1));
+                self.sel =
+                    add_or(self.sel, 1, usize::MAX).min(sub_or(self.connections.len(), 1, 0));
             }
             KeyCode::Home => self.sel = 0,
-            KeyCode::End => self.sel = self.connections.len().saturating_sub(1),
+            KeyCode::End => self.sel = sub_or(self.connections.len(), 1, 0),
             KeyCode::Enter => self.start_connect(self.sel),
             KeyCode::Char('a') => {
                 self.form = Form::default();
@@ -124,7 +139,7 @@ impl Browser {
                         self.mcp_shared.remove(&removed.name);
                         self.held_passwords.remove(&removed.name);
                     }
-                    self.sel = self.sel.min(self.connections.len().saturating_sub(1));
+                    self.sel = self.sel.min(sub_or(self.connections.len(), 1, 0));
                     self.dirty.connections = true;
                 }
             }
@@ -150,8 +165,12 @@ impl Browser {
     /// list and environments dirty for the host to persist.
     pub(super) fn key_form(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
-            KeyCode::Up => self.form.sel = self.form.sel.saturating_sub(1),
-            KeyCode::Down | KeyCode::Tab => self.form.sel = (self.form.sel + 1) % FORM_ROWS,
+            KeyCode::Up => self.form.sel = sub_or(self.form.sel, 1, 0),
+            KeyCode::Down | KeyCode::Tab => {
+                self.form.sel = add_or(self.form.sel, 1, usize::MAX)
+                    .checked_rem(FORM_ROWS)
+                    .unwrap_or(0);
+            }
             KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') if self.form.sel == FORM_KIND => {
                 self.form.kind = self.form.kind.next();
             }
@@ -174,10 +193,14 @@ impl Browser {
                 self.form_mcp_sharing = self.form_mcp_sharing.toggled();
             }
             KeyCode::Char(c) if self.form.sel < FORM_FIELDS && self.form.sel != FORM_KIND => {
-                self.form.fields[self.form.sel].push(c);
+                if let Some(field) = self.form.fields.get_mut(self.form.sel) {
+                    field.push(c);
+                }
             }
             KeyCode::Backspace if self.form.sel < FORM_FIELDS && self.form.sel != FORM_KIND => {
-                self.form.fields[self.form.sel].pop();
+                if let Some(field) = self.form.fields.get_mut(self.form.sel) {
+                    field.pop();
+                }
             }
             KeyCode::Enter => {
                 // The name is the only required field: it identifies the
@@ -204,9 +227,10 @@ impl Browser {
         let conn = self.form.to_connection();
         let name = conn.name.clone();
         let old_name = match self.form.editing {
-            Some(i) if i < self.connections.len() => {
-                Some(std::mem::replace(&mut self.connections[i], conn).name)
-            }
+            Some(i) if i < self.connections.len() => self
+                .connections
+                .get_mut(i)
+                .map(|slot| std::mem::replace(slot, conn).name),
             _ => {
                 self.connections.push(conn);
                 None
@@ -314,12 +338,17 @@ impl Browser {
             let _ = tx.send(connect_worker(&worker_conn, worker_password.as_deref()));
         });
         self.message = Some(t!("msg.db_connecting", secs = 0).to_string());
+        // No password supplied is the empty password.
+        let mut held_password = String::new();
+        if let Some(given) = password {
+            held_password = given;
+        }
         self.pending_connect = Some(PendingConnect {
             rx,
             started: std::time::Instant::now(),
             conn,
             idx,
-            password: password.unwrap_or_default(),
+            password: held_password,
         });
     }
 
@@ -430,8 +459,10 @@ impl Browser {
             .run_catalog(catalog::columns_sql(kind))
             .map_or_default(|(_, rows)| {
                 rows.into_iter()
-                    .filter(|r| r.len() >= 2)
-                    .map(|r| (r[0].clone(), r[1].clone()))
+                    .filter_map(|r| match r.as_slice() {
+                        [a, b, ..] => Some((a.clone(), b.clone())),
+                        _ => None,
+                    })
                     .collect()
             });
         self.completer.set_schema(self.tree.table_names(), columns);
@@ -440,8 +471,10 @@ impl Browser {
             .run_catalog(catalog::relationships_sql(kind))
             .map_or_default(|(_, rows)| {
                 rows.into_iter()
-                    .filter(|r| r.len() >= 4)
-                    .map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone()))
+                    .filter_map(|r| match r.as_slice() {
+                        [a, b, c, d, ..] => Some((a.clone(), b.clone(), c.clone(), d.clone())),
+                        _ => None,
+                    })
                     .collect()
             });
         self.completer.set_relationships(rels);
@@ -550,5 +583,320 @@ pub(crate) fn connect_worker(conn: &connect::Connection, password: Option<&str>)
     match session::Session::connect(&url, &setup) {
         Ok(session) => ConnectOutcome::Connected { session, tunnel },
         Err(e) => ConnectOutcome::Failed(e.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{family, file_workbench, press, typed};
+    use crate::{FORM_KIND, FORM_STORE};
+
+    fn conn(name: &str) -> connect::Connection {
+        connect::Connection {
+            name: name.into(),
+            kind: connect::Kind::Sqlite,
+            file: format!("/tmp/{name}.db"),
+            ..connect::Connection::default()
+        }
+    }
+
+    fn list(names: &[&str]) -> Browser {
+        Browser::new(names.iter().map(|n| conn(n)).collect())
+    }
+
+    #[test]
+    fn the_connection_list_moves_clamps_and_leaves() {
+        let mut b = list(&["a", "b", "c"]);
+        press(&mut b, KeyCode::Up);
+        assert_eq!(b.sel, 0);
+        press(&mut b, KeyCode::Down);
+        press(&mut b, KeyCode::Char('j'));
+        press(&mut b, KeyCode::Down);
+        assert_eq!(b.sel, 2);
+        press(&mut b, KeyCode::Char('k'));
+        assert_eq!(b.sel, 1);
+        press(&mut b, KeyCode::End);
+        assert_eq!(b.sel, 2);
+        press(&mut b, KeyCode::Home);
+        assert_eq!(b.sel, 0);
+        press(&mut b, KeyCode::Char('?'));
+        assert_eq!(press_outcome(&mut b, KeyCode::Char('q')), Outcome::Close);
+        assert_eq!(press_outcome(&mut b, KeyCode::Esc), Outcome::Close);
+        // With a live connection Esc returns to the workbench instead.
+        let mut live = family(false);
+        live.connections = vec![conn("a")];
+        live.view = View::Connections;
+        assert_eq!(press_outcome(&mut live, KeyCode::Esc), Outcome::Consumed);
+        assert_eq!(live.view, View::Workbench);
+    }
+
+    fn press_outcome(b: &mut Browser, code: KeyCode) -> Outcome {
+        b.handle_key(crate::test_support::key(code), crate::Pages::default())
+    }
+
+    #[test]
+    fn editing_a_missing_row_and_deleting_the_last_row_are_safe() {
+        let mut b = list(&[]);
+        press(&mut b, KeyCode::Char('e'));
+        assert_eq!(b.view, View::Connections);
+        press(&mut b, KeyCode::Char('d'));
+        press(&mut b, KeyCode::Enter);
+        assert!(!b.connect_running());
+        let mut b = list(&["only"]);
+        press(&mut b, KeyCode::Char('d'));
+        assert_eq!(b.sel, 0);
+        assert_eq!(b.connections.len(), 0);
+    }
+
+    #[test]
+    fn deleting_keeps_the_environment_of_a_name_still_in_use() {
+        let mut b = list(&["x", "x"]);
+        b.environments
+            .insert("x".into(), connect::Environment::Production);
+        b.mcp_shared.insert("x".into());
+        press(&mut b, KeyCode::Char('d'));
+        assert_eq!(b.environment_of("x"), connect::Environment::Production);
+        press(&mut b, KeyCode::Char('d'));
+        assert_eq!(b.environment_of("x"), connect::Environment::Local);
+        assert!(!b.is_mcp_shared("x"));
+    }
+
+    #[test]
+    fn the_form_cycles_toggles_and_edits_its_rows() {
+        let mut b = list(&["a"]);
+        press(&mut b, KeyCode::Char('e'));
+        assert_eq!(b.view, View::Form);
+        press(&mut b, KeyCode::Up);
+        assert_eq!(b.form.sel, 0);
+        typed(&mut b, "z");
+        press(&mut b, KeyCode::Backspace);
+        press(&mut b, KeyCode::Backspace);
+        assert_eq!(b.form.fields[0], "");
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.message, Some(t!("msg.db_name_required").to_string()));
+        assert_eq!(b.view, View::Form);
+        typed(&mut b, "n");
+        // Kind row cycles the engine; typing there is ignored.
+        b.form.sel = FORM_KIND;
+        let before = b.form.kind;
+        press(&mut b, KeyCode::Right);
+        assert_ne!(b.form.kind, before);
+        press(&mut b, KeyCode::Char('x'));
+        press(&mut b, KeyCode::Backspace);
+        press(&mut b, KeyCode::Left);
+        press(&mut b, KeyCode::Char(' '));
+        // The toggle rows.
+        b.form.sel = FORM_WRITABLE;
+        press(&mut b, KeyCode::Char(' '));
+        assert!(b.form.writable);
+        b.form.sel = FORM_STORE;
+        press(&mut b, KeyCode::Right);
+        assert!(b.form.store_keyring);
+        b.form.sel = FORM_ENVIRONMENT;
+        press(&mut b, KeyCode::Right);
+        assert_ne!(b.form_environment, connect::Environment::Local);
+        b.form.sel = FORM_MCP_SHARED;
+        press(&mut b, KeyCode::Left);
+        assert!(b.form_mcp_sharing.is_shared());
+        // Down and Tab walk the rows and wrap.
+        b.form.sel = FORM_ROWS - 1;
+        press(&mut b, KeyCode::Down);
+        assert_eq!(b.form.sel, 0);
+        press(&mut b, KeyCode::Tab);
+        assert_eq!(b.form.sel, 1);
+        press(&mut b, KeyCode::F(3));
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.view, View::Connections);
+        assert!(b.dirty.connections);
+        assert!(b.connections[0].writable && b.connections[0].store_keyring);
+        assert_ne!(b.environment_of("n"), connect::Environment::Local);
+        assert!(b.is_mcp_shared("n"));
+    }
+
+    #[test]
+    fn renaming_a_connection_moves_its_environment_sharing_and_held_password() {
+        let mut b = list(&["old"]);
+        b.environments
+            .insert("old".into(), connect::Environment::Production);
+        b.mcp_shared.insert("old".into());
+        b.held_passwords.insert("old".into(), "pw".into());
+        press(&mut b, KeyCode::Char('e'));
+        assert_eq!(b.form_environment, connect::Environment::Production);
+        assert!(b.form_mcp_sharing.is_shared());
+        for _ in 0..3 {
+            press(&mut b, KeyCode::Backspace);
+        }
+        typed(&mut b, "new");
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.connections[0].name, "new");
+        assert_eq!(b.environment_of("new"), connect::Environment::Production);
+        assert_eq!(b.environment_of("old"), connect::Environment::Local);
+        assert!(b.is_mcp_shared("new") && !b.is_mcp_shared("old"));
+        assert_eq!(b.held_passwords.get("new").map(String::as_str), Some("pw"));
+        assert!(!b.held_passwords.contains_key("old"));
+        // Saving back to Local drops the environment entry; editing a stale
+        // index appends instead.
+        press(&mut b, KeyCode::Char('e'));
+        b.form_environment = connect::Environment::Local;
+        b.form_mcp_sharing = mcp_share::Sharing::Private;
+        b.form.editing = Some(9);
+        press(&mut b, KeyCode::Enter);
+        assert_eq!(b.connections.len(), 2);
+        assert_eq!(b.environment_of("new"), connect::Environment::Local);
+        assert!(!b.is_mcp_shared("new"));
+    }
+
+    #[test]
+    fn a_missing_database_file_directory_fails_the_background_connect() {
+        let mut b = Browser::new(vec![connect::Connection {
+            name: "bad".into(),
+            kind: connect::Kind::Sqlite,
+            file: "/no/such/dir/x.db".into(),
+            ..connect::Connection::default()
+        }]);
+        press(&mut b, KeyCode::Enter);
+        assert!(b.connect_running());
+        assert_eq!(
+            b.message,
+            Some(t!("msg.db_connecting", secs = 0).to_string())
+        );
+        // While connecting, the list ignores keys.
+        press(&mut b, KeyCode::Char('d'));
+        assert_eq!(b.connections.len(), 1);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while b.connect_running() {
+            b.poll_connect();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        assert_eq!(b.view, View::Connections);
+        assert!(b.conn.is_none());
+        assert!(b.message.is_some());
+        b.poll_connect();
+    }
+
+    #[test]
+    fn a_dropped_connect_worker_reports_not_connected() {
+        let mut b = list(&["a"]);
+        let (tx, rx) = std::sync::mpsc::channel::<ConnectOutcome>();
+        drop(tx);
+        b.pending_connect = Some(PendingConnect {
+            rx,
+            started: std::time::Instant::now(),
+            conn: conn("a"),
+            idx: Some(0),
+            password: String::new(),
+        });
+        b.poll_connect();
+        assert_eq!(b.message, Some(t!("msg.db_not_connected").to_string()));
+        assert!(!b.connect_running());
+    }
+
+    #[test]
+    fn the_password_prompt_retries_the_connection_with_what_was_typed() {
+        let (mut b, dir) = file_workbench("lc-pw", true, &["CREATE TABLE t (a)"]);
+        let saved = b.connections[0].clone();
+        b.disconnect();
+        assert_eq!(b.view, View::Connections);
+        // Put the browser on the password prompt for that connection.
+        b.pending = Some(0);
+        b.view = View::Password;
+        typed(&mut b, "secret");
+        press(&mut b, KeyCode::Backspace);
+        press(&mut b, KeyCode::Tab);
+        assert_eq!(b.password, "secre");
+        press(&mut b, KeyCode::Enter);
+        assert!(b.password.is_empty(), "the typed password is taken");
+        assert!(b.connect_running());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while b.connect_running() {
+            b.poll_connect();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        assert_eq!(b.view, View::Workbench);
+        assert_eq!(
+            b.conn.as_ref().map(|c| c.name.as_str()),
+            Some(saved.name.as_str())
+        );
+        assert!(b.write_enabled());
+        assert!(b.tree.table_names().contains(&"t".to_string()));
+        // Enter with nothing pending does nothing.
+        b.view = View::Password;
+        b.pending = None;
+        press(&mut b, KeyCode::Enter);
+        assert!(!b.connect_running());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_read_only_connection_starts_read_only_and_a_writable_one_does_not() {
+        let (b, dir) = file_workbench("lc-ro", false, &["CREATE TABLE t (a)"]);
+        assert!(!b.write_enabled());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn disconnecting_resets_every_piece_of_per_connection_state() {
+        let mut b = family(true);
+        b.begin_tx();
+        b.ask_input = "x".into();
+        b.last_error = Some(("a".into(), "b".into()));
+        b.import_path = "p".into();
+        b.password = "pw".into();
+        b.disconnect();
+        assert!(b.conn.is_none() && b.session.is_none());
+        assert!(!b.write_enabled());
+        assert_eq!(b.tx_state(), TxState::None);
+        assert!(b.log.entries.is_empty());
+        assert!(b.tree.schemas.is_empty());
+        assert!(b.ask_input.is_empty() && b.import_path.is_empty() && b.password.is_empty());
+        assert!(b.last_error.is_none());
+        assert_eq!(b.view, View::Connections);
+        assert_eq!(b.message, Some(t!("msg.db_disconnected").to_string()));
+        assert!(!b.editable());
+    }
+
+    #[test]
+    fn refreshing_rebuilds_the_tree_and_reports_a_failed_catalog() {
+        let mut b = family(true);
+        b.session
+            .as_mut()
+            .unwrap()
+            .run("CREATE TABLE extra (x)")
+            .unwrap();
+        b.refresh_catalog();
+        assert!(b.tree.table_names().contains(&"extra".to_string()));
+        assert!(
+            b.completer
+                .suggest_in("select * from ext", 17, "")
+                .items
+                .iter()
+                .any(|i| i == "extra")
+        );
+        let before = b.tree.table_names();
+        b.session = None;
+        b.refresh_catalog();
+        assert!(b.message.is_some());
+        assert_eq!(b.tree.table_names(), before, "the old tree is kept");
+        b.conn = None;
+        b.message = None;
+        b.refresh_catalog();
+        assert_eq!(b.message, None, "a no-op when disconnected");
+    }
+
+    #[test]
+    fn an_unreadable_catalog_sends_the_connect_back_to_the_list() {
+        let mut b = list(&["a"]);
+        let mut s = session::Session::connect("sqlite::memory:", &[]).unwrap();
+        s.run("SELECT 1").unwrap();
+        // A catalog query cannot fail on SQLite, so use a session whose
+        // worker has been told to stop.
+        s.cancel();
+        b.finish_connected(conn("a"), s, None);
+        assert_eq!(b.view, View::Connections);
+        assert!(b.session.is_none());
+        assert!(b.message.is_some());
     }
 }

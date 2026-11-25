@@ -29,7 +29,9 @@ const MAX_NAME_TRIES: u32 = 10_000;
 /// target) to the trash.
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn trash(path: &Path) -> io::Result<()> {
-    let date = jiff::Zoned::now().strftime("%Y-%m-%dT%H:%M:%S").to_string();
+    let date = jiff::ZonedDateTime::now()
+        .strftime("%Y-%m-%dT%H:%M:%S")
+        .to_string();
     let uid = nix::unistd::getuid().as_raw();
     trash_with(path, home_trash_dir().as_deref(), uid, &date).map(drop)
 }

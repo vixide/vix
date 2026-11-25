@@ -497,3 +497,7 @@ cannot portably resize the font, so Vix emits the font-resize escape for
 terminals that support one (xterm `OSC 50`, urxvt `OSC 720/721`, chosen by
 `$TERM`) and otherwise reports that font size is controlled by the terminal
 itself.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Menu navigation, type-ahead and activation reach items through `get`, a ring-step helper (`wrap_next`/`wrap_prev`, `None` for an empty ring) and `items_of`. **Declared (MENU-F1):** a top-level index with no menu has no items; stepping in a ring with no selectable item stays on the current index; with the theme names unset the Theme submenu offers Dark and Light.

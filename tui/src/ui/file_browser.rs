@@ -1,6 +1,19 @@
 //! The file browser overlay (File → Open…): a `walkdir`-backed listing with
 //! fuzzy/glob/extension filtering, sort, and hidden-file toggling.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::{Geo, chunk};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
@@ -16,10 +29,10 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
         return;
     }
     let width = 100u16.min(area.width);
-    let height = (area.height.saturating_sub(4)).max(8).min(area.height);
+    let height = (area.height.minus(4)).max(8).min(area.height);
     let rect = Rect {
-        x: area.x + area.width.saturating_sub(width) / 2,
-        y: area.y + area.height.saturating_sub(height) / 4,
+        x: area.x.plus(area.width.minus(width).quot(2)),
+        y: area.y.plus(area.height.minus(height).quot(4)),
         width,
         height,
     };
@@ -47,9 +60,9 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
     let Some(fb) = app.file_browser.as_ref() else {
         return;
     };
-    draw_file_browser_header(fb, frame, chunks[0], chunks[1]);
+    draw_file_browser_header(fb, frame, chunk(&chunks, 0), chunk(&chunks, 1));
 
-    let view_h = chunks[2].height as usize;
+    let view_h = usize::from(chunk(&chunks, 2).height);
     if let Some(fb) = app.file_browser.as_mut() {
         fb.ensure_visible(view_h);
     }
@@ -59,10 +72,15 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
     let filtered = fb.matches();
     let total = filtered.len();
     // Fixed size (9) and date (16) columns; the path takes the rest.
-    let path_w = (chunks[2].width as usize).saturating_sub(9 + 16 + 5).max(8);
+    let path_w = usize::from(chunk(&chunks, 2).width)
+        .minus(9 + 16 + 5)
+        .max(8);
     let mut lines: Vec<Line> = Vec::with_capacity(view_h);
     for (row, &idx) in filtered.iter().enumerate().skip(fb.scroll).take(view_h) {
-        let text = file_browser_row(&fb.entries[idx], path_w);
+        let Some(entry) = fb.entries.get(idx) else {
+            continue;
+        };
+        let text = file_browser_row(entry, path_w);
         let line = if row == fb.selected {
             Line::from(Span::styled(text, theme::selected()))
         } else {
@@ -70,22 +88,22 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
         };
         lines.push(line);
     }
-    let show_bar = total > view_h && chunks[2].width > 1;
+    let show_bar = total > view_h && chunk(&chunks, 2).width > 1;
     let row_area = if show_bar {
         Rect {
-            width: chunks[2].width - 1,
-            ..chunks[2]
+            width: chunk(&chunks, 2).width.minus(1),
+            ..chunk(&chunks, 2)
         }
     } else {
-        chunks[2]
+        chunk(&chunks, 2)
     };
     frame.render_widget(Paragraph::new(lines), row_area);
     if show_bar {
         let sb_area = Rect {
-            x: chunks[2].x + chunks[2].width - 1,
-            ..chunks[2]
+            x: chunk(&chunks, 2).x.plus(chunk(&chunks, 2).width).minus(1),
+            ..chunk(&chunks, 2)
         };
-        draw_scrollbar(frame, sb_area, fb.selected, total.saturating_sub(1));
+        draw_scrollbar(frame, sb_area, fb.selected, total.minus(1));
     }
 
     frame.render_widget(
@@ -93,22 +111,22 @@ pub(super) fn draw_file_browser(app: &mut App, frame: &mut Frame, area: Rect) {
             file_browser_status(fb, total),
             theme::dim(),
         ))),
-        chunks[3],
+        chunk(&chunks, 3),
     );
 
     let hint = Line::from(Span::styled(
         t!("ui.file_browser_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunks[4]);
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 4));
 
     app.layout.file_browser = Rect {
-        x: chunks[2].x,
-        y: chunks[2].y,
+        x: chunk(&chunks, 2).x,
+        y: chunk(&chunks, 2).y,
         width: row_area.width,
         height: u16::try_from(view_h)
             .unwrap_or(u16::MAX)
-            .min(chunks[2].height),
+            .min(chunk(&chunks, 2).height),
     };
 }
 

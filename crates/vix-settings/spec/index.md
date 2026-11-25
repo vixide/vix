@@ -336,3 +336,11 @@ must round-trip every section in every build, because `Settings::save` writes
 back only the fields it knows — gating a field behind a capability would silently
 delete the user's config the first time a build without that capability saved.
 A test loads a config with every section and re-saves it unchanged.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The quoting helpers' capacity hints use `checked_add`. Three `unwrap_or_default` calls remain: two load the settings file and fall back to the documented default settings, and one reads a per-environment flag that defaults to off. They are declared defaults rather than unknown numbers, and are left as they are.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `SET-F1` | A capacity hint `len + 2` does not fit | `0` | The capacity is only an allocation hint. |

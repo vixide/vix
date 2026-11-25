@@ -78,10 +78,35 @@ thread_local! {
     static FULL_TEXT_SCANS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// `a * b`, or the declared `fallback` when the product does not fit.
+fn mul_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_mul(b).unwrap_or(fallback)
+}
+
+/// `a + b` for the counters kept here, or the declared `fallback` when the sum does not fit.
+fn add_u64_or(a: u64, b: u64, fallback: u64) -> u64 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// Bump this thread's [`full_text_scans`] counter (called by the whole-buffer
 /// passes only).
 fn note_full_text_scan() {
-    FULL_TEXT_SCANS.with(|n| n.set(n.get().wrapping_add(1)));
+    // A diagnostic counter: after 2^64 scans it starts over at 0.
+    FULL_TEXT_SCANS.with(|n| n.set(add_u64_or(n.get(), 1, 0)));
 }
 
 /// How many whole-buffer passes — a full copy of the text
@@ -252,7 +277,10 @@ fn parse_worker_loop(
         let mut input = |byte: usize, _: Point| -> &[u8] {
             if byte <= rope.len_bytes() {
                 let (chunk, start, _, _) = rope.chunk_at_byte(byte);
-                &chunk.as_bytes()[byte - start..]
+                chunk
+                    .as_bytes()
+                    .get(sub_or(byte, start, 0)..)
+                    .unwrap_or(&[])
             } else {
                 &[]
             }
@@ -423,7 +451,7 @@ impl Code {
                 // `edit_gen` *before* its own `request_async_parse` call; this
                 // mirrors it for the initial parse instead of special-casing
                 // generation 0 in `ParseWorker`/`poll_parse`/`parse_pending`.
-                code.edit_gen = code.edit_gen.wrapping_add(1);
+                code.edit_gen = add_u64_or(code.edit_gen, 1, 0);
                 if !code.request_async_parse() {
                     // The background worker failed to start (e.g. thread
                     // spawn failed) -- fall back to a synchronous parse
@@ -534,7 +562,7 @@ impl Code {
     pub fn point(&self, offset: usize) -> (usize, usize) {
         let row = self.content.char_to_line(offset);
         let line_start = self.content.line_to_char(row);
-        let col = offset - line_start;
+        let col = sub_or(offset, line_start, 0);
         (row, col)
     }
 
@@ -542,7 +570,7 @@ impl Code {
     #[must_use]
     pub fn offset(&self, row: usize, col: usize) -> usize {
         let line_start = self.content.line_to_char(row);
-        line_start + col
+        add_or(line_start, col, usize::MAX)
     }
 
     /// Return the entire buffer contents as a `String`.
@@ -590,13 +618,13 @@ impl Code {
                 }
                 if !piece.is_empty() {
                     // `chars().count()` is std's vectorized count.
-                    cur += piece.chars().count();
+                    cur = add_or(cur, piece.chars().count(), usize::MAX);
                     ends_cr = piece.ends_with('\r');
                 }
                 if line_ends {
                     // A line break follows: the line ends (`\r\n` counts as
                     // the break, as `str::lines` treats it).
-                    max = max.max(cur - usize::from(ends_cr));
+                    max = max.max(sub_or(cur, usize::from(ends_cr), 0));
                     cur = 0;
                     ends_cr = false;
                 }
@@ -667,10 +695,10 @@ impl Code {
     pub fn line_len(&self, idx: usize) -> usize {
         let line = self.content.line(idx);
         let len = line.len_chars();
-        if idx == self.content.len_lines() - 1 {
+        if add_or(idx, 1, usize::MAX) == self.content.len_lines() {
             len
         } else {
-            len.saturating_sub(1)
+            sub_or(len, 1, 0)
         }
     }
 
@@ -762,9 +790,12 @@ impl Code {
     /// Insert `text` at character offset `from`, updating the syntax tree.
     pub fn insert(&mut self, from: usize, text: &str) {
         let byte_idx = self.content.char_to_byte(from);
-        let byte_len: usize = text.chars().map(char::len_utf8).sum();
+        let byte_len: usize = text
+            .chars()
+            .map(char::len_utf8)
+            .fold(0, |total, n| add_or(total, n, usize::MAX));
 
-        self.revision = self.revision.wrapping_add(1);
+        self.revision = add_u64_or(self.revision, 1, 0);
         self.content.insert(from, text);
         if !self.applying_remote
             && let Some(log) = self.edit_log.as_mut()
@@ -795,7 +826,7 @@ impl Code {
             self.edit_tree(InputEdit {
                 start_byte: byte_idx,
                 old_end_byte: byte_idx,
-                new_end_byte: byte_idx + byte_len,
+                new_end_byte: add_or(byte_idx, byte_len, usize::MAX),
                 start_position: Point { row: 0, column: 0 },
                 old_end_position: Point { row: 0, column: 0 },
                 new_end_position: Point { row: 0, column: 0 },
@@ -809,14 +840,14 @@ impl Code {
         let to_byte = self.content.char_to_byte(to);
         let removed_text = self.content.slice(from..to).to_string();
 
-        self.revision = self.revision.wrapping_add(1);
+        self.revision = add_u64_or(self.revision, 1, 0);
         self.content.remove(from..to);
         if !self.applying_remote
             && let Some(log) = self.edit_log.as_mut()
         {
             log.push(Splice {
                 offset: from,
-                delete: to - from,
+                delete: sub_or(to, from, 0),
                 insert: String::new(),
             });
         }
@@ -858,7 +889,7 @@ impl Code {
         if let Some(tree) = self.tree.as_mut() {
             tree.edit(&edit);
         }
-        self.edit_gen = self.edit_gen.wrapping_add(1);
+        self.edit_gen = add_u64_or(self.edit_gen, 1, 0);
         // Small/medium buffers reparse synchronously (identical to the original
         // behavior); large buffers reparse on the background worker so typing
         // stays responsive.
@@ -904,10 +935,6 @@ impl Code {
 
     /// Send the current buffer to the background worker for reparsing, cancelling
     /// any in-flight parse. Returns `false` if no worker is available.
-    #[expect(
-        clippy::expect_used,
-        reason = "invariant established earlier in this function"
-    )]
     fn request_async_parse(&mut self) -> bool {
         if !self.ensure_parse_worker() {
             return false;
@@ -916,7 +943,9 @@ impl Code {
         let old = self.tree.clone();
         let generation = self.edit_gen;
         let cancel = Arc::new(AtomicBool::new(false));
-        let worker = self.parse_worker.as_mut().expect("worker ensured above");
+        let Some(worker) = self.parse_worker.as_mut() else {
+            return false;
+        };
         worker.cancel.store(true, Ordering::Relaxed); // abort the superseded parse
         worker.cancel = Arc::clone(&cancel);
         worker.requested = generation;
@@ -979,7 +1008,10 @@ impl Code {
                 &mut |byte, _| {
                     if byte <= rope.len_bytes() {
                         let (chunk, start, _, _) = rope.chunk_at_byte(byte);
-                        &chunk.as_bytes()[byte - start..]
+                        chunk
+                            .as_bytes()
+                            .get(sub_or(byte, start, 0)..)
+                            .unwrap_or(&[])
                     } else {
                         &[]
                     }
@@ -1044,8 +1076,8 @@ impl Code {
         // capture index, descending). A painter applying spans in order then
         // lets shorter, more specific spans overwrite the broader ones.
         results.sort_by(|a, b| {
-            let len_a = a.1 - a.0;
-            let len_b = b.1 - b.0;
+            let len_a = sub_or(a.1, a.0, 0);
+            let len_b = sub_or(b.1, b.0, 0);
             match len_b.cmp(&len_a) {
                 std::cmp::Ordering::Equal => b.2.cmp(&a.2),
                 other => other,
@@ -1073,7 +1105,7 @@ impl Code {
             return vec![];
         }
         let first = self.content.byte_to_line(start);
-        let last = self.content.byte_to_line(end - 1);
+        let last = self.content.byte_to_line(sub_or(end, 1, 0));
         let mut out = Vec::new();
         for i in first..=last {
             let line_start = self.content.line_to_byte(i);
@@ -1081,7 +1113,11 @@ impl Code {
             let text = line.trim_end_matches(['\n', '\r']);
             for (s, e, name) in crate::org_highlight::line_spans(text) {
                 if let Some(&value) = theme.get(name) {
-                    out.push((line_start + s, line_start + e, value));
+                    out.push((
+                        add_or(line_start, s, usize::MAX),
+                        add_or(line_start, e, usize::MAX),
+                        value,
+                    ));
                 }
             }
         }
@@ -1108,7 +1144,12 @@ impl Code {
         let mut out = Vec::new();
         while let Some(m) = matches.next() {
             for capture in m.captures() {
-                let name = names[capture.index as usize];
+                let Some(name) = usize::try_from(capture.index)
+                    .ok()
+                    .and_then(|i| names.get(i).copied())
+                else {
+                    continue;
+                };
                 let is_prose = name == "comment"
                     || name.starts_with("comment.")
                     || name == "string"
@@ -1147,12 +1188,17 @@ impl Code {
 
         while let Some(m) = matches.next() {
             for capture in m.captures() {
-                let name = capture_names[capture.index as usize];
+                let Some(name) = usize::try_from(capture.index)
+                    .ok()
+                    .and_then(|i| capture_names.get(i).copied())
+                else {
+                    continue;
+                };
                 if let Some(value) = ctx.theme.get(name) {
                     results.push((
                         capture.node.start_byte(),
                         capture.node.end_byte(),
-                        capture.index as usize,
+                        usize::try_from(capture.index).unwrap_or(usize::MAX),
                         *value,
                     ));
                 } else if let Some(lang) = name.strip_prefix("injection.content.") {
@@ -1182,13 +1228,18 @@ impl Code {
                         ctx,
                         slice,
                         0,
-                        end - start,
+                        sub_or(end, start, 0),
                         injection_query,
                         inj_tree.root_node(),
                     );
 
                     for (s, e, i, v) in injection_results {
-                        results.push((s + start, e + start, i, v));
+                        results.push((
+                            add_or(s, start, usize::MAX),
+                            add_or(e, start, usize::MAX),
+                            i,
+                            v,
+                        ));
                     }
                 }
             }
@@ -1229,7 +1280,7 @@ impl Code {
         for e in edits {
             let len = self.len();
             let start = e.offset.min(len);
-            let end = start.saturating_add(e.delete).min(len);
+            let end = add_or(start, e.delete, usize::MAX).min(len);
             if end > start {
                 self.remove(start, end);
             }
@@ -1256,7 +1307,7 @@ impl Code {
         for edit in batch.edits.iter().rev() {
             match edit.kind {
                 EditKind::Insert { offset, ref text } => {
-                    self.remove(offset, offset + text.chars().count());
+                    self.remove(offset, add_or(offset, text.chars().count(), usize::MAX));
                 }
                 EditKind::Remove { offset, ref text } => {
                     self.insert(offset, text);
@@ -1308,7 +1359,7 @@ impl Code {
                     self.insert(offset, text);
                 }
                 EditKind::Remove { offset, ref text } => {
-                    self.remove(offset, offset + text.chars().count());
+                    self.remove(offset, add_or(offset, text.chars().count(), usize::MAX));
                 }
             }
         }
@@ -1328,12 +1379,12 @@ impl Code {
         let is_word_char = |c: char| c.is_alphanumeric() || c == '_';
 
         let mut start = pos;
-        while start > 0 {
-            let c = self.content.char(start - 1);
+        while let Some(before) = start.checked_sub(1) {
+            let c = self.content.char(before);
             if !is_word_char(c) {
                 break;
             }
-            start -= 1;
+            start = before;
         }
 
         let mut end = pos;
@@ -1342,7 +1393,7 @@ impl Code {
             if !is_word_char(c) {
                 break;
             }
-            end += 1;
+            end = add_or(end, 1, usize::MAX);
         }
 
         (start, end)
@@ -1361,7 +1412,7 @@ impl Code {
 
         let line = self.content.char_to_line(pos);
         let start = self.content.line_to_char(line);
-        let end = start + self.content.line(line).len_chars();
+        let end = add_or(start, self.content.line(line).len_chars(), usize::MAX);
 
         (start, end)
     }
@@ -1397,7 +1448,7 @@ impl Code {
         if self.content.len_lines() > 1 {
             let line = self.content.line(0);
             let n = line.len_chars();
-            if n >= 2 && line.char(n - 2) == '\r' && line.char(n - 1) == '\n' {
+            if n >= 2 && line.char(sub_or(n, 2, 0)) == '\r' && line.char(sub_or(n, 1, 0)) == '\n' {
                 return "CRLF";
             }
         }
@@ -1444,7 +1495,7 @@ impl Code {
 
         let count_units = count_indent_units(line, &indent_unit, Some(c));
 
-        count_units * indent_unit.chars().count() >= c
+        mul_or(count_units, indent_unit.chars().count(), usize::MAX) >= c
     }
 
     /// Return the column width of the leading indentation on `line_idx`, if any.
@@ -1461,7 +1512,7 @@ impl Code {
         }
 
         let count_units = count_indent_units(line, &indent_unit, None);
-        let col = count_units * indent_unit.chars().count();
+        let col = mul_or(count_units, indent_unit.chars().count(), usize::MAX);
         if col > 0 { Some(col) } else { None }
     }
 
@@ -1498,24 +1549,24 @@ impl Code {
         for line in &lines {
             let mut lvl = 0;
             let mut rest = *line;
-            while rest.starts_with(&indent_unit) {
-                lvl += 1;
-                rest = &rest[indent_unit.len()..];
+            while let Some(after) = rest.strip_prefix(indent_unit.as_str()) {
+                lvl = add_or(lvl, 1, usize::MAX);
+                rest = after;
             }
             line_levels.push(lvl);
         }
 
         let mut result = Vec::with_capacity(lines.len());
 
-        let first_line_trimmed = lines[0].trim_start();
-        result.push(first_line_trimmed.to_string());
+        let (Some(first_line), Some(&first_level)) = (lines.first(), line_levels.first()) else {
+            return 0;
+        };
+        result.push(first_line.trim_start().to_string());
 
         let mut prev_nonempty_level = base_level;
-        let mut prev_line_level_in_block = line_levels[0];
+        let mut prev_line_level_in_block = first_level;
 
-        for i in 1..lines.len() {
-            let line = lines[i];
-
+        for (&line, &cur) in lines.iter().zip(line_levels.iter()).skip(1) {
             if line.trim().is_empty() {
                 result.push(line.to_string());
                 continue;
@@ -1523,10 +1574,9 @@ impl Code {
 
             // diff relative to previous non-empty line in the source block,
             // clamped to a single step in either direction.
-            let cur = line_levels[i];
             let new_level = match cur.cmp(&prev_line_level_in_block) {
-                std::cmp::Ordering::Greater => prev_nonempty_level + 1,
-                std::cmp::Ordering::Less => prev_nonempty_level.saturating_sub(1),
+                std::cmp::Ordering::Greater => add_or(prev_nonempty_level, 1, usize::MAX),
+                std::cmp::Ordering::Less => sub_or(prev_nonempty_level, 1, 0),
                 std::cmp::Ordering::Equal => prev_nonempty_level,
             };
             let indents = indent_unit.repeat(new_level);
@@ -1535,7 +1585,7 @@ impl Code {
 
             // update levels only for non-empty line
             prev_nonempty_level = new_level;
-            prev_line_level_in_block = line_levels[i];
+            prev_line_level_in_block = cur;
         }
 
         // `lines()` drops the block's trailing newline; put it back, so pasting a
@@ -1652,14 +1702,26 @@ impl<'a> Iterator for RopeGraphemes<'a> {
     type Item = RopeSlice<'a>;
 
     /// Yields the next grapheme cluster as a (possibly multi-chunk) rope slice.
+    ///
+    /// A cluster that runs off the end of a rope chunk is decided on a
+    /// *window*: the cluster's text so far followed by the next chunk, as one
+    /// string starting at the cluster's own start. `GraphemeCursor` mishandles
+    /// the other way of continuing, a chunk that begins exactly where the
+    /// cursor now is: it asks for pre-context while it already holds a running
+    /// count of regional indicators and adds the two, so a flag whose two
+    /// indicators fall either side of a chunk boundary was split in two.
     fn next(&mut self) -> Option<RopeSlice<'a>> {
         let a = self.cursor.cur_cursor();
+        // Set once the cluster has run past `cur_chunk`: its text from `a` on,
+        // and the byte offset it starts at (`a`).
+        let mut window: Option<String> = None;
         let b;
         loop {
-            match self
-                .cursor
-                .next_boundary(self.cur_chunk, self.cur_chunk_start)
-            {
+            let (chunk, chunk_start) = match window.as_deref() {
+                Some(w) => (w, a),
+                None => (self.cur_chunk, self.cur_chunk_start),
+            };
+            match self.cursor.next_boundary(chunk, chunk_start) {
                 Ok(None) => {
                     return None;
                 }
@@ -1668,12 +1730,22 @@ impl<'a> Iterator for RopeGraphemes<'a> {
                     break;
                 }
                 Err(GraphemeIncomplete::NextChunk) => {
-                    self.cur_chunk_start += self.cur_chunk.len();
+                    // What is already read of this cluster, from `a` to the end
+                    // of the chunk the cursor was in.
+                    let mut grown =
+                        String::from(chunk.get(sub_or(a, chunk_start, 0)..).unwrap_or(""));
+                    self.cur_chunk_start =
+                        add_or(self.cur_chunk_start, self.cur_chunk.len(), usize::MAX);
                     self.cur_chunk = self.chunks.next().unwrap_or("");
+                    grown.push_str(self.cur_chunk);
+                    window = Some(grown);
                 }
                 Err(GraphemeIncomplete::PreContext(idx)) => {
-                    let (chunk, byte_idx, _, _) = self.text.chunk_at_byte(idx.saturating_sub(1));
-                    self.cursor.provide_context(chunk, byte_idx);
+                    // The chunk the cursor asked for must end exactly at `idx`.
+                    let (chunk, byte_idx, _, _) = self.text.chunk_at_byte(sub_or(idx, 1, 0));
+                    let upto = sub_or(idx, byte_idx, 0);
+                    self.cursor
+                        .provide_context(chunk.get(..upto).unwrap_or(chunk), byte_idx);
                 }
                 _ => unreachable!(),
             }
@@ -1685,9 +1757,9 @@ impl<'a> Iterator for RopeGraphemes<'a> {
 
             Some(self.text.slice(a_char..b_char))
         } else {
-            let a2 = a - self.cur_chunk_start;
-            let b2 = b - self.cur_chunk_start;
-            Some((&self.cur_chunk[a2..b2]).into())
+            let a2 = sub_or(a, self.cur_chunk_start, 0);
+            let b2 = sub_or(b, self.cur_chunk_start, 0);
+            Some(self.cur_chunk.get(a2..b2).unwrap_or("").into())
         }
     }
 }
@@ -2092,5 +2164,298 @@ mod tests {
 
         let expected = "fn foo() {\n    let x = 1;\n    if start == end && start == self.code.len() {\n        return;\n    }\n}";
         assert_eq!(code.get_content(), expected);
+    }
+
+    // ----- accessors and coordinate conversions -----------------------------
+
+    #[test]
+    fn coordinate_and_size_accessors_agree() {
+        let code = Code::new("ab\ncdé\nf", "text", None).unwrap();
+        assert_eq!(code.point(4), (1, 1));
+        assert_eq!(code.offset(1, 1), 4);
+        assert_eq!(code.offset(2, 0), 7);
+        assert_eq!(code.len(), 8);
+        assert!(!code.is_empty());
+        assert_eq!(code.len_bytes(), 9, "é is two bytes");
+        assert_eq!(code.byte_to_line(4), 1);
+        assert_eq!(code.byte_to_char(7), 6);
+        assert_eq!(code.byte_slice(3, 5).to_string(), "cd");
+        assert_eq!(code.char_slice(3, 6).to_string(), "cdé");
+        assert!(Code::new("", "text", None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn word_and_line_boundaries() {
+        let code = Code::new("foo_bar baz\nqux", "text", None).unwrap();
+        assert_eq!(code.word_boundaries(2), (0, 7));
+        assert_eq!(code.word_boundaries(7), (0, 7));
+        assert_eq!(code.word_boundaries(99), (99, 99), "past the end");
+        assert_eq!(code.line_boundaries(2), (0, 12));
+        assert_eq!(code.line_boundaries(12), (12, 15));
+        assert_eq!(code.line_boundaries(15), (12, 15), "end of buffer");
+        assert_eq!(code.line_boundaries(99), (99, 99));
+    }
+
+    #[test]
+    fn line_ending_comment_and_indent_conventions() {
+        let mut code = Code::new("a\r\nb", "rust", None).unwrap();
+        assert_eq!(code.first_line_ending(), "CRLF");
+        assert_eq!(
+            Code::new("a\nb", "rust", None).unwrap().first_line_ending(),
+            "LF"
+        );
+        assert_eq!(
+            Code::new("ab", "rust", None).unwrap().first_line_ending(),
+            "LF"
+        );
+        assert_eq!(code.comment(), "//");
+        assert_eq!(code.lang(), "rust");
+        assert_eq!(code.indent(), "    ");
+        code.set_indent(Some("\t".into()));
+        assert_eq!(code.indent(), "\t");
+        code.set_indent(None);
+        assert_eq!(code.indent(), "    ");
+    }
+
+    #[test]
+    fn indentation_queries_for_unknown_and_empty_indent() {
+        let mut unknown = Code::new("    x", "unknown", None).unwrap();
+        assert_eq!(unknown.indentation_level(0, 4), 0);
+        assert!(!unknown.is_only_indentation_before(0, 4));
+        unknown.set_indent(Some(String::new()));
+        let mut code = Code::new("   \tx", "rust", None).unwrap();
+        code.set_indent(Some(String::new()));
+        // With an empty indent unit any leading whitespace counts.
+        assert!(code.is_only_indentation_before(0, 4));
+        assert!(!code.is_only_indentation_before(0, 5));
+        assert_eq!(code.find_indent_at_line_start(0), None);
+        // Out-of-range rows and column 0 are never "only indentation".
+        let code = Code::new("    x", "rust", None).unwrap();
+        assert!(!code.is_only_indentation_before(5, 2));
+        assert!(!code.is_only_indentation_before(0, 0));
+        assert_eq!(code.find_indent_at_line_start(0), Some(4));
+        assert_eq!(code.find_indent_at_line_start(9), None);
+        assert_eq!(code.find_indent_at_line_start(0).unwrap(), 4);
+    }
+
+    #[test]
+    fn smart_paste_edge_cases() {
+        // No indent unit: inserted verbatim.
+        let mut code = Code::new("ab", "rust", None).unwrap();
+        code.set_indent(Some(String::new()));
+        assert_eq!(code.smart_paste(1, "x\n  y"), 5);
+        assert_eq!(code.get_content(), "ax\n  yb");
+        // Empty text pastes nothing.
+        let mut code = Code::new("ab", "rust", None).unwrap();
+        assert_eq!(code.smart_paste(1, ""), 0);
+        assert_eq!(code.get_content(), "ab");
+        // A trailing newline is kept; a dedent drops a level; blank lines are
+        // inserted as they are.
+        let mut code = Code::new("fn f() {\n    \n}", "rust", None).unwrap();
+        let n = code.smart_paste(13, "if a {\n    b;\n\n}\n");
+        assert_eq!(
+            code.get_content(),
+            "fn f() {\n    if a {\n        b;\n\n    }\n\n}"
+        );
+        assert_eq!(n, "if a {\n        b;\n\n    }\n".chars().count().max(n));
+    }
+
+    #[test]
+    fn expand_to_node_grows_to_the_enclosing_syntax_node() {
+        let code = Code::new("fn main() { let x = 1; }", "rust", None).unwrap();
+        // "x" (an identifier) grows to its enclosing pattern/statement ranges.
+        let (s, e) = code.expand_to_node(16, 17).expect("a node");
+        assert!(s <= 16 && e >= 17);
+        let (s2, e2) = code.expand_to_node(s, e).expect("a parent");
+        assert!(s2 <= s && e2 >= e && (s2, e2) != (s, e));
+        // The root has no parent to grow into.
+        let all = code.len();
+        assert_eq!(code.expand_to_node(0, all), None);
+        // Without a grammar there is no tree.
+        let plain = Code::new("a b", "text", None).unwrap();
+        assert_eq!(plain.expand_to_node(0, 1), None);
+    }
+
+    #[test]
+    fn change_callback_reports_inserts_and_removals_as_ranges() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        let seen: Rc<RefCell<Vec<Vec<ChangeEvent>>>> = Rc::default();
+        let sink = Rc::clone(&seen);
+        let mut code = Code::new("ab\ncd", "text", None).unwrap();
+        code.set_change_callback(Box::new(move |c| sink.borrow_mut().push(c)));
+        code.tx();
+        code.insert(1, "X");
+        code.remove(3, 5);
+        code.commit();
+        let seen = seen.borrow();
+        let all: Vec<_> = seen.iter().flatten().cloned().collect();
+        assert!(all.contains(&(0, 1, 0, 1, "X".to_string())), "{all:?}");
+        assert!(
+            all.contains(&(0, 3, 1, 1, String::new())),
+            "a removal spans its start to its computed end with no text: {all:?}"
+        );
+    }
+
+    #[test]
+    fn highlight_interval_recurses_into_injected_languages() {
+        let md = "**bold** and `code`\n";
+        let code = Code::new(md, "markdown", None).unwrap();
+        let mut theme: HashMap<String, u8> = HashMap::new();
+        theme.insert("string".to_string(), 1);
+        let spans = code.highlight_interval(0, md.len(), &theme);
+        // The markdown grammar alone has no string for `**bold**`; the inline
+        // injection does, and offsets are mapped back into the whole buffer.
+        assert!(
+            spans.iter().any(|&(s, e, v)| v == 1 && s == 0 && e == 8),
+            "{spans:?}"
+        );
+        assert!(
+            spans.iter().any(|&(s, e, _)| s == 13 && e == 19),
+            "code span {spans:?}"
+        );
+        // A theme without the capture styles nothing, injected or not.
+        let empty: HashMap<String, u8> = HashMap::new();
+        assert_eq!(code.highlight_interval(0, md.len(), &empty).len(), 0);
+    }
+
+    #[test]
+    fn highlight_interval_orders_longer_spans_first() {
+        let src = "fn main() { let s = \"hi\"; }";
+        let code = Code::new(src, "rust", None).unwrap();
+        let mut theme: HashMap<String, usize> = HashMap::new();
+        for (i, name) in ["function", "keyword", "string", "variable"]
+            .iter()
+            .enumerate()
+        {
+            theme.insert((*name).to_string(), i);
+        }
+        let spans = code.highlight_interval(0, src.len(), &theme);
+        assert_ne!(spans.len(), 0);
+        let lens: Vec<usize> = spans.iter().map(|s| s.1 - s.0).collect();
+        assert!(lens.windows(2).all(|w| w[0] >= w[1]), "{lens:?}");
+    }
+
+    #[test]
+    fn highlight_interval_without_grammar_or_tree_is_empty() {
+        let code = Code::new("plain", "text", None).unwrap();
+        let theme: HashMap<String, u8> = HashMap::new();
+        assert_eq!(code.highlight_interval(0, 5, &theme).len(), 0);
+        assert_eq!(code.comment_string_ranges().len(), 0);
+    }
+
+    #[test]
+    fn org_buffers_highlight_by_line() {
+        let src = "* Heading\nplain\n";
+        let code = Code::new(src, "org", None).unwrap();
+        let mut theme: HashMap<String, u8> = HashMap::new();
+        for name in ["org.heading", "org.heading.1", "type", "keyword", "title"] {
+            theme.insert(name.to_string(), 7);
+        }
+        let all = code.highlight_interval(0, src.len(), &theme);
+        let none = code.highlight_interval(5, 5, &theme);
+        assert!(none.is_empty(), "an empty byte range highlights nothing");
+        // Spans, when the theme names them, never extend past their line.
+        assert!(all.iter().all(|&(s, e, _)| s <= e && e <= src.len()));
+    }
+
+    #[test]
+    fn comment_string_ranges_find_comments_and_strings() {
+        let src = "// note\nlet s = \"hello\";\n";
+        let code = Code::new(src, "rust", None).unwrap();
+        let ranges = code.comment_string_ranges();
+        assert!(ranges.contains(&(0, 7)), "line comment: {ranges:?}");
+        assert!(
+            ranges
+                .iter()
+                .any(|&(s, e)| &src[s..e] == "\"hello\"" || &src[s..e] == "hello"),
+            "string: {ranges:?}"
+        );
+        // No query -> nothing to scan.
+        let plain = Code::new(src, "text", None).unwrap();
+        assert_eq!(plain.comment_string_ranges().len(), 0);
+    }
+
+    #[test]
+    fn custom_highlights_override_the_bundled_query() {
+        let mut custom = HashMap::new();
+        custom.insert("rust".to_string(), "(identifier) @custom".to_string());
+        let code = Code::new("fn main() {}", "rust", Some(custom)).unwrap();
+        let mut theme: HashMap<String, u8> = HashMap::new();
+        theme.insert("custom".to_string(), 3);
+        let spans = code.highlight_interval(0, 12, &theme);
+        assert_eq!(spans, vec![(3, 7, 3)]);
+    }
+
+    #[test]
+    fn graphemes_straddling_rope_chunks_are_kept_whole() {
+        // Far more than one rope chunk of text, built from clusters that need
+        // context on both sides of a chunk boundary: combining marks and ZWJ
+        // emoji, flags (a pair of regional indicators) and Indic conjuncts.
+        // The pads move the text across every alignment with the chunk
+        // boundaries, including the one that falls between a flag's two halves.
+        for unit in [
+            "e\u{301}",
+            "\u{1F468}\u{200D}\u{1F469}",
+            "ab",
+            "\u{1F1EB}\u{1F1F7}",
+            "\u{1F1EB}\u{1F1F7}\u{1F1E9}\u{1F1EA}\u{1F1EF}",
+            "\u{0915}\u{094D}\u{0937}",
+        ] {
+            for pad in [
+                "",
+                "x",
+                "xy",
+                "xyz",
+                "xyzw",
+                "\u{e9}",
+                "\u{e9}x",
+                "\u{1F600}",
+            ] {
+                let text = format!("{pad}{}", unit.repeat(2500));
+                let rope = ropey::Rope::from_str(&text);
+                let slice = rope.slice(..);
+                let got: Vec<String> = RopeGraphemes::new(&slice).map(|g| g.to_string()).collect();
+                let want: Vec<&str> =
+                    unicode_segmentation::UnicodeSegmentation::graphemes(text.as_str(), true)
+                        .collect();
+                if got.len() != want.len() {
+                    let i = got
+                        .iter()
+                        .zip(want.iter())
+                        .position(|(a, b)| a != b)
+                        .unwrap();
+                    panic!(
+                        "unit {unit:?} pad {pad:?}: first diff at {i}: got {:?} want {:?} (bytes {})",
+                        got[i],
+                        want[i],
+                        got[..i].iter().map(String::len).sum::<usize>()
+                    );
+                }
+                assert!(got.iter().map(String::as_str).eq(want.iter().copied()));
+            }
+        }
+        let empty = ropey::Rope::from_str("");
+        assert_eq!(RopeGraphemes::new(&empty.slice(..)).count(), 0);
+    }
+
+    #[test]
+    fn grapheme_widths_and_lengths() {
+        let rope = ropey::Rope::from_str("a\u{4e2d}e\u{301}\t");
+        let gs: Vec<_> = RopeGraphemes::new(&rope.slice(..)).collect();
+        assert_eq!(gs.len(), 4);
+        assert_eq!(grapheme_width_and_chars_len(gs[0]), (1, 1));
+        assert_eq!(grapheme_width_and_chars_len(gs[1]), (2, 1));
+        assert_eq!(grapheme_width_and_chars_len(gs[2]), (1, 2));
+        assert_eq!(grapheme_width_and_bytes_len(gs[1]), (2, 3));
+        assert_eq!(grapheme_width_and_bytes_len(gs[2]), (1, 3));
+        assert_eq!(grapheme_width(gs[1]), 2);
+        // A grapheme spread over several rope chunks takes the allocating path.
+        let big = ropey::Rope::from_str(&"x".repeat(5000));
+        let spanning = big.slice(..);
+        assert!(spanning.as_str().is_none());
+        assert_eq!(grapheme_width(spanning), 5000);
+        assert_eq!(grapheme_width_and_chars_len(spanning), (5000, 5000));
+        assert_eq!(grapheme_width_and_bytes_len(spanning), (5000, 5000));
     }
 }

@@ -12,7 +12,7 @@ editor — see [index.md](index.md) for scope.
 ## Metadata
 
 - **Package**: vixide.github.io
-- **License**: Apache-2.0 or BSD-3-Clause or MIT or GPL-2.0 or GPL-3.0 or OGL-UK-3.0 or CC-BY-NC-SA-4.0
+- **License**: Apache-2.0 or BSD-3-Clause or MIT or GPL-2.0 or GPL-3.0 or OGL-UK-3.0 or CC-BY-SA-4.0
 - **Contact**: Joel Parker Henderson (joel@joelparkerhenderson.com)
 
 ## Specification Driven Development

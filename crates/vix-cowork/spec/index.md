@@ -170,3 +170,7 @@ Unit tests per module; property tests for the codec, paths, and an N-replica
 convergence run (`crates/vix-cowork/tests/converge.rs`): a host and three guests edit and undo
 concurrently over delayed per-link queues, and every replica's CRDT text and
 its replay-only plain buffer must be identical at the end.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). The document edit range check, offset transform, drive-prefix test and wire reader use `checked_*`, `get` and iterators. **Declared (COWORK-F1):** the terminal screen sent to a guest is the top-left window of at most the wire's row and column limits (a larger host terminal is cut, never refused); an offset range that ends past the address space ends at its top; a revert with no CRDT update to send carries an empty one; peer id 0, which no session hands out, takes the first palette color and a guest count past the top of the type takes the top id; an unknown peer name shows as empty. Counters and the color mix carry `RCA-EXC-2` proofs.

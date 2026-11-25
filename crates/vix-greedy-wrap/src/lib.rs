@@ -16,6 +16,18 @@
 //! already-known paragraph (no embedded newlines) and a width; splitting a
 //! multi-line source into paragraphs is the caller's job.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
 /// Greedily word-wrap one paragraph (no embedded newlines) to `width`
 /// columns. A blank line yields a single empty string; `width` `0` returns
 /// the line unchanged. A word longer than `width` is hard-broken
@@ -43,7 +55,13 @@ pub fn wrap_line(line: &str, width: usize) -> Vec<String> {
                     chunk_len = 0;
                 }
                 cur.push(ch);
-                chunk_len += 1;
+                #[expect(
+                    clippy::arithmetic_side_effects,
+                    reason = "RCA-EXC-2: the check above resets chunk_len when it equals width, so before this increment it is below width, which is at most usize::MAX"
+                )]
+                {
+                    chunk_len += 1;
+                }
             }
             cur_len = chunk_len;
             continue;
@@ -51,10 +69,14 @@ pub fn wrap_line(line: &str, width: usize) -> Vec<String> {
         if cur_len == 0 {
             cur.push_str(word);
             cur_len = wlen;
-        } else if cur_len + 1 + wlen <= width {
+        } else if let Some(joined) = cur_len
+            .checked_add(1)
+            .and_then(|len| len.checked_add(wlen))
+            .filter(|joined| *joined <= width)
+        {
             cur.push(' ');
             cur.push_str(word);
-            cur_len += 1 + wlen;
+            cur_len = joined;
         } else {
             out.push(std::mem::take(&mut cur));
             cur.push_str(word);

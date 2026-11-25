@@ -64,6 +64,20 @@ const DETAIL_KEYS: &[&str] = &[
     "Rows Removed by Join Filter",
 ];
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// One plan node, flattened in pre-order (a parent comes before its
 /// children).
 #[derive(Debug, Clone, PartialEq)]
@@ -235,8 +249,8 @@ impl Plan {
     /// The indices of the direct children of node `i`.
     #[must_use]
     pub fn children(&self, i: usize) -> Vec<usize> {
-        (i + 1..self.nodes.len())
-            .filter(|&c| self.nodes[c].parent == Some(i))
+        (add_or(i, 1, usize::MAX)..self.nodes.len())
+            .filter(|&c| self.nodes.get(c).is_some_and(|n| n.parent == Some(i)))
             .collect()
     }
 }
@@ -328,7 +342,7 @@ fn walk(value: &Value, depth: usize, parent: Option<usize>, out: &mut Vec<Node>)
     out.push(node);
     if let Some(Value::Array(children)) = obj.get("Plans") {
         for child in children {
-            walk(child, depth + 1, Some(me), out)?;
+            walk(child, add_or(depth, 1, usize::MAX), Some(me), out)?;
         }
     }
     Some(())
@@ -340,12 +354,18 @@ fn account_time(plan: &mut Plan) {
         let children: f64 = plan
             .children(i)
             .iter()
-            .filter_map(|&c| plan.nodes[c].inclusive_ms)
-            .sum();
-        let node = &mut plan.nodes[i];
+            .filter_map(|&c| plan.nodes.get(c).and_then(|n| n.inclusive_ms))
+            .fold(0.0, |total, t| total + t);
+        let Some(node) = plan.nodes.get_mut(i) else {
+            continue;
+        };
         node.exclusive_ms = node.inclusive_ms.map(|t| (t - children).max(0.0));
     }
-    let total: f64 = plan.nodes.iter().filter_map(|n| n.exclusive_ms).sum();
+    let total: f64 = plan
+        .nodes
+        .iter()
+        .filter_map(|n| n.exclusive_ms)
+        .fold(0.0, |sum, t| sum + t);
     if total <= 0.0 {
         return;
     }
@@ -354,12 +374,14 @@ fn account_time(plan: &mut Plan) {
     }
     let mut order: Vec<usize> = (0..plan.nodes.len()).collect();
     order.sort_by(|&a, &b| {
-        let share = |i: usize| plan.nodes[i].share.unwrap_or(0.0);
+        let share = |i: usize| plan.nodes.get(i).and_then(|n| n.share).unwrap_or(0.0);
         share(b).total_cmp(&share(a))
     });
     for i in order.into_iter().take(SLOWEST_COUNT) {
-        if plan.nodes[i].share.unwrap_or(0.0) >= SLOWEST_MIN_SHARE {
-            plan.nodes[i].slowest = true;
+        if let Some(node) = plan.nodes.get_mut(i)
+            && node.share.unwrap_or(0.0) >= SLOWEST_MIN_SHARE
+        {
+            node.slowest = true;
         }
     }
 }
@@ -524,7 +546,7 @@ fn yaml_value(text: &str) -> Option<Value> {
         .filter(|l| !l.trim().is_empty())
         .map(|l| {
             let body = l.trim_end();
-            let indent = body.len() - body.trim_start_matches(' ').len();
+            let indent = sub_or(body.len(), body.trim_start_matches(' ').len(), 0);
             YamlLine {
                 indent,
                 text: body.trim_start_matches(' ').to_string(),
@@ -573,23 +595,25 @@ fn yaml_seq(lines: &mut [YamlLine], i: &mut usize, indent: usize) -> Value {
         if line.indent != indent || !is_item(&line.text) {
             break;
         }
-        let rest = line.text[1..].trim_start().to_string();
-        let column = indent + line.text.len() - rest.len();
+        let rest = line.text.get(1..).unwrap_or("").trim_start().to_string();
+        let column = sub_or(add_or(indent, line.text.len(), usize::MAX), rest.len(), 0);
         if rest.is_empty() {
-            *i += 1;
+            *i = add_or(*i, 1, usize::MAX);
             match lines.get(*i).map(|l| l.indent) {
                 Some(child) if child > indent => items.push(yaml_block(lines, i, child)),
                 _ => items.push(Value::Null),
             }
         } else if split_key(&rest).is_some() {
-            lines[*i] = YamlLine {
-                indent: column,
-                text: rest,
-            };
+            if let Some(slot) = lines.get_mut(*i) {
+                *slot = YamlLine {
+                    indent: column,
+                    text: rest,
+                };
+            }
             items.push(yaml_map(lines, i, column));
         } else {
             items.push(yaml_scalar(&rest));
-            *i += 1;
+            *i = add_or(*i, 1, usize::MAX);
         }
     }
     Value::Array(items)
@@ -607,7 +631,7 @@ fn yaml_map(lines: &mut [YamlLine], i: &mut usize, indent: usize) -> Value {
         let Some((key, value)) = split_key(&line.text) else {
             break;
         };
-        *i += 1;
+        *i = add_or(*i, 1, usize::MAX);
         let value = if value.is_empty() {
             match lines.get(*i) {
                 Some(next)
@@ -1085,5 +1109,63 @@ mod tests {
         assert_eq!(format_rows(0.0), "0");
         assert_eq!(format_rows(1270.0), "1270");
         assert_eq!(format_rows(2.5), "2.50");
+    }
+
+    #[test]
+    fn a_bare_plan_object_and_loose_field_types_parse() {
+        // No outer array, a boolean detail, a numeric string, a number in a
+        // string slot, and an unusable (null) field.
+        let doc: Value = serde_json::from_str(
+            r#"{"Plan": {"Node Type": "Seq Scan", "Relation Name": "t",
+                "Total Cost": "12.5", "Plan Rows": "7", "Actual Loops": null,
+                "Filter": true, "Alias": 5}}"#,
+        )
+        .unwrap();
+        let plan = from_value(&doc).unwrap();
+        let node = &plan.nodes[0];
+        assert_eq!(node.cost, Some(12.5));
+        assert_eq!(node.plan_rows, Some(7.0));
+        assert_eq!(node.loops, None, "null is not a number");
+        assert_eq!(node.alias.as_deref(), Some("5"));
+        assert!(
+            node.details
+                .iter()
+                .any(|(k, v)| k == "Filter" && v == "true")
+        );
+        assert!(!plan.analyzed);
+        assert_eq!(from_value(&Value::Array(Vec::new())), None);
+    }
+
+    #[test]
+    fn a_plan_whose_time_is_all_zero_has_no_shares() {
+        let doc: Value = serde_json::from_str(
+            r#"[{"Plan": {"Node Type": "Result", "Actual Loops": 1,
+                "Actual Total Time": 0.0, "Actual Rows": 1}}]"#,
+        )
+        .unwrap();
+        let plan = from_value(&doc).unwrap();
+        assert!(plan.analyzed);
+        assert_eq!(plan.nodes[0].share, None);
+        assert!(!plan.nodes[0].slowest);
+    }
+
+    #[test]
+    fn the_note_cell_says_never_executed() {
+        let plan = parse_json(MODIFY_JSON).unwrap();
+        let (_, rows, _) = grid(&plan);
+        assert_eq!(rows[1][6], t!("ui.db_plan_never"));
+    }
+
+    #[test]
+    fn yaml_sequences_may_hold_nulls_and_nested_blocks() {
+        let v = yaml_value("- \n- a\n-\n  - b\n  - c\n").unwrap();
+        assert_eq!(
+            v,
+            Value::Array(vec![
+                Value::Null,
+                Value::String("a".into()),
+                Value::Array(vec![Value::String("b".into()), Value::String("c".into())]),
+            ])
+        );
     }
 }

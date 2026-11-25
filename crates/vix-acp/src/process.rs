@@ -66,7 +66,12 @@ impl AgentProcess {
                 match stdout.read(&mut buf) {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        decoder.push(&buf[..n]);
+                        #[expect(
+                            clippy::indexing_slicing,
+                            reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most buf.len()"
+                        )]
+                        let received = &buf[..n];
+                        decoder.push(received);
                         while let Some(v) = decoder.pop() {
                             if tx.send(v).is_err() {
                                 return;

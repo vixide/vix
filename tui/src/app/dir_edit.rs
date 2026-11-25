@@ -6,6 +6,19 @@
 //! ([`vix_fileops::dir_edit`]), previewed in a confirm step, and only then
 //! applied, deletes honoring the `explorer_delete` setting.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::{Path, PathBuf};
 
 use crate::lsp_core::file_ops::{FileOp, FileOpItem};
@@ -259,7 +272,7 @@ impl App {
                     .error(t!("msg.dir_edit_failed", path = path.display(), error = e).to_string());
                 break;
             }
-            done += 1;
+            done = done.plus(1);
         }
         let complete = done == confirm.steps.len();
         let applied = super::lsp_file_ops::group_ops(ops.into_iter().take(done));
@@ -363,12 +376,12 @@ impl App {
             }
             KeyCode::Up => {
                 if let Some(c) = self.dir_edit_confirm.as_mut() {
-                    c.scroll = c.scroll.saturating_sub(1);
+                    c.scroll = c.scroll.minus(1);
                 }
             }
             KeyCode::Down => {
                 if let Some(c) = self.dir_edit_confirm.as_mut() {
-                    c.scroll = (c.scroll + 1).min(c.lines.len().saturating_sub(1));
+                    c.scroll = c.scroll.plus(1).min(c.lines.len().minus(1));
                 }
             }
             _ => {}
@@ -394,3 +407,7 @@ fn diff_error_text(e: &DiffError) -> String {
         _ => e.to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "tests_r3_dir_edit.rs"]
+mod r3_tests;

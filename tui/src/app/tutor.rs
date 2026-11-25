@@ -2,6 +2,19 @@
 //! the live progress indicator (`crates/vix-tutor/spec/index.md`). `vix
 //! --tutor` and **Help → Tutorial** both call [`App::open_tutor`].
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -80,7 +93,10 @@ impl App {
         let Some(session) = &mut self.tutor else {
             return;
         };
-        session.active = (session.active + 1).min(vix_tutor::CHAPTERS.len() - 1);
+        session.active = session
+            .active
+            .plus(1)
+            .min(vix_tutor::CHAPTERS.len().minus(1));
         let ordinal = session.active;
         self.open_tutor_chapter(ordinal);
     }
@@ -91,7 +107,7 @@ impl App {
         let Some(session) = &mut self.tutor else {
             return;
         };
-        session.active = session.active.saturating_sub(1);
+        session.active = session.active.minus(1);
         let ordinal = session.active;
         self.open_tutor_chapter(ordinal);
     }

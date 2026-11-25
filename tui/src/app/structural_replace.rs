@@ -6,6 +6,19 @@
 //! `workspace_replace_all` already uses (`ReplaceConfirm`), rather than
 //! building a second confirm UI.
 
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::arithmetic_side_effects,
+        clippy::integer_division,
+        clippy::modulo_arithmetic,
+        clippy::as_conversions,
+        clippy::indexing_slicing,
+        clippy::string_slice
+    )
+)]
+
+use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent};
 
 use vix_structural_replace::{Pattern, render_replacement};
@@ -159,7 +172,7 @@ impl App {
                 Decision::Replace => {
                     let (resume, delta) =
                         apply_one_structural_replace(t, &pattern, &template, cs, ce);
-                    replaced += 1;
+                    replaced = replaced.plus(1);
                     t.dirty = true;
                     t.preview = false;
                     t.editor.remove_marks();
@@ -169,11 +182,11 @@ impl App {
                 Decision::ReplaceRest => {
                     let (mut resume, delta) =
                         apply_one_structural_replace(t, &pattern, &template, cs, ce);
-                    replaced += 1;
+                    replaced = replaced.plus(1);
                     adjust_bounds(&mut bounds, delta);
                     while let Some((ns, ne)) = find_next_structural(t, &pattern, resume, bounds) {
                         let (r2, d2) = apply_one_structural_replace(t, &pattern, &template, ns, ne);
-                        replaced += 1;
+                        replaced = replaced.plus(1);
                         adjust_bounds(&mut bounds, d2);
                         resume = r2;
                     }
@@ -226,7 +239,7 @@ impl App {
             }
             let rel = path.strip_prefix(&self.root).unwrap_or(&path);
             lines.push(format!("{} ({})", rel.display(), hits.len()));
-            replaced += hits.len();
+            replaced = replaced.plus(hits.len());
             plan.push((path, new_content));
         }
         if plan.is_empty() {
@@ -268,17 +281,22 @@ fn apply_one_structural_replace(
         captures,
     };
     let rendered = render_replacement(template, &source, &m);
-    let old_len = ce - cs;
+    let old_len = ce.minus(cs);
     let new_len = rendered.chars().count();
     super::replace_char_span(t, (cs, ce), &rendered);
-    (cs + new_len, new_len.cast_signed() - old_len.cast_signed())
+    (
+        cs.plus(new_len),
+        new_len.cast_signed().minus(old_len.cast_signed()),
+    )
 }
 
 /// Grow/shrink a selection bound's end by `delta` chars (never past its
 /// own start), after a replacement changed the buffer's length inside it.
 fn adjust_bounds(bounds: &mut Option<(usize, usize)>, delta: isize) {
     if let Some((bs, be)) = bounds.as_mut() {
-        *be = (be.cast_signed() + delta)
+        *be = be
+            .cast_signed()
+            .plus(delta)
             .max(bs.cast_signed())
             .cast_unsigned();
     }

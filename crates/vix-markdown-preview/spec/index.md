@@ -52,3 +52,12 @@ no-op with a status message.
       - menuitem "List" -> insert a three-item `- Item` bullet list.
       - menuitem "Table" -> insert a three-column header/separator/rows table.
       - menuitem "Todos" -> insert a three-item `- [ ] Todo` checklist.
+
+## Checked arithmetic
+
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Line offsets and the heading line number are plain additions under `RCA-EXC-2` expectations (a newline index plus one, and a vector length plus one). List numbering and scrolling use `checked_*`; the old `saturating_sub` calls are gone.
+
+| ID | Failure | Declared fallback | Why it is correct |
+| -- | ------- | ----------------- | ----------------- |
+| `MDP-F1` | A list number or a scroll step does not fit | the current value, or the end of the document | A list number stops growing and scrolling stops at the end; both are bounds of a computed position. |
+| `MDP-F2` | A subtraction goes below zero | `0` | A short document does not scroll, and moving up stops at the top. |

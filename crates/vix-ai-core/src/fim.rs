@@ -24,11 +24,20 @@ pub const CURSOR: &str = "<CURSOR>";
 /// The fixed directions sent as the instruction.
 pub const INSTRUCTION: &str = "You complete text at a cursor. The input holds the text of a file with the marker <CURSOR> where the cursor is. Reply with ONLY the text to insert at <CURSOR>, continuing naturally. Do not repeat the text before the cursor, do not explain, and do not use Markdown fences.";
 
+/// `a - b`, or the declared `fallback` when it would go below zero. The
+/// fallback is a parameter so each call names the declaration it comes from;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
 /// The model input: the last [`PREFIX_CHARS`] characters of `before`, the
 /// [`CURSOR`] marker, then the first [`SUFFIX_CHARS`] characters of `after`.
 #[must_use]
 pub fn input(before: &str, after: &str) -> String {
-    let skip = before.chars().count().saturating_sub(PREFIX_CHARS);
+    // FIM-F1: a prefix shorter than the window is kept whole.
+    let skip = sub_or(before.chars().count(), PREFIX_CHARS, 0);
     let head: String = before.chars().skip(skip).collect();
     let tail: String = after.chars().take(SUFFIX_CHARS).collect();
     format!("{head}{CURSOR}{tail}")
@@ -81,7 +90,7 @@ pub fn clean(reply: &str, line_prefix: &str) -> String {
 fn unfence(text: &str) -> Option<String> {
     let trimmed = text.trim();
     let after_open = trimmed.strip_prefix("```")?;
-    let body = &after_open[after_open.find('\n')? + 1..];
+    let (_info, body) = after_open.split_once('\n')?;
     let body = body.strip_suffix("```").unwrap_or(body);
     Some(body.trim_end_matches('\n').to_string())
 }

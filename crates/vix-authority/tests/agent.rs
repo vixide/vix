@@ -81,6 +81,25 @@ fn a_batch_stats_many_paths_in_order() {
 }
 
 #[test]
+fn a_watch_interval_outside_its_range_is_refused_not_adjusted() {
+    let dir = scratch("watch-range");
+    std::fs::create_dir_all(&dir).unwrap();
+    let a = dir.join("a.txt");
+    std::fs::write(&a, b"one").unwrap();
+    let auth = agent();
+    for interval in [Duration::from_millis(1), Duration::from_secs(3600)] {
+        let refused = auth.watch(std::slice::from_ref(&a), interval);
+        assert!(refused.is_err(), "{interval:?} must be refused");
+    }
+    // The edges are accepted.
+    assert!(
+        auth.watch(std::slice::from_ref(&a), Duration::from_millis(100))
+            .is_ok()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_watch_reports_changes() {
     let dir = scratch("watch");
     std::fs::create_dir_all(&dir).unwrap();
