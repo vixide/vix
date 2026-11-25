@@ -10571,6 +10571,9 @@ were not exercised.
   comments for the two ranges survive close/reopen and export separately;
   advancing a branch keeps the old comment with its context.
   `crates/vix-review/src/lib.rs`, `tui/src/app/git_review.rs`
+  **Partly done (branch `fix/t813-review-key`):** hashed per-range storage name,
+  range check on load, legacy files still load. Still open: binding comments to
+  the reviewed revision, keeping the code excerpt and marking comments outdated.
 
 - [ ] **T814 — Named debug target.** The debugger picks an adapter from the
   active file and runs one session; the named run configuration only drives

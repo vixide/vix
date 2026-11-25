@@ -1149,11 +1149,19 @@ fn review_comments_save_export_and_reload() {
             .text()
             .contains("    >> why rename?")
     );
-    let json = fs::read_to_string(dir.join(".vix/review/main..feat.json")).unwrap();
+    let json = fs::read_to_string(dir.join(format!(
+        ".vix/review/{}.json",
+        vix_review::store_name("main..feat")
+    )))
+    .unwrap();
     assert!(json.contains("why rename?"));
 
     app.run_action("git.review_export");
-    let md = fs::read_to_string(dir.join(".vix/review/main..feat.md")).unwrap();
+    let md = fs::read_to_string(dir.join(format!(
+        ".vix/review/{}.md",
+        vix_review::store_name("main..feat")
+    )))
+    .unwrap();
     assert!(md.contains("## `src/a.rs`") && md.contains("- **Line 2**: why rename?"));
 
     // Reviewing the same range in a fresh session reloads the comment.

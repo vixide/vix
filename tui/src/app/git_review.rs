@@ -105,10 +105,21 @@ impl App {
             self.status = t!("status.git_review_empty", range = range).to_string();
             return;
         }
-        let saved =
-            crate::authority::current().read_to_string_guarded(&self.review_file(range, "json"));
-        if let Ok(json) = saved {
-            review.load_json(&json);
+        let auth = crate::authority::current();
+        // The hashed file first; else an older lossy-named file, which
+        // `load_json` accepts only when its stored range is this one.
+        let loaded = auth
+            .read_to_string_guarded(&self.review_file(range, "json"))
+            .is_ok_and(|json| review.load_json(&json));
+        if !loaded {
+            let legacy = self
+                .root
+                .join(".vix")
+                .join("review")
+                .join(format!("{}.json", vix_review::legacy_store_name(range)));
+            if let Ok(json) = auth.read_to_string_guarded(&legacy) {
+                review.load_json(&json);
+            }
         }
         let tab_path = PathBuf::from(format!("review {range}"));
         let rendered = review.render();
