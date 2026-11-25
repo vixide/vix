@@ -2020,6 +2020,8 @@ status.project_cache_discarded:
   bn: "প্রজেক্ট কমান্ড ক্যাশে সাফ করা হয়েছে।"
   zh: "项目命令缓存已清除。"
   ja: "プロジェクトコマンドのキャッシュをクリアしました。"
+status.tests_run_failed:
+  en: "Test run failed (exit %{code}); %{pass} passed before it stopped"
 status.tests_done:
   en: "Tests: %{pass} passed, %{fail} failed, %{ignore} ignored"
   es: "Pruebas: %{pass} pasadas, %{fail} fallidas, %{ignore} ignoradas"

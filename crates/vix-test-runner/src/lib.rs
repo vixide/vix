@@ -22,6 +22,10 @@ pub enum Status {
 pub struct TestResult {
     /// Test name / path (e.g. `module::it_works`).
     pub name: String,
+    /// The test binary or file the result came from (cargo's `Running …` or
+    /// `Doc-tests …` header); empty when the output names none. Together with
+    /// `name` it identifies the test, so equal names in two targets stay apart.
+    pub target: String,
     /// Pass / fail / ignore.
     pub status: Status,
     /// Source location of a failure, if found: `(file, 1-based line)`.
@@ -75,9 +79,15 @@ pub fn tally(results: &[TestResult]) -> (usize, usize, usize) {
 pub fn parse(output: &str) -> Vec<TestResult> {
     let mut results: Vec<TestResult> = Vec::new();
     let mut current_failure: Option<String> = None;
+    let mut target = String::new();
 
     for line in output.lines() {
         let trimmed = line.trim();
+        if let Some(t) = target_header(trimmed) {
+            target = t;
+            current_failure = None;
+            continue;
+        }
         // libtest: `test module::name ... ok | FAILED | ignored`
         if let Some(rest) = trimmed.strip_prefix("test ")
             && let Some((name, tail)) = rest.rsplit_once(" ... ")
@@ -89,13 +99,13 @@ pub fn parse(output: &str) -> Vec<TestResult> {
                 _ => None,
             };
             if let Some(status) = status {
-                upsert(&mut results, name.trim(), status);
+                upsert(&mut results, &target, name.trim(), status);
                 continue;
             }
         }
         // Reached when the libtest branch did not match (or its tail was an
         // unknown status). Generic: `path::name PASSED | FAILED | SKIPPED` (pytest -v, etc.).
-        if let Some((name, verdict)) = trimmed.rsplit_once(' ') {
+        if let Some((name, verdict)) = strip_progress(trimmed).rsplit_once(' ') {
             let status = match verdict {
                 "PASSED" => Some(Status::Pass),
                 "FAILED" => Some(Status::Fail),
@@ -105,7 +115,7 @@ pub fn parse(output: &str) -> Vec<TestResult> {
             if let Some(status) = status
                 && !name.is_empty()
             {
-                upsert(&mut results, name, status);
+                upsert(&mut results, &target, name, status);
                 continue;
             }
         }
@@ -120,24 +130,28 @@ pub fn parse(output: &str) -> Vec<TestResult> {
         if let Some(loc) = panic_location(trimmed)
             && let Some(name) = current_failure.clone()
         {
-            attach_location(&mut results, &name, loc);
+            attach_location(&mut results, &target, &name, loc);
         }
     }
 
-    results.sort_by(|a, b| a.name.cmp(&b.name));
+    results.sort_by(|a, b| (&a.name, &a.target).cmp(&(&b.name, &b.target)));
     // `upsert` already keeps names unique; this is a defensive no-op.
-    results.dedup_by(|a, b| a.name == b.name);
+    results.dedup_by(|a, b| a.name == b.name && a.target == b.target);
     results
 }
 
 /// Insert or update a result by name (a later status wins, e.g. the failure
 /// summary after the run).
-fn upsert(results: &mut Vec<TestResult>, name: &str, status: Status) {
-    if let Some(r) = results.iter_mut().find(|r| r.name == name) {
+fn upsert(results: &mut Vec<TestResult>, target: &str, name: &str, status: Status) {
+    if let Some(r) = results
+        .iter_mut()
+        .find(|r| r.name == name && r.target == target)
+    {
         r.status = status;
     } else {
         results.push(TestResult {
             name: name.to_string(),
+            target: target.to_string(),
             status,
             location: None,
         });
@@ -145,10 +159,44 @@ fn upsert(results: &mut Vec<TestResult>, name: &str, status: Status) {
 }
 
 /// Attach a failure location to the named test.
-fn attach_location(results: &mut [TestResult], name: &str, loc: (String, usize)) {
-    if let Some(r) = results.iter_mut().find(|r| r.name == name) {
+fn attach_location(results: &mut [TestResult], target: &str, name: &str, loc: (String, usize)) {
+    if let Some(r) = results
+        .iter_mut()
+        .find(|r| r.name == name && r.target == target)
+    {
         r.location = Some(loc);
     }
+}
+
+/// The target named by a cargo `Running <what> (<path>)` or `Doc-tests <crate>`
+/// header line, or `None` for any other line.
+fn target_header(line: &str) -> Option<String> {
+    let rest = line
+        .strip_prefix("Running ")
+        .or_else(|| line.strip_prefix("Doc-tests "))?;
+    let name = rest.split(" (").next()?.trim();
+    (!name.is_empty()).then(|| {
+        if line.starts_with("Doc-tests") {
+            format!("doc-tests {name}")
+        } else {
+            name.to_string()
+        }
+    })
+}
+
+/// Drop a trailing pytest progress marker such as ` [ 50%]` or ` [100%]`, so
+/// `name PASSED [100%]` reads as `name PASSED`.
+fn strip_progress(line: &str) -> &str {
+    if let Some(i) = line.rfind(" [")
+        && line.ends_with("%]")
+        && line[i + 2..line.len() - 2]
+            .trim()
+            .chars()
+            .all(|c| c.is_ascii_digit())
+    {
+        return line[..i].trim_end();
+    }
+    line
 }
 
 /// Extract a `<file>:<line>` from a `thread '…' panicked at <file>:<line>:<col>`
@@ -232,5 +280,27 @@ test result: FAILED. 1 passed; 1 failed; 1 ignored;
             parse("compiling...\nwarning: unused\n"),
             [] as [TestResult; 0]
         );
+    }
+
+    #[test]
+    fn same_name_in_two_targets_stays_distinct() {
+        let out = "Running unittests src/lib.rs (target/debug/deps/a-1)\n\
+                   test tests::round_trip ... FAILED\n\
+                   Running tests/it.rs (target/debug/deps/it-2)\n\
+                   test tests::round_trip ... ok\n";
+        let r = parse(out);
+        assert_eq!(r.len(), 2);
+        assert_eq!(tally(&r), (1, 1, 0));
+        assert!(
+            r.iter()
+                .any(|t| t.status == Status::Fail && t.target == "unittests src/lib.rs")
+        );
+    }
+
+    #[test]
+    fn pytest_progress_suffix_is_ignored() {
+        let r = parse("tests/a.py::t PASSED [100%]\ntests/a.py::u FAILED [ 50%]\n");
+        assert_eq!(tally(&r), (1, 1, 0));
+        assert_eq!(r[0].name, "tests/a.py::t");
     }
 }
