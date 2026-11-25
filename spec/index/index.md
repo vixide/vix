@@ -19,7 +19,7 @@ owns its spec at `crates/<crate>/spec/index.md` (multi-topic crates add
 `spec/<topic>/index.md` sub-specs), so a crate and its specification travel
 together. This repo-root `spec/` holds only the cross-cutting / app-level and
 build/meta specs that no single crate owns — this overview, `navigation`,
-`comparisons`, `emacs-menus`, `tools`, `license`, `trademarks`,
+`comparisons`, `emacs-menus`, `tools`, `license`, `licenses`, `trademarks`,
 `rust-clippy-pedantic`, `rust-cargo-fmt`, `test`, `ci`, `debian`, and the like.
 A spec that describes one crate's behavior belongs with that crate; `scripts/check-docs`
 enforces that every crate owns a `spec/index.md`.

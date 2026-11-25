@@ -10687,6 +10687,80 @@ awareness, not capability. Items marked (stale?) may already exist.
   profiling guide, release-process and code-review guidelines. Check
   `docs/architecture` and `agents/` first — most exist.
 
+### Vim-user audit (2026-11-25, GPT-6.2 Astra High; revision `55ba6ae1`)
+
+Source: an audit of the Vi keymap against Vim 9.1 using 18 key sequences sent
+to the real `App::on_key` path and to stock Vim; 13 differed. Spot-checked
+against the repo: `:q!` sets `AppFlags::SHOULD_QUIT` (`tui/src/app/keymap.rs`),
+and the capability gate maps the whole `lsp.` prefix to `Capability::Lsp`
+(`tui/src/capability.rs`). The audit file was folded in and removed.
+Fix boundaries of everyday edits before adding Vi features.
+
+- [ ] **T830 — Vi: a change is one unit of repeat and undo.** `ciw`/`cw` text
+  typed in Insert is not recorded, so `.` replays an older `dw`. Record from
+  operator through Escape (typed text, backspaces), recompute the range on
+  replay so a different-length word works, one undo unit per change, and
+  invalidate the previous record if an edit cannot be recorded. Also `cw` on
+  `old value` joined `new` to `value` (Vim keeps the separator). Acceptance:
+  `ciw` on two differently sized identifiers, `.` on the second, undo each
+  independently; include typed Unicode, a corrected typo, a preceding delete
+  and a cancelled operator; run under both Vi and Spacemacs.
+  `tui/src/app/modal.rs`, `tui/src/app/keymap.rs`
+- [ ] **T831 — Vi: operator ranges, word classes, graphemes, columns.**
+  Separate a Normal-mode cursor destination from the half-open operator range:
+  `$x` and `9x` must delete the last character; `x` consumes displayed
+  characters (a combining mark must not be left detached); give the Vi keymap
+  its own word classifier (identifier / punctuation run / whitespace) so `w`
+  and `dw` on `pkg::run(arg);` match Vim; `cw` keeps the separator; carry the
+  preferred display column across vertical motions (`4ljj` over a short line).
+  Do not change the shared scanner for other keymaps. Acceptance: exact text,
+  register and cursor for `x`, `3x`, `dw`, `cw`, `de` on single-character
+  lines, `pkg::run`, `obj.field`, adjacent blanks, decomposed accents, plus a
+  vertical fixture with a short line, a tab and a wide character.
+  `crates/vix-modal/src/{motion,operator}.rs`, `crates/vix-textops`
+- [ ] **T832 — Ex: `:q!` closes the current window only.** `:q!` sets the
+  application-wide quit flag while `:q` closes the tab. Define pane/tab/window
+  correspondence, apply `:q`/`:q!` to the same focused scope (bang = abandon
+  edits), add an explicit all-windows force-quit command. Tests: two panes on
+  one buffer, two modified buffers, the last window, and `:wq` on a save
+  conflict (close only after a successful save). `tui/src/app/keymap.rs`
+- [ ] **T833 — Vi: Visual operators and counted put.** `vld`/`Vjd` leave the
+  buffer unchanged and `"ayy"a3p` inserts one copy. Wire Visual d/c/y to the
+  existing editor operations, keep character-wise vs linewise register type,
+  pass the count through put, handle forward and reversed selections.
+  Acceptance: cut two lines, switch files, paste three copies from a named
+  register, undo once; one-character and backward-across-newline selections.
+  Visual Block and register macros later. `crates/vix-modal`
+- [ ] **T834 — Ex quickfix aliases and a bounded `:s`.** Map `:cn`/`:cp` to
+  `go.next_error`/`go.prev_error` and `:cope` to a task-problems view; verify
+  by traversing a failing subproject build. Add `:s` / `:%s` for literal
+  patterns with explicit `g` and confirm flags and a single undo; reject
+  unsupported Vim pattern syntax before editing, document the grammar, test
+  escaped delimiters, cancel, and an unchanged buffer on parse failure.
+  `tui/src/app/task_problems.rs`, `spec/find-and-replace`
+- [ ] **T835 — Offline structural selection without the `lsp` feature.** With
+  the LSP feature off, three App tests for offline expand/shrink selection
+  fail because the capability gate catches the `lsp.` prefix before the
+  fallback runs. Give offline selection its own action ids (keep the `lsp.*`
+  ids as aliases for saved keybindings), and verify both feature builds in
+  `scripts/check` without starting a server. `tui/src/capability.rs`,
+  `tui/tests/integration/textobjects.rs`
+- [ ] **T836 — Vi motion cost must not scale with file size.** `l` takes
+  0.4 ms at 512 KiB and 8.6 ms at 8 MiB, `w` 12.4 ms (budget is 16 ms),
+  because the App materializes the whole buffer and the motion collects its
+  chars. Use rope and line-local grapheme APIs and scan only as far as needed;
+  add Vi `h/l`, `w/b` and counted operators to `tui/benches/editor_ops.rs`
+  (a same-line step should cost the same when unrelated text is appended);
+  measure key-to-frame latency with the existing profiler.
+- [ ] **T837 — Vim-parity table test and a runnable migration exercise.** A
+  table of key sequences (initial text/cursor → expected text, cursor, mode,
+  register) run unconditionally in CI against Vix, and verified or regenerated
+  against a pinned, unconfigured Vim in a separate job with intentional
+  differences marked. Rewrite `docs/vix-for-vim-users` as a runnable exercise
+  (edit an argument, repeat, test at point, jump to the failure, stage the
+  fix), separate stock Vim, optional Vix and external-tool behavior, stop using
+  Neovim plugin examples for stock Vim, and showcase undo-tree navigation.
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -10956,6 +11030,9 @@ CI-discovered rounds to get genuinely right on Windows).
     T812, T813 and T815; then T814, T803–T809 and T816. T817–T829 are the
     general assessments' backlog: pick by maintainer priority; anything
     outward-facing (T817, T818, T822) needs the maintainer's say-so.
+    The Vim audit (T830–T837): T830, T832 first (wrong repeat and an
+    over-broad quit are data-loss-adjacent), then T831, T833, T836; then
+    T834, T835, T837.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
