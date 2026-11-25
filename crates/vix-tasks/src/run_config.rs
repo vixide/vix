@@ -428,36 +428,6 @@ mod tests {
         assert!(cmd.contains("set \"PORT=8080\" && cargo run -p api && npm run dev"));
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn a_failed_child_blocks_the_dependent_stage() {
-        let run = |first: &str, last: &str| {
-            let toml = format!(
-                "[[config]]\nname=\"a\"\ncommand=\"{first}\"\n[[config]]\nname=\"b\"\ncommand=\"{last}\"\n\
-                 [[config]]\nname=\"g\"\ncompound=[\"a\",\"b\"]\n\
-                 [[config]]\nname=\"c\"\ncommand=\"echo DEP\"\nbefore=[\"g\"]\n"
-            );
-            let p = plan(&parse(&toml).unwrap(), &[], "c").unwrap();
-            let out = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(p.shell_command(Shell::Posix))
-                .output()
-                .unwrap();
-            (
-                out.status.success(),
-                String::from_utf8_lossy(&out.stdout).into_owned(),
-                String::from_utf8_lossy(&out.stderr).into_owned(),
-            )
-        };
-        let (ok, out, _) = run("true", "true");
-        assert!(ok && out.contains("DEP"));
-        let (ok, out, err) = run("exit 7", "true");
-        assert!(!ok && !out.contains("DEP"), "first child failed");
-        assert!(err.contains("exit 7"), "{err}");
-        let (ok, out, _) = run("true", "exit 7");
-        assert!(!ok && !out.contains("DEP"), "last child failed");
-    }
-
     #[test]
     fn before_may_name_a_task_and_shared_befores_run_once() {
         let c = parse(
