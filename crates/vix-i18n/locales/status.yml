@@ -5732,6 +5732,12 @@ status.hl7_busy:
   bn: "একটি HL7 পাঠানো ইতিমধ্যে চলছে"
   zh: "已有 HL7 发送正在进行"
   ja: "HL7 の送信はすでに進行中です"
+status.fhir_busy:
+  en: "A FHIR request is already in progress; wait for its reply"
+status.hl7_reply_mismatch:
+  en: "HL7 reply does not match the message sent (sent %{expected}, reply names %{got})"
+status.hl7_reply_commit:
+  en: "HL7 commit accepted (%{code}); application processing not confirmed"
 status.hl7_reply_accept:
   en: "HL7 acknowledged: %{code}"
   es: "HL7 confirmado: %{code}"

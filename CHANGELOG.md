@@ -8,6 +8,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Healthcare tools keep decimals exactly as received.** A synthetic `valueQuantity.value` of `2.00` was shown as `2.0` in FHIR responses and Bundle entries; numbers now display as sent.
+- **FHIR updates need a matching `id`.** An update whose body has no `id` (or a non-string one) is rejected before sending, as R4 requires. A second FHIR request while one is running is refused instead of hiding the first reply.
+- **HL7 Send checks the acknowledgment belongs to the message.** The reply's `MSA-2` must equal the sent `MSH-10`; a mismatch is reported, and a commit-only `CA` says application processing is unconfirmed. The last segment now ends with `\r` before the MLLP trailer.
 - **Local History's "restore selection" restores just the selection.** When several lines in a row had all changed, restoring one of them from an earlier save brought back the whole changed block. Lines that changed one for one now come back one for one; only a block that grew or shrank is still restored whole.
 - **The desktop apps open a folder given on the command line too.** `vix-egui ~/src/app` (or any of the GUIs) now works on that folder, as `vix ~/src/app` does, instead of the current directory.
 - **`vix some-folder` opens that folder.** A folder on the command line used to fail with "Open failed" and leave you in the current directory. It now opens as the workspace, as in other editors: `vix .` or `vix ~/src/app`.

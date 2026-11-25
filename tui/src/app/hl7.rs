@@ -17,6 +17,8 @@ use super::{App, Focus, rect_contains};
 pub(super) struct Hl7Pending {
     /// The `host:port` shown to the user.
     endpoint: String,
+    /// `MSH-10` of the outbound message; the reply's `MSA-2` must equal it.
+    control_id: Option<String>,
     /// The background thread's outcome.
     rx: std::sync::mpsc::Receiver<Result<Vec<u8>, crate::hl7::net::SendError>>,
 }
@@ -146,6 +148,7 @@ impl App {
         }
         self.hl7_endpoint = ep.to_string();
         self.status = t!("status.hl7_sending", endpoint = ep.to_string()).to_string();
+        let control_id = crate::hl7::control_id_of(&crate::hl7::Message::parse(&text));
         let payload = crate::hl7::mllp::to_wire(&text);
         let (tx, rx) = std::sync::mpsc::channel();
         let target = ep.clone();
@@ -155,6 +158,7 @@ impl App {
         });
         self.hl7_rx = Some(Hl7Pending {
             endpoint: ep.to_string(),
+            control_id,
             rx,
         });
     }
@@ -184,7 +188,9 @@ impl App {
             return;
         };
         match outcome {
-            Ok(bytes) => self.show_hl7_reply(&pending.endpoint, &bytes),
+            Ok(bytes) => {
+                self.show_hl7_reply(&pending.endpoint, pending.control_id.as_deref(), &bytes);
+            }
             Err(e) => {
                 let why = match e.code() {
                     "resolve" => t!("msg.hl7_err_resolve"),
@@ -202,7 +208,7 @@ impl App {
 
     /// Open the reply as a read-only tab: an acknowledgement summary line,
     /// then the numbered field view of the reply.
-    fn show_hl7_reply(&mut self, endpoint: &str, bytes: &[u8]) {
+    fn show_hl7_reply(&mut self, endpoint: &str, sent_id: Option<&str>, bytes: &[u8]) {
         let reply = String::from_utf8_lossy(bytes).into_owned();
         let msg = crate::hl7::Message::parse(&reply);
         let ack = crate::hl7::Ack::from_message(&msg);
@@ -219,6 +225,16 @@ impl App {
         let title = t!("ui.hl7_ack_title", endpoint = endpoint).to_string();
         self.open_readonly_text_tab(&title, &content);
         self.status = match ack {
+            // A reply that does not name the message we sent is never success.
+            Some(a) if !a.acknowledges(sent_id.unwrap_or_default()) => t!(
+                "status.hl7_reply_mismatch",
+                expected = sent_id.unwrap_or("-"),
+                got = a.control_id.as_str()
+            )
+            .to_string(),
+            Some(a) if a.code.is_commit_stage() && a.code.is_accept() => {
+                t!("status.hl7_reply_commit", code = a.code_text).to_string()
+            }
             Some(a) if a.code.is_accept() => {
                 t!("status.hl7_reply_accept", code = a.code_text).to_string()
             }
