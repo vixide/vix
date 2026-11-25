@@ -2540,7 +2540,7 @@ test result: FAILED. 1 passed; 1 failed; 1 ignored;
     .lines()
     .map(str::to_string)
     .collect();
-    a.finish_test_run();
+    a.finish_test_run(101);
     assert!(!a.flags.contains(AppFlags::TEST_CAPTURE));
     assert_eq!(a.test_results.len(), 3);
     assert_eq!(
@@ -2566,7 +2566,7 @@ test result: FAILED. 1 passed; 1 failed; 1 ignored;
     assert_eq!(a.editor.tabs.len(), tabs);
     // An all-passing run reports through an info message.
     a.test_buffer = vec!["test x ... ok".to_string()];
-    a.finish_test_run();
+    a.finish_test_run(0);
     assert_eq!(
         a.status,
         t!("status.tests_done", pass = 1, fail = 0, ignore = 0).to_string()

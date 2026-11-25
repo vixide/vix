@@ -252,6 +252,7 @@ fn send_failures_say_why_without_echoing_message_content() {
     drop(tx);
     app.hl7_rx = Some(super::Hl7Pending {
         endpoint: "x:1".into(),
+        control_id: None,
         rx,
     });
     app.poll_hl7();
