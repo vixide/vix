@@ -961,6 +961,7 @@ mod tests {
             "quit! closes the tab, not the session"
         );
         app.flags.remove(AppFlags::SHOULD_QUIT);
+        app.open_path(&file, false); // `quit!` closed the file's tab
         // Unknown names fall through to the Vi command line.
         app.run_helix_command("frobnicate");
         assert_eq!(

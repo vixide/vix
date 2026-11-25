@@ -131,7 +131,10 @@ fn commenting_on_a_comment_row_edits_that_comment() {
         t!(
             "status.git_review_exported",
             count = 1,
-            path = d.join(".vix/review/a..b.md").display().to_string()
+            path = d
+                .join(format!(".vix/review/{}.md", vix_review::store_name("a..b")))
+                .display()
+                .to_string()
         )
         .to_string()
     );
