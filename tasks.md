@@ -10388,6 +10388,305 @@ principle, so it waits for a deliberate decision.
   inserted by a click and by Enter on the same day. Include an empty leading
   cell and a month with a sixth row. [Calendar layout](crates/vix-calendar-panel/spec/index.md#layout)
 
+## Run Y — audit follow-ups (2026-11-25)
+
+Source: four audits of revision `55ba6ae1` (v2.1.0) — a healthcare audit and a
+VS Code-migration audit (both GPT-6.2 Astra High, source-and-synthetic-workflow,
+with verified failing fixtures) and two broad, general assessments (Mistral
+Vibe, Mistral Medium 3.5 High; unverified, some facts already stale, e.g. they
+say VS Code/Helix migration guides and a tutor are missing; check each item
+against the repo before starting). The audit files were folded into this run and
+removed. Tasks T798–T813 come from the two GPT audits, in each audit's own
+order; T814–T829 distill the two Mistral assessments.
+
+**Already landed on branch `fix/healthcare-audit` (2026-11-25, not yet merged):**
+FHIR/Bundle decimals shown as received (`pretty` now only re-indents;
+`Entry::resource_raw`), FHIR Update requires a matching string body `id`, one
+outstanding FHIR exchange, HL7 ACK `MSA-2` must equal sent `MSH-10` with
+commit-only `CA` labelled application-unconfirmed, HL7 last segment ends in
+`\r` before the MLLP trailer. Tests, specs and CHANGELOG are in that branch.
+Everything below is what remains.
+
+### Healthcare (synthetic-data interface workbench)
+
+Positioning: use Vix first as a workbench for interface engineers with
+**synthetic** records. Identifiable-record troubleshooting is deferred until
+T798 passes; patient charting, treatment decisions and order entry are out of
+scope (they would need an intended use, clinical ownership, human-factors
+evaluation and a site safety assessment). FHIR R4 is the comparison point.
+
+- [ ] **T798 — Prove sensitive results are not retained.** The FHIR guide
+  promises results stay in memory until saved; the whole editor must keep that
+  promise (crash recovery of untitled work, exports, clipboard, Cowork).
+  Give results an explicit lifetime that follows a Bundle into opened entries
+  and error views; define which operations are deliberate export; add a "clear
+  last Bundle" on context change. Headless acceptance test: open synthetic
+  results with a unique marker, run idle, quit and restart paths, inspect the
+  isolated application storage and recovery UI, require zero retained markers —
+  and in the same run recover an ordinary unsaved document so the privacy
+  change keeps the feature. [FHIR guide](docs/fhir-client/index.md) ·
+  `tui/tests/integration/hot_exit.rs` · [`SECURITY.md`](SECURITY.md)
+- [ ] **T799 — Keep OperationOutcome JSON separable from its prose.** The
+  outcome tab prepends readable issue lines to the JSON, so the whole tab
+  cannot be passed to a JSON tool. Show the issue summary apart from (or as the
+  only non-JSON part outside) exportable JSON. Extend the decimal test (`2`,
+  `2.0`, `2.00`, a long fraction) through the response tab, Bundle drill-down
+  and explicit export, asserting each displayed token and unit. `tui/src/app/fhir_http.rs`
+- [ ] **T800 — FHIR write attribution: destination, version, conflicts.**
+  Remaining from the first-priority "outbound writes" table: show destination
+  and operation before a write; keep the response `ETag` (the App currently
+  drops response headers) and send `If-Match` on update for servers that
+  support version-aware updates; a stale version is a visible conflict that
+  leaves the user's edits intact. Reject non-string ids is done; also
+  distinguish "unknown outcome after transmission" from "rejected locally",
+  show the destination/state of the one outstanding exchange, and add a
+  delayed-loopback test (submit twice → server receives one write, first
+  result shown). [FHIR R4 update and concurrency rules](https://hl7.org/fhir/R4/http.html)
+- [ ] **T801 — HL7 acknowledgment stage and outcome matrix.** Remaining test
+  cases: matching, missing and differing `MSA-2`, a negative acknowledgment, a
+  timeout; label commit and application outcomes separately in the reply
+  summary tab (status line is done).
+- [ ] **T802 — HL7 character sets and wire fidelity.** Outgoing text is UTF-8
+  and the reply view uses lossy UTF-8; a site declaring another `MSH-18` could
+  see altered names. Test UTF-8, a supported legacy encoding with a synthetic
+  accented name, and an unsupported declaration (explicit diagnostic); preserve
+  the original bytes for inspection. Add a second independent implementation
+  agreeing on the wire fixtures. [HL7 v2.5.1 ch. 2](https://hl7.eu/HL7v2x/v251/std251/ch02.html)
+- [ ] **T803 — HL7 transport security for pilots.** The sender is plaintext
+  TCP. Document the approved route and peer identity for pilots (a managed
+  tunnel is one option); consider native TLS with server verification and
+  optional mutual TLS. [`crates/vix-hl7/spec`](crates/vix-hl7/spec/index.md)
+- [ ] **T804 — Offline FHIR Bundle inspection without `http`.** The action id
+  `tools.http_fhir_bundle` falls under the HTTP capability gate, so a minimal
+  build can view HL7 but not a local Bundle. Expose local Bundle inspection
+  independently, gate remote paging separately, keep the old action id for
+  saved keybindings, test both in minimal and HTTP builds.
+  `tui/Cargo.toml`, `tui/src/capability.rs`, `tui/src/app/fhir.rs`
+- [ ] **T805 — Name `smart_backend` precisely.** It is OAuth
+  client-credentials with HTTP Basic client auth; SMART Backend Services 2.2
+  needs asymmetric client authentication. Document it as shared-secret OAuth,
+  keep old config readable; prioritise SMART discovery and signed client
+  assertions only when a partner server needs them, verified against an
+  independent test server (advertised auth method, least-privilege scopes,
+  rejection of invalid assertions). [SMART Backend Services 2.2](https://hl7.org/fhir/smart-app-launch/STU2.2/backend-services.html)
+- [ ] **T806 — Cross-feature App acceptance tests, and a distribution
+  verification table.** Give each cross-feature promise one named App
+  acceptance test linked from both owning specs (the costly failures sit where
+  the App connects features: tab creation, dispatch, recovery). Publish one
+  table by distribution route naming artifact, signer, trust source and
+  verification command (`SECURITY.md` calls release artifacts unsigned while
+  `scripts/release-local` signs and verifies a manifest); check it against a
+  sample downloaded artifact per claimed route.
+- [ ] **T807 — Large-Bundle reliability.** The App parses/formats whole Bundles
+  and keeps the last response. Using the existing startup/frame benches, measure
+  time to first usable row, peak memory and keyboard response on synthetic
+  Bundles of increasing size on a named machine, then choose paging, lazy row
+  formatting or a size cap. Treat a partial or unreadable response as its own
+  result state.
+- [ ] **T808 — Bundle summaries for worldwide names and same-name records.**
+  The summary prefers the first supplied name, else "family, given" (one
+  imposed ordering). Prefer supplied display text, label identifier systems,
+  show resource reference and source context together. Test same-name
+  synthetic records, a single-part name, right-to-left text and keyboard-only
+  selection in a narrow terminal. `crates/vix-fhir/src/bundle.rs`,
+  `tui/src/ui/fhir.rs`, [worldwide spec](spec/worldwide/index.md)
+- [ ] **T809 — Healthcare pilot and profile-aware inspection.** Pilot: one
+  synthetic laboratory result and one International Patient Summary Bundle; the
+  analyst locates the result, its unit and source, the matching patient
+  reference, and explains a deliberately rejected message. Then local,
+  profile-aware inspection for a pinned FHIR release and IG (synthetic patient
+  summary, an unresolvable reference, an Observation with an absent value): the
+  UI distinguishes valid JSON, profile validation, terminology checks and
+  checks that could not run; preserve source code system, unit, result status
+  and absent-value reason; an unavailable terminology service is an incomplete
+  check. Gate for identifiable data: a named-purpose read-only pilot approved
+  by the site's informatics, privacy and operations leads (access, retention,
+  permitted exports, incident handling, stop conditions), operators complete
+  the exercise with same-name records and conflicting versions, and exchanges
+  reconcile from approved metadata.
+
+### Software engineering (VS Code migration)
+
+Positioning: a Rust/Python team on terminals and shared build commands is a
+credible pilot; teams depending on extension-contributed tests or several
+simultaneous debug sessions should evaluate those explicitly. No timed
+comparison against VS Code was run; the full gate, a live SSH host and Windows
+were not exercised.
+
+- [ ] **T810 — Task stages must stop on failure.** Verified on macOS: a run
+  configuration whose child exits 7 beside a successful sibling still ran the
+  dependent stage and exited 0 — the POSIX renderer backgrounds children and
+  uses one argument-free `wait`. Preserve each child's status, wait for all,
+  start dependent work only when the stage succeeds, name the failed child in
+  the output dock; the Windows renderer (sequential) gets its own acceptance
+  case. Repeat Last Task must keep the original working directory and matcher
+  with the command (a session that saved only the string keeps the
+  root-directory fallback). Acceptance: first/last-child failure and
+  all-success (marker, exit status, child name); two packages with identically
+  named scripts, repeat while editing the other — same package, diagnostics and
+  jump. `crates/vix-tasks/src/run_config.rs`, `tui/src/app.rs`, `tui/src/app/ide_parity.rs`
+- [ ] **T811 — Stable test identity and suite outcome.** Verified: two Cargo
+  targets both emitting `tests::round_trip` (one fail, one pass) collapse to a
+  single passing row because results key on display name; a pytest line ending
+  `PASSED [100%]` yields no row; a nonzero exit with zero parsed failures can
+  leave an informational zero-test summary as the final status. Store runner,
+  target/file and case id independent of the label; give the suite its own
+  outcome for process failure, cancellation and unrecognized output; keep the
+  raw-output link; use one identity for panel row, source location and rerun,
+  then connect test-at-point and the code lens (start with Cargo and pytest).
+  Acceptance: both same-name cases shown, failure kept, rerun of only that
+  target+case; pytest progress suffix; collection/compile failure; a runner
+  that discovers zero tests; keyboard path from failed row to source to rerun.
+  `crates/vix-test-runner/src/lib.rs`, `crates/vix-tasks/src/test_at_point.rs`
+- [ ] **T812 — Report the real outcome of a previewed multi-file edit.**
+  The refactor preview diff clears the code-action chooser; applying a
+  workspace edit separately writes closed files in a loop and may skip an
+  unwritable one; for a server `workspace/applyEdit` the client replies
+  `applied: true` as soon as it queues the event. Keep the pending edit behind
+  the preview so apply/cancel acts on what was reviewed; check affected
+  documents against the reviewed versions; return the real result to the
+  server and name skipped files; on partial failure report exactly which files
+  changed and give a recovery operation that keeps pre-existing unsaved work.
+  Acceptance (existing mock server): one dirty open file plus one closed file;
+  vary second file changed after preview, a write failure, user cancel; assert
+  buffers, disk, visible outcome and server reply; include a rename after a
+  non-ASCII character (negotiated position encoding).
+  `tui/src/app/ide_parity.rs`, `tui/src/app/lsp_dap.rs`, `crates/vix-lsp/src/lib.rs`
+- [ ] **T813 — Review comments tied to the right range and revision.**
+  Verified: `main..feature/api` and `main..feature_api` share a storage name,
+  and the loader ignores the stored range, so one range's comments load into
+  the other. Use a collision-resistant key, validate the stored range on load
+  (still load a legacy file whose identity matches), bind line comments to the
+  reviewed revision keeping the code excerpt, mark a comment outdated when its
+  location becomes ambiguous and keep it in exports. Acceptance: different
+  comments for the two ranges survive close/reopen and export separately;
+  advancing a branch keeps the old comment with its context.
+  `crates/vix-review/src/lib.rs`, `tui/src/app/git_review.rs`
+
+- [ ] **T814 — Named debug target.** The debugger picks an adapter from the
+  active file and runs one session; the named run configuration only drives
+  shell commands; the rust-analyzer Debug lens has no handler. A tracked
+  project config names adapter, prerequisite task, executable, args and working
+  directory; bind F5 in the VS Code keymaps to start the target or continue a
+  paused session; an explicit import preview for a documented subset of VS Code
+  task/launch fields lists unresolved variables, extension task types and
+  unsupported fields before saving, respecting workspace trust. Acceptance: with
+  another package's file active, launch the named target and stop at its
+  breakpoint; a failed prerequisite leaves the adapter unstarted; same fixture
+  via menu, palette and shortcut; a Python project too. Compound (multi-session)
+  debugging only once a real two-process workflow needs it.
+- [ ] **T815 — Correct the VS Code migration guide and navigation spec.** The
+  guide says incremental Ctrl+D is missing, but the keymap test sends it and
+  the editor adds the next occurrence — extend the assertion to the selected
+  ranges after two presses. It also calls pair tooling absent although Cowork
+  is specified and opt-in. Link each disputed claim to the feature, build
+  capability and test. Reconcile `spec/navigation` (still calls semantic lookup
+  future work) with F12-via-LSP, and label declaration-search fallback results
+  as text matches. `docs/vix-for-visual-studio-code-users/index.md`,
+  `tui/tests/integration/keymaps.rs`, [`spec/cowork`](spec/cowork/index.md)
+- [ ] **T816 — Large-checkout open-time benchmark.** Add a repeatable
+  project-opening exercise measuring time to first editable frame, first Quick
+  Open result, first semantic definition and first actionable diagnostic;
+  record tool versions, workspace size, enabled capabilities, cold/warm runs
+  and local vs remote server (note where each measurement starts and ends for
+  remote authority); publish the distributions next to the migration guide's
+  startup claim. `tui/benches/startup.rs`, [performance guide](docs/performance/index.md)
+
+### General assessments (distilled; verify before starting)
+
+Strengths both assessments agree on and must not regress: crate-per-feature
+architecture, zero `unsafe`, pedantic clippy, spec-first, 15 languages, local
+signed gate, multi-forge CI, benchmarks (100 MB opens in ~14 ms, typing 10 MB
+~3.4 µs, 10k-file workspace search ~214 ms). Their stated biggest gap is
+awareness, not capability. Items marked (stale?) may already exist.
+
+- [ ] **T817 — Community channels.** Discord or Discourse with a README
+  badge; GitHub Discussions Q&A category; "Join the community" README section;
+  Good-first-issue / Help-wanted labels; `CONTRIBUTING.md` pointing at
+  `AGENTS.md`; new-contributor checklist; social links on README/site; metrics
+  to track (stars ~1,200, ~10 active contributors, ~5,000 downloads/month,
+  docs coverage ~50% — all from the assessment, unverified). Needs maintainer
+  decisions (accounts, outward posting), so never post anything without say-so.
+- [ ] **T818 — Outreach.** Regular GitHub Release announcements with detailed
+  changelogs; Hacker News / Product Hunt / Reddit (r/rust, r/terminal) /
+  Lobsters for major releases; 5–10 min YouTube walkthroughs and a contributor
+  welcome video; podcast outreach; "Powered by Vix" and a user-showcase page;
+  social preview (OpenGraph) cards generated like `scripts/render-theme-gallery.py`;
+  public community-metrics dashboard (stars, downloads from crates.io/npm/Homebrew,
+  CI, contributors) updated daily. Outward-facing: maintainer approval first.
+- [ ] **T819 — Onboarding in the editor.** "First 5 minutes" interactive
+  tutorial and `vix --tutor` (check `vix-tutor` first — stale?); a dismissible
+  first-launch Quick Tour overlay (dismissal stored in `session.toml`); a
+  "What's New" panel; optional Tips of the Day from a curated list (check
+  `vix-tips`); install one-liners per platform with copy buttons on the site.
+- [ ] **T820 — Migration and comparison pages.** Standalone comparison landing
+  pages (VS Code, Neovim, Helix) extending `docs/compare/index.md`; guides for
+  Sublime Text, Atom, JetBrains, Eclipse, Notepad++ (Vim, Emacs, Helix, VS
+  Code, Zed, Fresh, ttt exist); VS Code and Helix guides were reported missing
+  but exist (stale — only the T815 corrections apply).
+- [ ] **T821 — Documentation depth.** Deep dives for DB workbench, Git graph and
+  hunk staging/conflicts, Cowork, AI panel, LSP/debugger, Org mode, remote
+  editing; a tutorial series (10–15 parts incl. advanced Git, Rhai commands,
+  custom themes, extending with new crates); hands-on labs and role-based
+  learning paths (Rust, Python, data science, DevOps, writers); ADRs in
+  `docs/adr/` (why Rust, ratatui, no unsafe, crate layout, feature flags);
+  patterns library (`docs/patterns/`); a hosted `cargo doc` API site; 20+ new
+  cookbook recipes; 10+ new `tui/examples/` with READMEs; a personalised
+  cheat-sheet generator by keymap; FAQ/troubleshooting; screenshot and theme
+  galleries with a theme-submission guide and Rhai API docs; optional
+  self-assessment quizzes. Check `docs/coverage.md` first — much is done.
+- [ ] **T822 — Packaging channels.** Prepared in `packaging/` but not
+  published: AUR, winget, Scoop, Nix flake, mise; public Docker/ghcr.io image;
+  official Homebrew cask (instead of the custom tap); also Chocolatey,
+  Flatpak, Snap, portable Windows ZIP and an auto-update mechanism (check
+  current 2.0.2+ status before acting; publishing is a maintainer action).
+- [ ] **T823 — Startup and memory.** Defer the git refresh until first Git
+  panel open (the assessment measured a 12.2 ms full startup vs ~134 µs
+  `App::new`); lazy-load rarely used features (DB, containers, Jupyter); stated
+  targets: <100 ms empty workspace (later <50 ms), <50 MB with a 100 MB log
+  open. File-size warning above ~500 MB and graceful degradation above 1 GB;
+  incremental workspace search via filesystem watch (100k files < 1 s);
+  Tree-sitter on very large files; LRU eviction for caches; native
+  file-watching efficiency; incremental rendering; memory-usage tracking.
+- [ ] **T824 — Test infrastructure.** Coverage ≥90% on `vix-editor-core`,
+  `vix-fileops`, `vix-git`, `vix-lsp`, `vix-db` (tarpaulin; see the coverage
+  push); more integration tests for editor+LSP, editor+Git, DB+SQLite/Postgres,
+  remote+SSH; wider proptest use (parsers, search/replace, undo/redo, buffer
+  ops); fuzz targets for TOML/JSON/YAML/HTTP/DB-query parsing wired into CI;
+  `cargo-mutants` weekly on core crates; visual-regression screenshots; an
+  end-to-end workflow framework; cross-platform matrix (Windows MSVC/MinGW,
+  more Linux distros, macOS Intel/ARM, FreeBSD, the GUIs); performance suite
+  with baseline comparison reports; flaky-test detection/quarantine; test
+  data generators; test-impact analysis for PRs; chaos/stress testing building
+  on `chaos.yml`.
+- [ ] **T825 — Security follow-ups.** Quarterly audits with a checklist for new
+  features and a threat-model document; GitHub security advisories; SBOM per
+  release; Dependabot or equivalent grouping; secret scanning (gitleaks) in
+  hooks/CI; incident-response playbook from `SECURITY.md`; code signing of
+  release artifacts (ties to T806); a sandboxing study for external commands
+  (seccomp / App Sandbox / Windows); input-validation and file-system (TOCTOU,
+  canonicalisation) audits; keep the zero-`unsafe`, licence (`cargo-deny`) and
+  i18n-coverage audits green.
+- [ ] **T826 — Code-quality tooling.** Project-specific lints (no `println!`,
+  user strings via `t!`, no blocking I/O in async); pre-push and pre-commit
+  hooks (already partly there: `make hooks`, `scripts/attest`); a PR review
+  checklist/template; a quality-metrics dashboard; crate dependency layering
+  report with `cargo-depgraph`.
+- [ ] **T827 — Ecosystem and extensibility.** Plugin system beyond Rhai
+  (WASM or dynamic, no-`unsafe`) with a stable documented API, plugin and theme
+  registry (static site), submission process, script/theme package manager,
+  configuration as Rhai code; a shared `vix-gui-core` to cut duplication across
+  the eight GUIs; a language server for Vix config files; editor-side
+  integration for developing Vix itself. Large — design spike first.
+- [ ] **T828 — Interactive web demo.** A WebAssembly build of `vix-tui` or a
+  replayable recorded terminal session on the site; VHS tapes for palette,
+  find, git, LSP, DB.
+- [ ] **T829 — Contributor developer-experience docs.** Development-setup guide
+  with IDE recommendations, an architecture overview diagram, a crate
+  navigation map (which crate owns what), a debugging guide and a performance
+  profiling guide, release-process and code-review guidelines. Check
+  `docs/architecture` and `agents/` first — most exist.
+
 ## Ideas backlog (unscoped)
 
 Bigger or more speculative than the tasks above — not yet sized, not yet
@@ -10650,6 +10949,13 @@ CI-discovered rounds to get genuinely right on Windows).
 
 24. **Run X (worldwide editing).** T794 covers workspace search. Prioritize
     T795 for other result lists. T796 and T797 can proceed independently.
+
+25. **Run Y (2026-11-25 audits).** T810, T811 first (a failed prerequisite
+    must stop its dependents; same-name tests must stay distinct), together
+    with T798 (result retention) and T799–T802 (healthcare fidelity). Then
+    T812, T813 and T815; then T814, T803–T809 and T816. T817–T829 are the
+    general assessments' backlog: pick by maintainer priority; anything
+    outward-facing (T817, T818, T822) needs the maintainer's say-so.
 
 When a task is finished: check its box here, note the branch/merge commit,
 and record anything learned that changes later tasks.
