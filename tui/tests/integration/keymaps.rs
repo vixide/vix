@@ -532,7 +532,15 @@ fn vim_keymap_command_line_quits() {
     app.on_key(key('!'));
     assert_eq!(app.mode_indicator().as_deref(), Some(":q!"));
     app.on_key(keycode(KeyCode::Enter));
-    assert!(app.flags.contains(AppFlags::SHOULD_QUIT), ":q! quits");
+    assert!(
+        !app.flags.contains(AppFlags::SHOULD_QUIT),
+        ":q! closes the tab, not the session"
+    );
+    for c in ":qa!".chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.flags.contains(AppFlags::SHOULD_QUIT), ":qa! quits");
 }
 
 #[test]

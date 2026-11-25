@@ -232,7 +232,7 @@ line. Press `Esc` to return to Normal mode.
 | Normal  | `o` / `O`           | Open a line below / above           |
 | Insert  | `Esc`               | Return to Normal mode               |
 | Command | `:w`                | Save                                |
-| Command | `:q` / `:q!`        | Close tab / quit                    |
+| Command | `:q` / `:q!`        | Close tab / close tab, discarding edits; `:qa` / `:qa!` quit |
 | Command | `:wq` / `:x`        | Save and close                      |
 | Command | `:Ex`               | Focus the file explorer             |
 
