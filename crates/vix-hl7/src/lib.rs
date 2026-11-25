@@ -20,7 +20,7 @@ mod panel;
 mod path;
 mod view;
 
-pub use ack::{Ack, AckCode};
+pub use ack::{Ack, AckCode, control_id_of};
 pub use escape::{escape, unescape};
 pub use message::{Component, Delimiters, Field, Message, Repetition, Segment};
 pub use panel::Panel;

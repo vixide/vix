@@ -29,6 +29,9 @@ pub struct Entry {
     pub search_mode: Option<String>,
     /// The resource itself (`Value::Null` when absent).
     pub resource: Value,
+    /// The resource's JSON text exactly as received, so numeric precision
+    /// (`2.00`) survives display and export. `None` when the entry has no resource.
+    pub resource_raw: Option<String>,
 }
 
 impl Entry {
@@ -48,7 +51,10 @@ impl Entry {
         if self.resource.is_null() {
             return None;
         }
-        serde_json::to_string_pretty(&self.resource).ok()
+        match &self.resource_raw {
+            Some(raw) => crate::pretty(raw).ok(),
+            None => serde_json::to_string_pretty(&self.resource).ok(),
+        }
     }
 }
 
@@ -142,7 +148,7 @@ fn link(links: &[Value], relation: &str) -> Option<String> {
 
 /// Build an [`Entry`] from one `Bundle.entry` object. Never fails: absent parts
 /// become empty strings, `None`, or `Value::Null`.
-fn parse_entry(e: &Value) -> Entry {
+fn parse_entry(e: &Value, raw: Option<&str>) -> Entry {
     let resource = e.get("resource").cloned().unwrap_or(Value::Null);
     let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).map(String::from);
     Entry {
@@ -152,8 +158,29 @@ fn parse_entry(e: &Value) -> Entry {
         summary: summary_of(&resource),
         status: e.get("response").and_then(|r| text(r, "status")),
         search_mode: e.get("search").and_then(|s| text(s, "mode")),
+        resource_raw: raw.map(String::from),
         resource,
     }
+}
+
+/// The raw JSON text of each entry's `resource`, aligned with `Bundle.entry`.
+/// Empty or short when the text is not shaped as expected.
+fn raw_resources(text: &str) -> Vec<Option<String>> {
+    use serde_json::value::RawValue;
+    use std::collections::HashMap;
+    let top: HashMap<String, Box<RawValue>> = serde_json::from_str(text).unwrap_or_default();
+    let entries: Vec<Box<RawValue>> = top
+        .get("entry")
+        .and_then(|e| serde_json::from_str(e.get()).ok())
+        .unwrap_or_default();
+    entries
+        .iter()
+        .map(|e| {
+            let obj: HashMap<String, Box<RawValue>> =
+                serde_json::from_str(e.get()).unwrap_or_default();
+            obj.get("resource").map(|r| r.get().to_string())
+        })
+        .collect()
 }
 
 /// Parse a `Bundle` resource.
@@ -184,6 +211,7 @@ pub fn parse_bundle(text: &str) -> Result<Bundle, FhirError> {
         .get("link")
         .and_then(Value::as_array)
         .map_or(&[][..], Vec::as_slice);
+    let raws = raw_resources(text);
     Ok(Bundle {
         bundle_type: value
             .get("type")
@@ -194,7 +222,12 @@ pub fn parse_bundle(text: &str) -> Result<Bundle, FhirError> {
         entries: value
             .get("entry")
             .and_then(Value::as_array)
-            .map_or_default(|a| a.iter().map(parse_entry).collect()),
+            .map_or_default(|a| {
+                a.iter()
+                    .enumerate()
+                    .map(|(i, e)| parse_entry(e, raws.get(i).and_then(Option::as_deref)))
+                    .collect()
+            }),
         next: link(links, "next"),
         previous: link(links, "previous"),
     })
@@ -214,6 +247,18 @@ mod tests {
         {"resource":{"resourceType":"Observation","id":"o1","code":{"coding":[{"display":"Heart rate"}]}}},
         {"resource":{"resourceType":"Organization","id":"org","name":"Acme"}}
       ]}"#;
+
+    #[test]
+    fn bundle_entry_keeps_decimal_precision() {
+        let b = parse_bundle(
+            r#"{"resourceType":"Bundle","entry":[{"resource":{"resourceType":"Observation",
+            "valueQuantity":{"value":2.00,"unit":"mg/L"}}}]}"#,
+        )
+        .unwrap();
+        let shown = b.entries[0].resource_pretty().unwrap();
+        assert!(shown.contains("\"value\": 2.00"), "{shown}");
+        assert!(shown.contains("mg/L"));
+    }
 
     #[test]
     fn parses_entries_and_links() {

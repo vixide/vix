@@ -44,6 +44,17 @@ impl AckCode {
         matches!(self, AckCode::ApplicationAccept | AckCode::CommitAccept)
     }
 
+    /// Whether this is only a commit-stage code (`CA`, `CE`, `CR`): the
+    /// receiver took custody of the message, which says nothing about whether
+    /// the application processed it.
+    #[must_use]
+    pub fn is_commit_stage(self) -> bool {
+        matches!(
+            self,
+            AckCode::CommitAccept | AckCode::CommitError | AckCode::CommitReject
+        )
+    }
+
     /// Whether this is a negative acknowledgement (a NAK): an error or reject.
     #[must_use]
     pub fn is_nak(self) -> bool {
@@ -74,7 +85,24 @@ pub struct Ack {
     pub error_code: Option<String>,
 }
 
+/// The control id (`MSH-10`) of an outbound message, or `None` when absent.
+#[must_use]
+pub fn control_id_of(msg: &Message) -> Option<String> {
+    Path::parse("MSH-10")
+        .ok()
+        .and_then(|p| msg.get(&p))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 impl Ack {
+    /// Whether this acknowledgement answers the message whose `MSH-10` is
+    /// `sent_id`. A missing or differing `MSA-2` never matches.
+    #[must_use]
+    pub fn acknowledges(&self, sent_id: &str) -> bool {
+        !sent_id.is_empty() && self.control_id.trim() == sent_id
+    }
+
     /// Read the acknowledgement from a reply. `None` when the reply has no
     /// `MSA` segment (so it is not an acknowledgement at all).
     #[must_use]
@@ -123,6 +151,27 @@ mod tests {
         assert!(a.code.is_nak());
         assert_eq!(a.text, "bad thing");
         assert_eq!(a.error_code.as_deref(), Some("101"));
+    }
+
+    #[test]
+    fn matches_the_sent_control_id() {
+        let sent = Message::parse("MSH|^~\\&|S|F|R|F|2024||ADT^A01|MSG0001|P|2.5\rPID|1");
+        assert_eq!(control_id_of(&sent).as_deref(), Some("MSG0001"));
+        let ack = |id: &str| {
+            Ack::from_message(&Message::parse(&format!("MSH|^~\\&|R\rMSA|AA|{id}"))).unwrap()
+        };
+        assert!(ack("MSG0001").acknowledges("MSG0001"));
+        assert!(!ack("OTHER").acknowledges("MSG0001"));
+        assert!(!ack("").acknowledges("MSG0001"));
+        assert!(!ack("").acknowledges(""));
+        let none = Message::parse("MSH|^~\\&|S\rPID|1");
+        assert_eq!(control_id_of(&none), None);
+    }
+
+    #[test]
+    fn commit_codes_are_not_application_outcomes() {
+        assert!(AckCode::CommitAccept.is_commit_stage());
+        assert!(!AckCode::ApplicationAccept.is_commit_stage());
     }
 
     #[test]

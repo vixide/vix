@@ -104,6 +104,12 @@ impl App {
 
     /// Send `built` on a background thread.
     fn fhir_spawn(&mut self, profile: Profile, built: BuiltRequest, paging: bool) {
+        // One outstanding exchange: replacing the receiver would hide a completed
+        // write and invite the user to repeat it.
+        if self.fhir_rx.is_some() {
+            self.status = t!("status.fhir_busy").to_string();
+            return;
+        }
         self.status = t!("status.fhir_sending").to_string();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {

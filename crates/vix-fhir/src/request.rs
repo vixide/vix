@@ -241,7 +241,7 @@ impl Spec {
     }
 
     /// The body, checked to be a resource of the right type (and id on Update).
-    /// An Update body with no `id` is accepted: the URL id is authoritative.
+    /// An Update body must carry a string `id` equal to the URL id (FHIR R4).
     fn checked_body(&self) -> Result<String, FhirError> {
         let body = self.body.as_deref().ok_or(FhirError::MissingBody)?;
         let value: serde_json::Value =
@@ -254,8 +254,7 @@ impl Spec {
             return Err(FhirError::BodyTypeMismatch);
         }
         if self.interaction == Interaction::Update
-            && let Some(body_id) = value.get("id").and_then(serde_json::Value::as_str)
-            && Some(body_id) != self.id.as_deref()
+            && value.get("id").and_then(serde_json::Value::as_str) != self.id.as_deref()
         {
             return Err(FhirError::BodyIdMismatch);
         }
@@ -287,9 +286,59 @@ impl Profile {
 ///
 /// # Errors
 /// [`FhirError::NotJson`] when `text` is not JSON.
+///
+/// Only whitespace changes: every number and string token is copied verbatim, so
+/// a reported precision such as `2.00` is never shortened to `2.0`.
 pub fn pretty(text: &str) -> Result<String, FhirError> {
-    let value: serde_json::Value = serde_json::from_str(text).map_err(|_| FhirError::NotJson)?;
-    serde_json::to_string_pretty(&value).map_err(|_| FhirError::NotJson)
+    serde_json::from_str::<serde_json::Value>(text).map_err(|_| FhirError::NotJson)?;
+    let mut out = String::with_capacity(text.len() * 2);
+    let (mut depth, mut in_str, mut esc) = (0usize, false, false);
+    let mut chars = text.trim().chars().peekable();
+    let indent = |out: &mut String, d: usize| {
+        out.push('\n');
+        out.extend(std::iter::repeat_n(' ', d * 2));
+    };
+    while let Some(c) = chars.next() {
+        if in_str {
+            out.push(c);
+            match (esc, c) {
+                (true, _) => esc = false,
+                (false, '\\') => esc = true,
+                (false, '"') => in_str = false,
+                _ => {}
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_str = true;
+                out.push(c);
+            }
+            '{' | '[' => {
+                out.push(c);
+                while chars.next_if(|w| w.is_whitespace()).is_some() {}
+                if chars.next_if(|n| matches!(n, '}' | ']')).is_some() {
+                    out.push(if c == '{' { '}' } else { ']' });
+                } else {
+                    depth += 1;
+                    indent(&mut out, depth);
+                }
+            }
+            '}' | ']' => {
+                depth = depth.saturating_sub(1);
+                indent(&mut out, depth);
+                out.push(c);
+            }
+            ',' => {
+                out.push(c);
+                indent(&mut out, depth);
+            }
+            ':' => out.push_str(": "),
+            w if w.is_whitespace() => {}
+            _ => out.push(c),
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -371,6 +420,16 @@ mod tests {
             .with_body(body.into())
             .build(&profile());
         assert_eq!(wrong_id, Err(FhirError::BodyIdMismatch));
+        for body in [
+            r#"{"resourceType":"Patient"}"#,
+            r#"{"resourceType":"Patient","id":7}"#,
+        ] {
+            let r = Spec::parse_command("update Patient/7")
+                .unwrap()
+                .with_body(body.into())
+                .build(&profile());
+            assert_eq!(r.err(), Some(FhirError::BodyIdMismatch), "{body}");
+        }
         let wrong_type = Spec::parse_command("create Observation")
             .unwrap()
             .with_body(body.into())
@@ -432,6 +491,17 @@ mod tests {
             Err(FhirError::ForeignLink)
         );
         assert_eq!(p.link_request("/r4?x"), Err(FhirError::ForeignLink));
+    }
+
+    #[test]
+    fn pretty_preserves_number_tokens() {
+        let out = pretty(r#"{"value":2.00,"a":[2,2.0,0.1230,1e3],"s":"x\\\"{,}","e":{},"l":[]}"#)
+            .unwrap();
+        for t in ["2.00", "2.0,", "0.1230", "1e3", r#""x\\\"{,}""#, "{}", "[]"] {
+            assert!(out.contains(t), "{t} in {out}");
+        }
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["a"][0], 2);
     }
 
     #[test]

@@ -44,7 +44,7 @@ this crate and its App glue:
   subcomponents. Each row carries the source `line` and `col` for jumping.
   `pretty` renders the rows as text.
 - `Ack::from_message` reads `MSA-1` (`AA/AE/AR/CA/CE/CR` -> `AckCode`, with
-  `is_accept`/`is_nak`), `MSA-2`, `MSA-3` and the first `ERR` code.
+  `is_accept`/`is_nak`/`is_commit_stage`), `MSA-2`, `MSA-3` and the first `ERR` code.
 - `Panel` is the overlay's state: all rows, a case-insensitive filter over label
   and value, and a highlight/scroll over the filtered rows via `vix-list-state`.
   `Panel::open(msg, cursor_line)` starts on the segment at the cursor.
