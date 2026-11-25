@@ -165,7 +165,7 @@ command, `Esc` cancels, and backspacing past the empty `:` closes it.
 | ------- | ------ |
 | `:w` | Save |
 | `:q` | Close buffer |
-| `:q!` | Force-quit (discard unsaved changes) |
+| `:q!` | Close the current tab, discarding unsaved changes (no prompt); `:qa` quits (prompting), `:qa!` force-quits the session |
 | `:wq` / `:x` | Save, then close |
 | `:N` (a number) | Go to line N |
 | `:e` / `:e path` | Open-file prompt / open `path` |

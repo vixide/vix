@@ -8,6 +8,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Vi `:q!` closes only the current tab.** It used to end the whole session, like Vim's `:qa!`. It now abandons the current tab's edits and closes just that tab; `:qa` quits (asking about unsaved tabs) and `:qa!` force-quits.
 - **Local History's "restore selection" restores just the selection.** When several lines in a row had all changed, restoring one of them from an earlier save brought back the whole changed block. Lines that changed one for one now come back one for one; only a block that grew or shrank is still restored whole.
 - **The desktop apps open a folder given on the command line too.** `vix-egui ~/src/app` (or any of the GUIs) now works on that folder, as `vix ~/src/app` does, instead of the current directory.
 - **`vix some-folder` opens that folder.** A folder on the command line used to fail with "Open failed" and leave you in the current directory. It now opens as the workspace, as in other editors: `vix .` or `vix ~/src/app`.

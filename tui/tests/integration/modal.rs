@@ -556,3 +556,43 @@ fn yank_never_updates_what_dot_repeats() {
         ". still repeats the earlier dw (deleting the rest of the buffer), not a no-op from yy"
     );
 }
+
+fn ex(app: &mut App, cmd: &str) {
+    app.on_key(key(':'));
+    for c in cmd.chars() {
+        app.on_key(key(c));
+    }
+    app.on_key(keycode(KeyCode::Enter));
+}
+
+#[test]
+fn ex_force_quit_closes_only_the_current_dirty_tab() {
+    let mut app = vi_app("ex-qbang-one", "first\n", true);
+    app.editor.new_tab_with_content("second\n");
+    app.editor.active_tab_mut().unwrap().dirty = true;
+    let before = app.editor.tabs.len();
+    ex(&mut app, "q!");
+    assert!(
+        !app.flags.contains(AppFlags::SHOULD_QUIT),
+        ":q! must not end the session"
+    );
+    assert_eq!(app.editor.tabs.len(), before - 1, "the current tab closed");
+    assert!(app.unsaved.is_none(), ":q! abandons edits without prompting");
+}
+
+#[test]
+fn ex_qa_bang_quits_the_whole_session() {
+    let mut app = vi_app("ex-qabang", "x\n", true);
+    app.editor.active_tab_mut().unwrap().dirty = true;
+    ex(&mut app, "qa!");
+    assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
+}
+
+#[test]
+fn ex_qa_prompts_for_a_dirty_tab_instead_of_quitting() {
+    let mut app = vi_app("ex-qa", "x\n", true);
+    app.editor.active_tab_mut().unwrap().dirty = true;
+    ex(&mut app, "qa");
+    assert!(!app.flags.contains(AppFlags::SHOULD_QUIT));
+    assert!(app.unsaved.is_some());
+}

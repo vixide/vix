@@ -1387,8 +1387,12 @@ impl App {
         match cmd {
             "w" => self.run_action("file.save"),
             "q" => self.run_action("file.close"),
-            // Vim force-quit discards unsaved changes without prompting.
-            "q!" => self.flags.insert(AppFlags::SHOULD_QUIT),
+            // `:q!` abandons the current buffer's edits and closes only it
+            // (Vim closes the current window); whole-session commands are
+            // the explicit `:qa` / `:qa!`.
+            "q!" => self.do_close_active(),
+            "qa" | "qall" => self.run_action("file.quit"),
+            "qa!" | "qall!" => self.flags.insert(AppFlags::SHOULD_QUIT),
             "wq" | "x" => {
                 self.run_action("file.save");
                 self.run_action("file.close");
