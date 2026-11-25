@@ -10575,7 +10575,7 @@ were not exercised.
   breakpoint; a failed prerequisite leaves the adapter unstarted; same fixture
   via menu, palette and shortcut; a Python project too. Compound (multi-session)
   debugging only once a real two-process workflow needs it.
-- [ ] **T815 — Correct the VS Code migration guide and navigation spec.** The
+- [x] **T815 — Correct the VS Code migration guide and navigation spec.** The
   guide says incremental Ctrl+D is missing, but the keymap test sends it and
   the editor adds the next occurrence — extend the assertion to the selected
   ranges after two presses. It also calls pair tooling absent although Cowork
