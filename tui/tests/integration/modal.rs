@@ -577,7 +577,10 @@ fn ex_force_quit_closes_only_the_current_dirty_tab() {
         ":q! must not end the session"
     );
     assert_eq!(app.editor.tabs.len(), before - 1, "the current tab closed");
-    assert!(app.unsaved.is_none(), ":q! abandons edits without prompting");
+    assert!(
+        app.unsaved.is_none(),
+        ":q! abandons edits without prompting"
+    );
 }
 
 #[test]
