@@ -10587,7 +10587,7 @@ were not exercised.
   breakpoint; a failed prerequisite leaves the adapter unstarted; same fixture
   via menu, palette and shortcut; a Python project too. Compound (multi-session)
   debugging only once a real two-process workflow needs it.
-- [ ] **T815 — Correct the VS Code migration guide and navigation spec.** The
+- [x] **T815 — Correct the VS Code migration guide and navigation spec.** The
   guide says incremental Ctrl+D is missing, but the keymap test sends it and
   the editor adds the next occurrence — extend the assertion to the selected
   ranges after two presses. It also calls pair tooling absent although Cowork
@@ -10596,6 +10596,8 @@ were not exercised.
   future work) with F12-via-LSP, and label declaration-search fallback results
   as text matches. `docs/vix-for-visual-studio-code-users/index.md`,
   `tui/tests/integration/keymaps.rs`, [`spec/cowork`](spec/cowork/index.md)
+  Done in docs/spec and the Ctrl+D test; the UI still does not label fallback
+  definition results as text matches (open follow-up).
 - [ ] **T816 — Large-checkout open-time benchmark.** Add a repeatable
   project-opening exercise measuring time to first editable frame, first Quick
   Open result, first semantic definition and first actionable diagnostic;

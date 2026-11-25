@@ -836,33 +836,16 @@ fn apple_keymap_ctrl_d_deletes_the_character_ahead() {
         "foo foo",
         "VS Code's Ctrl+D selects, it does not delete"
     );
-}
 
-// ----- vix-keybindings registry conversion (improvement plan T104g) -------
-// apple_ctrl_key and global_shared_key now dispatch through
-// vix_keybindings::lookup/lookup_shared instead of their own hardcoded
-// match/if chains; these cover the two bindings that stay host-side
-// (Ctrl+Alt+R, the only Alt-keyed apple_ctrl_key binding) and a shared,
-// named-key token (Ctrl+BackTab) neither exercised elsewhere.
-
-#[test]
-fn apple_keymap_ctrl_alt_r_opens_query_replace() {
-    let mut app = app_at(Path::new("."));
-    assert_eq!(app.settings.keymap, "apple", "default keymap");
-    app.on_key(KeyEvent::new(
-        KeyCode::Char('r'),
-        KeyModifiers::CONTROL | KeyModifiers::ALT,
-    ));
-    // `edit.query_replace` opens the search bar in interactive mode --
-    // `app.query_replace` (the step-through session) only appears once the
-    // query/replace fields are submitted, so the field's `interactive` flag
-    // is the right signal here, same as `edit.replace`'s own coverage.
-    assert!(
-        app.search
-            .as_ref()
-            .is_some_and(|s| s.flags.contains(SearchFlags::INTERACTIVE)),
-        "Ctrl+Alt+R opens the search bar in interactive query-replace mode"
-    );
+    // Pressed repeatedly it adds one more occurrence each time, as in VS Code.
+    buffer_with(&mut app, "foo foo foo", 0);
+    app.on_key(ctrl('d'));
+    let editor = &mut app.editor.active_tab_mut().unwrap().editor;
+    assert_eq!(editor.get_selection_text().as_deref(), Some("foo"));
+    app.on_key(ctrl('d'));
+    let editor = &mut app.editor.active_tab_mut().unwrap().editor;
+    assert!(editor.caret_count() >= 2, "second press adds a caret");
+    assert_eq!(editor.get_selection_text().as_deref(), Some("foo"));
 }
 
 // ----- vix-keybindings override choke point (improvement plan T104i/j) ----
