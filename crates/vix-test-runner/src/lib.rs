@@ -215,12 +215,11 @@ fn target_header(line: &str) -> Option<String> {
 fn strip_progress(line: &str) -> &str {
     if let Some(i) = line.rfind(" [")
         && line.ends_with("%]")
-        && line[i + 2..line.len() - 2]
-            .trim()
-            .chars()
-            .all(|c| c.is_ascii_digit())
+        && let Some(pct) = line.get(i.saturating_add(2)..line.len().saturating_sub(2))
+        && pct.trim().chars().all(|c| c.is_ascii_digit())
+        && let Some(head) = line.get(..i)
     {
-        return line[..i].trim_end();
+        return head.trim_end();
     }
     line
 }
