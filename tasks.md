@@ -10584,6 +10584,8 @@ were not exercised.
   future work) with F12-via-LSP, and label declaration-search fallback results
   as text matches. `docs/vix-for-visual-studio-code-users/index.md`,
   `tui/tests/integration/keymaps.rs`, [`spec/cowork`](spec/cowork/index.md)
+  Done in docs/spec and the Ctrl+D test; the UI still does not label fallback
+  definition results as text matches (open follow-up).
 - [ ] **T816 — Large-checkout open-time benchmark.** Add a repeatable
   project-opening exercise measuring time to first editable frame, first Quick
   Open result, first semantic definition and first actionable diagnostic;
