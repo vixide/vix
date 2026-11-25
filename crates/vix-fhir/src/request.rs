@@ -291,12 +291,12 @@ impl Profile {
 /// a reported precision such as `2.00` is never shortened to `2.0`.
 pub fn pretty(text: &str) -> Result<String, FhirError> {
     serde_json::from_str::<serde_json::Value>(text).map_err(|_| FhirError::NotJson)?;
-    let mut out = String::with_capacity(text.len() * 2);
+    let mut out = String::with_capacity(text.len().saturating_mul(2));
     let (mut depth, mut in_str, mut esc) = (0usize, false, false);
     let mut chars = text.trim().chars().peekable();
     let indent = |out: &mut String, d: usize| {
         out.push('\n');
-        out.extend(std::iter::repeat_n(' ', d * 2));
+        out.extend(std::iter::repeat_n(' ', d.saturating_mul(2)));
     };
     while let Some(c) = chars.next() {
         if in_str {
@@ -320,7 +320,7 @@ pub fn pretty(text: &str) -> Result<String, FhirError> {
                 if chars.next_if(|n| matches!(n, '}' | ']')).is_some() {
                     out.push(if c == '{' { '}' } else { ']' });
                 } else {
-                    depth += 1;
+                    depth = depth.saturating_add(1);
                     indent(&mut out, depth);
                 }
             }
