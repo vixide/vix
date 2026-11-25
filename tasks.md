@@ -10718,7 +10718,7 @@ Fix boundaries of everyday edits before adding Vi features.
   lines, `pkg::run`, `obj.field`, adjacent blanks, decomposed accents, plus a
   vertical fixture with a short line, a tab and a wide character.
   `crates/vix-modal/src/{motion,operator}.rs`, `crates/vix-textops`
-- [ ] **T832 — Ex: `:q!` closes the current window only.** `:q!` sets the
+- [x] **T832 — Ex: `:q!` closes the current window only.** (Done, merged from `fix/t832-ex-force-quit`: `:q!` closes the tab, `:qa`/`:qa!` added; `:wq` save-conflict ordering untested.) `:q!` sets the
   application-wide quit flag while `:q` closes the tab. Define pane/tab/window
   correspondence, apply `:q`/`:q!` to the same focused scope (bang = abandon
   edits), add an explicit all-windows force-quit command. Tests: two panes on

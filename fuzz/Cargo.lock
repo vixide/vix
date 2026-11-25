@@ -1025,7 +1025,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vix-authority"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "ignore",
  "vix-fileops",
@@ -1033,14 +1033,14 @@ dependencies = [
 
 [[package]]
 name = "vix-conflict-tool"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "vix-list-state",
 ]
 
 [[package]]
 name = "vix-convert-from-json-into-toml-tool"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "serde_json",
  "toml",
@@ -1049,7 +1049,7 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-json-into-yaml-tool"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "serde_json",
  "serde_norway",
@@ -1058,7 +1058,7 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-toml-into-json-tool"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "serde_json",
  "toml",
@@ -1067,7 +1067,7 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-from-yaml-into-json-tool"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "serde_json",
  "serde_norway",
@@ -1076,14 +1076,14 @@ dependencies = [
 
 [[package]]
 name = "vix-convert-tabular"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "vix-encoding"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "vix-fileops"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "globset",
  "jiff",
@@ -1102,7 +1102,7 @@ dependencies = [
 
 [[package]]
 name = "vix-find-panel"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "bitflags",
  "regex",
@@ -1135,7 +1135,7 @@ dependencies = [
 
 [[package]]
 name = "vix-http-client"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "base64",
  "getrandom 0.4.3",
@@ -1148,7 +1148,7 @@ dependencies = [
 
 [[package]]
 name = "vix-im"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1156,14 +1156,14 @@ dependencies = [
 
 [[package]]
 name = "vix-input"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "bitflags",
 ]
 
 [[package]]
 name = "vix-jupyter-core"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "base64",
  "hmac",
@@ -1174,11 +1174,11 @@ dependencies = [
 
 [[package]]
 name = "vix-list-state"
-version = "2.0.2"
+version = "2.1.0"
 
 [[package]]
 name = "vix-lsp-core"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "globset",
  "serde_json",
@@ -1186,7 +1186,7 @@ dependencies = [
 
 [[package]]
 name = "vix-macros"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "serde",
  "toml",
@@ -1196,18 +1196,18 @@ dependencies = [
 
 [[package]]
 name = "vix-org-table"
-version = "2.0.2"
+version = "2.1.0"
 dependencies = [
  "evalexpr",
 ]
 
 [[package]]
 name = "vix-textops"
-version = "2.0.2"
+version = "2.1.0"
 
 [[package]]
 name = "vix-vcard-parser"
-version = "2.0.2"
+version = "2.1.0"
 
 [[package]]
 name = "walkdir"
