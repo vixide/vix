@@ -10538,6 +10538,11 @@ were not exercised.
   target+case; pytest progress suffix; collection/compile failure; a runner
   that discovers zero tests; keyboard path from failed row to source to rerun.
   `crates/vix-test-runner/src/lib.rs`, `crates/vix-tasks/src/test_at_point.rs`
+  **Partly done (branch `fix/t811-test-identity`):** results keyed by
+  (target, name) from cargo's `Running`/`Doc-tests` headers, pytest progress
+  suffix stripped, nonzero exit with no parsed failure is a failed suite. Still
+  open: stable ids for rerun-only-that-case, raw-output link, test-at-point and
+  code-lens integration, cancelled/unrecognised outcomes.
 - [ ] **T812 — Report the real outcome of a previewed multi-file edit.**
   The refactor preview diff clears the code-action chooser; applying a
   workspace edit separately writes closed files in a loop and may skip an

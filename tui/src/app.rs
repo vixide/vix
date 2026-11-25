@@ -14585,6 +14585,7 @@ impl App {
             v
         };
         let mut done = false;
+        let mut exit_code = 0;
         for msg in msgs {
             match msg {
                 CmdMsg::Line(l) => {
@@ -14599,6 +14600,7 @@ impl App {
                 }
                 CmdMsg::Done(code) => {
                     let code = code.unwrap_or(-1);
+                    exit_code = code;
                     self.bottom_dock.push(format!("[exit {code}]"));
                     self.status = match self.finish_task_scan() {
                         0 => t!("status.command_done", code = code),
@@ -14625,7 +14627,7 @@ impl App {
         if done {
             self.running_command = None;
             if self.flags.contains(AppFlags::TEST_CAPTURE) {
-                self.finish_test_run();
+                self.finish_test_run(exit_code);
             }
             // A finished command may have changed the working tree or HEAD (e.g.
             // git push/pull/checkout); refresh the cached git state.
@@ -14648,20 +14650,27 @@ impl App {
     }
 
     /// Parse the captured test output, populate the panel, and report a summary.
-    fn finish_test_run(&mut self) {
+    fn finish_test_run(&mut self, exit_code: i32) {
         self.flags.remove(AppFlags::TEST_CAPTURE);
         self.test_results = crate::test_runner::parse(&self.test_buffer.join("\n"));
         self.test_buffer.clear();
         self.test_selected = 0;
         let (pass, fail, ignore) = crate::test_runner::tally(&self.test_results);
-        let note = t!(
-            "status.tests_done",
-            pass = pass,
-            fail = fail,
-            ignore = ignore
-        )
-        .to_string();
-        if fail > 0 {
+        // A nonzero exit with no parsed failure (compile error, aborted or
+        // unrecognised run) is still a failed suite, never a quiet info line.
+        let failed = fail > 0 || exit_code != 0;
+        let note = if fail == 0 && exit_code != 0 {
+            t!("status.tests_run_failed", code = exit_code, pass = pass).to_string()
+        } else {
+            t!(
+                "status.tests_done",
+                pass = pass,
+                fail = fail,
+                ignore = ignore
+            )
+            .to_string()
+        };
+        if failed {
             self.messages.error(note.clone());
         } else {
             self.messages.info(note.clone());
