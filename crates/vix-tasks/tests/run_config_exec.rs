@@ -13,12 +13,13 @@ fn run(first: &str, last: &str) -> (bool, String, String) {
          [[config]]\nname=\"g\"\ncompound=[\"a\",\"b\"]\n\
          [[config]]\nname=\"c\"\ncommand=\"echo DEP\"\nbefore=[\"g\"]\n"
     );
-    let p = plan(&parse(&toml).unwrap(), &[], "c").unwrap();
+    let configs = parse(&toml).unwrap_or_else(|e| panic!("parse: {e}"));
+    let p = plan(&configs, &[], "c").unwrap_or_else(|e| panic!("plan: {e}"));
     let out = std::process::Command::new("sh")
         .arg("-c")
         .arg(p.shell_command(Shell::Posix))
         .output()
-        .unwrap();
+        .unwrap_or_else(|e| panic!("sh: {e}"));
     (
         out.status.success(),
         String::from_utf8_lossy(&out.stdout).into_owned(),
