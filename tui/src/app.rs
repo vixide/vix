@@ -4053,8 +4053,10 @@ impl App {
             a if self.run_jupyter_action(a) => {}
             "lsp.rename" => self.begin_lsp_rename(),
             "lsp.code_action" => self.request_code_action(),
-            "lsp.expand_selection" => self.request_selection_range(true),
-            "lsp.shrink_selection" => self.request_selection_range(false),
+            // `lsp.*` ids stay as aliases for saved keybindings; the `edit.*`
+            // ids are the ungated ones (offline Tree-sitter fallback, T835).
+            "edit.expand_selection" | "lsp.expand_selection" => self.request_selection_range(true),
+            "edit.shrink_selection" | "lsp.shrink_selection" => self.request_selection_range(false),
             "lsp.highlight" => self.request_document_highlight(),
             "lsp.linked_edit" => self.request_linked_editing(),
             "view.inlay_hints" => self.toggle_inlay_hints(),

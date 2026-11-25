@@ -112,18 +112,18 @@ fn expand_then_shrink_round_trips_offline() {
     let mut app = rust_app("to-shrink");
     let start = at("x + 1");
     set_cursor(&mut app, start);
-    app.run_action("lsp.expand_selection");
+    app.run_action("edit.expand_selection");
     let first = selected(&mut app).expect("first expansion");
-    app.run_action("lsp.expand_selection");
+    app.run_action("edit.expand_selection");
     let second = selected(&mut app).expect("second expansion");
     assert!(second.len() > first.len());
-    app.run_action("lsp.shrink_selection");
+    app.run_action("edit.shrink_selection");
     assert_eq!(selected(&mut app), Some(first));
-    app.run_action("lsp.shrink_selection");
+    app.run_action("edit.shrink_selection");
     assert_eq!(selected(&mut app), None, "back to the bare caret");
     assert_eq!(cursor(&mut app), start);
     // Nothing left to shrink: nothing changes.
-    app.run_action("lsp.shrink_selection");
+    app.run_action("edit.shrink_selection");
     assert_eq!(selected(&mut app), None);
 }
 
@@ -134,7 +134,7 @@ fn textobject_selection_shrinks_back_too() {
     app.run_action("edit.select_function_around");
     let inner = selected(&mut app).expect("closure");
     app.run_action("edit.select_function_around");
-    app.run_action("lsp.shrink_selection");
+    app.run_action("edit.shrink_selection");
     assert_eq!(selected(&mut app), Some(inner));
 }
 
@@ -142,8 +142,8 @@ fn textobject_selection_shrinks_back_too() {
 fn shrink_stack_is_dropped_after_an_edit() {
     let mut app = rust_app("to-shrink-edit");
     set_cursor(&mut app, at("a + b"));
-    app.run_action("lsp.expand_selection");
-    app.run_action("lsp.expand_selection");
+    app.run_action("edit.expand_selection");
+    app.run_action("edit.expand_selection");
     let range = |app: &mut App| {
         let s = app.editor.active_tab_mut().unwrap().editor.get_selection();
         s.map(|s| (s.start, s.end))
@@ -154,7 +154,7 @@ fn shrink_stack_is_dropped_after_an_edit() {
         let t = app.editor.active_tab_mut().unwrap();
         t.editor.code_mut().insert(0, "\n");
     }
-    app.run_action("lsp.shrink_selection");
+    app.run_action("edit.shrink_selection");
     assert_eq!(range(&mut app), before, "a stale stack is not trusted");
 }
 
