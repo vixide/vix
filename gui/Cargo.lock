@@ -12846,15 +12846,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vix-matrix-protocol"
-version = "3.0.0"
-dependencies = [
- "serde",
- "serde_json",
- "zeroize",
-]
-
-[[package]]
 name = "vix-mcp-server"
 version = "3.0.0"
 dependencies = [
@@ -13291,7 +13282,6 @@ dependencies = [
  "vix-lsp-core",
  "vix-macros",
  "vix-markdown-preview",
- "vix-matrix-protocol",
  "vix-mcp-server",
  "vix-media-type",
  "vix-menu",
