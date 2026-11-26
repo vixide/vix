@@ -1357,7 +1357,15 @@ mod pty_tests {
         t.send_key(KeyEvent::new(KeyCode::Null, KeyModifiers::NONE));
         t.send_bytes(b"");
         t.send_bytes(b"!!");
-        wait_until(&t, |s| s.contains("zq!!"));
+        // `cat` writes its copy of the pasted line back whenever it gets to it,
+        // which can land between the echoed `zq` and `!!` on a busy machine:
+        // drop those copies and the line breaks, then nothing may be left
+        // between the two.
+        wait_until(&t, |s| {
+            s.replace("pasted line", "")
+                .replace('\n', "")
+                .contains("zq!!")
+        });
     }
 
     #[test]

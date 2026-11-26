@@ -1630,8 +1630,16 @@ const TOOLS_LSP: &[Item] = &[
     SEP,
     Item::leaf("menu.item.lsp.highlight", "lsp.highlight", ""),
     SEP,
-    Item::leaf("menu.item.lsp.expand_selection", "lsp.expand_selection", ""),
-    Item::leaf("menu.item.lsp.shrink_selection", "lsp.shrink_selection", ""),
+    Item::leaf(
+        "menu.item.lsp.expand_selection",
+        "edit.expand_selection",
+        "",
+    ),
+    Item::leaf(
+        "menu.item.lsp.shrink_selection",
+        "edit.shrink_selection",
+        "",
+    ),
     SEP,
     Item::leaf("menu.item.lsp.format", "lsp.format", ""),
     Item::leaf("menu.item.lsp.hover", "lsp.hover", ""),

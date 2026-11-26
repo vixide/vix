@@ -10923,7 +10923,7 @@ Fix boundaries of everyday edits before adding Vi features.
   unsupported Vim pattern syntax before editing, document the grammar, test
   escaped delimiters, cancel, and an unchanged buffer on parse failure.
   `tui/src/app/task_problems.rs`, `spec/find-and-replace`
-- [ ] **T842 — Offline structural selection without the `lsp` feature.** With
+- [x] **T842 — Offline structural selection without the `lsp` feature.** With
   the LSP feature off, three App tests for offline expand/shrink selection
   fail because the capability gate catches the `lsp.` prefix before the
   fallback runs. Give offline selection its own action ids (keep the `lsp.*`

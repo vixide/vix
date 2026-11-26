@@ -105,6 +105,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.delete.sentence` | Sentence | Menu |
 | `edit.delete.word` | Word | Menu |
 | `edit.emmet_expand` | Emmet Expand | Menu |
+| `edit.expand_selection` | Expand Selection | Menu |
 | `edit.find` | Find… | Menu |
 | `edit.find_next` | Find Next | Menu |
 | `edit.find_prev` | Find Previous | Menu |
@@ -138,6 +139,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.select_parameter_around` | Parameter (Around) | Menu |
 | `edit.select_parameter_inside` | Parameter (Inside) | Menu |
 | `edit.select_section` | Select Section | Menu |
+| `edit.shrink_selection` | Shrink Selection | Menu |
 | `edit.structural_replace` | Structural Replace… | Menu |
 | `edit.structural_replace_workspace` | Structural Replace in Workspace… | Menu |
 | `edit.toggle_comment` | Comment | Menu |
@@ -362,7 +364,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `lsp.diagnostics` | Diagnostics… | Menu |
 | `lsp.document_symbols` | Document Symbols… | Menu |
 | `lsp.edit_color` | Edit Color… | Menu |
-| `lsp.expand_selection` | Expand Selection | Menu |
+| `lsp.expand_selection` | Expand Selection | Catalog |
 | `lsp.format` | Format Document | Menu |
 | `lsp.highlight` | Highlight Occurrences | Menu |
 | `lsp.hover` | Hover | Menu |
@@ -374,7 +376,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `lsp.rename` | Rename Symbol | Menu |
 | `lsp.restart` | Restart Server | Menu |
 | `lsp.show_log` | Show Server Log | Menu |
-| `lsp.shrink_selection` | Shrink Selection | Menu |
+| `lsp.shrink_selection` | Shrink Selection | Catalog |
 | `lsp.signature_help` | Signature Help | Menu |
 | `lsp.status` | LSP Status… | Menu |
 | `lsp.type_hierarchy_subtypes` | Type Hierarchy (Subtypes) | Menu |
@@ -848,4 +850,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**841 actions.**
+**843 actions.**

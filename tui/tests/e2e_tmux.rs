@@ -115,15 +115,26 @@ impl Session {
         !self.tmux(&["has-session", "-t", "e2e"]).status.success()
     }
 
-    fn wait_ended(&self) {
+    /// Quit with Ctrl+Q and wait for the session to end. Ctrl+Q is sent again
+    /// each second until it does: a key sent right after `Escape` can reach Vix
+    /// in the same read and decode as one Alt-modified key (Alt+Ctrl+Q), which
+    /// does not quit, so a single send flakes when the machine is busy.
+    fn quit(&self) {
         let deadline = Instant::now() + Duration::from_secs(20);
-        while !self.ended() {
+        loop {
+            self.keys(&["C-q"]);
+            let resend = Instant::now() + Duration::from_secs(1);
+            while Instant::now() < resend {
+                if self.ended() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
             assert!(
                 Instant::now() < deadline,
                 "vix did not exit; screen:\n{}",
                 self.screen()
             );
-            std::thread::sleep(Duration::from_millis(50));
         }
     }
 }
@@ -171,8 +182,7 @@ fn edit_save_and_quit_in_a_real_terminal() {
         );
         std::thread::sleep(Duration::from_millis(50));
     }
-    s.keys(&["C-q"]);
-    s.wait_ended();
+    s.quit();
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -189,7 +199,6 @@ fn a_folder_argument_opens_that_folder_as_the_workspace() {
     let screen = s.wait_for("proj_file.txt");
     assert!(!screen.contains("Open failed"), "{screen}");
     s.keys(&["Escape"]);
-    s.keys(&["C-q"]);
-    s.wait_ended();
+    s.quit();
     let _ = std::fs::remove_dir_all(&dir);
 }

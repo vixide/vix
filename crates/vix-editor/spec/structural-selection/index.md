@@ -1,6 +1,6 @@
 # Structural Selection (Offline)
 
-Part of Expand Selection (`lsp.expand_selection`).
+Part of Expand Selection (`edit.expand_selection`; `lsp.expand_selection` is kept as an alias).
 
 When the file has no language server, Expand Selection falls back to the Tree-sitter parse tree: it grows the selection to the smallest enclosing node, climbing to the parent so repeats keep growing.
 
