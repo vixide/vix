@@ -10881,7 +10881,7 @@ and the capability gate maps the whole `lsp.` prefix to `Capability::Lsp`
 (`tui/src/capability.rs`). The audit file was folded in and removed.
 Fix boundaries of everyday edits before adding Vi features.
 
-- [ ] **T837 — Vi: a change is one unit of repeat and undo.** `ciw`/`cw` text
+- [x] **T837 — Vi: a change is one unit of repeat and undo.** (Done: `c`/`i`/`a`/`o`… record their Insert keys through `Esc`, replay recomputes the range, `History::squash_since` makes each change one undo step, sessions `.` cannot replay and Visual `d`/`c` clear `.`, `cw` keeps the separator; an Insert session with a cursor key is not repeatable.) `ciw`/`cw` text
   typed in Insert is not recorded, so `.` replays an older `dw`. Record from
   operator through Escape (typed text, backspaces), recompute the range on
   replay so a different-length word works, one undo unit per change, and

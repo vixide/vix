@@ -10,8 +10,9 @@
 //! (this slice): `i`/`a` + `w`/a delimiter pair/a quote composing with
 //! `d`/`c`/`y` the same way a motion does (`vix_modal::text_object`), and
 //! `.` dot-repeat — keystroke replay of the last real change (`d{motion}`,
-//! a text object, or `p`/`P`; `y` and `c` are excluded, see
-//! [`App::apply_operator_to_range`]'s own doc for why `c` specifically).
+//! a text object, or `p`/`P`; not `y`). T837: a change that goes on into
+//! Insert mode (`c`, `i`, `o`, …) is recorded through the `Esc` that ends
+//! it ([`InsertRecord`]) and folded into one undo step.
 //! `vim_key`/`spacemacs_key` call [`App::modal_key`] before falling through
 //! to `vim_normal_key`'s existing table — everything this doesn't recognize
 //! (Visual mode's own motion vocabulary, still just `h j k l` per T112) keeps
@@ -29,7 +30,7 @@
     )
 )]
 
-use super::ModalPending;
+use super::{AppFlags, ModalPending};
 use crate::geo::Geo;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 use vix_modal::motion::MotionKind::{self, Exclusive, Inclusive, Linewise};
@@ -81,6 +82,10 @@ impl App {
             && self.modal_operator_count == 1
         {
             self.modal_recording.clear();
+            // Where this command's change starts in the undo tree (T837):
+            // leaving the Insert mode it may go on into folds everything
+            // since into one undo step.
+            self.modal_recording_seq = self.modal_history_seq();
         }
         self.modal_recording.push(key);
 
@@ -458,6 +463,18 @@ impl App {
         after: usize,
         kind: MotionKind,
     ) {
+        // `cw` (T837): Vim changes to the end of the word and keeps the
+        // white space after it. The `w` motion is the only exclusive one
+        // whose key is `w` (`fw`/`tw` are inclusive), and the recording's
+        // last key is the motion key that just resolved.
+        let after = if op == 'c'
+            && kind == Exclusive
+            && self.modal_recording.last().map(|k| k.code) == Some(KeyCode::Char('w'))
+        {
+            vix_modal::operator::change_word_end(text, before, after)
+        } else {
+            after
+        };
         let (start, end, reg_kind) = vix_modal::operator::operator_range(text, before, after, kind);
         self.apply_operator_to_range(op, text, start, end, reg_kind);
     }
@@ -526,14 +543,12 @@ impl App {
         }
         // Dot-repeat (T115): only a real buffer mutation is a "change" --
         // `y` never touches the buffer, matching real Vim's own `.` (yank
-        // was never dot-repeatable there either). `c` is excluded too, for
-        // now: replaying it would need to replay the Insert-mode session
-        // that follows, which needs its own recording hook outside this
-        // file (the typed keys never reach `App::modal_key` at all, per
-        // T112's own Insert-mode-passthrough design) -- a deliberately
-        // scoped-out follow-on, not in the spec's own cut list.
+        // was never dot-repeatable there either). `c` is recorded when its
+        // Insert-mode session ends (T837, `Self::modal_finish_insert_record`),
+        // so `.` replays the typed text too.
         if op == 'd' {
             self.modal_last_change = self.modal_recording.clone();
+            self.modal_last_change_insert.clear();
         }
     }
 
@@ -601,6 +616,7 @@ impl App {
         // Dot-repeat (T115): p/P is one of the three change kinds the spec
         // names outright.
         self.modal_last_change = self.modal_recording.clone();
+        self.modal_last_change_insert.clear();
     }
 
     /// `.` (T115): replay the last recorded change (`modal_last_change`) —
@@ -626,21 +642,24 @@ impl App {
             // digit, but always comes after the motion key that starts it,
             // so it can never be mistaken for this first run).
             let is_digit = |k: &KeyEvent| matches!(k.code, KeyCode::Char(c) if c.is_ascii_digit());
-            let (before, after) = match recorded.iter().position(is_digit) {
-                Some(start) => {
-                    let len = recorded
-                        .get(start..)
-                        .unwrap_or_default()
-                        .iter()
-                        .take_while(|k| is_digit(k))
-                        .count();
-                    (
-                        recorded.get(..start).unwrap_or_default().to_vec(),
-                        recorded.get(start.plus(len)..).unwrap_or_default().to_vec(),
-                    )
+            // With no count recorded, the new one goes first -- after a
+            // register prefix, which must stay first.
+            let (start, len) = if let Some(start) = recorded.iter().position(is_digit) {
+                let len = recorded
+                    .get(start..)
+                    .unwrap_or_default()
+                    .iter()
+                    .take_while(|k| is_digit(k))
+                    .count();
+                (start, len)
+            } else {
+                match recorded.as_slice() {
+                    [q, _, ..] if q.code == KeyCode::Char('"') => (2, 0),
+                    _ => (0, 0),
                 }
-                None => (recorded.clone(), Vec::new()),
             };
+            let before = recorded.get(..start).unwrap_or_default().to_vec();
+            let after = recorded.get(start.plus(len)..).unwrap_or_default().to_vec();
             let mut keys = before;
             keys.extend(
                 n.to_string()
@@ -652,8 +671,24 @@ impl App {
         } else {
             recorded
         };
+        let typed = self.modal_last_change_insert.clone();
+        // The Normal-mode part runs through the same two layers `vim_key`
+        // tries (`i`/`o`/`A`/… live in the old table), so a text object or
+        // motion is recomputed where the cursor is now; then, only if that
+        // put the editor back in Insert mode, the typed keys, through the
+        // same Insert-mode path typing uses (T837).
         for key in keys {
-            self.modal_key(key);
+            if !self.modal_key(key) {
+                self.vim_normal_key(key);
+            }
+        }
+        self.modal_after_normal_key();
+        if self.flags.contains(AppFlags::MODAL_INSERT) {
+            for key in typed {
+                if !self.modal_insert_key(key) {
+                    self.editor_key(key);
+                }
+            }
         }
     }
 
@@ -869,10 +904,12 @@ impl App {
     /// writes a character-wise register and Visual Line a line-wise one; see
     /// [`vix_modal::operator::visual_range`] for the inclusive range rule. A
     /// text object's own selection is used exactly as it was selected.
-    /// Visual operators are not dot-repeatable yet: the last change `.`
-    /// replays is left as it was.
+    /// Visual operators are not dot-repeatable yet, so a `d` or `c` here
+    /// clears what `.` replays rather than leave an older change in place
+    /// (T837); a `c` and the text typed after it are still one undo step.
     fn modal_visual_operator(&mut self, op: char) {
         let linewise = self.modal_mode == vix_modal::Mode::VisualLine;
+        let seq = self.modal_history_seq();
         let exact = self.modal_visual_exact.take();
         self.modal_mode = vix_modal::Mode::Normal;
         self.modal_reset_counts();
@@ -891,7 +928,16 @@ impl App {
         };
         let last_change = std::mem::take(&mut self.modal_last_change);
         self.apply_operator_to_range(op, &text, start, end, kind);
-        self.modal_last_change = last_change;
+        if op == 'y' {
+            self.modal_last_change = last_change;
+        } else {
+            self.modal_last_change.clear();
+            self.modal_last_change_insert.clear();
+            // No Normal-mode keys to replay: the Insert session `c` opens is
+            // grouped for undo but not recorded for `.`.
+            self.modal_recording.clear();
+            self.modal_recording_seq = seq;
+        }
     }
 
     /// `j` in Visual Line mode when the selection ends just above the buffer's
@@ -959,6 +1005,166 @@ impl App {
             tab.editor.set_selection_range(line_end, line_start);
         } else {
             tab.editor.set_selection_range(line_start, line_end);
+        }
+    }
+}
+
+/// An Insert-mode session being recorded as part of a Vi change (T837): the
+/// Normal-mode keys that opened it (`ciw`, `cw`, `o`, `3A`, …), the keys
+/// typed in it, and where in the undo tree the change began.
+#[derive(Debug, Clone, Default)]
+pub(super) struct InsertRecord {
+    /// The Normal-mode keys of the command that entered Insert mode. Empty
+    /// when there are none to replay (a Visual `c`).
+    normal: Vec<KeyEvent>,
+    /// The keys typed in Insert mode so far: text, `Enter`, `Tab`,
+    /// `Backspace`, `Delete`.
+    typed: Vec<KeyEvent>,
+    /// The undo state when the change began (`History::current`).
+    start_seq: Option<usize>,
+    /// `.` can replay the session: no key or edit it cannot replay came in.
+    replayable: bool,
+    /// The session's edits fold into one undo step on `Esc` (a cursor key
+    /// in Insert mode ends that, as it starts a new undo step in Vim).
+    grouped: bool,
+    /// The key being dispatched reached [`App::modal_insert_key`].
+    noted: bool,
+}
+
+impl App {
+    /// The active tab's current undo state (`History::current`), if any.
+    fn modal_history_seq(&self) -> Option<usize> {
+        self.editor
+            .active_tab()
+            .map(|t| t.editor.code_ref().history().current())
+    }
+
+    /// After a Vi/Spacemacs Normal-mode key (or a replayed change): when it
+    /// entered Insert mode, start recording the session as part of the
+    /// change the recording holds (T837). A no-op with the modal engine
+    /// off, or when a session is already being recorded.
+    pub(super) fn modal_after_normal_key(&mut self) {
+        if !self.settings.subsystems.modal_engine
+            || !self.flags.contains(AppFlags::MODAL_INSERT)
+            || self.modal_insert_record.is_some()
+        {
+            return;
+        }
+        self.modal_insert_record = Some(InsertRecord {
+            normal: self.modal_recording.clone(),
+            typed: Vec::new(),
+            start_seq: self.modal_recording_seq,
+            replayable: true,
+            grouped: true,
+            noted: false,
+        });
+    }
+
+    /// A key in Vi/Spacemacs Insert mode. `Esc` returns to Normal mode and
+    /// ends the session's record (`true`: consumed); every other key is
+    /// noted in the record and left for the editor to type (`false`).
+    pub(super) fn modal_insert_key(&mut self, key: KeyEvent) -> bool {
+        if key.code == KeyCode::Esc {
+            self.flags.remove(AppFlags::MODAL_INSERT);
+            self.modal_mode = vix_modal::Mode::Normal;
+            self.modal_finish_insert_record();
+            return true;
+        }
+        let plain = !Self::ctrl(&key) && !Self::alt(&key);
+        let Some(rec) = self.modal_insert_record.as_mut() else {
+            return false;
+        };
+        rec.noted = true;
+        match key.code {
+            KeyCode::Char(_)
+            | KeyCode::Enter
+            | KeyCode::Tab
+            | KeyCode::Backspace
+            | KeyCode::Delete
+                if plain =>
+            {
+                rec.typed.push(key);
+            }
+            // A key `.` cannot replay: a modified key (a shortcut), a
+            // function key, or a cursor key, which in Vim also starts a new
+            // undo step and a new insert.
+            KeyCode::Char(_)
+            | KeyCode::Enter
+            | KeyCode::Tab
+            | KeyCode::Backspace
+            | KeyCode::Delete
+            | KeyCode::F(_)
+            | KeyCode::Left
+            | KeyCode::Right
+            | KeyCode::Up
+            | KeyCode::Down
+            | KeyCode::Home
+            | KeyCode::End
+            | KeyCode::PageUp
+            | KeyCode::PageDown => {
+                rec.replayable = false;
+                rec.grouped = false;
+            }
+            // Anything else (a lone modifier, …) edits nothing; any edit it
+            // does make is caught by `Self::modal_insert_unwatch`.
+            _ => {}
+        }
+        false
+    }
+
+    /// Before a key is dispatched while a session is recorded: the undo
+    /// state to compare against afterward (`None`: nothing recorded).
+    pub(super) fn modal_insert_watch(&mut self) -> Option<usize> {
+        let seq = self.modal_history_seq();
+        let rec = self.modal_insert_record.as_mut()?;
+        rec.noted = false;
+        seq
+    }
+
+    /// After that key: an edit made by something other than Insert-mode
+    /// typing (a completion popup, ghost text, an Org table key, …) is not
+    /// in the record, so the session can no longer be replayed or grouped.
+    pub(super) fn modal_insert_unwatch(&mut self, before: Option<usize>) {
+        let Some(before) = before else {
+            return;
+        };
+        let now = self.modal_history_seq();
+        if let Some(rec) = self.modal_insert_record.as_mut()
+            && !rec.noted
+            && now != Some(before)
+        {
+            rec.replayable = false;
+            rec.grouped = false;
+        }
+    }
+
+    /// `Esc` ended a recorded Insert-mode session: fold the change's edits
+    /// into one undo step and make it what `.` replays — or, when it
+    /// cannot be replayed, clear what `.` replays so an older change is
+    /// not repeated in its place. A session that changed nothing (`i` then
+    /// `Esc`) leaves both alone.
+    fn modal_finish_insert_record(&mut self) {
+        let Some(rec) = self.modal_insert_record.take() else {
+            return;
+        };
+        let now = self.modal_history_seq();
+        if now.is_none() || now == rec.start_seq {
+            return;
+        }
+        if rec.grouped
+            && let Some(seq) = rec.start_seq
+            && let Some(tab) = self.editor.active_tab_mut()
+        {
+            tab.editor.code_mut().squash_history_since(seq);
+        }
+        if rec.replayable && !rec.normal.is_empty() {
+            self.modal_last_change = rec.normal;
+            let mut typed = rec.typed;
+            typed.push(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+            self.modal_last_change_insert = typed;
+        } else {
+            self.modal_last_change.clear();
+            self.modal_last_change_insert.clear();
         }
     }
 }

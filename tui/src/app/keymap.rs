@@ -214,7 +214,11 @@ impl App {
         if key.kind != KeyEventKind::Release {
             self.cowork_local_input();
         }
+        // A Vi Insert-mode session being recorded for `.` (T837) notices an
+        // edit that bypassed Insert-mode typing.
+        let watched = self.modal_insert_watch();
         self.dispatch_key(key);
+        self.modal_insert_unwatch(watched);
         // Keeps the tutorial's status-bar progress indicator live as the
         // learner types (`crates/vix-tutor/spec/index.md`, § Progress
         // checks) -- a cheap no-op whenever no tutorial tab is active, so
@@ -1264,13 +1268,9 @@ impl App {
             return true;
         }
         if self.flags.contains(AppFlags::MODAL_INSERT) {
-            if key.code == KeyCode::Esc {
-                self.flags.remove(AppFlags::MODAL_INSERT);
-                self.modal_mode = vix_modal::Mode::Normal;
-                return true;
-            }
-            // Let typing and shared keys flow through to the editor.
-            return false;
+            // `Esc` leaves Insert mode; typing and shared keys flow
+            // through to the editor, recorded for `.` (T837).
+            return self.modal_insert_key(key);
         }
         // Normal mode. Defer modifier combos and function keys to the shared
         // handler (menu mnemonics, F10, …).
@@ -1291,10 +1291,11 @@ impl App {
         // Visual/Visual Line entry and movement; everything it doesn't
         // recognize falls through to the table below unchanged (T112;
         // T113+ narrow this fallback as real motions/operators land).
-        if self.modal_key(key) {
-            return true;
+        if !self.modal_key(key) {
+            self.vim_normal_key(key);
         }
-        self.vim_normal_key(key);
+        // A key that entered Insert mode starts recording the session (T837).
+        self.modal_after_normal_key();
         // Swallow every other Normal-mode key so it never types into the buffer.
         true
     }
@@ -1304,7 +1305,7 @@ impl App {
     /// looks everything else up in `vix-keybindings`' `"vi"` table
     /// (T104b) — shared with Spacemacs, which delegates its own
     /// Normal-mode vocabulary to this same function.
-    fn vim_normal_key(&mut self, key: KeyEvent) {
+    pub(super) fn vim_normal_key(&mut self, key: KeyEvent) {
         // Second key of a pending `g` / `d` / `y` operator: a one-entry
         // context per operator (only `gg`/`dd`/`yy` continue it; anything
         // else silently cancels, matching the original dispatch, which had
@@ -1475,12 +1476,7 @@ impl App {
             return true;
         }
         if self.flags.contains(AppFlags::MODAL_INSERT) {
-            if key.code == KeyCode::Esc {
-                self.flags.remove(AppFlags::MODAL_INSERT);
-                self.modal_mode = vix_modal::Mode::Normal;
-                return true;
-            }
-            return false;
+            return self.modal_insert_key(key);
         }
         if Self::ctrl(&key) || Self::alt(&key) || matches!(key.code, KeyCode::F(_)) {
             return false;
@@ -1497,12 +1493,13 @@ impl App {
         if self.focus != Focus::Editor {
             return false;
         }
-        // The modal engine gets first refusal (see vim_key's own comment).
-        if self.modal_key(key) {
-            return true;
+        // The modal engine gets first refusal (see vim_key's own comment),
+        // then the shared Vi Normal-mode vocabulary (motions, operators,
+        // insert entry).
+        if !self.modal_key(key) {
+            self.vim_normal_key(key);
         }
-        // Shared Vi Normal-mode vocabulary (motions, operators, insert entry).
-        self.vim_normal_key(key);
+        self.modal_after_normal_key();
         true
     }
 

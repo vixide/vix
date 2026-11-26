@@ -27,9 +27,9 @@ all pure — no buffer mutation, the host applies the result through its own
 selection + `InsertText` action) and `register.rs` (`Registers`, the named
 `a`-`z` map). `d`/`c`/`y` compose with every T113 motion, `x` is real sugar
 for `d` + one right motion, `dd`/`cc`/`yy` act on the whole line, `p`/`P`
-read a register, `"{a-z}` selects one. Two deliberately deferred real-Vim
-nuances, neither in the spec's own cut list: `cw`'s "acts like `ce`"
-special case, and `cc`'s indentation preservation. Operators composing
+read a register, `"{a-z}` selects one. One deliberately deferred real-Vim
+nuance, not in the spec's own cut list: `cc`'s indentation preservation
+(`cw`'s "acts like `ce`" special case landed in T837). Operators composing
 with a **Visual** selection landed later, in T840 (§ Design: Visual
 operators). **T115** (done):
 `text_object.rs` — `iw`/`aw`, a parameterized `inner_pair`/`around_pair`
@@ -39,13 +39,11 @@ motion (always a plain character-wise range). Dot-repeat: `.` replays the
 last real change (`d{motion}`, a text object, or `p`/`P` — not `y`,
 matching real Vim's own rule) as host-side keystroke replay
 (`tui/src/app/modal.rs`, not this crate — there's no pure function to write for
-it); `c` and a plain Insert-mode session are excluded too, a deliberately
-scoped-out follow-on (replaying typed Insert-mode text needs a recording
-hook outside this crate's host wiring, since those keys never reach
-`App::modal_key` at all under T112's own Insert-mode-passthrough design).
-`cw`'s "acts
-like `ce`" special case and `cc`'s indentation preservation remain
-deliberately unimplemented too. None of the open items above are in this
+it). **T837** (done): `c` and the Insert-mode session it opens, and a plain
+Insert-mode session (`i`, `a`, `o`, …), are recorded too and each change
+is one undo step (§ Design: dot-repeat); `cw` keeps the white space after
+the word (`operator::change_word_end`). `cc`'s indentation preservation
+remains deliberately unimplemented. None of the open items above are in this
 spec's own cut list; they're documented gaps, not silent omissions —
 `docs/vix-for-vim-users/index.md`'s "Where Vim still wins" states the same list
 in user-facing terms.
@@ -245,8 +243,10 @@ inside Visual mode selects the register, as does one typed before `v`/`V`.
   Visual Line a line-wise one, so `p` afterward pastes inline or as lines.
 - **Cursor.** `d`/`c`/`y` leave the cursor at the start of the range (a
   line-wise `d`/`y`: its first non-blank), as in Vim.
-- **Not yet.** A Visual operator is not dot-repeatable (`.` keeps replaying
-  the previous change), Visual mode's motions are still `h j k l` and the
+- **Not yet.** A Visual operator is not dot-repeatable: a Visual `d` or `c`
+  clears what `.` replays (T837) rather than leave an older change to be
+  repeated in its place (a Visual `y` changes nothing and leaves it), and a
+  Visual `c` with the text typed after it is still one undo step. Visual mode's motions are still `h j k l` and the
   arrows (plus text objects), and `p`/`P` over a selection does not
   replace it. Visual Block and register macros are later work.
 
@@ -300,6 +300,38 @@ A "change" for this purpose is: an operator+motion/text-object pair, `p`/
 leaving it counts as one change, matching Vim). Pure motions (`w`, `gg`,
 `/pattern`) do not update what `.` repeats — moving the cursor isn't a
 change.
+
+### Changes through Insert mode (T837)
+
+- **Recording.** A Normal-mode command that enters Insert mode (`c{motion}`,
+  `c` + a text object, `cc`, `i`, `a`, `I`, `A`, `o`, `O`, with any count
+  or register prefix) starts a record holding its own keys; every key typed
+  in Insert mode is added to it — text (any Unicode), `Enter`, `Tab`,
+  `Backspace` and `Delete`, so a corrected typo replays as typed — and the
+  `Esc` that leaves Insert mode makes the whole record what `.` replays.
+  An Insert session that changed nothing (`i` then `Esc`) leaves the last
+  change as it was.
+- **Replay.** `.` re-runs the Normal-mode keys where the cursor now is, so
+  a text object or motion is recomputed (`ciw` on a longer word changes
+  that whole word), then — only if they entered Insert mode again — the
+  typed keys and `Esc`. `{count}.` replaces the count among the
+  Normal-mode keys (none recorded: the count goes first, after a register
+  prefix), never a digit typed in Insert mode.
+- **Undo.** On `Esc`, every edit since the command began — the deletion
+  `c` made, the line `o` opened, each typed character — folds into one
+  undo step (`History::squash_since` in `vix-editor-core`), so one `u`
+  undoes the change and an earlier change stays its own step.
+- **Invalidation.** When a change cannot be recorded, `.` is cleared
+  rather than left to repeat an older change: an Insert session that used a
+  cursor key, a function key or a modified key (Vim also starts a new undo
+  step and a new insert there; the session then stays separate undo steps
+  too), one in which something other than typing edited the buffer (a
+  completion popup, ghost text, an Org table key), and a Visual `d`/`c`.
+  A cancelled operator (`d` then `Esc`) changes nothing and is not a
+  change.
+- **`cw`.** On a non-blank, `cw` changes to the end of the word and keeps
+  the white space after it (`:help cw`): `cw` on `old value` leaves
+  ` value` (`operator::change_word_end`). On white space it is `dw`.
 
 ## Design: text objects
 

@@ -1319,6 +1319,16 @@ impl Code {
         Some(batch)
     }
 
+    /// Merge every undo state after `seq` into one, so one undo reverts
+    /// them together (see [`History::squash_since`]). Refused (`false`)
+    /// while the edit log is on, as `undo` is.
+    pub fn squash_history_since(&mut self, seq: usize) -> bool {
+        if self.edit_log.is_some() {
+            return false;
+        }
+        self.history.squash_since(seq)
+    }
+
     /// Cycle which undo-tree branch `redo` will follow from the current state.
     /// Returns `true` if the current state has more than one branch. See
     /// [`crate::history::History`].

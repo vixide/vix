@@ -323,13 +323,18 @@ fn a_count_before_dd_deletes_that_many_lines() {
 fn c_w_deletes_and_enters_insert_mode() {
     let mut app = vi_app("modal-cw", "foo bar\n", true);
     type_str(&mut app, "\"acw");
-    assert_eq!(buffer_text(&app), "bar\n");
+    // Vim's `cw` special case (T837): the space after the word stays.
+    assert_eq!(buffer_text(&app), " bar\n");
     assert!(
         matches!(app.mode_indicator().as_deref(), Some("-- INSERT --")),
         "c enters Insert mode"
     );
     type_str(&mut app, "XYZ");
-    assert_eq!(buffer_text(&app), "XYZbar\n", "typed text lands at the cut");
+    assert_eq!(
+        buffer_text(&app),
+        "XYZ bar\n",
+        "typed text lands at the cut"
+    );
 }
 
 #[test]
@@ -743,5 +748,173 @@ fn cut_two_lines_switch_files_paste_three_copies_undo_once() {
         buffer_text(&app),
         "first\nlast\n",
         "one undo removes all three copies"
+    );
+}
+
+// ----- T837: a change is one unit of repeat and undo ----------------------
+
+fn modal_app(tag: &str, text: &str, keymap: &str) -> App {
+    let mut app = app_with({
+        let mut s = Settings::default();
+        s.keymap = keymap.to_string();
+        s.subsystems.modal_engine = true;
+        s
+    });
+    let dir = unique_dir(tag);
+    let file = dir.join("a.txt");
+    fs::write(&file, text).unwrap();
+    app.open_initial(&file);
+    app
+}
+
+/// `ciw` on a short identifier with typed Unicode and a corrected typo,
+/// `.` on a longer one, then one `u` per change.
+fn ciw_then_dot_on_a_longer_word(keymap: &str, tag: &str) {
+    let mut app = modal_app(tag, "ab longer_name\n", keymap);
+    type_keys(&mut app, "ciwnëx");
+    app.on_key(keycode(KeyCode::Backspace));
+    type_keys(&mut app, "w→");
+    app.on_key(esc());
+    assert_eq!(
+        buffer_text(&app),
+        "nëw→ longer_name\n",
+        "{keymap}: the first change"
+    );
+    type_keys(&mut app, "w.");
+    assert_eq!(
+        buffer_text(&app),
+        "nëw→ nëw→\n",
+        "{keymap}: . re-ran ciw on the longer word with the same typed text"
+    );
+    app.on_key(key('u'));
+    assert_eq!(
+        buffer_text(&app),
+        "nëw→ longer_name\n",
+        "{keymap}: one u undoes the repeat"
+    );
+    app.on_key(key('u'));
+    assert_eq!(
+        buffer_text(&app),
+        "ab longer_name\n",
+        "{keymap}: one u undoes the first change"
+    );
+}
+
+#[test]
+fn ciw_is_repeated_and_undone_as_one_change_under_vi() {
+    ciw_then_dot_on_a_longer_word("vi", "modal-t837-ciw-vi");
+}
+
+#[test]
+fn ciw_is_repeated_and_undone_as_one_change_under_spacemacs() {
+    ciw_then_dot_on_a_longer_word("spacemacs", "modal-t837-ciw-spacemacs");
+}
+
+#[test]
+fn a_change_after_a_delete_replaces_it_as_the_dot_target_and_undoes_separately() {
+    for keymap in ["vi", "spacemacs"] {
+        let mut app = modal_app(
+            &format!("modal-t837-after-delete-{keymap}"),
+            "one two three four\n",
+            keymap,
+        );
+        type_keys(&mut app, "dw");
+        assert_eq!(buffer_text(&app), "two three four\n");
+        type_keys(&mut app, "ciwX");
+        app.on_key(esc());
+        assert_eq!(buffer_text(&app), "X three four\n");
+        // A cancelled operator in between changes nothing and is not a change.
+        app.on_key(key('d'));
+        app.on_key(esc());
+        app.on_key(key('c'));
+        app.on_key(esc());
+        type_keys(&mut app, "w.");
+        assert_eq!(
+            buffer_text(&app),
+            "X X four\n",
+            "{keymap}: . repeats ciw, not dw"
+        );
+        app.on_key(key('u'));
+        assert_eq!(buffer_text(&app), "X three four\n", "{keymap}");
+        app.on_key(key('u'));
+        assert_eq!(buffer_text(&app), "two three four\n", "{keymap}");
+        app.on_key(key('u'));
+        assert_eq!(buffer_text(&app), "one two three four\n", "{keymap}");
+    }
+}
+
+#[test]
+fn cw_keeps_the_white_space_after_the_word() {
+    let mut app = modal_app("modal-t837-cw-sep", "old value\n", "vi");
+    type_keys(&mut app, "cwnew");
+    app.on_key(esc());
+    assert_eq!(
+        buffer_text(&app),
+        "new value\n",
+        "Vim's cw changes only the word"
+    );
+}
+
+#[test]
+fn a_count_before_dot_replaces_the_count_not_a_digit_typed_in_insert() {
+    let mut app = modal_app("modal-t837-count-dot", "a b c d\n", "vi");
+    type_keys(&mut app, "cwx1");
+    app.on_key(esc());
+    assert_eq!(buffer_text(&app), "x1 b c d\n");
+    type_keys(&mut app, "w2.");
+    assert_eq!(
+        buffer_text(&app),
+        "x1 x1 d\n",
+        "2. is c2w with the same typed text"
+    );
+}
+
+#[test]
+fn an_open_line_session_is_one_change() {
+    let mut app = modal_app("modal-t837-open-line", "top\n", "vi");
+    type_keys(&mut app, "ofoo");
+    app.on_key(esc());
+    assert_eq!(buffer_text(&app), "top\nfoo\n");
+    app.on_key(key('.'));
+    assert_eq!(
+        buffer_text(&app),
+        "top\nfoo\nfoo\n",
+        ". opens and types again"
+    );
+    app.on_key(key('u'));
+    app.on_key(key('u'));
+    assert_eq!(buffer_text(&app), "top\n", "each session undid as a whole");
+}
+
+#[test]
+fn an_insert_session_that_cannot_be_recorded_invalidates_dot() {
+    let mut app = modal_app("modal-t837-unrecordable", "one two three\n", "vi");
+    type_keys(&mut app, "dw");
+    assert_eq!(buffer_text(&app), "two three\n");
+    // A cursor key inside Insert mode is not something . can replay.
+    type_keys(&mut app, "iZ");
+    app.on_key(keycode(KeyCode::Right));
+    type_keys(&mut app, "Y");
+    app.on_key(esc());
+    assert_eq!(buffer_text(&app), "ZtYwo three\n");
+    app.on_key(key('.'));
+    assert_eq!(
+        buffer_text(&app),
+        "ZtYwo three\n",
+        ". no longer replays the older dw"
+    );
+}
+
+#[test]
+fn a_visual_delete_invalidates_dot() {
+    let mut app = modal_app("modal-t837-visual-invalidates", "one two three\n", "vi");
+    type_keys(&mut app, "dw");
+    type_keys(&mut app, "vd");
+    assert_eq!(buffer_text(&app), "wo three\n");
+    app.on_key(key('.'));
+    assert_eq!(
+        buffer_text(&app),
+        "wo three\n",
+        ". does not replay the older dw"
     );
 }
