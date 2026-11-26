@@ -246,16 +246,23 @@ fn an_installed_agent_takes_over_every_operation() {
     let watch = auth
         .watch(std::slice::from_ref(&watched), Duration::from_millis(100))
         .unwrap();
-    std::fs::write(&watched, b"2 and more").unwrap();
+    // The agent takes its first snapshot of the file some time after `watch`
+    // returns; a change written before that snapshot is never reported. So
+    // keep growing the file until a change is seen, then put back the text
+    // the checks below expect.
     let mut seen = Vec::new();
+    let mut text = b"2 and more".to_vec();
     for _ in 0..100 {
+        std::fs::write(&watched, &text).unwrap();
         if let Some(paths) = watch.next_timeout(Duration::from_millis(100)) {
             seen.extend(paths);
             break;
         }
+        text.push(b'.');
     }
     assert_eq!(seen, vec![watched.clone()]);
     drop(watch);
+    std::fs::write(&watched, b"2 and more").unwrap();
 
     // Stopping the agent hands everything back to the shell scripts.
     auth.stop_agent();
