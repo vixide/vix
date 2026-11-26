@@ -6,7 +6,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-- Fixed: expand and shrink selection work without the `lsp` feature. The menu and palette now use the ungated `edit.expand_selection` and `edit.shrink_selection` ids (offline Tree-sitter fallback); the `lsp.*` ids stay as aliases for saved keybindings (T842).
+- Fixed: expand and shrink selection work without the `lsp` feature. The menu and palette now use the `edit.expand_selection` and `edit.shrink_selection` ids, which the LSP capability gate does not catch, so the offline Tree-sitter fallback runs; the `lsp.*` ids stay as aliases for saved keybindings (T842).
 
 ## [3.0.0] - 2026-11-24
 
