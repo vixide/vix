@@ -26,6 +26,7 @@ pub mod mode;
 pub mod motion;
 pub mod operator;
 pub mod register;
+pub mod text;
 pub mod text_object;
 
 pub use count::Count;

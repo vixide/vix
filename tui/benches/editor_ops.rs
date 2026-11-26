@@ -230,6 +230,92 @@ fn bench_line_transforms(c: &mut Criterion) {
     group.finish();
 }
 
+/// The Vi (modal-engine) keymap over a buffer of about `bytes` bytes whose
+/// middle line is always the same `TEST_LINE` (T843). The rest is unrelated
+/// filler, so the cost of a motion on that line should not depend on
+/// `bytes` at all: a same-line step reads the line, not the buffer.
+fn vi_app(tag: &str, bytes: usize) -> (vix::app::App, usize) {
+    use vix::settings::Settings;
+    const TEST_LINE: &str =
+        "    let value = compute_something(alpha, beta, gamma, delta); // note\n";
+    let filler = "the quick brown fox jumps over the lazy dog, again and again\n";
+    let half = bytes / 2 / filler.len();
+    let mut text = filler.repeat(half);
+    let line_start = text.chars().count();
+    text.push_str(TEST_LINE);
+    text.push_str(&filler.repeat(half));
+    let dir = std::env::temp_dir().join(format!("vix-bench-vi-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.txt");
+    std::fs::write(&file, &text).unwrap();
+    let mut settings = Settings::default();
+    settings.keymap = "vi".to_string();
+    settings.subsystems.modal_engine = true;
+    let mut app = vix::app::App::new(dir.clone(), settings)
+        .with_session_path(dir.join("session.toml"))
+        .with_backup_dir(dir.join("backup"));
+    app.layout.editor = ratatui::layout::Rect::new(0, 0, 120, 40);
+    app.open_initial(&file);
+    // On `compute_something`: a word with words on both sides.
+    let cursor = line_start + 16;
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor(cursor);
+    (app, cursor)
+}
+
+/// One key press, as the terminal reports a plain character.
+fn vi_key(c: char) -> vix_input::KeyEvent {
+    vix_input::KeyEvent::new(vix_input::KeyCode::Char(c), vix_input::KeyModifiers::NONE)
+}
+
+/// Vi motions and counted operators through the real `App` key path
+/// (T843): `l`+`h`, `w`+`b`, `3dw`+`u` and `2dd`+`u`, each pair
+/// returning the cursor (and buffer) to where it started, plus `l`+`h`
+/// with a frame drawn after each key (key-to-frame, what the
+/// `VIX_PROFILE` profiler's "input to frame" phase times). Three buffer
+/// sizes around the same line: the numbers should not grow with size.
+fn bench_vi_motions(c: &mut Criterion) {
+    let mut group = c.benchmark_group("editor/vi");
+    group.sample_size(20);
+    for (label, bytes) in [("4KiB", 4 << 10), ("512KiB", 512 << 10), ("8MiB", 8 << 20)] {
+        let (mut app, cursor) = vi_app(label, bytes);
+        let keys: [(&str, &[char]); 4] = [
+            ("l_h", &['l', 'h']),
+            ("w_b", &['w', 'b']),
+            ("3dw_u", &['3', 'd', 'w', 'u']),
+            ("2dd_u", &['2', 'd', 'd', 'u']),
+        ];
+        for (name, seq) in keys {
+            group.bench_function(BenchmarkId::new(name, label), |b| {
+                b.iter(|| {
+                    for &k in seq {
+                        app.on_key(vi_key(k));
+                    }
+                    app.editor
+                        .active_tab_mut()
+                        .unwrap()
+                        .editor
+                        .set_cursor(cursor);
+                });
+            });
+        }
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 40)).unwrap();
+        group.bench_function(BenchmarkId::new("l_h_with_frames", label), |b| {
+            b.iter(|| {
+                for k in ['l', 'h'] {
+                    app.on_key(vi_key(k));
+                    term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+                }
+            });
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_open,
@@ -237,6 +323,7 @@ criterion_group!(
     bench_typing,
     bench_random_edits,
     bench_paste_and_undo,
-    bench_line_transforms
+    bench_line_transforms,
+    bench_vi_motions
 );
 criterion_main!(benches);

@@ -648,6 +648,14 @@ impl Code {
         self.content.slice(start..end).to_string()
     }
 
+    /// The buffer itself, for read-only walks that must not copy the text
+    /// (`Rope::clone` is an O(1) structural share). The Vi motions read
+    /// through this so a motion costs its line, not the file (T843).
+    #[must_use]
+    pub fn rope(&self) -> &Rope {
+        &self.content
+    }
+
     /// Return the number of characters in the buffer.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -1445,11 +1453,6 @@ impl Code {
     /// or while a large buffer's first background parse is still running).
     pub(crate) fn syntax_tree(&self) -> Option<&Tree> {
         self.tree.as_ref()
-    }
-
-    /// The rope backing the buffer.
-    pub(crate) fn rope(&self) -> &Rope {
-        &self.content
     }
 
     /// `"CRLF"` if the first line ends with `\r\n`, else `"LF"`.

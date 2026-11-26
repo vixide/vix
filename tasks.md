@@ -10930,7 +10930,7 @@ Fix boundaries of everyday edits before adding Vi features.
   ids as aliases for saved keybindings), and verify both feature builds in
   `scripts/check` without starting a server. `tui/src/capability.rs`,
   `tui/tests/integration/textobjects.rs`
-- [ ] **T843 — Vi motion cost must not scale with file size.** `l` takes
+- [x] **T843 — Vi motion cost must not scale with file size.** (Done: motions/operators read the rope through `vix_modal::text::Text`, line-local; 8 MiB `l` 17.6 ms → 1.5 µs, key-to-frame p50 12.1 → 0.34 ms; `(`/`)`, text objects, `p`/`P` and Visual operators still copy the buffer.) `l` takes
   0.4 ms at 512 KiB and 8.6 ms at 8 MiB, `w` 12.4 ms (budget is 16 ms),
   because the App materializes the whole buffer and the motion collects its
   chars. Use rope and line-local grapheme APIs and scan only as far as needed;

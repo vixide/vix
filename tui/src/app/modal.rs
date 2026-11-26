@@ -32,8 +32,10 @@
 
 use super::{AppFlags, ModalPending};
 use crate::geo::Geo;
+use ropey::Rope;
 use vix_input::{KeyCode, KeyEvent, KeyModifiers};
 use vix_modal::motion::MotionKind::{self, Exclusive, Inclusive, Linewise};
+use vix_modal::text::Text;
 
 use super::App;
 use crate::editor_core::actions::InsertText;
@@ -248,7 +250,11 @@ impl App {
         let Some(op) = self.modal_pending_operator.take() else {
             return;
         };
-        let Some(text) = self.editor.active_tab_mut().map(|t| t.editor.get_content()) else {
+        let Some(text) = self
+            .editor
+            .active_tab_mut()
+            .map(|t| t.editor.code_ref().rope().clone())
+        else {
             return;
         };
         // Text objects are always a plain character-wise range -- there's
@@ -416,7 +422,7 @@ impl App {
     /// by the caller) against the active tab's buffer, moving its cursor —
     /// or, when an operator is pending (T114), feeding `kind` and the
     /// motion's landing position to it instead. A no-op with no active tab.
-    fn apply_modal_motion(&mut self, kind: MotionKind, f: impl FnOnce(&str, usize) -> usize) {
+    fn apply_modal_motion(&mut self, kind: MotionKind, f: impl FnOnce(&Rope, usize) -> usize) {
         self.apply_modal_motion_fallible(kind, |text, pos| Some(f(text, pos)));
     }
 
@@ -426,12 +432,14 @@ impl App {
     fn apply_modal_motion_fallible(
         &mut self,
         kind: MotionKind,
-        f: impl FnOnce(&str, usize) -> Option<usize>,
+        f: impl FnOnce(&Rope, usize) -> Option<usize>,
     ) {
+        // The buffer's rope, shared in O(1) rather than copied out (T843):
+        // the motion walks only the text it needs from the cursor.
         let Some((pos, text)) = self
             .editor
             .active_tab_mut()
-            .map(|t| (t.editor.get_cursor(), t.editor.get_content()))
+            .map(|t| (t.editor.get_cursor(), t.editor.code_ref().rope().clone()))
         else {
             return;
         };
@@ -458,7 +466,7 @@ impl App {
     fn run_modal_operator(
         &mut self,
         op: char,
-        text: &str,
+        text: &Rope,
         before: usize,
         after: usize,
         kind: MotionKind,
@@ -483,22 +491,22 @@ impl App {
     /// end)` came from — a T113 motion (via [`Self::run_modal_operator`]) or
     /// a T115 text object (via [`Self::modal_resolve_text_object`]), both of
     /// which only differ in how they compute the range in the first place.
-    fn apply_operator_to_range(
+    fn apply_operator_to_range<T: Text + ?Sized>(
         &mut self,
         op: char,
-        text: &str,
+        text: &T,
         start: usize,
         end: usize,
         reg_kind: vix_modal::register::RegisterKind,
     ) {
-        let (_, removed) = vix_modal::operator::delete_range(text, (start, end));
+        let removed = text.range_string(start, end);
         // A line-wise change (`cc`, `Vc`) keeps one empty line to type
         // into, as Vim does: the register still gets the whole lines, but
         // the final line break stays in the buffer.
         let end = if op == 'c'
             && reg_kind == vix_modal::register::RegisterKind::Line
             && end > start
-            && text.chars().nth(end.minus(1)) == Some('\n')
+            && text.char_at(end.minus(1)) == Some('\n')
         {
             end.minus(1)
         } else {
@@ -530,8 +538,8 @@ impl App {
                     // Vim's `dd`/`dj`/`dgg`/... rather than wherever the
                     // raw deletion point happens to fall.
                     if op == 'd' && reg_kind == vix_modal::register::RegisterKind::Line {
-                        let content = tab.editor.get_content();
-                        let cursor = vix_modal::motion::line_first_non_blank(&content, start);
+                        let content = tab.editor.code_ref().rope();
+                        let cursor = vix_modal::motion::line_first_non_blank(content, start);
                         tab.editor.set_cursor(cursor);
                     }
                 }

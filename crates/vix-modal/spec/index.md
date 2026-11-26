@@ -182,6 +182,33 @@ match, rather than a fourth reimplementation — that crate may need a small
 extension (e.g. a `nth` parameter) rather than being called in a loop, which
 is T113's call once it's in the code.
 
+**Buffer access and cost (T843).** The motions are generic over
+`vix_modal::text::Text` — a character count plus a forward and a backward
+character iterator from any offset — implemented for `str`, `String`,
+`ropey::Rope` and `ropey::RopeSlice`. The `&str` shape above still works
+unchanged; the host passes the editor's rope (`Code::rope`, cloned in O(1))
+so no motion or operator copies the buffer. Each motion walks outward from
+`pos` only as far as its answer needs: `h l 0 ^ $ f t F T` read the cursor's
+line, `w b e` read up to the next word boundary, `j k {count}gg { }` read
+the lines they cross, `G` reads the last line, and a linewise operator reads
+the two lines at its ends. A same-line motion therefore costs the same in an
+8 MiB buffer as in a one-line one (`docs/performance/index.md`, *Vi motions
+in a large file*). Only `(`/`)` still read the whole text, because the
+sentence rules (`vix_textops::sentence_starts`) are a whole-text scan; text
+objects, `p`/`P` and Visual operators also still take a copy of the
+buffer — follow-ons, not part of T843. Results are exactly those of the
+original whole-text implementation, which the crate's tests keep as an
+oracle and compare on every offset of thousands of generated texts.
+
+*Offsets* (RCA figure declaration): `pos` and every motion result are
+character offsets, `usize`, valid range `0..=len_chars`. A motion clamps by
+design (to the line's last character, the line start, the buffer end or 0),
+so an offset sum that would overflow `usize` (a count near `usize::MAX`)
+lands on that same clamp bound, and a difference below zero lands on 0, the
+start; both are the answer Vim gives for an overlong count, not invalid
+input. A huge count costs no more than reaching the bound: a repeated step
+stops as soon as it stops moving.
+
 **Cut from v1**: `W`/`B`/`E` (WORD — whitespace-delimited, vs. word's
 alphanumeric-run definition), `;`/`,` (repeat last `f`/`t`), `*`/`#`
 (search word under cursor). Each is a small, self-contained addition once

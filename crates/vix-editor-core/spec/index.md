@@ -42,7 +42,10 @@ far (~20 ms per edit on a 100 MB file; an idle frame costs nothing). `Code::
 from_rope` / `Editor::from_rope` build a buffer from a rope the host already
 has. `code::full_text_scans()` counts this thread's whole-buffer passes
 (`get_content`, `max_line_chars`) so tests can assert an idle frame makes
-none.
+none. `Code::rope` hands out the rope itself for read-only walks; cloning it
+is an O(1) structural share, which is how the Vi motions and operators read
+the buffer without copying it (T843, `crates/vix-modal/spec/index.md` §
+Design: motions).
 
 ## Grapheme segmentation across rope chunks
 

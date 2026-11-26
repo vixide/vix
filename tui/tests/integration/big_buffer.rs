@@ -192,3 +192,118 @@ fn opening_a_large_file_costs_about_its_size() {
         "opening a {size_kib} KiB file grew resident memory by {grew} KiB"
     );
 }
+
+/// A Vi (modal-engine) app editing `text` in a fresh file.
+fn vi_app_with(tag: &str, text: &str) -> App {
+    let mut settings = Settings::default();
+    settings.keymap = "vi".to_string();
+    settings.subsystems.modal_engine = true;
+    let dir = unique_dir(tag);
+    let file = dir.join("a.txt");
+    fs::write(&file, text).unwrap();
+    let mut app = app_at_with(&dir, settings);
+    app.open_initial(&file);
+    app
+}
+
+fn vi_cursor(app: &App) -> usize {
+    app.editor.active_tab().map_or(0, |t| t.editor.get_cursor())
+}
+
+fn set_vi_cursor(app: &mut App, at: usize) {
+    app.editor.active_tab_mut().unwrap().editor.set_cursor(at);
+}
+
+/// Three copies of one line, the cursor on the middle one.
+const VI_LINES: &str = "    alpha beta.gamma(delta, epsilon) zeta_eta\n\
+                        \x20   alpha beta.gamma(delta, epsilon) zeta_eta\n\
+                        \x20   alpha beta.gamma(delta, epsilon) zeta_eta\n";
+
+/// Unrelated text around [`VI_LINES`] in the large buffer.
+fn vi_filler() -> String {
+    "filler words, filler words. More filler!\n\n".repeat(20_000)
+}
+
+/// T843: every Vi motion and operator below gives the same result —
+/// cursor relative to the lines, and the lines' text — whether the three
+/// lines are the whole buffer or sit inside ~1.7 MB of unrelated text.
+#[test]
+fn vi_motions_on_a_large_buffer_match_the_same_lines_alone() {
+    let filler = vi_filler();
+    let big_text = format!("{filler}{VI_LINES}{filler}");
+    let off = filler.chars().count();
+    let line_len = VI_LINES.chars().count() / 3;
+    let start = line_len + 8;
+    let sequences: &[&str] = &[
+        "l", "3l", "h", "4h", "w", "2w", "b", "3b", "e", "2e", "$", "0", "^", "fa", "2fa", "t)",
+        "Fa", "Tb", "j", "k", "x", "3x", "dw", "3dw", "d2w", "db", "de", "d$", "dfa", "dt)", "dd",
+        "dk", "yw", "ywP", "cwX",
+    ];
+    let mut small = vi_app_with("t843-small", VI_LINES);
+    let mut big = vi_app_with("t843-big", &big_text);
+    for seq in sequences {
+        set_vi_cursor(&mut small, start);
+        set_vi_cursor(&mut big, off + start);
+        for c in seq.chars() {
+            small.on_key(key(c));
+            big.on_key(key(c));
+        }
+        if seq.starts_with('c') {
+            small.on_key(esc());
+            big.on_key(esc());
+        }
+        let small_now = small.editor.active_tab().unwrap().text();
+        let big_now = big.editor.active_tab().unwrap().text();
+        let middle = big_now
+            .strip_prefix(filler.as_str())
+            .and_then(|t| t.strip_suffix(filler.as_str()))
+            .unwrap_or_else(|| panic!("{seq}: the edit reached the filler"));
+        assert_eq!(middle, small_now, "{seq}: same text");
+        assert_eq!(
+            vi_cursor(&big).checked_sub(off),
+            Some(vi_cursor(&small)),
+            "{seq}: same cursor"
+        );
+        // Put both buffers back for the next sequence.
+        if small_now != VI_LINES {
+            small
+                .editor
+                .active_tab_mut()
+                .unwrap()
+                .editor
+                .set_content(VI_LINES);
+            big.editor
+                .active_tab_mut()
+                .unwrap()
+                .editor
+                .set_content(&big_text);
+        }
+    }
+}
+
+/// T843: a Vi motion or operator reads the lines it acts on, never the whole
+/// buffer — before it, `l` copied all of the text out (8.6 ms at 8 MiB).
+#[test]
+fn vi_motions_and_operators_make_no_whole_buffer_pass() {
+    use vix::editor_core::code::full_text_scans;
+    let filler = vi_filler();
+    let mut app = vi_app_with("t843-scans", &format!("{filler}{VI_LINES}{filler}"));
+    let off = filler.chars().count();
+    set_vi_cursor(&mut app, off + 50);
+    let before = full_text_scans();
+    for seq in [
+        "l", "h", "3l", "w", "b", "e", "j", "k", "$", "0", "^", "fa", "G", "gg", "}", "{",
+    ] {
+        for c in seq.chars() {
+            app.on_key(key(c));
+        }
+        assert_eq!(full_text_scans(), before, "{seq} read the whole buffer");
+        set_vi_cursor(&mut app, off + 50);
+    }
+    for seq in ["x", "3dw", "d$", "dd", "2dd", "yw"] {
+        for c in seq.chars() {
+            app.on_key(key(c));
+        }
+        assert_eq!(full_text_scans(), before, "{seq} read the whole buffer");
+    }
+}
