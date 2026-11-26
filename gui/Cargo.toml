@@ -29,7 +29,7 @@ license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only"
 # after `vix-tui`, `vix-input` and `vix-i18n` at the same version.
 publish = true
 repository = "https://github.com/vixide/vix"
-homepage = "https://github.com/vixide/vix"
+homepage = "https://vixide.github.io/"
 authors = ["Joel Parker Henderson <joel@joelparkerhenderson.com>"]
 
 [workspace.dependencies]

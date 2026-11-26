@@ -399,6 +399,9 @@ if in_tier full; then
 	step_begin "feature combinations (T587)"
 	cargo clippy -p vix-tui --no-default-features --all-targets -- -D warnings
 	cargo test -p vix-tui --no-default-features
+	# Every crate with its default features off, tests and examples included:
+	# a test of feature-gated code needs `required-features` or a `cfg`.
+	cargo check --workspace --all-targets --no-default-features
 	# Every grammar's textobjects query (T616): compile them all and run the
 	# per-language fixtures, which the default grammar set would skip.
 	cargo test -p vix-editor-core --features syntax-all --lib textobject
@@ -416,7 +419,9 @@ if in_tier full; then
 	cargo test -p vix-tui --features matrix --lib matrix
 	cargo test -p vix-matrix-protocol --features net
 	if command -v cargo-hack >/dev/null 2>&1; then
-		cargo hack check -p vix-tui --each-feature --no-dev-deps
+		# --all-targets: the tests too, so a test of one feature's code is
+		# gated on that feature (a lib-only check let such tests rot).
+		cargo hack check -p vix-tui --each-feature --all-targets
 	else
 		echo "    (skipping each-feature check: 'cargo install cargo-hack --locked' to enable)"
 	fi

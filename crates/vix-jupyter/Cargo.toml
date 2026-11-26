@@ -43,5 +43,13 @@ required-features = ["process"]
 name = "ipykernel_smoke"
 required-features = ["process"]
 
+[[test]]
+name = "launched_kernel"
+required-features = ["process"]
+
+[[test]]
+name = "scripted_kernel"
+required-features = ["process"]
+
 [lints]
 workspace = true

@@ -43,7 +43,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NFPM_IMAGE = "docker.io/goreleaser/nfpm:v2.47.0"
 
 MAINTAINER = "Joel Parker Henderson <joel@joelparkerhenderson.com>"
-HOMEPAGE = "https://github.com/vixide/vix"
+HOMEPAGE = "https://vixide.github.io/"
 
 # Shared libraries that winit/wgpu/glow load with dlopen at run time, so they
 # never show up as ELF NEEDED entries: a window needs X11 or Wayland, plus a

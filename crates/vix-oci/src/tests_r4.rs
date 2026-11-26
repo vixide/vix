@@ -286,6 +286,7 @@ fn errors_display_and_convert() {
     );
 }
 
+#[cfg(feature = "process")]
 #[test]
 fn run_reports_a_missing_program_as_not_installed() {
     let missing = std::path::Path::new("/nonexistent-dir-r4/engine");

@@ -12,7 +12,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 similar = { workspace = true }
-vix-editor-core = { path = "../vix-editor-core", version = "3.0.0", default-features = false }
+vix-editor-core = { workspace = true }
 vix-fileops = { workspace = true }
 vix-settings = { workspace = true }
 

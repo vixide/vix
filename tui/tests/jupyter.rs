@@ -949,6 +949,7 @@ fn project_kernelspecs_need_a_trusted_workspace() {
 
 // ----- T734g: images -------------------------------------------------------------
 
+#[cfg(feature = "image")]
 #[test]
 fn an_image_opens_in_a_tab_and_a_bomb_is_refused() {
     let _guard = lock();

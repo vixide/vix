@@ -1,7 +1,7 @@
 {
     "version": "2.0.2",
     "description": "Vix: a keyboard-friendly terminal text editor and IDE (the `vix` command).",
-    "homepage": "https://github.com/vixide/vix",
+    "homepage": "https://vixide.github.io/",
     "license": "Apache-2.0|BSD-3-Clause|MIT|GPL-3.0-only",
     "architecture": {
         "64bit": {
