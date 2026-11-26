@@ -8,6 +8,7 @@ repository.workspace = true
 description = "A real modal-editing engine for the Vi/Spacemacs keymaps: modes, operator x motion composition, counts, registers, text objects, dot-repeat."
 
 [dependencies]
+ropey = { workspace = true }
 vix-textops = { workspace = true }
 
 [lints]

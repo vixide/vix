@@ -424,6 +424,44 @@ widest-line width while you type and remeasures once you pause for 250 ms
 the small ones. Same machine as the baseline above, under load, so read the
 ratio rather than the absolute numbers.
 
+### Vi motions in a large file (T843, measured 2026-11-26)
+
+`editor/vi` (`tui/benches/editor_ops.rs`) drives the real `App` key path
+with the Vi keymap and the modal engine on: `l` + `h`, `w` + `b`, `3dw` +
+`u` and `2dd` + `u` (each returns to where it started), and `l` + `h`
+with a frame drawn after each key. The cursor is on the same line in every
+buffer; only the unrelated text around it grows. Before T843 every motion
+copied the whole buffer into a `String` and decoded it into characters, so
+the cost grew with the file; now motions read the editor's rope and only the
+lines they cover (`crates/vix-modal/spec/index.md`, § Design: motions).
+Run with `--warm-up-time 1 --measurement-time 3` on a heavily loaded
+machine, so the numbers are indicative; the shape (flat vs. linear) is the
+result.
+
+| Benchmark | 4 KiB before | 4 KiB after | 512 KiB before | 512 KiB after | 8 MiB before | 8 MiB after |
+| --------- | ------------ | ----------- | -------------- | ------------- | ------------ | ----------- |
+| `l` + `h` | 8.2 µs | 1.4 µs | 1.08 ms | 1.6 µs | 17.6 ms | 1.5 µs |
+| `w` + `b` | 10.8 µs | 1.1 µs | 1.10 ms | 1.3 µs | 25.5 ms | 1.2 µs |
+| `3dw` + `u` | 182 µs | 197 µs | 1.07 ms | 200 µs | 22.5 ms | 194 µs |
+| `2dd` + `u` | 370 µs | 343 µs | 1.73 ms | 339 µs | 35.4 ms | 405 µs |
+| `l` + `h`, frame after each | 355 µs | 287 µs | 1.16 ms | 295 µs | 18.0 ms | 581 µs |
+
+The remaining operator cost (about 0.2 ms for `3dw` + `u`) is the edit and
+its undo, not the motion, and does not grow with the file.
+
+Key-to-frame in the real terminal, from `VIX_PROFILE`: the `bench`-profile
+`vix` binary in a 120×40 `tmux` pane with a fresh `HOME` and
+`keymap = "vi"`, an 8 MiB text file, the cursor moved to its middle line,
+then 100 × `l`/`h` and 100 × `w`/`b`, 25 ms apart:
+
+| | input to frame p50 | p95 | p99 | inputs over 16 ms |
+| - | ------------------ | --- | --- | ----------------- |
+| Before T843 | 12.14 ms | 15.14 ms | 17.64 ms | 7 of 405 |
+| After T843 | 0.34 ms | 0.85 ms | 1.17 ms | 1 of 404 ¹ |
+
+¹ The `68760G` that moved the cursor to the middle line (19.4 ms): a
+counted `G` walks the lines it skips, once.
+
 ## Reading the numbers
 
 Benchmark what the user waits for — a keystroke, a frame, a file open — not

@@ -8,6 +8,7 @@
 
 use crate::motion::MotionKind;
 use crate::register::{RegisterKind, RegisterValue};
+use crate::text::Text;
 use vix_textops::line_ranges;
 
 /// Turn a motion's raw `(before, after)` cursor pair — `before` is where the
@@ -18,7 +19,7 @@ use vix_textops::line_ranges;
 /// distinction, § Design: registers).
 #[must_use]
 pub fn operator_range(
-    text: &str,
+    text: &(impl Text + ?Sized),
     before: usize,
     after: usize,
     kind: MotionKind,
@@ -31,26 +32,17 @@ pub fn operator_range(
     match kind {
         MotionKind::Exclusive => (lo, hi, RegisterKind::Char),
         MotionKind::Inclusive => {
-            let n = text.chars().count();
-            (lo, (hi + 1).min(n), RegisterKind::Char)
+            let n = text.len_chars();
+            // One past `hi`, clamped to the text's end (a sum past `usize`
+            // is past the end too).
+            (
+                lo,
+                hi.checked_add(1).map_or(n, |e| e.min(n)),
+                RegisterKind::Char,
+            )
         }
         MotionKind::Linewise => {
-            let chars: Vec<char> = text.chars().collect();
-            let lines = line_ranges(&chars);
-            let row_of = |p: usize| {
-                lines
-                    .iter()
-                    .position(|&(s, e)| p >= s && p <= e)
-                    .unwrap_or(lines.len().saturating_sub(1))
-            };
-            let start_row = row_of(lo);
-            let end_row = row_of(hi);
-            let start = lines[start_row].0;
-            let end = if end_row + 1 < lines.len() {
-                lines[end_row + 1].0
-            } else {
-                chars.len()
-            };
+            let (start, end) = crate::motion::linewise_span(text, lo, hi);
             (start, end, RegisterKind::Line)
         }
     }
@@ -249,10 +241,11 @@ pub fn paste_plan_counted(
 /// `after` minus the white space just before it, never before `before`'s
 /// own character. A cursor on white space keeps `after` unchanged.
 #[must_use]
-pub fn change_word_end(text: &str, before: usize, after: usize) -> usize {
+pub fn change_word_end(text: &(impl Text + ?Sized), before: usize, after: usize) -> usize {
+    // Only the span the motion crossed is read, so the cost does not grow
+    // with the buffer (T843).
     let span: Vec<char> = text
-        .chars()
-        .skip(before)
+        .chars_from(before)
         .take(after.saturating_sub(before))
         .collect();
     match span.first() {

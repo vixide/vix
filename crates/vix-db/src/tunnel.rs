@@ -519,8 +519,16 @@ mod tests {
 
     #[test]
     fn a_free_port_can_be_bound_again() {
-        let port = free_port().expect("a free port");
-        assert!(TcpListener::bind(("127.0.0.1", port)).is_ok());
+        // The port is released before it is bound again, so on a busy machine
+        // another process can take it in between; a port that is free must
+        // still be bindable on one of a few tries (a broken `free_port` that
+        // returned a port in use would fail every time).
+        let rebound = (0..5).any(|_| {
+            let port = free_port().expect("a free port");
+            assert_ne!(port, 0, "a real port, not the wildcard");
+            TcpListener::bind(("127.0.0.1", port)).is_ok()
+        });
+        assert!(rebound, "no free port could be bound again in 5 tries");
     }
 
     #[cfg(unix)]
