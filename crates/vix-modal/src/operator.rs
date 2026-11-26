@@ -241,10 +241,11 @@ pub fn paste_plan_counted(
 /// `after` minus the white space just before it, never before `before`'s
 /// own character. A cursor on white space keeps `after` unchanged.
 #[must_use]
-pub fn change_word_end(text: &str, before: usize, after: usize) -> usize {
+pub fn change_word_end<T: Text + ?Sized>(text: &T, before: usize, after: usize) -> usize {
+    // Only the span the motion crossed is read, so the cost does not grow
+    // with the buffer (T843).
     let span: Vec<char> = text
-        .chars()
-        .skip(before)
+        .chars_from(before)
         .take(after.saturating_sub(before))
         .collect();
     match span.first() {
