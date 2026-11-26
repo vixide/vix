@@ -10909,7 +10909,7 @@ Fix boundaries of everyday edits before adding Vi features.
   edits), add an explicit all-windows force-quit command. Tests: two panes on
   one buffer, two modified buffers, the last window, and `:wq` on a save
   conflict (close only after a successful save). `tui/src/app/keymap.rs`
-- [ ] **T840 — Vi: Visual operators and counted put.** `vld`/`Vjd` leave the
+- [x] **T840 — Vi: Visual operators and counted put.** (Done: Visual `d`/`x`/`c`/`y` via `operator::visual_range`, `"{a-z}` in Visual, `paste_plan_counted` for `3p`; Visual operators not dot-repeatable, Visual motions still `h j k l`.) `vld`/`Vjd` leave the
   buffer unchanged and `"ayy"a3p` inserts one copy. Wire Visual d/c/y to the
   existing editor operations, keep character-wise vs linewise register type,
   pass the count through put, handle forward and reversed selections.
