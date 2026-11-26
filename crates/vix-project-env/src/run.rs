@@ -73,3 +73,42 @@ pub(crate) fn reexec_with_path(path: &str, done_var: &str) {
         .env(done_var, "1")
         .exec();
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn sh(script: &str, timeout: Duration, env: &[(String, String)]) -> Option<String> {
+        run_tool("/bin/sh", &["-c", script], Path::new("/"), timeout, env)
+    }
+
+    #[test]
+    fn a_successful_tool_returns_its_stdout() {
+        let long = Duration::from_secs(10);
+        assert_eq!(sh("printf hello", long, &[]).as_deref(), Some("hello"));
+        // The extra environment reaches the child.
+        let env = [("VIX_RUN_TEST".to_string(), "42".to_string())];
+        assert_eq!(
+            sh("printf %s \"$VIX_RUN_TEST\"", long, &env).as_deref(),
+            Some("42")
+        );
+        // It runs in `dir`.
+        assert_eq!(sh("pwd", long, &[]).as_deref(), Some("/\n"));
+    }
+
+    #[test]
+    fn a_failing_or_missing_tool_yields_nothing() {
+        let long = Duration::from_secs(10);
+        assert_eq!(sh("printf partial; exit 3", long, &[]), None);
+        assert_eq!(
+            run_tool("/nonexistent/tool", &[], Path::new("/"), long, &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn a_tool_past_its_timeout_is_killed() {
+        // `exec` so the kill reaches `sleep` itself and the pipe closes.
+        assert_eq!(sh("exec sleep 30", Duration::from_millis(50), &[]), None);
+    }
+}
