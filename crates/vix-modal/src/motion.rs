@@ -178,7 +178,7 @@ fn row_and_col<T: Text + ?Sized>(text: &T, pos: usize) -> ((usize, usize), usize
 /// `h` / Left: `count` characters left, clamped to the current line's start
 /// (Vim's `h` does not cross into the previous line).
 #[must_use]
-pub fn char_left<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn char_left(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let (start, _) = current_line(text, pos);
     pos.saturating_sub(count).max(start)
 }
@@ -186,7 +186,7 @@ pub fn char_left<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize 
 /// `l` / Right: `count` characters right, clamped to the current line's last
 /// character (Vim's `l` does not cross into the next line).
 #[must_use]
-pub fn char_right<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn char_right(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let line = current_line(text, pos);
     let last = last_content_pos(line);
     pos.checked_add(count).map_or(last, |p| p.min(last))
@@ -199,7 +199,7 @@ pub fn char_right<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize
 /// in the spec's own cut list, but the spec's `fn(text, pos, count)` motion
 /// shape has nowhere to carry that memory without a 5th parameter).
 #[must_use]
-pub fn line_down<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn line_down(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let (mut row, col) = row_and_col(text, pos);
     for _ in 0..count {
         match next_line(text, row) {
@@ -212,7 +212,7 @@ pub fn line_down<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize 
 
 /// `k` / Up: `count` lines up, same column-clamping rule as [`line_down`].
 #[must_use]
-pub fn line_up<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn line_up(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let (mut row, col) = row_and_col(text, pos);
     for _ in 0..count {
         match prev_line(text, row) {
@@ -229,14 +229,14 @@ pub fn line_up<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
 /// (any digit typed first is the start of a count for a *later* key, not an
 /// argument to `0` itself), so this takes none either.
 #[must_use]
-pub fn line_start<T: Text + ?Sized>(text: &T, pos: usize) -> usize {
+pub fn line_start(text: &(impl Text + ?Sized), pos: usize) -> usize {
     current_line(text, pos).0
 }
 
 /// `^`: the first non-blank character of the current line (column 0 itself
 /// when the line is blank). Countless, like [`line_start`].
 #[must_use]
-pub fn line_first_non_blank<T: Text + ?Sized>(text: &T, pos: usize) -> usize {
+pub fn line_first_non_blank(text: &(impl Text + ?Sized), pos: usize) -> usize {
     first_non_blank(text, current_line(text, pos))
 }
 
@@ -244,7 +244,7 @@ pub fn line_first_non_blank<T: Text + ?Sized>(text: &T, pos: usize) -> usize {
 /// `count - 1` lines, then to that line's end (real Vim's own `$` count
 /// behavior — "the end of the count'th line from here").
 #[must_use]
-pub fn line_end<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn line_end(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let moved = line_down(text, pos, count.saturating_sub(1));
     last_content_pos(current_line(text, moved))
 }
@@ -259,7 +259,7 @@ pub fn line_end<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
 /// [`crate::Count::is_empty`]). `G` reads only the last line; `{n}gg`
 /// walks the first `n` lines.
 #[must_use]
-pub fn goto_line<T: Text + ?Sized>(text: &T, line: Option<usize>) -> usize {
+pub fn goto_line(text: &(impl Text + ?Sized), line: Option<usize>) -> usize {
     let row = match line {
         Some(n) => {
             let mut row = (0, end_of_line_at(text, 0));
@@ -344,7 +344,7 @@ fn repeat_step(pos: usize, count: usize, mut step: impl FnMut(usize) -> usize) -
 /// there are no more words) — [`vix_textops::word_units`]'s lowercase-only
 /// `word` definition, per the spec's v1 scope decision.
 #[must_use]
-pub fn word_forward<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn word_forward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let len = text.len_chars();
     repeat_step(pos, count, |p| next_word_start(text, p).unwrap_or(len))
 }
@@ -352,13 +352,13 @@ pub fn word_forward<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usi
 /// `b`: the start of the `count`-th previous word (lands at the buffer start
 /// once there are no more).
 #[must_use]
-pub fn word_backward<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn word_backward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     repeat_step(pos, count, |p| prev_word_start(text, p).unwrap_or(0))
 }
 
 /// `e`: the end (last char) of the `count`-th next word.
 #[must_use]
-pub fn word_end<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn word_end(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let last = text.len_chars().saturating_sub(1);
     repeat_step(pos, count, |p| next_word_end(text, p).unwrap_or(last))
 }
@@ -403,14 +403,14 @@ fn prev_paragraph_start<T: Text + ?Sized>(text: &T, pos: usize) -> Option<usize>
 /// lines, [`vix_textops::paragraph_units`]'s definition — the same one
 /// `dap`/Go → Paragraph already use).
 #[must_use]
-pub fn paragraph_forward<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn paragraph_forward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let len = text.len_chars();
     repeat_step(pos, count, |p| next_paragraph_start(text, p).unwrap_or(len))
 }
 
 /// `{`: the start of the `count`-th previous paragraph.
 #[must_use]
-pub fn paragraph_backward<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn paragraph_backward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     repeat_step(pos, count, |p| prev_paragraph_start(text, p).unwrap_or(0))
 }
 
@@ -444,7 +444,7 @@ fn nth_start_before(units: &[(usize, usize)], pos: usize, count: usize) -> usize
 /// text: a sentence boundary depends on rules (abbreviations, closing
 /// quotes) only that whole-text scan applies.
 #[must_use]
-pub fn sentence_forward<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn sentence_forward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let text = text.whole_string();
     let chars: Vec<char> = text.chars().collect();
     let units = sentence_units(&text, &chars);
@@ -453,7 +453,7 @@ pub fn sentence_forward<T: Text + ?Sized>(text: &T, pos: usize, count: usize) ->
 
 /// `(`: the start of the `count`-th previous sentence.
 #[must_use]
-pub fn sentence_backward<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -> usize {
+pub fn sentence_backward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let text = text.whole_string();
     let chars: Vec<char> = text.chars().collect();
     let units = sentence_units(&text, &chars);
@@ -466,8 +466,8 @@ pub fn sentence_backward<T: Text + ?Sized>(text: &T, pos: usize, count: usize) -
 /// only the current line (Vim's `f` never crosses lines). `None` when there
 /// aren't that many.
 #[must_use]
-pub fn find_char_forward<T: Text + ?Sized>(
-    text: &T,
+pub fn find_char_forward(
+    text: &(impl Text + ?Sized),
     pos: usize,
     target: char,
     count: usize,
@@ -486,8 +486,8 @@ pub fn find_char_forward<T: Text + ?Sized>(
 /// `F{char}`: the `count`-th occurrence of `target` before `pos`, current
 /// line only.
 #[must_use]
-pub fn find_char_backward<T: Text + ?Sized>(
-    text: &T,
+pub fn find_char_backward(
+    text: &(impl Text + ?Sized),
     pos: usize,
     target: char,
     count: usize,
@@ -508,8 +508,8 @@ pub fn find_char_backward<T: Text + ?Sized>(
 /// `t{char}`: one char before the `count`-th occurrence of `target` after
 /// `pos` (so a repeated `t` lands short of where a repeated `f` would).
 #[must_use]
-pub fn till_char_forward<T: Text + ?Sized>(
-    text: &T,
+pub fn till_char_forward(
+    text: &(impl Text + ?Sized),
     pos: usize,
     target: char,
     count: usize,
@@ -521,8 +521,8 @@ pub fn till_char_forward<T: Text + ?Sized>(
 /// `T{char}`: one char after the `count`-th occurrence of `target` before
 /// `pos`.
 #[must_use]
-pub fn till_char_backward<T: Text + ?Sized>(
-    text: &T,
+pub fn till_char_backward(
+    text: &(impl Text + ?Sized),
     pos: usize,
     target: char,
     count: usize,
@@ -535,7 +535,7 @@ pub fn till_char_backward<T: Text + ?Sized>(
 /// of the line after `hi`'s (or the text's end) — read from those two lines
 /// only. See [`crate::operator::operator_range`].
 #[must_use]
-pub fn linewise_span<T: Text + ?Sized>(text: &T, lo: usize, hi: usize) -> (usize, usize) {
+pub fn linewise_span(text: &(impl Text + ?Sized), lo: usize, hi: usize) -> (usize, usize) {
     let start = row_at(text, lo).0;
     let end = next_line(text, row_at(text, hi)).map_or(text.len_chars(), |(s, _)| s);
     (start, end)

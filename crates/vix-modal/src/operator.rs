@@ -18,8 +18,8 @@ use vix_textops::line_ranges;
 /// how the extracted text should be classified for `p`/`P` (the spec's own
 /// distinction, § Design: registers).
 #[must_use]
-pub fn operator_range<T: Text + ?Sized>(
-    text: &T,
+pub fn operator_range(
+    text: &(impl Text + ?Sized),
     before: usize,
     after: usize,
     kind: MotionKind,
@@ -241,7 +241,7 @@ pub fn paste_plan_counted(
 /// `after` minus the white space just before it, never before `before`'s
 /// own character. A cursor on white space keeps `after` unchanged.
 #[must_use]
-pub fn change_word_end<T: Text + ?Sized>(text: &T, before: usize, after: usize) -> usize {
+pub fn change_word_end(text: &(impl Text + ?Sized), before: usize, after: usize) -> usize {
     // Only the span the motion crossed is read, so the cost does not grow
     // with the buffer (T843).
     let span: Vec<char> = text
