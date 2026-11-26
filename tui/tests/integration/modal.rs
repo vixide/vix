@@ -714,6 +714,17 @@ fn a_count_before_p_puts_that_many_copies() {
 }
 
 #[test]
+fn a_put_with_an_absurd_count_is_refused_not_attempted() {
+    // The count saturates; the put must warn and leave the buffer alone, not
+    // try to allocate the copies.
+    let mut app = vi_app("modal-t840-hugep", "ab\n", true);
+    let before = app.messages.items.len();
+    type_keys(&mut app, "yl99999999999999999999999p");
+    assert_eq!(buffer_text(&app), "ab\n");
+    assert!(app.messages.items.len() > before, "a warning was added");
+}
+
+#[test]
 fn cut_two_lines_switch_files_paste_three_copies_undo_once() {
     let mut app = vi_app("modal-t840-accept", "keep\ncut one\ncut two\ntail\n", true);
     type_keys(&mut app, "j\"aVjd");

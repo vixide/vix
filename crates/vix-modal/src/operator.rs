@@ -199,11 +199,20 @@ pub fn paste_plan(
     }
 }
 
+/// The most text one counted put may insert (64 MiB): [`paste_plan_counted`]
+/// refuses a larger result.
+pub const PUT_LIMIT_BYTES: usize = 64 * 1024 * 1024;
+
 /// [`paste_plan`] with a count (`3p`, T840): `value` inserted `count`
 /// times as one insertion (so one undo removes every copy). A character-wise
 /// paste lands on the last inserted character; a line-wise one on the first
 /// pasted line's first non-blank, as Vim does. A `count` of 0 is treated as
 /// 1, the count a bare `p` has.
+///
+/// Returns `None`, and nothing should be inserted, when the copies would add
+/// up to more than [`PUT_LIMIT_BYTES`]: a count saturates rather than
+/// overflowing, so `99999999999999999999p` must be refused, as Vim refuses it
+/// with E1240, instead of trying to allocate the result.
 #[must_use]
 pub fn paste_plan_counted(
     text: &str,
@@ -211,9 +220,12 @@ pub fn paste_plan_counted(
     value: &RegisterValue,
     before: bool,
     count: usize,
-) -> (usize, String, usize) {
+) -> Option<(usize, String, usize)> {
     let (at, one, cursor) = paste_plan(text, pos, value, before);
     let count = count.max(1);
+    if one.len().checked_mul(count)? > PUT_LIMIT_BYTES {
+        return None;
+    }
     let content = one.repeat(count);
     let cursor = match value.kind {
         RegisterKind::Line => cursor,
@@ -226,7 +238,7 @@ pub fn paste_plan_counted(
             }
         }
     };
-    (at, content, cursor)
+    Some((at, content, cursor))
 }
 
 #[cfg(test)]
@@ -420,11 +432,25 @@ mod tests {
         };
         assert_eq!(
             paste_plan_counted("xy", 0, &v, false, 3),
-            (1, "ababab".into(), 6)
+            Some((1, "ababab".into(), 6))
         );
         assert_eq!(
             paste_plan_counted("xy", 0, &v, false, 0),
-            paste_plan("xy", 0, &v, false)
+            Some(paste_plan("xy", 0, &v, false))
+        );
+    }
+
+    #[test]
+    fn a_counted_paste_past_the_limit_is_refused() {
+        let v = RegisterValue {
+            text: "ab".into(),
+            kind: RegisterKind::Char,
+        };
+        // A saturated count (a long digit run) and one just over the limit.
+        assert_eq!(paste_plan_counted("xy", 0, &v, false, usize::MAX), None);
+        assert_eq!(
+            paste_plan_counted("xy", 0, &v, false, PUT_LIMIT_BYTES / 2 + 1),
+            None
         );
     }
 
@@ -436,7 +462,7 @@ mod tests {
         };
         assert_eq!(
             paste_plan_counted("a\nb\n", 0, &v, false, 2),
-            (2, "  one\n  one\n".into(), 4)
+            Some((2, "  one\n  one\n".into(), 4))
         );
     }
 }

@@ -214,6 +214,10 @@ paste this inline" behave correctly without the user thinking about it.
 
 A count before `p`/`P` (`3p`, `"a3p`, T840) inserts that many copies as one
 insertion, so one undo removes them all (`operator::paste_plan_counted`).
+A put whose copies would exceed `operator::PUT_LIMIT_BYTES` (64 MiB) is
+refused with a warning and the buffer is left unchanged, as Vim refuses it
+with E1240: a count saturates rather than overflowing, so a long digit run
+must not try to allocate the result.
 A character-wise put lands on the last inserted character, a line-wise one
 on the first pasted line's first non-blank, as in Vim.
 

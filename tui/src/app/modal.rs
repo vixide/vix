@@ -586,8 +586,12 @@ impl App {
         else {
             return;
         };
-        let (at, content, cursor) =
-            vix_modal::operator::paste_plan_counted(&text, pos, &value, before, count);
+        let Some((at, content, cursor)) =
+            vix_modal::operator::paste_plan_counted(&text, pos, &value, before, count)
+        else {
+            self.messages.warn(t!("msg.vi_put_too_long").to_string());
+            return;
+        };
         let Some(tab) = self.editor.active_tab_mut() else {
             return;
         };
