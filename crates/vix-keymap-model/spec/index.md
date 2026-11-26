@@ -170,6 +170,9 @@ command, `Esc` cancels, and backspacing past the empty `:` closes it.
 | `:N` (a number) | Go to line N |
 | `:e` / `:e path` | Open-file prompt / open `path` |
 | `:Ex` | Open the file explorer and focus it |
+| `:s/pat/rep/[gc]` / `:%s/…` | Literal substitute on the cursor's line / every line, one undo step; unsupported Vim syntax is refused before editing (see `spec/find-and-replace/index.md`, "Ex substitute") |
+| `:cn` / `:cnext`, `:cp` / `:cprevious` (`:cN`) | Next / previous task problem (`go.next_error` / `go.prev_error`), Vim's quickfix list |
+| `:cope[n]` | List the last task run's problems in the results panel (Enter jumps) |
 
 An unrecognized command reports "no command" in the status bar.
 

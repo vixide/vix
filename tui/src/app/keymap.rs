@@ -1407,6 +1407,23 @@ impl App {
 
     /// Run a Vim ex command (the text after `:`).
     pub(super) fn run_vim_command(&mut self, cmd: &str) {
+        // `:s` / `:%s` (T841): claimed, run or refused before anything else.
+        if self.try_ex_substitute(cmd) {
+            return;
+        }
+        // Quickfix (T841): the task problems are Vim's quickfix list.
+        if ex_abbrev(cmd, "cn", "cnext") {
+            self.run_action("go.next_error");
+            return;
+        }
+        if ex_abbrev(cmd, "cp", "cprevious") || ex_abbrev(cmd, "cN", "cNext") {
+            self.run_action("go.prev_error");
+            return;
+        }
+        if ex_abbrev(cmd, "cope", "copen") {
+            self.open_task_problems_panel();
+            return;
+        }
         match cmd {
             "w" => self.run_action("file.save"),
             "q" => self.run_action("file.close"),
@@ -1508,6 +1525,12 @@ impl App {
             }
         }
     }
+}
+
+/// Whether `cmd` names the Ex command `full` by one of Vim's abbreviations: at
+/// least `min`, at most `full`, and a prefix of it (`:cn`, `:cne`, … `:cnext`).
+fn ex_abbrev(cmd: &str, min: &str, full: &str) -> bool {
+    cmd.len() >= min.len() && cmd.starts_with(min) && full.starts_with(cmd)
 }
 
 #[cfg(test)]

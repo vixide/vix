@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use crate::editor_core::virtual_text::{EolText, VirtualTextLayer};
 use crate::lsp::inline::InlineMode;
 use crate::tasks::matcher::{self, MatcherSpec, ProblemList, Scanner, Severity};
-use crate::workspace_search::Hit;
+use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
 
 use super::{App, Focus};
 
@@ -201,6 +201,24 @@ impl App {
                 })
             })
             .collect()
+    }
+
+    /// `:cope[n]` (T841): list the last run's problems (Vim's quickfix list)
+    /// in the static-results panel, where Enter jumps to one. Unlike the
+    /// Problems panel (`lsp.diagnostics`) it needs no language server, so it
+    /// works in every build.
+    pub(super) fn open_task_problems_panel(&mut self) {
+        let hits = self.task_problem_hits();
+        if hits.is_empty() {
+            self.status = t!("status.no_task_problems").to_string();
+            return;
+        }
+        let mut ps = WorkspaceSearch::new(false);
+        ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
+        ps.title = Some(t!("ui.results_task_problems").to_string());
+        ps.status = t!("status.task_problems_n", n = hits.len()).to_string();
+        ps.hits = hits;
+        self.workspace_search = Some(ps);
     }
 
     /// Draw the active buffer's task problems as end-of-line virtual text on

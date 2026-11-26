@@ -286,6 +286,8 @@ codelldb
 gedit
 
 # Vim / Emacs / VS Code ecosystem terms (docs/for-*-users)
+cnext
+cprevious
 vimrc
 vimscript
 vimtutor
