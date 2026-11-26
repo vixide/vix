@@ -12,14 +12,19 @@ default = ["process"]
 # The runners that spawn the `git` CLI. Off, the crate is only the parser, the
 # lane algorithm and the panel state (no process is ever started); the root
 # `git` feature turns it on.
-process = ["vix-authority/process"]
+process = ["dep:vix-authority", "vix-authority/process"]
 
 [dependencies]
-vix-authority = { workspace = true }
+vix-authority = { workspace = true, optional = true }
 vix-list-state = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+# The repository tests drive the real `git` through the `process` feature.
+[[test]]
+name = "git"
+required-features = ["process"]
 
 [lints]
 workspace = true

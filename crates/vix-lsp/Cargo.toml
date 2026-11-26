@@ -10,13 +10,13 @@ description = "LSP client: process management and document sync over `vix_lsp_co
 [features]
 default = ["process"]
 # Spawn language-server processes. Off, no server is ever started.
-process = ["vix-authority/process"]
+process = ["dep:vix-project-env", "vix-authority/process"]
 
 [dependencies]
 serde_json = { workspace = true }
 vix-authority = { workspace = true }
 vix-lsp-core = { workspace = true }
-vix-project-env = { workspace = true }
+vix-project-env = { workspace = true, optional = true }
 vix-settings = { workspace = true }
 
 # Tests never read or write the real ~/.config/vix (crates/vix-fileops user_dirs).

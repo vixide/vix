@@ -91,7 +91,7 @@ script = ["dep:vix-script"]
 terminal = ["dep:vix-terminal", "dep:vt100"]
 http = ["dep:vix-http-client", "vix-hl7/net", "vix-fhir/net"]
 ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel", "dep:vix-acp", "vix-acp/process", "dep:keyring-core", "dep:apple-native-keyring-store", "dep:windows-native-keyring-store"]
-git = ["tasks", "vix-git/process", "vix-git-graph/process", "vix-doctor/probe-git", "vix-script?/plugins"]
+git = ["tasks", "dep:vix-review", "vix-git/process", "vix-git-graph/process", "vix-doctor/probe-git", "vix-script?/plugins"]
 jj = ["tasks"]
 # The OC menu (T700-T708): runs the Docker/Podman/nerdctl CLI. Streamed output
 # (logs, builds, Compose) reuses the tasks runner, so it implies `tasks`.
@@ -124,7 +124,7 @@ jupyter = ["dep:vix-jupyter", "vix-jupyter/process"]
 # starts the separate `vix-matrix` helper (the `matrix/` workspace) and pumps
 # its JSON lines. Adds no crates to `vix`. Opt-in and NOT part of `full`,
 # `net` or `default` until the helper ships through the release channels.
-matrix = ["im", "vix-matrix-protocol/net"]
+matrix = ["im", "dep:vix-matrix-protocol", "vix-matrix-protocol/net"]
 
 lang-bash = ["vix-editor-core/lang-bash"]
 lang-c = ["vix-editor-core/lang-c"]
@@ -177,16 +177,16 @@ vix-convert-from-tsv-into-csv-tool = { workspace = true }
 # Convert: TSV text into a JSON array of objects.
 vix-convert-from-tsv-into-json-tool = { workspace = true }
 # Debug Adapter Protocol (DAP) client: drive a debug adapter over stdio.
-vix-dap = { path = "../crates/vix-dap", version = "3.0.0", default-features = false }
+vix-dap = { workspace = true }
 # DB workbench: connection management, schema browsing, and SQL queries.
 vix-db = { workspace = true, optional = true }
 # Editor host: the `CodeEditor` widget wrapper and the pane tree.
-vix-editor = { path = "../crates/vix-editor", version = "3.0.0", default-features = false }
+vix-editor = { workspace = true }
 # The fully-custom terminal code-editor widget (owns the Tree-sitter grammars);
 # default-features = false leaves grammar selection to the root `lang-*` features.
-vix-editor-core = { path = "../crates/vix-editor-core", version = "3.0.0", default-features = false }
+vix-editor-core = { workspace = true }
 # LSP client: process management and document sync over `vix_lsp_core`.
-vix-lsp = { path = "../crates/vix-lsp", version = "3.0.0", default-features = false }
+vix-lsp = { workspace = true }
 # Top menu bar with keyboard-navigable dropdowns (a dropdown plus two nested submenu levels).
 vix-menu = { workspace = true }
 # User `.rhai` scripting: load, sandbox, and run scripts against the active
@@ -272,7 +272,7 @@ vix-coverage = { workspace = true }
 # Read-only side-by-side comparison: a unified diff between two texts.
 vix-diff-view = { workspace = true }
 # Environment checks for `vix --doctor` and Help → Run Diagnostics.
-vix-doctor = { path = "../crates/vix-doctor", version = "3.0.0", default-features = false }
+vix-doctor = { workspace = true }
 # The byte editor: a hex/ASCII view for editing raw file bytes.
 vix-edit-bytes = { workspace = true }
 # The Large File Viewer (T733): a read-only, chunked view of huge files.
@@ -302,14 +302,14 @@ vix-fileops = { workspace = true }
 # Find / find-and-replace for the editor.
 vix-find-panel = { workspace = true }
 # Reformat the selection (or buffer) within one data format: pretty-print or minify.
-vix-format-tool = { path = "../crates/vix-format-tool", version = "3.0.0", default-features = false }
+vix-format-tool = { workspace = true }
 # HL7 FHIR client logic (profiles, request building, Bundle/OperationOutcome);
 # its blocking network layer is enabled by the `http` feature.
 vix-fhir = { workspace = true }
 # Git integration: status/diff/staging via the git CLI.
-vix-git = { path = "../crates/vix-git", version = "3.0.0", default-features = false }
+vix-git = { workspace = true }
 # Interactive Git graph: lanes, decorations, paged log, per-commit actions.
-vix-git-graph = { path = "../crates/vix-git-graph", version = "3.0.0", default-features = false }
+vix-git-graph = { workspace = true }
 # OC menu: drive a container engine through its CLI (runner behind `oc`).
 vix-oci = { workspace = true }
 # OC menu list panel: containers, images, volumes, networks, pods.
@@ -324,7 +324,7 @@ vix-http-client = { workspace = true, optional = true }
 vix-cowork = { workspace = true, optional = true }
 vix-cowork-net = { workspace = true, optional = true }
 # Jupyter kernel transport (the `jupyter` feature; `process` adds ZeroMQ).
-vix-jupyter = { path = "../crates/vix-jupyter", version = "3.0.0", default-features = false, optional = true }
+vix-jupyter = { workspace = true, optional = true }
 # Decode a JSON Web Token's header and payload into readable JSON.
 vix-jwt-tool = { workspace = true }
 # Data and table state for the keybinding editor overlay (rebind/reset).
@@ -388,9 +388,9 @@ vix-im = { workspace = true }
 vix-im-panel = { workspace = true }
 # IRCv3 client for IM; its connection thread is behind the `im` feature.
 vix-im-irc = { workspace = true }
-# Matrix bridge for IM: the helper protocol (always), the helper process
+# Matrix bridge for IM: the helper protocol and its helper process, both
 # behind the `matrix` feature.
-vix-matrix-protocol = { workspace = true }
+vix-matrix-protocol = { workspace = true, optional = true }
 # Org-roam: networked, Zettelkasten-style note-taking over a directory of Org files.
 vix-roam = { workspace = true }
 # Bundle config.toml/macros.toml/keybindings.toml/the user dictionary/the
@@ -399,11 +399,11 @@ vix-settings-bundle = { workspace = true }
 # A small library of reusable text snippets, plus the picker's selection state.
 vix-snippet-tool = { workspace = true }
 # Spell-checking for the Vix editor (Hunspell-backed, over comment/string ranges).
-vix-spellcheck = { path = "../crates/vix-spellcheck", version = "3.0.0", default-features = false }
+vix-spellcheck = { workspace = true }
 # Formatting for the bottom status bar's two segments.
 vix-status-bar-panel = { workspace = true }
 # Branch review: a multi-file diff of a revision range with saved line comments.
-vix-review = { workspace = true }
+vix-review = { workspace = true, optional = true }
 # Structural search & replace: metavariable-hole patterns matched token-by-token.
 vix-structural-replace = { workspace = true }
 # A read-only snapshot of host system information, plus the panel's selection.

@@ -18,5 +18,10 @@ process = []
 serde_json = { workspace = true }
 vix-civil-date = { workspace = true }
 
+# The fake-engine tests run a stand-in engine through the `process` runner.
+[[test]]
+name = "fake_engine"
+required-features = ["process"]
+
 [lints]
 workspace = true

@@ -25,7 +25,7 @@ rust-version = "1.98"
 # crate allows the other four. The same set as `vix` itself.
 license = "Apache-2.0 OR BSD-3-Clause OR MIT OR GPL-3.0-only"
 repository = "https://github.com/vixide/vix"
-homepage = "https://github.com/vixide/vix"
+homepage = "https://vixide.github.io/"
 authors = ["Joel Parker Henderson <joel@joelparkerhenderson.com>"]
 
 # Same lint policy as the root workspace's `[workspace.lints]` — a separate

@@ -69,11 +69,13 @@ fn ran_search_tool(fake: &FakeAuthority) -> bool {
         .any(|c| c.op == "command" && c.path.file_name().is_some_and(|n| n == "rg" || n == "grep"))
 }
 
+#[cfg(feature = "git")]
 fn git_available() -> bool {
     vix_fileops::which_on_path("git").is_some()
 }
 
 /// `git` in the local `dir`, quietly, for fixtures.
+#[cfg(feature = "git")]
 fn git(dir: &Path, args: &[&str]) {
     let ok = std::process::Command::new("git")
         .current_dir(dir)
@@ -169,33 +171,43 @@ fn search_and_git_go_through_an_installed_fake_authority() {
     vix_authority::install(Arc::<FakeAuthority>::clone(&fake));
     assert_eq!(remote_out, local_out);
 
-    // Git: status and the HEAD blob a diff is taken against run `git`
-    // through the authority, in the mapped directory.
-    if git_available() {
-        git(&backing, &["init", "-q"]);
-        git(&backing, &["add", "."]);
-        git(&backing, &["commit", "-q", "-m", "seed"]);
-        std::fs::write(backing.join("src/b.rs"), "changed\n").unwrap();
-        fake.clear_calls();
-        let rows = vix::git::status(&root);
-        assert_eq!(rows.len(), 1, "{rows:?}");
-        assert_eq!(rows[0].path, "src/b.rs");
-        let head = vix::git::head_blob(&root, "src/b.rs").unwrap();
-        assert!(head.contains("alpha();"));
-        let marks = vix::git::diff_marks(&head, "changed\n");
-        assert_ne!(marks.len(), 0);
-        assert!(
-            fake.calls()
-                .iter()
-                .any(|c| c.op == "command" && c.path == Path::new("git")),
-            "{:?}",
-            fake.calls()
-        );
-    }
+    git_goes_through_the_authority(&fake, &backing, &root);
 
     vix_authority::install(previous);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Git under the installed fake: status and the HEAD blob a diff is taken
+/// against run `git` through the authority, in the mapped directory.
+#[cfg(feature = "git")]
+fn git_goes_through_the_authority(fake: &FakeAuthority, backing: &Path, root: &Path) {
+    if !git_available() {
+        return;
+    }
+    git(backing, &["init", "-q"]);
+    git(backing, &["add", "."]);
+    git(backing, &["commit", "-q", "-m", "seed"]);
+    std::fs::write(backing.join("src/b.rs"), "changed\n").unwrap();
+    fake.clear_calls();
+    let rows = vix::git::status(root);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].path, "src/b.rs");
+    let head = vix::git::head_blob(root, "src/b.rs").unwrap();
+    assert!(head.contains("alpha();"));
+    let marks = vix::git::diff_marks(&head, "changed\n");
+    assert_ne!(marks.len(), 0);
+    assert!(
+        fake.calls()
+            .iter()
+            .any(|c| c.op == "command" && c.path == Path::new("git")),
+        "{:?}",
+        fake.calls()
+    );
+}
+
+/// Without the `git` feature the App has no git runners to check.
+#[cfg(not(feature = "git"))]
+fn git_goes_through_the_authority(_: &FakeAuthority, _: &Path, _: &Path) {}
 
 /// A fake `ssh` that logs one `call` line per invocation to `dir/calls.log`
 /// and runs the remote command with `sh -c`, the way `sshd` does.

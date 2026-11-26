@@ -60,7 +60,7 @@
 
           meta = {
             description = "Keyboard-friendly terminal text editor and IDE";
-            homepage = "https://github.com/vixide/vix";
+            homepage = "https://vixide.github.io/";
             # The `vix` binary's license (tui/Cargo.toml, spec/license).
             license = with pkgs.lib.licenses; [
               asl20

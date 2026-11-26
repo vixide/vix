@@ -10,13 +10,13 @@ description = "Debug Adapter Protocol (DAP) client: drive a debug adapter over s
 [features]
 default = ["process"]
 # Spawn debug-adapter processes. Off, no adapter is ever started.
-process = ["vix-authority/process"]
+process = ["dep:vix-authority", "vix-authority/process"]
 
 [dependencies]
 vix-settings = { workspace = true }
 serde_json = { workspace = true }
 bitflags = { workspace = true }
-vix-authority = { workspace = true }
+vix-authority = { workspace = true, optional = true }
 vix-lsp-core = { workspace = true }
 
 # Tests never read or write the real ~/.config/vix (crates/vix-fileops user_dirs).
