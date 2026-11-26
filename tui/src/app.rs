@@ -2821,6 +2821,11 @@ pub struct App {
     /// exactly what `.` replays, `{count}.` overriding its recorded count.
     /// Empty until the first such change happens.
     modal_last_change: Vec<KeyEvent>,
+    /// The exact half-open range a Visual-mode text object (`viw`, `va(`)
+    /// last selected (T840). While the selection still equals it, a Visual
+    /// operator acts on exactly that range; any other selection follows
+    /// Vim's inclusive rule (`vix_modal::operator::visual_range`).
+    modal_visual_exact: Option<(usize, usize)>,
     /// The Helix keymap's `.` state: the last change and the Insert-mode
     /// session `c`/`i`/`a` opened (`tui/src/app/helix.rs`).
     helix: helix::HelixState,
@@ -3169,6 +3174,7 @@ impl App {
             modal_pending_text_object: None,
             modal_recording: Vec::new(),
             modal_last_change: Vec::new(),
+            modal_visual_exact: None,
             helix: helix::HelixState::default(),
         };
         app.validate_keymap();

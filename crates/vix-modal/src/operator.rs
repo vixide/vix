@@ -103,6 +103,43 @@ fn first_non_blank_at(text: &str, pos: usize) -> usize {
     (s..e).find(|&i| !chars[i].is_whitespace()).unwrap_or(s)
 }
 
+/// The range a Visual-mode operator (`d`/`c`/`y`, T840) acts on, and the
+/// register kind it writes. `selection` is the host's half-open selection
+/// (`None` or empty right after `v`), whichever way it was extended.
+///
+/// - Character-wise (`linewise == false`): Vim's Visual selection is
+///   inclusive at both ends — the anchor character and the cursor character
+///   are both part of it — while the host's selection ends just before the
+///   cursor (forward) or just before the anchor (backward). Either way the
+///   one character after the host's range belongs to it, so the result is
+///   `[start, end + 1)`, clamped to the buffer; an empty selection is the
+///   one character under `cursor`.
+/// - Line-wise (`linewise == true`): every line the selection touches,
+///   whole, as a [`RegisterKind::Line`] range (the same rule as a
+///   line-wise motion).
+#[must_use]
+pub fn visual_range(
+    text: &str,
+    selection: Option<(usize, usize)>,
+    cursor: usize,
+    linewise: bool,
+) -> (usize, usize, RegisterKind) {
+    let (lo, hi) = match selection {
+        Some((a, b)) if a != b => (a.min(b), a.max(b)),
+        _ => (cursor, cursor),
+    };
+    if linewise {
+        // `hi` is exclusive: its last character (a line break, for a
+        // whole-line selection) is the last line the selection touches.
+        let last = if hi > lo { hi.saturating_sub(1) } else { hi };
+        operator_range(text, lo, last, MotionKind::Linewise)
+    } else {
+        let n = text.chars().count();
+        let lo = lo.min(n);
+        (lo, hi.saturating_add(1).min(n).max(lo), RegisterKind::Char)
+    }
+}
+
 /// `p`/`P` (§ Design: registers — not operators, Normal-mode
 /// register-paste commands): where to insert `value` relative to the
 /// cursor at `pos`, what to insert, and where the cursor lands afterward.
@@ -160,6 +197,48 @@ pub fn paste_plan(
             (at, content, cursor)
         }
     }
+}
+
+/// The most text one counted put may insert (64 MiB): [`paste_plan_counted`]
+/// refuses a larger result.
+pub const PUT_LIMIT_BYTES: usize = 64 * 1024 * 1024;
+
+/// [`paste_plan`] with a count (`3p`, T840): `value` inserted `count`
+/// times as one insertion (so one undo removes every copy). A character-wise
+/// paste lands on the last inserted character; a line-wise one on the first
+/// pasted line's first non-blank, as Vim does. A `count` of 0 is treated as
+/// 1, the count a bare `p` has.
+///
+/// Returns `None`, and nothing should be inserted, when the copies would add
+/// up to more than [`PUT_LIMIT_BYTES`]: a count saturates rather than
+/// overflowing, so `99999999999999999999p` must be refused, as Vim refuses it
+/// with E1240, instead of trying to allocate the result.
+#[must_use]
+pub fn paste_plan_counted(
+    text: &str,
+    pos: usize,
+    value: &RegisterValue,
+    before: bool,
+    count: usize,
+) -> Option<(usize, String, usize)> {
+    let (at, one, cursor) = paste_plan(text, pos, value, before);
+    let count = count.max(1);
+    if one.len().checked_mul(count)? > PUT_LIMIT_BYTES {
+        return None;
+    }
+    let content = one.repeat(count);
+    let cursor = match value.kind {
+        RegisterKind::Line => cursor,
+        RegisterKind::Char => {
+            let len = content.chars().count();
+            if len == 0 {
+                at
+            } else {
+                at.saturating_add(len.saturating_sub(1))
+            }
+        }
+    };
+    Some((at, content, cursor))
 }
 
 #[cfg(test)]
@@ -283,5 +362,107 @@ mod tests {
         assert_eq!(at, 4, "the start of 'three', not the cursor's own column");
         assert_eq!(content, "two\n");
         assert_eq!(cursor, 4);
+    }
+
+    #[test]
+    fn visual_range_includes_the_cursor_character_forward() {
+        // `vl` from 0: the host selects [0, 1), Vim covers 0..=1.
+        assert_eq!(
+            visual_range("hello", Some((0, 1)), 1, false),
+            (0, 2, RegisterKind::Char)
+        );
+    }
+
+    #[test]
+    fn visual_range_includes_the_anchor_character_backward() {
+        // `vhh` from 3: the host selects [1, 3), Vim covers 1..=3.
+        assert_eq!(
+            visual_range("abcdef", Some((1, 3)), 1, false),
+            (1, 4, RegisterKind::Char)
+        );
+    }
+
+    #[test]
+    fn an_empty_visual_selection_is_the_cursor_character() {
+        assert_eq!(
+            visual_range("abc", None, 1, false),
+            (1, 2, RegisterKind::Char)
+        );
+        assert_eq!(
+            visual_range("abc", Some((2, 2)), 2, false),
+            (2, 3, RegisterKind::Char)
+        );
+    }
+
+    #[test]
+    fn visual_range_crosses_a_newline_and_clamps_at_the_end() {
+        assert_eq!(
+            visual_range("one\ntwo\n", Some((0, 4)), 0, false),
+            (0, 5, RegisterKind::Char)
+        );
+        assert_eq!(
+            visual_range("ab", Some((0, 2)), 2, false),
+            (0, 2, RegisterKind::Char)
+        );
+        assert_eq!(visual_range("", None, 0, false), (0, 0, RegisterKind::Char));
+    }
+
+    #[test]
+    fn visual_line_range_covers_every_touched_line() {
+        let text = "one\ntwo\nthree\n";
+        assert_eq!(
+            visual_range(text, Some((0, 8)), 4, true),
+            (0, 8, RegisterKind::Line)
+        );
+        assert_eq!(
+            visual_range(text, Some((0, 4)), 0, true),
+            (0, 4, RegisterKind::Line)
+        );
+        assert_eq!(
+            visual_range(text, None, 9, true),
+            (8, 14, RegisterKind::Line)
+        );
+    }
+
+    #[test]
+    fn a_counted_char_paste_repeats_and_lands_on_the_last_character() {
+        let v = RegisterValue {
+            text: "ab".into(),
+            kind: RegisterKind::Char,
+        };
+        assert_eq!(
+            paste_plan_counted("xy", 0, &v, false, 3),
+            Some((1, "ababab".into(), 6))
+        );
+        assert_eq!(
+            paste_plan_counted("xy", 0, &v, false, 0),
+            Some(paste_plan("xy", 0, &v, false))
+        );
+    }
+
+    #[test]
+    fn a_counted_paste_past_the_limit_is_refused() {
+        let v = RegisterValue {
+            text: "ab".into(),
+            kind: RegisterKind::Char,
+        };
+        // A saturated count (a long digit run) and one just over the limit.
+        assert_eq!(paste_plan_counted("xy", 0, &v, false, usize::MAX), None);
+        assert_eq!(
+            paste_plan_counted("xy", 0, &v, false, PUT_LIMIT_BYTES / 2 + 1),
+            None
+        );
+    }
+
+    #[test]
+    fn a_counted_line_paste_repeats_whole_lines_and_lands_on_the_first() {
+        let v = RegisterValue {
+            text: "  one\n".into(),
+            kind: RegisterKind::Line,
+        };
+        assert_eq!(
+            paste_plan_counted("a\nb\n", 0, &v, false, 2),
+            Some((2, "  one\n  one\n".into(), 4))
+        );
     }
 }

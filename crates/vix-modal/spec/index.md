@@ -30,10 +30,8 @@ for `d` + one right motion, `dd`/`cc`/`yy` act on the whole line, `p`/`P`
 read a register, `"{a-z}` selects one. Two deliberately deferred real-Vim
 nuances, neither in the spec's own cut list: `cw`'s "acts like `ce`"
 special case, and `cc`'s indentation preservation. Operators composing
-with a **Visual** selection (this section's own "any motion/text
-object/Visual selection") isn't wired yet either — Visual mode's own
-motion vocabulary is still just T112's `h j k l`, so there's nothing
-richer to compose with until text objects (T115) exist. **T115** (done):
+with a **Visual** selection landed later, in T840 (§ Design: Visual
+operators). **T115** (done):
 `text_object.rs` — `iw`/`aw`, a parameterized `inner_pair`/`around_pair`
 (`(`/`)`/`b`, `{`/`}`/`B`, `[`/`]`, `<`/`>`) and `inner_quote`/
 `around_quote` (`"`/`'`/`` ` ``), composing with `d`/`c`/`y` exactly like a
@@ -45,8 +43,7 @@ it); `c` and a plain Insert-mode session are excluded too, a deliberately
 scoped-out follow-on (replaying typed Insert-mode text needs a recording
 hook outside this crate's host wiring, since those keys never reach
 `App::modal_key` at all under T112's own Insert-mode-passthrough design).
-Operators composing with a Visual selection, per the paragraph above, is
-still open — T115 didn't touch Visual mode's own vocabulary. `cw`'s "acts
+`cw`'s "acts
 like `ce`" special case and `cc`'s indentation preservation remain
 deliberately unimplemented too. None of the open items above are in this
 spec's own cut list; they're documented gaps, not silent omissions —
@@ -214,6 +211,44 @@ follows how the register was written (`yy`/`dd` produce a line-wise
 register; `yw`/`dw` produce a character-wise one) — the same distinction
 real Vim makes, since it's what makes `p` "paste this as its own line vs.
 paste this inline" behave correctly without the user thinking about it.
+
+A count before `p`/`P` (`3p`, `"a3p`, T840) inserts that many copies as one
+insertion, so one undo removes them all (`operator::paste_plan_counted`).
+A put whose copies would exceed `operator::PUT_LIMIT_BYTES` (64 MiB) is
+refused with a warning and the buffer is left unchanged, as Vim refuses it
+with E1240: a count saturates rather than overflowing, so a long digit run
+must not try to allocate the result.
+A character-wise put lands on the last inserted character, a line-wise one
+on the first pasted line's first non-blank, as in Vim.
+
+A line-wise change (`cc`, Visual Line `c`) puts the whole lines in the
+register but keeps the final line break, leaving one empty line to type
+into, as Vim does (indentation is still not preserved).
+
+### Design: Visual operators (T840)
+
+In Visual and Visual Line mode `d`, `x` (the same as `d`), `c` and `y`
+apply to the selection through the same host path a motion or text object
+uses, then return to Normal mode (`c` on into Insert). `"{a-z}` typed
+inside Visual mode selects the register, as does one typed before `v`/`V`.
+
+- **Range.** Vim's Visual selection is inclusive: the anchor character and
+  the cursor character both belong to it, whichever way it was extended.
+  The host editor's selection is half-open and ends just before the cursor
+  (forward) or the anchor (backward), so in both directions the operator
+  range is the host selection plus one character, clamped to the buffer
+  (`operator::visual_range`). Right after `v` the selection is the one
+  character under the cursor. A selection made by a Visual text object
+  (`viw`, `va(`) is already exact and is used as is while it is unchanged.
+  Visual Line covers every line the selection touches, whole.
+- **Register kind.** Character-wise Visual writes a character-wise register,
+  Visual Line a line-wise one, so `p` afterward pastes inline or as lines.
+- **Cursor.** `d`/`c`/`y` leave the cursor at the start of the range (a
+  line-wise `d`/`y`: its first non-blank), as in Vim.
+- **Not yet.** A Visual operator is not dot-repeatable (`.` keeps replaying
+  the previous change), Visual mode's motions are still `h j k l` and the
+  arrows (plus text objects), and `p`/`P` over a selection does not
+  replace it. Visual Block and register macros are later work.
 
 **Cut from v1**: no other operators (`>`/`<` indent, `~` case-toggle, `gu`/
 `gU`) — `d c y (x) p P` only, matching `tasks.md` T114's exact list.

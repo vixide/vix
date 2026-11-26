@@ -102,15 +102,15 @@ fn capital_v_enters_visual_line_and_selects_whole_lines() {
 
 #[test]
 fn visual_mode_does_not_intercept_keys_it_does_not_recognize() {
-    // 'x' isn't a modal-engine key at all (T114's job) -- it must keep
-    // falling through to the existing vim_normal_key table unchanged.
+    // 'x' in Visual mode is Vim's Visual 'd' (T840): with nothing extended
+    // yet, the selection is the one character under the cursor.
     let mut app = vi_app("modal-x-fallthrough", "hello\n", true);
     app.on_key(key('v'));
     app.on_key(key('x'));
     let text = app.editor.active_tab().unwrap().text();
     assert_eq!(
         text, "ello\n",
-        "the old hardcoded 'x' forward-delete still runs"
+        "Visual x deletes the character under the cursor"
     );
 }
 
@@ -598,4 +598,150 @@ fn ex_qa_prompts_for_a_dirty_tab_instead_of_quitting() {
     ex(&mut app, "qa");
     assert!(!app.flags.contains(AppFlags::SHOULD_QUIT));
     assert!(app.unsaved.is_some());
+}
+
+// ----- T840: Visual operators and counted put ----------------------------
+
+fn type_keys(app: &mut App, seq: &str) {
+    for c in seq.chars() {
+        app.on_key(key(c));
+    }
+}
+
+#[test]
+fn visual_d_deletes_the_selection_including_the_cursor_character() {
+    // Vim's Visual selection is inclusive: `vld` deletes two characters.
+    let mut app = vi_app("modal-t840-vld", "hello world\n", true);
+    type_keys(&mut app, "vld");
+    assert_eq!(buffer_text(&app), "llo world\n");
+    assert_eq!(cursor(&mut app), 0);
+    assert!(selection(&mut app).is_none(), "back in Normal mode");
+    // Normal mode again: `l` moves, it does not extend.
+    type_keys(&mut app, "l");
+    assert!(selection(&mut app).is_none());
+}
+
+#[test]
+fn visual_line_d_deletes_whole_lines_into_a_linewise_register() {
+    let mut app = vi_app("modal-t840-vjd", "one\ntwo\nthree\n", true);
+    type_keys(&mut app, "Vjd");
+    assert_eq!(buffer_text(&app), "three\n");
+    // The register is line-wise: `p` puts it below the current line.
+    type_keys(&mut app, "p");
+    assert_eq!(buffer_text(&app), "three\none\ntwo\n");
+}
+
+#[test]
+fn a_one_character_visual_selection_deletes_that_character() {
+    let mut app = vi_app("modal-t840-vd", "abc\n", true);
+    type_keys(&mut app, "lvd");
+    assert_eq!(buffer_text(&app), "ac\n");
+}
+
+#[test]
+fn a_backward_selection_across_a_newline_includes_both_ends() {
+    // Cursor on `t` of `two`, `v`, then `k` up to `o` of `one`: Vim
+    // deletes `one\nt`, both the anchor and the cursor character.
+    let mut app = vi_app("modal-t840-vkd", "one\ntwo\n", true);
+    type_keys(&mut app, "jvkd");
+    assert_eq!(buffer_text(&app), "wo\n");
+    assert_eq!(cursor(&mut app), 0);
+}
+
+#[test]
+fn a_reversed_selection_on_one_line_deletes_from_cursor_to_anchor() {
+    let mut app = vi_app("modal-t840-vhd", "abcdef\n", true);
+    type_keys(&mut app, "lllvhhd");
+    assert_eq!(buffer_text(&app), "aef\n");
+    assert_eq!(cursor(&mut app), 1);
+}
+
+#[test]
+fn visual_x_is_visual_d() {
+    let mut app = vi_app("modal-t840-vx", "abcdef\n", true);
+    type_keys(&mut app, "vlx");
+    assert_eq!(buffer_text(&app), "cdef\n");
+}
+
+#[test]
+fn visual_y_copies_character_wise_and_leaves_the_buffer() {
+    let mut app = vi_app("modal-t840-vy", "abc def\n", true);
+    // `"a` chosen inside Visual mode, as Vim allows.
+    type_keys(&mut app, "wv\"ay");
+    assert_eq!(buffer_text(&app), "abc def\n");
+    assert!(selection(&mut app).is_none());
+    type_keys(&mut app, "0\"aP");
+    assert_eq!(buffer_text(&app), "dabc def\n");
+}
+
+#[test]
+fn visual_y_of_two_characters_pastes_inline() {
+    let mut app = vi_app("modal-t840-vy-two", "abc def\n", true);
+    type_keys(&mut app, "vly$p");
+    assert_eq!(buffer_text(&app), "abc defab\n");
+}
+
+#[test]
+fn visual_c_deletes_and_enters_insert_mode() {
+    let mut app = vi_app("modal-t840-vc", "abc def\n", true);
+    type_keys(&mut app, "vllcXY");
+    assert_eq!(buffer_text(&app), "XY def\n");
+}
+
+#[test]
+fn visual_line_c_keeps_an_empty_line_to_type_into() {
+    let mut app = vi_app("modal-t840-line-c", "one\ntwo\nthree\n", true);
+    type_keys(&mut app, "VjcX");
+    assert_eq!(buffer_text(&app), "X\nthree\n");
+}
+
+#[test]
+fn a_visual_text_object_is_operated_on_exactly() {
+    let mut app = vi_app("modal-t840-viwd", "abc def ghi\n", true);
+    type_keys(&mut app, "wviwd");
+    assert_eq!(buffer_text(&app), "abc  ghi\n");
+}
+
+#[test]
+fn a_count_before_p_puts_that_many_copies() {
+    let mut app = vi_app("modal-t840-3p", "one\ntwo\n", true);
+    type_keys(&mut app, "\"ayy\"a3p");
+    assert_eq!(buffer_text(&app), "one\none\none\none\ntwo\n");
+    let mut app = vi_app("modal-t840-3p-char", "ab\n", true);
+    type_keys(&mut app, "yl2p");
+    assert_eq!(buffer_text(&app), "aaab\n");
+    assert_eq!(cursor(&mut app), 2, "on the last pasted character");
+}
+
+#[test]
+fn a_put_with_an_absurd_count_is_refused_not_attempted() {
+    // The count saturates; the put must warn and leave the buffer alone, not
+    // try to allocate the copies.
+    let mut app = vi_app("modal-t840-hugep", "ab\n", true);
+    let before = app.messages.items.len();
+    type_keys(&mut app, "yl99999999999999999999999p");
+    assert_eq!(buffer_text(&app), "ab\n");
+    assert!(app.messages.items.len() > before, "a warning was added");
+}
+
+#[test]
+fn cut_two_lines_switch_files_paste_three_copies_undo_once() {
+    let mut app = vi_app("modal-t840-accept", "keep\ncut one\ncut two\ntail\n", true);
+    type_keys(&mut app, "j\"aVjd");
+    assert_eq!(buffer_text(&app), "keep\ntail\n");
+    let other = unique_dir("modal-t840-accept-b").join("b.txt");
+    fs::write(&other, "first\nlast\n").unwrap();
+    app.open_initial(&other);
+    assert_eq!(buffer_text(&app), "first\nlast\n", "now on the other file");
+    type_keys(&mut app, "\"a3p");
+    assert_eq!(
+        buffer_text(&app),
+        "first\ncut one\ncut two\ncut one\ncut two\ncut one\ncut two\nlast\n"
+    );
+    type_keys(&mut app, "u");
+    assert_eq!(
+        buffer_text(&app),
+        "first\nlast\n",
+        "one undo removes all three copies"
+    );
 }

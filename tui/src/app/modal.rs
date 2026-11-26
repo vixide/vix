@@ -154,7 +154,8 @@ impl App {
             return true;
         }
         if let KeyCode::Char(c @ ('p' | 'P')) = key.code {
-            self.modal_paste(c == 'P');
+            let count = self.modal_effective_count();
+            self.modal_paste(c == 'P', count);
             self.modal_reset_counts();
             return true;
         }
@@ -165,11 +166,13 @@ impl App {
         match key.code {
             KeyCode::Char('v') => {
                 self.modal_mode = vix_modal::Mode::Visual;
+                self.modal_visual_exact = None;
                 self.modal_reset_counts();
                 true
             }
             KeyCode::Char('V') => {
                 self.modal_mode = vix_modal::Mode::VisualLine;
+                self.modal_visual_exact = None;
                 let area = self.editor_view();
                 self.editor.select_line(area);
                 self.modal_reset_counts();
@@ -472,6 +475,18 @@ impl App {
         reg_kind: vix_modal::register::RegisterKind,
     ) {
         let (_, removed) = vix_modal::operator::delete_range(text, (start, end));
+        // A line-wise change (`cc`, `Vc`) keeps one empty line to type
+        // into, as Vim does: the register still gets the whole lines, but
+        // the final line break stays in the buffer.
+        let end = if op == 'c'
+            && reg_kind == vix_modal::register::RegisterKind::Line
+            && end > start
+            && text.chars().nth(end.minus(1)) == Some('\n')
+        {
+            end.minus(1)
+        } else {
+            end
+        };
         match op {
             'y' => {
                 self.modal_write_register(removed, reg_kind);
@@ -546,10 +561,11 @@ impl App {
     }
 
     /// `p`/`P`: read the selected (or unnamed) register and insert it
-    /// relative to the cursor — see [`vix_modal::operator::paste_plan`] for
+    /// `count` times (`3p`, T840) relative to the cursor, as one insertion
+    /// and so one undo step — see [`vix_modal::operator::paste_plan`] for
     /// the char-wise-vs-line-wise placement rule. A no-op if the register
     /// is empty/unset, or there's no active tab.
-    fn modal_paste(&mut self, before: bool) {
+    fn modal_paste(&mut self, before: bool, count: usize) {
         let value = if let Some(name) = self.modal_active_register.take() {
             self.modal_registers.get(name).cloned()
         } else {
@@ -570,7 +586,12 @@ impl App {
         else {
             return;
         };
-        let (at, content, cursor) = vix_modal::operator::paste_plan(&text, pos, &value, before);
+        let Some((at, content, cursor)) =
+            vix_modal::operator::paste_plan_counted(&text, pos, &value, before, count)
+        else {
+            self.messages.warn(t!("msg.vi_put_too_long").to_string());
+            return;
+        };
         let Some(tab) = self.editor.active_tab_mut() else {
             return;
         };
@@ -712,14 +733,18 @@ impl App {
     }
 
     /// Visual / Visual Line mode keys: `Esc` returns to Normal (collapsing
-    /// the selection to the cursor); `h j k l` and the arrow keys extend it.
-    /// Anything else falls through unconsumed — T114's operators don't yet
-    /// reach into Visual mode (they compose with T113 motions and
-    /// `dd`/`cc`/`yy`/`x` only); a future slice is where a Visual selection
-    /// becomes a third thing `d`/`c`/`y` can act on.
+    /// the selection to the cursor); `h j k l` and the arrow keys extend it;
+    /// `i`/`a` select a text object; `"{a-z}` picks a register and
+    /// `d`/`x`/`c`/`y` apply an operator to the selection (T840,
+    /// [`Self::modal_visual_operator`]). Anything else falls through
+    /// unconsumed.
     fn modal_visual_key(&mut self, key: KeyEvent) -> bool {
         if key.code == KeyCode::Esc {
             self.modal_pending_text_object = None;
+            self.modal_visual_exact = None;
+            if self.modal_pending == ModalPending::RegisterSelect {
+                self.modal_pending = ModalPending::None;
+            }
             self.modal_mode = vix_modal::Mode::Normal;
             if let Some(tab) = self.editor.active_tab_mut() {
                 tab.editor.clear_selection();
@@ -730,12 +755,31 @@ impl App {
             self.modal_visual_text_object(ia, key.code);
             return true;
         }
+        if self.modal_pending == ModalPending::RegisterSelect {
+            self.modal_pending = ModalPending::None;
+            if let KeyCode::Char(c @ 'a'..='z') = key.code {
+                self.modal_active_register = Some(c);
+            }
+            return true;
+        }
         if Self::ctrl(&key) || Self::alt(&key) {
             return false;
         }
         if let KeyCode::Char(c @ ('i' | 'a')) = key.code {
             self.modal_pending_text_object = Some(c);
             return true;
+        }
+        match key.code {
+            KeyCode::Char('"') => {
+                self.modal_pending = ModalPending::RegisterSelect;
+                return true;
+            }
+            // `x` is `d` in Visual mode, as in Vim.
+            KeyCode::Char(c @ ('d' | 'x' | 'c' | 'y')) => {
+                self.modal_visual_operator(if c == 'x' { 'd' } else { c });
+                return true;
+            }
+            _ => {}
         }
         let step = match key.code {
             KeyCode::Char('h') | KeyCode::Left => Some(KeyCode::Left),
@@ -814,7 +858,40 @@ impl App {
         if let Some((start, end)) = range {
             self.modal_mode = vix_modal::Mode::Visual;
             self.select_remembering(start, end);
+            self.modal_visual_exact = Some((start, end));
         }
+    }
+
+    /// `d`/`c`/`y` (and `x`, passed here as `d`) in Visual or Visual Line
+    /// mode (T840): apply the operator to the selection through the same
+    /// [`Self::apply_operator_to_range`] a motion or text object uses, then
+    /// return to Normal mode (`c` goes on into Insert). Character-wise Visual
+    /// writes a character-wise register and Visual Line a line-wise one; see
+    /// [`vix_modal::operator::visual_range`] for the inclusive range rule. A
+    /// text object's own selection is used exactly as it was selected.
+    /// Visual operators are not dot-repeatable yet: the last change `.`
+    /// replays is left as it was.
+    fn modal_visual_operator(&mut self, op: char) {
+        let linewise = self.modal_mode == vix_modal::Mode::VisualLine;
+        let exact = self.modal_visual_exact.take();
+        self.modal_mode = vix_modal::Mode::Normal;
+        self.modal_reset_counts();
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let text = tab.editor.get_content();
+        let cursor = tab.editor.get_cursor();
+        let selection = tab.editor.get_selection().map(|s| (s.start, s.end));
+        tab.editor.clear_selection();
+        let (start, end, kind) = match (exact, selection) {
+            (Some(range), Some(sel)) if !linewise && range == sel => {
+                (sel.0, sel.1, vix_modal::register::RegisterKind::Char)
+            }
+            _ => vix_modal::operator::visual_range(&text, selection, cursor, linewise),
+        };
+        let last_change = std::mem::take(&mut self.modal_last_change);
+        self.apply_operator_to_range(op, &text, start, end, kind);
+        self.modal_last_change = last_change;
     }
 
     /// `j` in Visual Line mode when the selection ends just above the buffer's
