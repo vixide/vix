@@ -12,6 +12,7 @@ cargo bench                            # everything
 cargo bench --bench editor_ops         # one file
 cargo bench -- editor/open             # one group; Criterion compares to the
                                         # last run under target/criterion/
+cargo bench --bench startup -- open/   # the large-checkout open-time exercise
 ```
 
 `cargo bench` uses `[profile.bench]` (speed-optimized, no LTO) rather than the
@@ -141,6 +142,137 @@ A smaller, unconditional fix landed alongside it: `App::new` scanned the
 custom-themes directory (real filesystem I/O) **twice** — once inside
 `apply_saved_theme`, once again immediately after for the View → Theme
 submenu's name list — now scanned once and reused for both.
+
+## Opening a large checkout (T823)
+
+How long a user waits after opening a big project: for the file named on
+the command line to be on screen and editable, and for Quick Open (the
+palette's file finder, `Ctrl+P` in the VS Code and Sublime keymaps) to list a
+result. Measured by the open-time exercise in `tui/benches/startup.rs`,
+2026-11-26 (branch for T823, on `d570a67a`).
+
+```sh
+cargo bench --bench startup -- open/        # the default run: no language server
+VIX_BENCH_LSP=1 cargo bench --bench startup -- lsp/   # opt-in, needs rust-analyzer
+```
+
+The checkout is generated, never committed: a seeded, Cargo-workspace-shaped
+tree of 100 crates under `crates/cNNN/src/` (a `lib.rs` each, modules two
+directories deep), written to `$TMPDIR` and deleted afterwards.
+`VIX_BENCH_OPEN_FILES` sets its size (default 20,000) and
+`VIX_BENCH_OPEN_RUNS` the number of opens per authority (default 10; 20
+below). Each open builds a fresh `App`.
+
+**Environment of the run below.** Apple M4 Max (16 cores), macOS (Darwin
+27.2.0, `aarch64`), `rustc 1.100.0 (0ef1bc386 2026-11-09)`, `git version
+2.56.1`, `vix 3.0.0` built with `[profile.bench]` and default features
+(capabilities: sql, image, script, terminal, http, ai, git, jj, oc, im,
+lsp, dap, tasks, hunspell), language servers switched off in the settings
+(`subsystems.lsp_enabled = false`, so nothing can start one and no trust
+prompt covers the first frame). Workspace: 20,000 files, 4,193 directories,
+28.6 MiB. **Load average 50.3 / 57.3 / 53.7** (1 / 5 / 15 min) from other
+jobs on the machine, about three runnable threads per core: the numbers are
+indicative, and the spread (p90, max) is mostly the scheduler.
+
+| Measurement | Authority | Run | Median ms | p90 ms | Min ms | Max ms | Samples |
+| ----------- | --------- | --- | --------- | ------ | ------ | ------ | ------- |
+| First editable frame | local | cold | 18.9 | 18.9 | 18.9 | 18.9 | 1 |
+| First editable frame | local | warm | 6.8 | 21.2 | 3.4 | 21.8 | 19 |
+| Quick Open, files listed | local | cold | 67.3 | 67.3 | 67.3 | 67.3 | 1 |
+| Quick Open, files listed | local | warm | 65.4 | 95.0 | 50.8 | 104.2 | 19 |
+| Quick Open, query result | local | cold | 67.6 | 67.6 | 67.6 | 67.6 | 1 |
+| Quick Open, query result | local | warm | 65.7 | 95.3 | 51.1 | 104.5 | 19 |
+| First editable frame | fake remote | cold | 4.4 | 4.4 | 4.4 | 4.4 | 1 |
+| First editable frame | fake remote | warm | 6.0 | 24.9 | 3.7 | 48.5 | 19 |
+| Quick Open, files listed | fake remote | cold | 68.4 | 68.4 | 68.4 | 68.4 | 1 |
+| Quick Open, files listed | fake remote | warm | 61.7 | 88.3 | 51.2 | 365.8 | 19 |
+| Quick Open, query result | fake remote | cold | 68.7 | 68.7 | 68.7 | 68.7 | 1 |
+| Quick Open, query result | fake remote | warm | 62.0 | 88.6 | 51.5 | 366.1 | 19 |
+
+Through the fake authority, the first frame made **17 authority calls** and
+Quick Open **2** (the file-index walk is one call).
+
+### Where each measurement starts and ends
+
+- **First editable frame** starts just before `App::new` and ends when the
+  first frame has been drawn (`ui::draw` into a 120 × 40 headless
+  terminal) with the file given on the command line open and focused. In
+  between: `App::new`, `App::start` (scripts, project settings, key
+  overrides, the welcome screen, opening the file) and the draw — what
+  `main` runs. Not included: starting the process, loading
+  `config.toml`, setting up the terminal and the terminal painting the
+  bytes. The whole-process figure, measured from `fork` in a
+  pseudo-terminal, is the T744 table above: about 40 ms to the first screen
+  on a 10,000-line file.
+- **Quick Open, files listed** starts when `tools.palette` is invoked on
+  that app and ends when the frame showing the open picker (empty query,
+  files listed) has been drawn. Opening the picker builds the file index,
+  so this includes walking the checkout; that walk is almost all of it.
+- **Quick Open, query result** has the same start and ends when the frame
+  listing at least one result for `lib.rs`, typed one key at a time after
+  the picker opened, has been drawn. The six keystrokes add about 0.3 ms.
+- **Cold** is the first open in the benchmark process: it pays one-time
+  costs (grammar and query compilation, the theme, the translation
+  tables). The operating system's file cache is warm, since the checkout
+  was just written; a cold-disk run needs `sudo purge` and is not measured.
+  The fake-remote "cold" run comes after the local runs in the same process,
+  so it is only cold for the authority.
+- **Warm** is every later open: a new `App` each time, in a warm process.
+
+### Remote authority
+
+The remote rows install the in-process `FakeAuthority` (T711) over the same
+checkout and open `/proj`, a path that exists only inside it, so every file
+operation goes through the authority slot as it would over SSH. No host is
+contacted. The timing starts **after** the authority is installed: that
+stands for a finished connection, which `main` makes before `App::new`
+(`vix::remote::connect_cli`), so the SSH handshake and the remote agent's
+start are not in these numbers. It ends at the same drawn frame as the
+local rows. The fake has no transport: each call is a local file operation,
+so these rows measure Vix's routed code path, and match the local ones.
+Over a real link, add about one round trip per authority call: 17 for the
+first frame and 2 for Quick Open, so at a 50 ms round trip, roughly 0.85 s
+and 0.1 s more.
+
+### Language server (opt-in, not measured here)
+
+*First semantic definition* and *first actionable diagnostic* need a real
+server, so the default run never starts one. With `VIX_BENCH_LSP=1` and a
+`rust-analyzer` that runs (`VIX_BENCH_RUST_ANALYZER` names another
+program), the exercise generates a small Cargo crate (one package, 202
+modules, no dependencies, the server run with `CARGO_NET_OFFLINE=true`) and
+opens its `lib.rs` `VIX_BENCH_LSP_RUNS` times (default 3) with a local
+server. Each interval starts just before `App::new`, so it includes the
+server's start and indexing, and ends at the first tick after which:
+
+- **first semantic definition**: `nav.goto_definition` on a call in
+  `lib.rs` has moved the cursor to `a.rs` (asked again every second,
+  since a server still indexing answers with nothing);
+- **first actionable diagnostic**: the server has published an error for
+  `lib.rs` (a deliberate type mismatch).
+
+Cold is the first run (a fresh server, first `cargo metadata`), warm the
+later ones. On the machine above this mode printed
+`` skipping lsp/large_checkout: `rust-analyzer --version` did not run ``:
+`rust-analyzer` on `PATH` is a rustup proxy with no component installed,
+so there are no language-server numbers yet. A remote language server is
+not covered: the fake authority has no server behind it.
+
+### What the numbers say
+
+- On a 20,000-file checkout the file is on screen and editable in about
+  7 ms (median, in-process; 19 ms for the first open in a process). The
+  size of the checkout does not enter into it: nothing on that path walks
+  the tree.
+- Quick Open lists files in about 65 ms, nearly all of it the file-index
+  walk. That walk stops at **5,000 files**
+  (`App::build_file_index`'s cap), so in this checkout Quick Open only
+  ever offers a quarter of the files, and its cost stops growing at that
+  size.
+- The micro-benchmarks run alongside, under the same load:
+  `startup/app_new` 378 µs (134 µs in the idle 2026-09-15 baseline) and
+  `startup/refresh_git` 31.4 ms (12.2 ms), which shows how much the load
+  inflates everything.
 
 ## Large File Viewer (T733)
 

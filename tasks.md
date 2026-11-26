@@ -10769,7 +10769,7 @@ were not exercised.
   `tui/tests/integration/keymaps.rs`, [`spec/cowork`](spec/cowork/index.md)
   Done in docs/spec and the Ctrl+D test; the UI still does not label fallback
   definition results as text matches (open follow-up).
-- [ ] **T823 — Large-checkout open-time benchmark.** Add a repeatable
+- [x] **T823 — Large-checkout open-time benchmark.** (Done: `tui/benches/startup.rs` open-time exercise, local + `FakeAuthority`, numbers in the performance guide; the opt-in rust-analyzer half is written but not yet measured, no working `rust-analyzer` here.) Add a repeatable
   project-opening exercise measuring time to first editable frame, first Quick
   Open result, first semantic definition and first actionable diagnostic;
   record tool versions, workspace size, enabled capabilities, cold/warm runs
