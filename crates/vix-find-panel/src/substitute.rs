@@ -274,11 +274,18 @@ pub fn plan(text: &str, sub: &Substitute, cursor_line: usize) -> Vec<(usize, usi
     let mut line_start = 0usize;
     for (n, line) in text.split('\n').enumerate() {
         if sub.range == Range::WholeBuffer || n == cursor_line {
+            // Count characters from the previous match only, so a long line
+            // with many matches stays linear.
+            let (mut seen_byte, mut seen_chars) = (0usize, 0usize);
             for (byte, _) in line.match_indices(sub.pattern.as_str()) {
-                let Some(start) = line
-                    .get(..byte)
-                    .and_then(|p| line_start.checked_add(p.chars().count()))
-                else {
+                let Some(gap) = line.get(seen_byte..byte).map(|p| p.chars().count()) else {
+                    break;
+                };
+                let Some(chars) = seen_chars.checked_add(gap) else {
+                    break;
+                };
+                (seen_byte, seen_chars) = (byte, chars);
+                let Some(start) = line_start.checked_add(chars) else {
                     break;
                 };
                 let Some(end) = start.checked_add(pat_chars) else {
@@ -480,5 +487,18 @@ mod tests {
         assert_eq!(apply("é-é", &[(2, 3)], "e"), "é-e");
         assert_eq!(apply("abab", &[(0, 2), (2, 4)], "x"), "xx");
         assert_eq!(err("s/a/b/q").to_string(), "unsupported flag 'q'");
+    }
+
+    #[test]
+    fn plan_counts_characters_across_many_matches_on_one_line() {
+        // Multi-byte text between matches: offsets are characters, not bytes,
+        // and every match on a long line is found.
+        let line = "é,".repeat(5000);
+        let sub = parse("%s/,/;/g").unwrap().unwrap();
+        let ranges = plan(&line, &sub, 0);
+        assert_eq!(ranges.len(), 5000);
+        assert_eq!(ranges[0], (1, 2));
+        assert_eq!(ranges[4999], (9999, 10000));
+        assert_eq!(apply(&line, &ranges, ";"), "é;".repeat(5000));
     }
 }
