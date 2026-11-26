@@ -10945,6 +10945,15 @@ Fix boundaries of everyday edits before adding Vi features.
   (edit an argument, repeat, test at point, jump to the failure, stage the
   fix), separate stock Vim, optional Vix and external-tool behavior, stop using
   Neovim plugin examples for stock Vim, and showcase undo-tree navigation.
+- [ ] **T845 — Quick Open finds every file in a large checkout.** Found by
+  T823: `build_file_index` (`tui/src/app/command_palette.rs`) stops at 5,000
+  files, so in the 20,000-file benchmark checkout three quarters of the files
+  can never be found from Quick Open, with no sign that the list is partial.
+  Index in the background (first results stay as fast as today), raise or
+  remove the cap with a measured per-keystroke budget, and say in the picker
+  when an index is still building or was cut short. Acceptance: in the
+  `open/` bench checkout every file is findable; first results and typing
+  latency stay within the numbers in docs/performance/index.md.
 
 ## Ideas backlog (unscoped)
 
