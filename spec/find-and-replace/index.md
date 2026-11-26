@@ -149,6 +149,49 @@ in Replace All). When the matches run out, the status line reports how many were
 replaced (e.g. `Query replace: replaced 5`); if there were none to begin with it
 reports `Query replace: no matches`.
 
+## Ex substitute (`:s` / `:%s`)
+
+In the Vi, Spacemacs and Helix keymaps the `:` command line takes a bounded,
+**literal** subset of Vim's `:substitute` (T841). Anything outside the subset
+is refused with a translated status message **before the buffer is touched**:
+no edit, no dirty flag, no undo step.
+
+```text
+[range]s{delim}{pattern}[{delim}{replacement}[{delim}[flags]]]
+```
+
+| Part | Accepted | Refused |
+| ---- | -------- | ------- |
+| Range | none (the cursor's line), `%` (every line) | any other (`1,5`, `.`, `'a,'b`, …): `status.ex_sub_range` |
+| Name | `s` or any longer prefix of `substitute` (`su`, `sub`, …, `substitute`) | |
+| Delimiter | any character except a letter, digit, blank, `\`, `"` or `\|` (Vim's rule), e.g. `/`, `#`, `,` | those: `status.ex_sub_delimiter` |
+| Pattern | literal text; `\{delim}` and `\/` for the delimiter, `\\`, and `\.` `\*` `\[` `\]` `\~` `\^` `\$` for those characters; `^` not first and `$` not last are literal, as in Vim | an empty pattern (Vim's "last search"): `status.ex_sub_empty`; unescaped `.` `*` `[` `~`, a leading `^`, a trailing `$`, and every other backslash sequence (`\(`, `\<`, `\|`, `\v`, `\n`, …): `status.ex_sub_pattern` |
+| Replacement | literal text; `&` is the matched text, `\&` `\~` `\\` `\{delim}` are literal, `\r` splits the line, `\t` is a tab; missing means empty (delete) | `~` (previous replacement) and every other backslash sequence (`\1`, `\u`, …): `status.ex_sub_replacement` |
+| Flags | `g` (every match on a line; a repeated `g` toggles, as in Vim), `c` (confirm), trailing blanks | anything else, counts included: `status.ex_sub_flag` |
+
+Matching is case-sensitive and non-overlapping, line by line: without `g` only
+the first match on each covered line is replaced. No match reports
+`status.ex_sub_not_found`; a read-only buffer reports
+`status.read_only_blocked`.
+
+**One undo step.** Without `c`, every replacement is computed first and the
+buffer is rewritten once (`Editor::set_content`), so a `:%s` with any number of
+matches undoes in one step. The cursor goes to the first non-blank of the last
+changed line and the status reads `status.ex_sub_done` (count and lines).
+
+**Confirm (`c`).** The command reuses the interactive query-replace bar
+(`QueryReplace`, `y` / `n` / `!` / `q` as above): the matches are planned up
+front, the current one is highlighted, and each decision only records or skips
+it. The buffer is **not** edited while asking (decision: Vim shows each
+replacement as it is made; deferring keeps the whole command one undo step and
+the planned offsets exact). When the matches run out, or on `q` / `Esc`, the
+accepted ones are written as one undo step; quitting at the first match leaves
+the buffer unchanged, and quitting later keeps the substitutions accepted so
+far, as Vim does.
+
+The parser and planner are pure (`vix_find_panel::substitute`: `parse`, `plan`,
+`apply`); `tui/src/app/ex_substitute.rs` applies them to the active buffer.
+
 ## Find In Workspace → Dock
 
 **Find → In: Workspace** (the find dialog's scope option, `Alt+I`; action id

@@ -36,6 +36,7 @@ mod diff_tool;
 mod dir_edit;
 mod doc_links;
 mod event_loop;
+mod ex_substitute;
 mod fhir;
 #[cfg(feature = "http")]
 mod fhir_http;
@@ -2137,6 +2138,9 @@ pub struct App {
     pub(crate) search: Option<SearchBar>,
     /// Interactive query-replace session, when active.
     pub(crate) query_replace: Option<QueryReplace>,
+    /// The `:s///c` (T841) state beside `query_replace`, when that session
+    /// is an Ex substitute rather than the Find box's query-replace.
+    pub(crate) ex_confirm: Option<ex_substitute::ExConfirm>,
     /// Interactive structural (T201) query-replace session, when active.
     pub(crate) structural_replace: Option<StructuralReplace>,
     /// The in-progress structural-replace prompt sequence: whether it's
@@ -2925,6 +2929,7 @@ impl App {
             palette: None,
             search: None,
             query_replace: None,
+            ex_confirm: None,
             structural_replace: None,
             pending_structural: (false, None),
             node_expansions: Vec::new(),
@@ -13490,6 +13495,7 @@ impl App {
         let regex = sb.flags.contains(SearchFlags::REGEX);
         let label = sb.query.clone();
         self.search = None;
+        self.ex_confirm = None;
 
         let area = self.editor_view();
         let found = {
@@ -13537,6 +13543,9 @@ impl App {
     /// Apply one query-replace `decision` to the highlighted match and advance to the next;
     /// ends the session (with a count) when no match remains or the user quit.
     fn qr_apply(&mut self, decision: Decision) {
+        if self.ex_confirm_apply(decision) {
+            return;
+        }
         let area = self.editor_view();
         let Some(qr) = self.query_replace.as_ref() else {
             return;

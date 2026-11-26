@@ -54,6 +54,11 @@ The matching itself is pure and testable: `matches` (regex → char ranges),
 and `PathFilter` (include/exclude path regexes for workspace search). The host
 owns the state (`SearchBar`), the keys, and the rendering.
 
+The `substitute` module is the pure half of the Vi command line's literal
+`:s` / `:%s` (T841): `parse` (grammar and refusals, `SubstituteError`), `plan`
+(the character ranges to replace) and `apply` (rewrite in one pass); the
+grammar is in `spec/find-and-replace/index.md` ("Ex substitute").
+
 See `spec/find-and-replace/index.md` for interactive query-replace and the
 workspace panel, and `crates/vix-menu/spec/index.md` for the menu around it.
 

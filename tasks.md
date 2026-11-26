@@ -10916,7 +10916,7 @@ Fix boundaries of everyday edits before adding Vi features.
   Acceptance: cut two lines, switch files, paste three copies from a named
   register, undo once; one-character and backward-across-newline selections.
   Visual Block and register macros later. `crates/vix-modal`
-- [ ] **T841 — Ex quickfix aliases and a bounded `:s`.** Map `:cn`/`:cp` to
+- [x] **T841 — Ex quickfix aliases and a bounded `:s`.** (Done: `:cn`/`:cp`/`:cN` run `go.next_error`/`go.prev_error`, `:cope` opens a Task Problems view; literal `:s`/`:%s` with `g`/`c` in `vix_find_panel::substitute` + `tui/src/app/ex_substitute.rs`, one undo step, confirm writes accepted matches at the end; grammar in `spec/find-and-replace`.) Map `:cn`/`:cp` to
   `go.next_error`/`go.prev_error` and `:cope` to a task-problems view; verify
   by traversing a failing subproject build. Add `:s` / `:%s` for literal
   patterns with explicit `g` and confirm flags and a single undo; reject

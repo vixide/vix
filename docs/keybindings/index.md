@@ -235,6 +235,8 @@ line. Press `Esc` to return to Normal mode.
 | Command | `:q` / `:q!`        | Close tab / close tab, discarding edits; `:qa` / `:qa!` quit |
 | Command | `:wq` / `:x`        | Save and close                      |
 | Command | `:Ex`               | Focus the file explorer             |
+| Command | `:s/a/b/` / `:%s/a/b/gc` | Literal substitute, line / buffer (`g` all, `c` confirm) |
+| Command | `:cn` / `:cp` / `:cope` | Next / previous task problem; list them |
 
 ## Overrides
 

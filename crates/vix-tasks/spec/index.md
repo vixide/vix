@@ -273,7 +273,14 @@ when the run ends the status line reports the count.
   the problem's line and column (recorded in the jump history) and shows
   `Problem i of n` with the message in the status line; a file that does not
   exist is reported instead of opened. With no problems they report
-  `status.no_task_problems`. Both belong to the `tasks` capability.
+  `status.no_task_problems`. Both belong to the `tasks` capability. The Vi
+  command line's quickfix aliases run them: `:cn[ext]` is Next Error,
+  `:cp` / `:cprevious` and `:cN[ext]` are Previous Error (T841).
+- **`:cope[n]`** (Vi command line, T841) opens a **Task Problems** view of the
+  same list, Vim's quickfix window: the static-results panel with only the
+  task rows (`Enter` jumps). Unlike the Problems panel it needs no language
+  server, so it works in every build; with no problems it reports
+  `status.no_task_problems`.
 - **The Problems panel** (`lsp.diagnostics`) lists them after the language
   servers' diagnostics as a task source: `rel:line: [severity] message
   (matcher)`; `Enter` jumps.

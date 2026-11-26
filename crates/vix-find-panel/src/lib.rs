@@ -36,6 +36,8 @@
     )
 )]
 
+pub mod substitute;
+
 use regex::Regex;
 
 /// Byte offset of character index `ch` in `text` (or `text.len()` if past the end).

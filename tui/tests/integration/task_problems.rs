@@ -180,3 +180,99 @@ fn clicking_a_rustc_arrow_in_the_dock_jumps_to_it() {
     );
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// Run the Vim Ex command `cmd` through the `:` command line.
+fn ex(app: &mut App, cmd: &str) {
+    app.on_key(key(':'));
+    type_str(app, cmd);
+    app.on_key(keycode(KeyCode::Enter));
+}
+
+/// `:cn` / `:cp` walk a failing subproject build's errors and `:cope` lists
+/// them (T841): the subproject compile runs in `crates/app`, whose paths the
+/// problems resolve against.
+#[cfg(all(unix, feature = "tasks"))]
+#[test]
+fn quickfix_ex_commands_walk_a_failing_subproject_build() {
+    // Canonical, as the tabs' paths are (macOS's temp dir is a symlink).
+    let dir = unique_dir("t841-quickfix").canonicalize().unwrap();
+    let sub = dir.join("crates/app");
+    fs::create_dir_all(sub.join("src")).unwrap();
+    fs::write(
+        sub.join("Cargo.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        sub.join("src/lib.rs"),
+        "pub fn a() {}\npub fn b() -> u8 {}\n",
+    )
+    .unwrap();
+    fs::write(sub.join("src/main.rs"), "fn main() {\n    app::c();\n}\n").unwrap();
+    let mut settings = Settings::default();
+    settings.keymap = "vi".into();
+    let mut app = app_at_with(&dir, settings);
+    ex(&mut app, "e crates/app/src/main.rs");
+    assert!(active_ends_with(&app, "crates/app/src/main.rs"));
+
+    // Project → Subproject → Compile, its command replaced by a failing one.
+    app.run_action("project.subproject.compile");
+    app.prompt.as_mut().unwrap_or_else(|| panic!("no prompt: {}", app.status)).input = "printf 'src/lib.rs:2:19: error: mismatched types\\nsrc/main.rs:2:10: error: cannot find function\\n'; exit 101".into();
+    app.on_key(keycode(KeyCode::Enter));
+    wait_until(
+        &mut app,
+        App::poll_command,
+        |a| !a.command_running(),
+        Duration::from_secs(10),
+    );
+    assert_eq!(app.task_problems.len(), 2, "{:?}", app.task_problems);
+
+    ex(&mut app, "cn");
+    assert!(active_ends_with(&app, "crates/app/src/lib.rs"));
+    assert_eq!(app.editor.active_tab().unwrap().cursor_1based(), (2, 19));
+    ex(&mut app, "cnext");
+    assert!(active_ends_with(&app, "crates/app/src/main.rs"));
+    assert_eq!(app.editor.active_tab().unwrap().cursor_1based(), (2, 10));
+    ex(&mut app, "cn");
+    assert_eq!(
+        app.task_problems.current(),
+        Some(0),
+        ":cn wraps to the first"
+    );
+    ex(&mut app, "cp");
+    assert_eq!(
+        app.task_problems.current(),
+        Some(1),
+        ":cp wraps to the last"
+    );
+    assert!(active_ends_with(&app, "crates/app/src/main.rs"));
+    ex(&mut app, "cprevious");
+    assert!(active_ends_with(&app, "crates/app/src/lib.rs"));
+    ex(&mut app, "cN");
+    assert_eq!(app.task_problems.current(), Some(1));
+
+    ex(&mut app, "cope");
+    let panel = app
+        .workspace_search
+        .as_ref()
+        .expect("the task-problems view");
+    let rows: Vec<&str> = panel.hits.iter().map(|h| h.display.as_str()).collect();
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(
+        rows[0].starts_with("crates/app/src/lib.rs:2: [error] mismatched types"),
+        "{rows:?}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cope_without_a_run_reports_no_problems() {
+    let dir = unique_dir("t841-cope-empty");
+    let mut settings = Settings::default();
+    settings.keymap = "vi".into();
+    let mut app = app_at_with(&dir, settings);
+    ex(&mut app, "copen");
+    assert!(app.workspace_search.is_none());
+    assert!(!app.status.is_empty(), "the empty list is reported");
+    let _ = fs::remove_dir_all(&dir);
+}
