@@ -1022,4 +1022,48 @@ mod tests {
         );
         assert!(r.blocked.is_none());
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_venv_path_holding_the_separator_leaves_path_alone() {
+        // `join_paths` refuses an entry containing `:`, so PATH is not set
+        // rather than set to a broken value; the rest still applies.
+        let dir = Dir::new("sep");
+        let venv = dir.path().join("odd:venv");
+        fs::create_dir_all(venv.join("bin")).unwrap();
+        let base = std::env::join_paths(["/usr/bin"]).unwrap();
+        let env = venv_env(&venv, Some(&base));
+        assert_eq!(env.source, Source::Venv);
+        assert!(!env.vars.contains_key("PATH"));
+        assert_eq!(
+            env.vars["VIRTUAL_ENV"].as_deref(),
+            Some(venv.to_string_lossy().as_ref())
+        );
+        assert_eq!(env.vars["PYTHONHOME"], None);
+    }
+
+    #[cfg(all(unix, feature = "process"))]
+    #[test]
+    fn resolve_runs_a_trusted_detector_command_for_real() {
+        let dir = Dir::new("real-runner");
+        write_detectors(
+            dir.path(),
+            r#"[[detector]]
+name = "sh"
+detect = ["marker"]
+command = ["/bin/sh", "-c", "printf '{\"FROM_SH\":\"%s\"}' \"$GREETING\""]
+[detector.env]
+GREETING = "hi"
+"#,
+        );
+        fs::write(dir.path().join("marker"), "").unwrap();
+        let env = resolve(dir.path(), true, None).env.unwrap();
+        assert_eq!(env.source, Source::Custom);
+        assert_eq!(env.label(), "sh");
+        assert_eq!(env.vars["FROM_SH"].as_deref(), Some("hi"));
+        // Untrusted, the same workspace runs nothing and reports the block.
+        let blocked = resolve(dir.path(), false, None);
+        assert!(blocked.env.is_none());
+        assert_eq!(blocked.blocked, Some(Source::Custom));
+    }
 }

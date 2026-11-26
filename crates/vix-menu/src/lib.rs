@@ -3925,4 +3925,135 @@ mod tests {
         assert_eq!(first_selectable(&[]), 0);
         assert_eq!(label_starting(&[], 0, 'a'), None);
     }
+
+    /// Index of the Edit menu and of its Find item (a submenu of leaves).
+    fn edit_and_find() -> (usize, usize) {
+        let edit = menus()
+            .iter()
+            .position(|m| m.name == "menu.edit")
+            .expect("edit menu");
+        let find = menus()[edit]
+            .items
+            .iter()
+            .position(|it| it.label == "menu.item.edit.find_menu")
+            .expect("find item");
+        (edit, find)
+    }
+
+    /// A runtime-built shared-help leaf behaves like a plain leaf except that
+    /// its help comes from the other label's `.help` key.
+    #[test]
+    fn leaf_shared_help_borrows_the_other_items_help() {
+        let shared = Item::leaf_shared_help(
+            "menu.item.__no_such_item__",
+            "file.new",
+            "Ctrl+N",
+            "menu.item.file.new",
+        );
+        assert_eq!(shared.action, "file.new");
+        assert_eq!(shared.shortcut, "Ctrl+N");
+        assert!(!shared.has_submenu() && !shared.is_separator());
+        let own = Item::leaf("menu.item.file.new", "file.new", "");
+        assert!(own.help().is_some());
+        assert_eq!(shared.help(), own.help());
+        assert_eq!(
+            Item::leaf("menu.item.__no_such_item__", "file.new", "").help(),
+            None,
+            "without the override the bogus label has no help"
+        );
+    }
+
+    /// The selectable-index helpers step over separators in both directions.
+    #[test]
+    fn selectable_helpers_skip_separators() {
+        let items = [Item::leaf("a", "a", ""), SEP, SEP, Item::leaf("b", "b", "")];
+        assert_eq!(next_selectable(&items, 0), 3);
+        assert_eq!(next_selectable(&items, 3), 0, "wraps forward");
+        assert_eq!(prev_selectable(&items, 3), 0);
+        assert_eq!(prev_selectable(&items, 0), 3, "wraps backward");
+    }
+
+    /// Filtering drops a separator left trailing (or leading) by removed leaves.
+    #[test]
+    fn filter_items_trims_edge_separators() {
+        const SAMPLE: &[Item] = &[
+            SEP,
+            Item::leaf("a", "keep.a", ""),
+            SEP,
+            Item::leaf("x", "drop.x", ""),
+        ];
+        let out = filter_items(SAMPLE, |a| !a.starts_with("drop."));
+        let actions: Vec<&str> = out.iter().map(|it| it.action).collect();
+        assert_eq!(actions, vec!["keep.a"]);
+    }
+
+    /// Top-level Up/Down step between items, and a top-level leaf is both the
+    /// selected action and what `enter` returns.
+    #[test]
+    fn top_level_leaf_navigation_and_enter() {
+        let file = menus()
+            .iter()
+            .position(|m| m.name == "menu.file")
+            .expect("file menu");
+        let items = menus()[file].items;
+        let mut m = Menu::default();
+        m.open_index(file);
+        m.down();
+        let first = first_selectable(items);
+        assert_eq!(m.item, Some(first));
+        m.down();
+        let second = next_selectable(items, first);
+        assert_eq!(m.item, Some(second));
+        m.up();
+        assert_eq!(
+            m.item,
+            Some(first),
+            "up from the second item returns to the first"
+        );
+        m.highlight_item(first);
+        let action = items[first].action;
+        assert!(!items[first].has_submenu());
+        assert_eq!(m.selected_action(), Some(action));
+        assert_eq!(m.enter(), Some(action));
+    }
+
+    /// Edit -> Find: `right` on a leaf row of the open submenu is a no-op, and
+    /// that leaf is the selected action and what `enter` returns.
+    #[test]
+    fn second_level_leaf_right_noop_and_enter() {
+        let (edit, find) = edit_and_find();
+        let mut m = Menu::default();
+        m.open_index(edit);
+        m.highlight_item(find);
+        m.right();
+        let sub = m.submenu_items().expect("find submenu");
+        let leaf = sub
+            .iter()
+            .position(|it| !it.has_submenu() && !it.is_separator())
+            .expect("a leaf row");
+        m.highlight_sub(leaf);
+        m.down();
+        assert_eq!(m.sub, Some(next_selectable(sub, leaf)));
+        m.highlight_sub(leaf);
+        m.right();
+        assert!(m.submenu_open() && !m.subsubmenu_open());
+        assert_eq!(m.sub, Some(leaf), "right on a leaf row keeps the highlight");
+        let action = sub[leaf].action;
+        assert_eq!(m.selected_action(), Some(action));
+        assert_eq!(m.enter(), Some(action));
+    }
+
+    /// Type-ahead with a letter no row starts with leaves the highlight alone,
+    /// whether or not anything was highlighted.
+    #[test]
+    fn type_ahead_without_a_match_keeps_the_highlight() {
+        let mut m = Menu::default();
+        m.open_index(0);
+        m.type_ahead('#');
+        assert_eq!(m.item, None);
+        m.down();
+        let before = m.item;
+        m.type_ahead('#');
+        assert_eq!(m.item, before);
+    }
 }

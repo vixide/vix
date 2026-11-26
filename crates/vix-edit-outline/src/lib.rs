@@ -648,4 +648,211 @@ mod tests {
         assert_eq!(t.handle_key(key('q'), 4), Outcome::Close);
         assert_eq!(t.handle_key(code(KeyCode::Esc), 4), Outcome::Close);
     }
+
+    #[test]
+    fn has_children_is_false_out_of_range() {
+        let t = tree();
+        assert!(!t.has_children(99));
+        assert_eq!(t.level(99), 0);
+        assert_eq!(t.text(99), "");
+        assert!(!t.is_collapsed(99));
+    }
+
+    #[test]
+    fn space_toggles_collapse_only_on_parents() {
+        let mut t = tree();
+        t.handle_key(key(' '), 4); // A is a leaf: nothing to toggle
+        assert!(!t.is_collapsed(0));
+        t.handle_key(key('j'), 4); // B
+        t.handle_key(key(' '), 4);
+        assert!(t.is_collapsed(1));
+        assert_eq!(t.visible(), vec![0, 1, 3]);
+        t.handle_key(key(' '), 4);
+        assert!(!t.is_collapsed(1));
+        assert_eq!(t.visible(), vec![0, 1, 2, 3]);
+        assert!(
+            !t.is_dirty(),
+            "collapse state is a view concern, not an edit"
+        );
+    }
+
+    #[test]
+    fn vim_keys_home_and_paging_move_within_visible_items() {
+        let mut t = Tree::from_text("a\nb\nc\nd\ne\n");
+        t.handle_key(code(KeyCode::PageDown), 3);
+        assert_eq!(t.sel(), 3);
+        t.handle_key(code(KeyCode::PageDown), 3);
+        assert_eq!(t.sel(), 4, "paging clamps at the last item");
+        t.handle_key(code(KeyCode::PageUp), 2);
+        assert_eq!(t.sel(), 2);
+        t.handle_key(code(KeyCode::PageUp), 0);
+        assert_eq!(t.sel(), 1, "a zero page still moves one item");
+        t.handle_key(key('k'), 3);
+        assert_eq!(t.sel(), 0);
+        t.handle_key(key('k'), 3);
+        assert_eq!(t.sel(), 0, "up clamps at the first item");
+        t.handle_key(code(KeyCode::End), 3);
+        t.handle_key(code(KeyCode::Home), 3);
+        assert_eq!(t.sel(), 0);
+    }
+
+    #[test]
+    fn unbound_keys_are_consumed_without_effect() {
+        let mut t = tree();
+        let before = t.to_text();
+        assert_eq!(t.handle_key(key('x'), 4), Outcome::Consumed);
+        assert_eq!(t.handle_key(code(KeyCode::F(5)), 4), Outcome::Consumed);
+        assert_eq!(t.to_text(), before);
+        assert_eq!(t.sel(), 0);
+        assert!(!t.is_dirty());
+    }
+
+    #[test]
+    fn left_on_a_leaf_jumps_to_its_parent() {
+        let mut t = tree();
+        t.handle_key(code(KeyCode::Down), 4);
+        t.handle_key(code(KeyCode::Down), 4); // B1
+        assert_eq!(t.text(t.sel()), "B1");
+        t.handle_key(key('h'), 4);
+        assert_eq!(t.text(t.sel()), "B", "leaf → parent");
+        assert!(
+            !t.is_collapsed(1),
+            "jumping to the parent does not collapse it"
+        );
+    }
+
+    #[test]
+    fn left_on_a_top_level_leaf_stays_put() {
+        let mut t = tree();
+        t.handle_key(code(KeyCode::Left), 4);
+        assert_eq!(t.sel(), 0);
+        assert!(!t.is_collapsed(0));
+    }
+
+    #[test]
+    fn left_on_a_collapsed_child_jumps_past_same_level_siblings_to_parent() {
+        // P(→ c1, c2(→ g)): collapse c2, then ← again goes to P, skipping c1.
+        let mut t = Tree::from_text("P\n  c1\n  c2\n    g\n");
+        t.handle_key(code(KeyCode::End), 4); // g
+        t.handle_key(code(KeyCode::Left), 4); // g → c2
+        assert_eq!(t.text(t.sel()), "c2");
+        t.handle_key(code(KeyCode::Left), 4); // collapse c2
+        assert!(t.is_collapsed(2));
+        t.handle_key(code(KeyCode::Left), 4); // collapsed: jump to parent
+        assert_eq!(t.text(t.sel()), "P");
+    }
+
+    #[test]
+    fn left_on_an_orphan_indented_first_line_has_no_parent() {
+        // A first item indented one level has no shallower item before it.
+        let mut t = Tree::from_text("  orphan\nroot\n");
+        assert_eq!(t.level(0), 1);
+        t.handle_key(code(KeyCode::Left), 4);
+        assert_eq!(t.sel(), 0);
+    }
+
+    #[test]
+    fn right_on_a_leaf_does_nothing() {
+        let mut t = tree();
+        t.handle_key(key('l'), 4);
+        assert_eq!(t.sel(), 0);
+        assert!(!t.is_collapsed(0));
+    }
+
+    #[test]
+    fn indent_refuses_a_first_child_and_outdent_refuses_the_root() {
+        let mut t = tree();
+        t.handle_key(code(KeyCode::Down), 4);
+        t.handle_key(code(KeyCode::Down), 4); // B1: first child of B
+        t.handle_key(alt(KeyCode::Right), 4);
+        assert_eq!(t.level(2), 1, "no previous sibling at B1's level");
+        t.handle_key(code(KeyCode::Home), 4); // A, level 0
+        t.handle_key(alt(KeyCode::Left), 4);
+        assert_eq!(t.level(0), 0);
+        assert!(!t.is_dirty(), "refused edits leave the outline clean");
+        t.handle_key(key('u'), 4);
+        assert_eq!(t.to_text(), "A\nB\n  B1\nC\n", "nothing was pushed to undo");
+    }
+
+    #[test]
+    fn indent_expands_a_collapsed_new_parent() {
+        // A(→ A1) collapsed, then indent B under A: A must re-expand so B stays visible.
+        let mut t = Tree::from_text("A\n  A1\nB\n");
+        t.handle_key(key(' '), 4); // collapse A
+        assert!(t.is_collapsed(0));
+        t.handle_key(code(KeyCode::Down), 4); // B (A1 hidden)
+        assert_eq!(t.text(t.sel()), "B");
+        t.handle_key(code(KeyCode::Tab), 4);
+        assert_eq!(t.level(2), 1);
+        assert!(!t.is_collapsed(0));
+        assert_eq!(t.visible(), vec![0, 1, 2]);
+        assert!(t.is_dirty());
+    }
+
+    #[test]
+    fn moves_without_a_sibling_are_refused() {
+        let mut t = tree();
+        t.handle_key(alt(KeyCode::Up), 4); // A is first
+        t.handle_key(code(KeyCode::End), 4);
+        t.handle_key(alt(KeyCode::Down), 4); // C is last
+        t.handle_key(code(KeyCode::Up), 4); // B1
+        t.handle_key(code(KeyCode::Up), 4); // B
+        assert_eq!(t.text(t.sel()), "B");
+        t.handle_key(code(KeyCode::Down), 4); // B1: only child
+        t.handle_key(alt(KeyCode::Down), 4);
+        t.handle_key(alt(KeyCode::Up), 4);
+        assert_eq!(t.to_text(), "A\nB\n  B1\nC\n");
+        assert!(!t.is_dirty());
+    }
+
+    #[test]
+    fn undo_and_redo_with_empty_history_do_nothing() {
+        let mut t = tree();
+        t.handle_key(key('u'), 4);
+        t.handle_key(ctrl('r'), 4);
+        assert!(!t.is_dirty());
+        assert_eq!(t.to_text(), "A\nB\n  B1\nC\n");
+        // One edit, undone, redone, then a second redo has nothing left.
+        t.handle_key(code(KeyCode::Down), 4);
+        t.handle_key(code(KeyCode::Tab), 4);
+        t.handle_key(key('u'), 4);
+        t.handle_key(ctrl('r'), 4);
+        t.handle_key(ctrl('r'), 4);
+        assert_eq!(t.to_text(), "A\n  B\n    B1\nC\n");
+    }
+
+    #[test]
+    fn mark_saved_clears_dirty() {
+        let mut t = tree();
+        t.handle_key(code(KeyCode::Down), 4);
+        t.handle_key(code(KeyCode::Tab), 4);
+        assert!(t.is_dirty());
+        t.mark_saved();
+        assert!(!t.is_dirty());
+        t.handle_key(key('u'), 4);
+        assert!(t.is_dirty(), "undo after a save is an unsaved change again");
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_to_the_selection() {
+        let mut t = Tree::from_text("0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n");
+        assert_eq!(t.scroll(), 0);
+        t.handle_key(code(KeyCode::End), 3);
+        t.ensure_visible(3);
+        assert_eq!(t.scroll(), 7, "last item sits on the window's bottom row");
+        t.handle_key(code(KeyCode::Home), 3);
+        t.ensure_visible(3);
+        assert_eq!(t.scroll(), 0);
+    }
+
+    #[test]
+    fn ensure_visible_counts_only_visible_rows() {
+        // P(→ 5 children) collapsed, then Q: Q is visible row 1.
+        let mut t = Tree::from_text("P\n  a\n  b\n  c\n  d\n  e\nQ\n");
+        t.handle_key(key(' '), 2);
+        t.handle_key(code(KeyCode::End), 2);
+        assert_eq!(t.text(t.sel()), "Q");
+        t.ensure_visible(2);
+        assert_eq!(t.scroll(), 0, "hidden children do not push Q off-screen");
+    }
 }
