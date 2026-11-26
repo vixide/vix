@@ -136,6 +136,71 @@ impl History {
         self.prune();
     }
 
+    /// Fold every state after `seq` on the path to the current state into
+    /// one, so a single `undo` reverts them all and a single `redo`
+    /// reapplies them: the Vi keymap's "a change is one undo unit" (T837),
+    /// where `ciw` + the text typed in Insert mode arrive as several edits.
+    /// The merged batch keeps the first state's `state_before` and the last
+    /// one's `state_after`. Returns `true` when anything was merged; nothing
+    /// changes (`false`) when `seq` is not an ancestor of the current state,
+    /// fewer than two states follow it, or one of them other than the last
+    /// already has another branch (folding it would lose that branch).
+    pub fn squash_since(&mut self, seq: usize) -> bool {
+        let Some(path) = self.path_to(self.current) else {
+            return false;
+        };
+        let Some(at) = path.iter().position(|&s| s == seq) else {
+            return false;
+        };
+        let chain = path.get(at.saturating_add(1)..).unwrap_or_default();
+        let (Some(&first), Some(&last)) = (chain.first(), chain.last()) else {
+            return false;
+        };
+        if chain.len() < 2 {
+            return false;
+        }
+        let linear = chain.split_last().is_some_and(|(_, inner)| {
+            inner
+                .iter()
+                .all(|&i| self.node(i).is_some_and(|n| n.children.len() == 1))
+        });
+        if !linear {
+            return false;
+        }
+        let mut merged = EditBatch::new();
+        for &i in chain {
+            let Some(batch) = self.node(i).and_then(|n| n.batch.as_ref()) else {
+                return false;
+            };
+            if merged.state_before.is_none() {
+                merged.state_before = batch.state_before;
+            }
+            merged.edits.extend(batch.edits.iter().cloned());
+            merged.state_after = batch.state_after;
+        }
+        let Some(tail) = self.node(last).cloned() else {
+            return false;
+        };
+        for &child in &tail.children {
+            if let Some(c) = self.node_mut(child) {
+                c.parent = Some(first);
+            }
+        }
+        if let Some(head) = self.node_mut(first) {
+            head.batch = Some(merged);
+            head.children = tail.children;
+            head.active_child = tail.active_child;
+            head.at = tail.at;
+        }
+        for &i in chain.get(1..).unwrap_or_default() {
+            if let Some(slot) = self.nodes.get_mut(i) {
+                *slot = None;
+            }
+        }
+        self.current = first;
+        true
+    }
+
     /// The live state at `i`, if there is one.
     fn node(&self, i: usize) -> Option<&Node> {
         self.nodes.get(i).and_then(Option::as_ref)
@@ -317,6 +382,52 @@ mod tests {
         match &b.edits[0].kind {
             EditKind::Insert { text, .. } | EditKind::Remove { text, .. } => text.clone(),
         }
+    }
+
+    #[test]
+    fn squash_since_folds_the_states_after_seq_into_one_undo_step() {
+        let mut h = History::new(100);
+        h.push(batch("a")); // 1: stays its own step
+        let start = h.current();
+        h.push(batch("b")); // 2
+        h.push(batch("c")); // 3
+        h.push(batch("d")); // 4
+        assert!(h.squash_since(start));
+        assert_eq!(h.current(), 2, "the first folded state survives");
+        let undone = h.undo().expect("one merged step");
+        let texts: Vec<String> = undone
+            .edits
+            .iter()
+            .map(|e| match &e.kind {
+                EditKind::Insert { text, .. } | EditKind::Remove { text, .. } => text.clone(),
+            })
+            .collect();
+        assert_eq!(texts, vec!["b", "c", "d"], "edits kept in order");
+        assert_eq!(h.current(), start);
+        assert_eq!(
+            h.redo().map(|b| b.edits.len()),
+            Some(3),
+            "redo reapplies all"
+        );
+        h.undo();
+        assert_eq!(h.undo().map(|b| first_text(&b)), Some("a".into()));
+        let seqs: Vec<usize> = h.nodes().iter().map(|n| n.seq).collect();
+        assert_eq!(seqs, vec![0, 1, 2], "the folded states are gone");
+    }
+
+    #[test]
+    fn squash_since_refuses_one_state_a_non_ancestor_or_a_branch() {
+        let mut h = History::new(100);
+        h.push(batch("a")); // 1
+        assert!(!h.squash_since(0), "a single state has nothing to fold");
+        assert!(!h.squash_since(9), "not on the path");
+        h.push(batch("b")); // 2
+        h.undo();
+        h.push(batch("c")); // 3: state 1 now has two branches
+        h.push(batch("d")); // 4
+        assert!(!h.squash_since(0), "folding state 1 would lose branch 2");
+        assert!(h.squash_since(1), "states 3 and 4 fold");
+        assert_eq!(h.nodes().len(), 4);
     }
 
     #[test]

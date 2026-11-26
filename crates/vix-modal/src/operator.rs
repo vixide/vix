@@ -241,9 +241,47 @@ pub fn paste_plan_counted(
     Some((at, content, cursor))
 }
 
+/// Vim's `cw` special case (`:help cw`): with the cursor on a non-blank,
+/// `cw` changes to the end of the word instead of also taking the white
+/// space after it, so `cw` on `old value` keeps the space before
+/// `value`. `before` is the cursor and `after` where the `w` motion
+/// landed (an exclusive end); the result is the end to change up to —
+/// `after` minus the white space just before it, never before `before`'s
+/// own character. A cursor on white space keeps `after` unchanged.
+#[must_use]
+pub fn change_word_end(text: &str, before: usize, after: usize) -> usize {
+    let span: Vec<char> = text
+        .chars()
+        .skip(before)
+        .take(after.saturating_sub(before))
+        .collect();
+    match span.first() {
+        Some(c) if !c.is_whitespace() => {
+            let trailing = span.iter().rev().take_while(|c| c.is_whitespace()).count();
+            after.saturating_sub(trailing)
+        }
+        _ => after,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn change_word_end_stops_before_the_white_space_after_the_word() {
+        // `w` from 0 in "old value" lands on 'v' (4); `cw` changes "old".
+        assert_eq!(change_word_end("old value", 0, 4), 3);
+        // Across a line break, and with a count landing two words on.
+        assert_eq!(change_word_end("old\n  next", 0, 6), 3);
+        assert_eq!(change_word_end("a b c", 0, 4), 3);
+        // Punctuation after the word is not white space: nothing to trim.
+        assert_eq!(change_word_end("foo.bar", 0, 3), 3);
+        // On white space, `cw` is `dw`.
+        assert_eq!(change_word_end("a  b", 1, 3), 3);
+        // Multi-byte text counts characters, not bytes.
+        assert_eq!(change_word_end("ñé x", 0, 3), 2);
+    }
 
     #[test]
     fn exclusive_range_does_not_include_the_landing_char() {

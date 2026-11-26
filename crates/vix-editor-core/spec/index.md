@@ -432,6 +432,16 @@ just cycle branches with `switch_branch`:
 The timestamp is a `serde(default)` field, so undo files written by
 `vix-undo-store` before T638 still load.
 
+`History::squash_since(seq)` (T837) folds every state after `seq` on the
+path to the current state into one, keeping the first state's
+`state_before` and the last one's `state_after`, so one undo reverts them
+all: the Vi keymap uses it to make a change (`ciw` and the text typed
+after it) one undo step. It changes nothing and returns `false` when `seq`
+is not an ancestor of the current state, fewer than two states follow it,
+or a folded state other than the last has another branch (folding would
+lose it). `Code::squash_history_since` wraps it and is refused while the
+edit log is on, as Undo is.
+
 ## End-of-line virtual text (T614)
 
 The widget can draw **virtual text** after a line's content: text that is shown

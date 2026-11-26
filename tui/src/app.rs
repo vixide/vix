@@ -2820,11 +2820,25 @@ pub struct App {
     /// on `App::modal_normal_key` for the exact rule. Not itself what `.`
     /// replays; [`App::modal_last_change`] is.
     modal_recording: Vec<KeyEvent>,
-    /// Dot-repeat (T115): the raw keys of the last command that actually
-    /// changed the buffer (`d{motion}`, a text object, or `p`/`P`) —
+    /// Dot-repeat (T115): the raw Normal-mode keys of the last command that
+    /// actually changed the buffer (`d{motion}`, a text object, `p`/`P`, or
+    /// the command that opened an Insert session, T837) —
     /// exactly what `.` replays, `{count}.` overriding its recorded count.
     /// Empty until the first such change happens.
     modal_last_change: Vec<KeyEvent>,
+    /// Dot-repeat (T837): the Insert-mode keys of the last change, when it
+    /// went on into Insert mode (`ciw`, `cw`, `i`, `o`, …) — the text,
+    /// backspaces and line breaks typed there, ending with the `Esc` that
+    /// left it. Replayed after [`App::modal_last_change`] only if that put
+    /// the editor back in Insert mode; empty for a change without one.
+    modal_last_change_insert: Vec<KeyEvent>,
+    /// The undo state (`History::current`) when [`App::modal_recording`]
+    /// last started afresh (T837): where the change in progress began, so
+    /// leaving Insert mode can fold everything since into one undo step.
+    modal_recording_seq: Option<usize>,
+    /// The Insert-mode session being recorded as part of a change (T837),
+    /// from the key that entered Insert mode to the `Esc` that leaves it.
+    modal_insert_record: Option<modal::InsertRecord>,
     /// The exact half-open range a Visual-mode text object (`viw`, `va(`)
     /// last selected (T840). While the selection still equals it, a Visual
     /// operator acts on exactly that range; any other selection follows
@@ -3179,6 +3193,9 @@ impl App {
             modal_pending_text_object: None,
             modal_recording: Vec::new(),
             modal_last_change: Vec::new(),
+            modal_last_change_insert: Vec::new(),
+            modal_recording_seq: None,
+            modal_insert_record: None,
             modal_visual_exact: None,
             helix: helix::HelixState::default(),
         };
@@ -10689,6 +10706,9 @@ impl App {
         self.modal_pending_text_object = None;
         self.modal_recording.clear();
         self.modal_last_change.clear();
+        self.modal_last_change_insert.clear();
+        self.modal_recording_seq = None;
+        self.modal_insert_record = None;
         self.helix = helix::HelixState::default();
         self.vim_cmd = None;
         self.spacemacs_leader = None;

@@ -84,13 +84,15 @@ Honesty is the best advocacy:
   `]f`/`[f`, `]c`/`[c`, `]a`/`[a` motions), named
   registers (`"ayy`, `"ap`) alongside the unnamed one, counted put
   (`"a3p`), Visual/Visual Line selection with `d`/`x`/`c`/`y` acting on
-  it, and `.` dot-repeat for `d{motion}`, a text object, or `p`/`P`.
+  it, and `.` dot-repeat for `d{motion}`, a text object, `p`/`P`, or a
+  change that goes on into Insert mode (`ciw`, `cw`, `o`, `A`, …, with the
+  text typed there), each change also one undo step.
   It is still a practical subset, not the full language: no Visual Block, no
   WORD motions (`W`/`B`/`E`), no `;`/`,`/`*`/`#`, no `>`/`<`/`~` operators, no
-  uppercase/numbered/special registers, `cw`'s "acts like `ce`" special case
-  and `cc`'s indentation preservation are both unimplemented, Visual mode
-  moves with `h j k l` only and its operators are not dot-repeatable,
-  dot-repeat doesn't cover `c`+motion or a plain Insert-mode session, and there's still no ex-command scripting or
+  uppercase/numbered/special registers, `cc`'s indentation preservation is
+  unimplemented, Visual mode moves with `h j k l` only and its operators
+  are not dot-repeatable, an Insert-mode session that uses a cursor key
+  is not dot-repeatable, and there's still no ex-command scripting or
   macro-via-`q`/`@` (Vix has recorded macros, but in the Edit menu). See
   `crates/vix-modal/spec/index.md` for the exact, current line. If your hands
   speak the deepest corners of fluent Vim, you will still notice.
