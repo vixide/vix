@@ -74,6 +74,14 @@ pub const CATALOG: &[Action] = &[
         title: "action.backspace",
     },
     Action {
+        id: "lsp.expand_selection",
+        title: "menu.item.lsp.expand_selection",
+    },
+    Action {
+        id: "lsp.shrink_selection",
+        title: "menu.item.lsp.shrink_selection",
+    },
+    Action {
         id: "center",
         title: "action.center",
     },
