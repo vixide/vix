@@ -473,6 +473,100 @@ mod tests {
         assert!(KeyCode::F(5).is_function_key(5));
         assert!(KeyCode::Char('x').is_char('x'));
         assert_eq!(KeyCode::Tab.as_char(), None);
+        assert_eq!(KeyCode::Char('é').as_char(), Some('é'));
+        assert!(!KeyCode::F(5).is_function_key(6));
+        assert!(!KeyCode::Char('x').is_char('y'));
+        assert!(!KeyCode::Enter.is_char('x'));
+    }
+
+    #[test]
+    fn repeat_is_neither_press_nor_release() {
+        let repeat =
+            KeyEvent::new_with_kind(KeyCode::Char('j'), KeyModifiers::NONE, KeyEventKind::Repeat);
+        assert!(repeat.is_repeat());
+        assert!(!repeat.is_press() && !repeat.is_release());
+        assert!(!KeyEvent::from(KeyCode::Char('j')).is_repeat());
+    }
+
+    #[cfg(feature = "crossterm")]
+    #[test]
+    fn converts_every_crossterm_key_code_and_kind() {
+        use crossterm::event as ct;
+        let pairs = [
+            (ct::KeyCode::Backspace, KeyCode::Backspace),
+            (ct::KeyCode::Enter, KeyCode::Enter),
+            (ct::KeyCode::Left, KeyCode::Left),
+            (ct::KeyCode::Right, KeyCode::Right),
+            (ct::KeyCode::Up, KeyCode::Up),
+            (ct::KeyCode::Down, KeyCode::Down),
+            (ct::KeyCode::Home, KeyCode::Home),
+            (ct::KeyCode::End, KeyCode::End),
+            (ct::KeyCode::PageUp, KeyCode::PageUp),
+            (ct::KeyCode::PageDown, KeyCode::PageDown),
+            (ct::KeyCode::Tab, KeyCode::Tab),
+            (ct::KeyCode::BackTab, KeyCode::BackTab),
+            (ct::KeyCode::Delete, KeyCode::Delete),
+            (ct::KeyCode::Insert, KeyCode::Insert),
+            (ct::KeyCode::F(12), KeyCode::F(12)),
+            (ct::KeyCode::Char('z'), KeyCode::Char('z')),
+            (ct::KeyCode::Esc, KeyCode::Esc),
+            (ct::KeyCode::CapsLock, KeyCode::CapsLock),
+            (ct::KeyCode::ScrollLock, KeyCode::ScrollLock),
+            (ct::KeyCode::NumLock, KeyCode::NumLock),
+            (ct::KeyCode::PrintScreen, KeyCode::PrintScreen),
+            (ct::KeyCode::Pause, KeyCode::Pause),
+            (ct::KeyCode::Menu, KeyCode::Menu),
+            (ct::KeyCode::KeypadBegin, KeyCode::KeypadBegin),
+            (ct::KeyCode::Null, KeyCode::Null),
+            (
+                ct::KeyCode::Modifier(ct::ModifierKeyCode::LeftShift),
+                KeyCode::Null,
+            ),
+        ];
+        for (from, want) in pairs {
+            assert_eq!(KeyCode::from(from), want, "{from:?}");
+        }
+        assert_eq!(
+            KeyEventKind::from(ct::KeyEventKind::Press),
+            KeyEventKind::Press
+        );
+        assert_eq!(
+            KeyEventKind::from(ct::KeyEventKind::Release),
+            KeyEventKind::Release
+        );
+        // Bits this crate has no flag for are dropped, known ones survive.
+        assert_eq!(
+            KeyEventState::from(ct::KeyEventState::KEYPAD | ct::KeyEventState::NUM_LOCK),
+            KeyEventState::KEYPAD | KeyEventState::NUM_LOCK
+        );
+    }
+
+    #[cfg(feature = "crossterm")]
+    #[test]
+    fn converts_every_crossterm_mouse_kind_and_button() {
+        use crossterm::event as ct;
+        let pairs = [
+            (
+                ct::MouseEventKind::Down(ct::MouseButton::Left),
+                MouseEventKind::Down(MouseButton::Left),
+            ),
+            (
+                ct::MouseEventKind::Up(ct::MouseButton::Right),
+                MouseEventKind::Up(MouseButton::Right),
+            ),
+            (
+                ct::MouseEventKind::Drag(ct::MouseButton::Middle),
+                MouseEventKind::Drag(MouseButton::Middle),
+            ),
+            (ct::MouseEventKind::Moved, MouseEventKind::Moved),
+            (ct::MouseEventKind::ScrollDown, MouseEventKind::ScrollDown),
+            (ct::MouseEventKind::ScrollUp, MouseEventKind::ScrollUp),
+            (ct::MouseEventKind::ScrollLeft, MouseEventKind::ScrollLeft),
+            (ct::MouseEventKind::ScrollRight, MouseEventKind::ScrollRight),
+        ];
+        for (from, want) in pairs {
+            assert_eq!(MouseEventKind::from(from), want, "{from:?}");
+        }
     }
 
     #[cfg(feature = "crossterm")]
