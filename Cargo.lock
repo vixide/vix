@@ -6706,6 +6706,8 @@ name = "vix-modal"
 version = "3.0.0"
 dependencies = [
  "ropey",
+ "unicode-segmentation",
+ "unicode-width",
  "vix-textops",
 ]
 

@@ -209,6 +209,42 @@ start; both are the answer Vim gives for an overlong count, not invalid
 input. A huge count costs no more than reaching the bound: a repeated step
 stops as soon as it stops moving.
 
+**The Vi keymap's own rules (T838).** The Vi and Spacemacs keymaps' Normal
+mode reads a separate set of motions (`motion::vi_*`, `display_column`,
+`line_down_to_column`, `line_up_to_column`), so the shared scanner above
+keeps its behavior for Helix (`w`/`b`/`e` selections) and every other
+caller:
+
+- **Graphemes.** A position is a grapheme start, computed over the current
+  line only (`unicode-segmentation`): `h`/`l` step over a letter and its
+  combining marks together, and a Normal-mode cursor never rests inside a
+  grapheme or on a line's end (`vi_normal_cursor`, Vim's `adjust_cursor`):
+  every Normal-mode motion result passes through it. An operator's range may
+  still end at a line's end.
+- **Word classes.** `w`/`b`/`e` follow Vim's `fwd_word`/`bck_word`/
+  `end_word` step for step over three classes: blank (white space,
+  including `\r`, and the line break), word (alphanumeric or `_`) and
+  punctuation (everything else). A run of one class is a word and an empty
+  line is a word, so `pkg::run(arg);` is `pkg`, `::`, `run`, `(`,
+  `arg`, `);`. Simplification (decided here): Vim gives CJK scripts and
+  emoji classes of their own; here they are word or punctuation characters
+  by `char::is_alphanumeric`. Past the last word, `w` rests on the text's
+  last character, as Vim's does.
+- **`w` under an operator** (`vi_word_forward_for_operator`): when the
+  last word moved over ends its line, the range stops at that line's end
+  (`:help w`), so `dw` on a line's last word keeps the line break.
+- **Preferred column.** `j`/`k` carry Vim's `curswant`: the display
+  column (`display_column`: tabs to the next multiple of the tab width,
+  wide characters two cells, a cursor on a tab at the tab's last cell) of
+  where a run of vertical motions started, or "each line's end" after `$`.
+  The target line's grapheme covering that column is chosen (a tab or wide
+  character spanning it included), its last grapheme when it is shorter, so
+  `4ljj` over a short line comes back to column 4. The pure functions take
+  the column and the tab width; the host keeps the column while the cursor
+  and buffer length are where the last `j`/`k`/`$` left them, and passes
+  a tab width of 1 because the editor draws a tab as one cell (decided
+  here: the column the user sees, Vim's own definition).
+
 **Cut from v1**: `W`/`B`/`E` (WORD — whitespace-delimited, vs. word's
 alphanumeric-run definition), `;`/`,` (repeat last `f`/`t`), `*`/`#`
 (search word under cursor). Each is a small, self-contained addition once
@@ -228,6 +264,22 @@ y{motion}   copy the range into the active register (buffer unchanged)
 `x` becomes real sugar for `d` + a one-character-forward motion, not its
 own code path — matching Vim's actual semantics (`x` **is** `dl`) instead
 of vix's current bespoke "forward-delete" action.
+
+**Cursor destination vs. operator range (T838).** A motion used as an
+operator's target may go where a Normal-mode cursor may not: `l` under an
+operator (and so `x`) reaches the line's end (`motion::vi_chars_end`:
+`count` graphemes, never the line break), so `$x` and `9x` delete the
+last character and `x` takes a letter with its combining marks. The Vi
+range (`operator::vi_operator_range`) adds Vim's rules to the half-open
+one: an inclusive motion takes its whole last grapheme and nothing on a
+line's end (`d$` on an empty line), and an exclusive motion ending at the
+start of a later line ends at the line before's end instead, becoming
+line-wise when it started in its line's indent (`:help exclusive`; `dw`
+on an empty line deletes the line). A character-wise `d`/`y` over an
+empty range changes nothing and leaves the register alone (`x` on an empty
+line); after a character-wise `d` the cursor moves back onto the line's
+new last character when the delete reached its end. `cw` keeps the white
+space after the word (T837, `operator::change_word_end`).
 
 `p`/`P` are not operators — they're Normal-mode commands that read the
 active register and insert its content after/before the cursor (or replace
