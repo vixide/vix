@@ -76,7 +76,7 @@ fn every_delimiter_text_object_selects_the_right_span() {
         ("x [a b] y\n", 4, "di[", "x [] y\n"),
         ("x <a b> y\n", 4, "da<", "x  y\n"),
         ("say 'hi there' ok\n", 7, "di'", "say '' ok\n"),
-        ("say `hi there` ok\n", 7, "da`", "say  ok\n"),
+        ("say `hi there` ok\n", 7, "da`", "say ok\n"),
         ("say \"hi\" ok\n", 6, "di\"", "say \"\" ok\n"),
     ];
     for (text, at, seq, expected) in cases {
@@ -185,15 +185,14 @@ fn visual_line_snaps_to_whole_lines_in_both_directions() {
     // The final line has no trailing newline; `V` + `j` still selects it
     // (it ends at the end of the buffer, offset 18).
     assert_eq!(selection(&mut app), Some((0, 18)));
-    // Growing upward keeps the caret at the top.
+    // Growing upward keeps the caret at the top, on its column (T846:
+    // `V` leaves the caret where it is, as in Vim).
     app.on_key(code(KeyCode::Esc));
     app.editor.active_tab_mut().unwrap().editor.set_cursor(10);
-    // (After `V` the caret sits at the start of the next line, so the first
-    // `k` only brings it back onto the selected line.)
     keys(&mut app, "Vkk");
     let (s, e) = selection(&mut app).unwrap();
-    assert_eq!((s, e), (4, 14));
-    assert_eq!(cursor(&mut app), 4);
+    assert_eq!((s, e), (0, 14));
+    assert_eq!(cursor(&mut app), 2);
     let _ = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
 }
 

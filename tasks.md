@@ -10954,7 +10954,7 @@ Fix boundaries of everyday edits before adding Vi features.
   when an index is still building or was cut short. Acceptance: in the
   `open/` bench checkout every file is findable; first results and typing
   latency stay within the numbers in docs/performance/index.md.
-- [ ] **T846 — Vi parity bugs found by the T844 table.** Each is a row in
+- [x] **T846 — Vi parity bugs found by the T844 table.** (Done: `Ctrl-R` redo and a no-typing guard for modified keys, `D C X s r J g- g+`, `Esc` steps back, `u` lands on the change, `V` keeps the cursor, Vim's `}`/`{` and `a"`, `/pattern<CR>` back to Normal; every row matches `vim -u NONE`; `r<CR>` not done.) Each is a row in
   `tui/tests/integration/vim_parity.rs` that asserts Vix's current behavior;
   fix it, flip the row to Vim's result, and check it against `vim -u NONE`.
   First: `Ctrl-R` in Normal mode types an `r` into the buffer instead of

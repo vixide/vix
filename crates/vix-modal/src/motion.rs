@@ -162,12 +162,6 @@ fn first_non_blank<T: Text + ?Sized>(text: &T, (start, end): (usize, usize)) -> 
 }
 
 /// Whether the `(start, end)` line is empty or whitespace only.
-fn line_is_blank<T: Text + ?Sized>(text: &T, (start, end): (usize, usize)) -> bool {
-    text.chars_from(start)
-        .take(end.saturating_sub(start))
-        .all(char::is_whitespace)
-}
-
 /// The offset at column `col` of `line`, clamped to the line's last
 /// content char (Normal mode never rests past it; see [`last_content_pos`]).
 fn clamp_to_line(line: (usize, usize), col: usize) -> usize {
@@ -374,53 +368,69 @@ pub fn word_end(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize 
 
 // ----- { } ( ) -----------------------------------------------------------
 
-/// Whether `line` starts a paragraph: it is not blank, and it is the first
-/// line or follows a blank one ([`vix_textops::paragraph_units`]'s runs of
-/// non-blank lines).
-fn starts_paragraph<T: Text + ?Sized>(text: &T, line: (usize, usize)) -> bool {
-    !line_is_blank(text, line) && prev_line(text, line).is_none_or(|prev| line_is_blank(text, prev))
+/// Whether `line` is empty: Vim's paragraph boundary (`:help paragraph`).
+/// A line holding only white space is *not* one, as in Vim.
+const fn line_is_empty((start, end): (usize, usize)) -> bool {
+    start == end
 }
 
-/// The first paragraph start strictly after `pos`, walking down from its
-/// line.
-fn next_paragraph_start<T: Text + ?Sized>(text: &T, pos: usize) -> Option<usize> {
+/// `}` / `{` (`forward` picks which): Vim's own paragraph search
+/// (`:help }`), run `count` times. Each run
+/// walks from the current line, first over any empty lines, then over at
+/// least one non-empty line, and stops on the next empty line. A run that
+/// reaches the buffer's first or last line stops there; when runs are still
+/// left to do after that the motion fails (`pos` is returned unmoved, as
+/// Vim beeps). `{` lands at a line start; `}` too, except on the buffer's
+/// last line, where it lands at that line's end (its last character for a
+/// cursor, through it for an operator: Vim makes the motion inclusive there).
+/// Reads only the lines it crosses.
+fn find_paragraph<T: Text + ?Sized>(text: &T, pos: usize, count: usize, forward: bool) -> usize {
     let mut line = row_at(text, pos);
-    let mut prev_blank = line_is_blank(text, line);
-    loop {
-        line = next_line(text, line)?;
-        let blank = line_is_blank(text, line);
-        if prev_blank && !blank && line.0 > pos {
-            return Some(line.0);
+    // `remaining`: the runs still to do after this one.
+    for remaining in (0..count.max(1)).rev() {
+        let mut did_skip = false;
+        let mut first = true;
+        loop {
+            let empty = line_is_empty(line);
+            if !empty {
+                did_skip = true;
+            }
+            if !first && did_skip && empty {
+                break;
+            }
+            let step = if forward {
+                next_line(text, line)
+            } else {
+                prev_line(text, line)
+            };
+            match step {
+                Some(next) => line = next,
+                None if remaining > 0 => return pos,
+                None => break,
+            }
+            first = false;
         }
-        prev_blank = blank;
+    }
+    if forward && next_line(text, line).is_none() {
+        line.1
+    } else {
+        line.0
     }
 }
 
-/// The last paragraph start strictly before `pos`, walking up from its
-/// line.
-fn prev_paragraph_start<T: Text + ?Sized>(text: &T, pos: usize) -> Option<usize> {
-    let mut line = row_at(text, pos);
-    loop {
-        if line.0 < pos && starts_paragraph(text, line) {
-            return Some(line.0);
-        }
-        line = prev_line(text, line)?;
-    }
-}
-
-/// `}`: the start of the `count`-th next paragraph (a run of non-blank
-/// lines, [`vix_textops::paragraph_units`]'s definition — the same one
-/// `dap`/Go → Paragraph already use).
+/// `}`: forward to the empty line after the `count`-th paragraph — Vim's
+/// rule, see `find_paragraph` (an empty line is the boundary; one of
+/// only white space is not).
 #[must_use]
 pub fn paragraph_forward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
-    let len = text.len_chars();
-    repeat_step(pos, count, |p| next_paragraph_start(text, p).unwrap_or(len))
+    find_paragraph(text, pos, count, true)
 }
 
-/// `{`: the start of the `count`-th previous paragraph.
+/// `{`: back to the empty line before the `count`-th paragraph (or the
+/// buffer's start), see `find_paragraph`.
 #[must_use]
 pub fn paragraph_backward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
-    repeat_step(pos, count, |p| prev_paragraph_start(text, p).unwrap_or(0))
+    find_paragraph(text, pos, count, false)
 }
 
 /// Walk forward `count` times (at least once) to the next unit start strictly
@@ -555,7 +565,7 @@ pub fn linewise_span(text: &(impl Text + ?Sized), lo: usize, hi: usize) -> (usiz
 /// line-local rewrite above must agree with them everywhere.
 #[cfg(test)]
 mod reference {
-    use vix_textops::{line_ranges, paragraph_units, sentence_units, word_units};
+    use vix_textops::{line_ranges, sentence_units, word_units};
 
     pub(super) fn operator_range(
         text: &str,
@@ -754,16 +764,53 @@ mod reference {
         p
     }
 
-    pub(super) fn paragraph_forward(text: &str, pos: usize, count: usize) -> usize {
+    /// Vim's paragraph search over a whole-text line list (the T846 rule).
+    fn paragraph(text: &str, pos: usize, count: usize, forward: bool) -> usize {
         let chars = chars_of(text);
-        let units = paragraph_units(&chars);
-        nth_start_after(&units, pos, count, chars.len())
+        let lines = line_ranges(&chars);
+        let mut row = lines
+            .iter()
+            .position(|&(s, e)| pos >= s && pos <= e)
+            .unwrap_or(lines.len() - 1);
+        let mut remaining = count.max(1);
+        while remaining > 0 {
+            remaining -= 1;
+            let mut did_skip = false;
+            let mut first = true;
+            loop {
+                let (s, e) = lines[row];
+                if s != e {
+                    did_skip = true;
+                }
+                if !first && did_skip && s == e {
+                    break;
+                }
+                let next = if forward {
+                    (row + 1 < lines.len()).then(|| row + 1)
+                } else {
+                    row.checked_sub(1)
+                };
+                match next {
+                    Some(n) => row = n,
+                    None if remaining > 0 => return pos,
+                    None => break,
+                }
+                first = false;
+            }
+        }
+        if forward && row + 1 == lines.len() {
+            lines[row].1
+        } else {
+            lines[row].0
+        }
+    }
+
+    pub(super) fn paragraph_forward(text: &str, pos: usize, count: usize) -> usize {
+        paragraph(text, pos, count, true)
     }
 
     pub(super) fn paragraph_backward(text: &str, pos: usize, count: usize) -> usize {
-        let chars = chars_of(text);
-        let units = paragraph_units(&chars);
-        nth_start_before(&units, pos, count)
+        paragraph(text, pos, count, false)
     }
 
     pub(super) fn sentence_forward(text: &str, pos: usize, count: usize) -> usize {
@@ -1276,14 +1323,26 @@ mod tests {
     }
 
     #[test]
-    fn paragraph_forward_and_backward_use_blank_line_separated_runs() {
+    fn paragraph_motions_stop_on_the_empty_line_between_paragraphs() {
+        // Vim (T846): `}` and `{` land on the empty line, not on the next
+        // paragraph's first line.
         let text = "one\ntwo\n\nthree\nfour";
+        assert_eq!(paragraph_forward(text, 0, 1), 8, "the empty line");
         assert_eq!(
-            paragraph_forward(text, 0, 1),
-            9,
-            "start of the 2nd paragraph"
+            paragraph_forward(text, 8, 1),
+            19,
+            "the last line's end once no empty line follows"
         );
-        assert_eq!(paragraph_backward(text, 9, 1), 0);
+        assert_eq!(paragraph_forward(text, 0, 2), 19);
+        assert_eq!(paragraph_forward(text, 0, 3), 0, "too many: no move");
+        assert_eq!(paragraph_backward(text, 14, 1), 8, "back to the empty line");
+        assert_eq!(paragraph_backward(text, 8, 1), 0, "the buffer's start");
+        assert_eq!(paragraph_backward(text, 14, 3), 14, "too many: no move");
+    }
+
+    #[test]
+    fn a_line_of_white_space_is_not_a_paragraph_boundary() {
+        assert_eq!(paragraph_forward("a\n  \nb\n\nc\n", 0, 1), 7);
     }
 
     #[test]

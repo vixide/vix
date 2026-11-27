@@ -8,7 +8,7 @@
 //! The table is the source of truth for every parity claim in
 //! `docs/vix-for-vim-users/index.md`: [`the_guide_shows_this_table`] fails
 //! when the guide's generated table is stale, and
-//! `VIX_UPDATE_VIM_PARITY=1 cargo test -p vix-tui --test integration vim_parity`
+//! `VIX_UPDATE_VIM_PARITY=1 cargo test -p vix-tui --lib integration::vim_parity`
 //! rewrites it.
 //!
 //! Notation: `|` in a buffer is the cursor (before a character in Normal
@@ -142,13 +142,6 @@ impl Row {
             ..self
         }
     }
-    const fn vim_differs_in(self, after: &'static str, mode: Mode, note: &'static str) -> Self {
-        Self {
-            vim: VimResult::Differs { after, mode },
-            note,
-            ..self
-        }
-    }
     /// Whether this build can run the row (Tree-sitter objects need a
     /// grammar; a task needs the `tasks` capability and a POSIX shell).
     fn runnable(&self) -> bool {
@@ -192,10 +185,8 @@ const ROWS: &[Row] = &[
         "a.b|.c\n",
         "`;` and `,` (repeat the last `f`/`t`) are not implemented",
     ),
-    stock("}", "|one\ntwo\n\nthree\n", "one\ntwo\n\n|three\n").vim_differs(
-        "one\ntwo\n|\nthree\n",
-        "`}` stops on the next paragraph's first line, not on the blank line before it (a parity bug)",
-    ),
+    stock("}", "|one\ntwo\n\nthree\n", "one\ntwo\n|\nthree\n"),
+    stock("{", "one\n\ntwo\nth|ree\n", "one\n|\ntwo\nthree\n"),
     stock(")", "|One. Two.\n", "One. |Two.\n"),
     stock("%", "|(a [b] c)\n", "(a [b] c|)\n"),
     stock("*", "|foo bar foo\n", "|foo bar foo\n").vim_differs(
@@ -204,10 +195,9 @@ const ROWS: &[Row] = &[
     ),
     stock("/bar<CR>", "|foo bar\n", "foo |bar\n").note("`/` opens Vix's find bar"),
     stock("/o<CR>n", "|xo o\n", "xo |o\n"),
-    stock("/bar<CR>\"ax", "|foo bar\n", "foo |bar\n").vim_differs(
-        "foo |ar\n",
-        "after `/pattern<CR>` the find bar keeps the keyboard until `<Esc>`, so the next keys edit the search, not the buffer (a parity bug)",
-    ),
+    stock("/bar<CR>\"ax", "|foo bar\n", "foo |ar\n")
+        .char_reg("b")
+        .note("`<CR>` closes the find bar and returns to Normal mode"),
     stock("/bar<CR><Esc>\"ax", "|foo bar\n", "foo |ar\n").char_reg("b"),
     // --- operators
     stock("\"adw", "|foo bar\n", "|bar\n").char_reg("foo "),
@@ -218,39 +208,29 @@ const ROWS: &[Row] = &[
         .char_reg("bar")
         .note("`dw` on a line's last word keeps the line break"),
     stock("\"ad$", "fo|o bar\n", "f|o\n").char_reg("o bar"),
-    stock("\"aD", "fo|o bar\n", "fo|o bar\n").vim_differs(
-        "f|o\n",
-        "`D` is not bound (`d$` is)",
-    ),
+    stock("\"aD", "fo|o bar\n", "f|o\n").char_reg("o bar"),
     stock("\"ax", "|abc\n", "|bc\n").char_reg("a"),
     stock("\"a3x", "|abcd\n", "|d\n").char_reg("abc"),
-    stock("\"aX", "ab|c\n", "ab|c\n").vim_differs("a|c\n", "`X` is not bound (`dh` is)"),
+    stock("\"aX", "ab|c\n", "a|c\n").char_reg("b"),
     stock("\"adf.", "|a.b.c\n", "|b.c\n").char_reg("a."),
     stock("\"a2d3w", "|a b c d e f g h\n", "|g h\n")
         .char_reg("a b c d e f ")
         .note("the two counts multiply"),
     stock("\"adj", "|one\ntwo\nthree\n", "|three\n").line_reg("one\ntwo\n"),
     stock("\"adG", "one\n|two\nthree\n", "|one\n").line_reg("two\nthree\n"),
-    stock("\"acwX<Esc>", "|foo bar\n", "X| bar\n")
-        .char_reg("foo")
-        .vim_differs("|X bar\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
-    stock("\"accX<Esc>", "  fo|o\nbar\n", "X|\nbar\n")
+    stock("\"acwX<Esc>", "|foo bar\n", "|X bar\n").char_reg("foo"),
+    stock("\"accX<Esc>", "  fo|o\nbar\n", "|X\nbar\n")
         .line_reg("  foo\n")
-        .vim_differs(
-            "|X\nbar\n",
-            "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug); an unconfigured Vim has `noautoindent`, so neither keeps the indent",
-        ),
-    stock("\"aCX<Esc>", "fo|o bar\n", "fo|o bar\n").vim_differs(
-        "fo|X\n",
-        "`C` is not bound (`c$` is), and neither is the `X` typed after it",
-    ),
-    stock("\"asX<Esc>", "|abc\n", "|abc\n").vim_differs(
-        "|Xbc\n",
-        "`s` is not bound (`cl` is)",
-    ),
-    stock("rX", "|abc\n", "|abc\n").vim_differs("|Xbc\n", "`r` is not bound"),
+        .note("an unconfigured Vim has `noautoindent`, so neither keeps the indent"),
+    stock("\"aCX<Esc>", "fo|o bar\n", "fo|X\n").char_reg("o bar"),
+    stock("\"asX<Esc>", "|abc\n", "|Xbc\n").char_reg("a"),
+    stock("rX", "|abc\n", "|Xbc\n"),
+    stock("2rX", "|abc\n", "X|Xc\n"),
+    stock("4rX", "|abc\n", "|abc\n").note("too few characters left: nothing happens"),
     stock("~", "|abc\n", "|abc\n").vim_differs("A|bc\n", "`~` is not implemented"),
-    stock("J", "|one\ntwo\n", "|one\ntwo\n").vim_differs("one| two\n", "`J` is not bound"),
+    stock("J", "|one\ntwo\n", "one| two\n"),
+    stock("3J", "|one\n  two\n)three\n", "one two|)three\n")
+        .note("leading white space goes; no space before `)`"),
     stock(">>", "|one\n", "|one\n").vim_differs(
         "\t|one\n",
         "`>` and `<` are not implemented",
@@ -265,15 +245,11 @@ const ROWS: &[Row] = &[
     stock("\"adaw", "foo b|ar baz\n", "foo |baz\n").char_reg("bar "),
     stock("\"adi(", "f(a, |b)\n", "f(|)\n").char_reg("a, b"),
     stock("\"adib", "f(a, |b)\n", "f(|)\n").char_reg("a, b"),
-    stock("\"ada\"", "say \"h|i\" now\n", "say | now\n")
-        .char_reg("\"hi\"")
-        .vim_differs(
-            "say |now\n",
-            "`a\"` leaves the white space after the closing quote (a parity bug)",
-        ),
-    stock("\"aci{X<Esc>", "{ a|b }\n", "{X|}\n")
-        .char_reg(" ab ")
-        .vim_differs("{|X}\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
+    stock("\"ada\"", "say \"h|i\" now\n", "say |now\n").char_reg("\"hi\" "),
+    stock("\"ada\"", "say  \"h|i\"\n", "sa|y\n")
+        .char_reg("  \"hi\"")
+        .note("no white space after the quote: the white space before it goes"),
+    stock("\"aci{X<Esc>", "{ a|b }\n", "{|X}\n").char_reg(" ab "),
     stock("\"adi<lt>", "<a|b>\n", "<|>\n").char_reg("ab"),
     stock("\"adip", "one\ntw|o\n\nthree\n", "one\ntw|o\n\nthree\n").vim_differs(
         "|\nthree\n",
@@ -281,11 +257,8 @@ const ROWS: &[Row] = &[
     ),
     // --- Visual mode
     stock("v", "|abc\n", "|abc\n").mode(Mode::Visual),
-    stock("V", "|abc\n", "abc\n|").mode(Mode::VisualLine).vim_differs_in(
-        "|abc\n",
-        Mode::VisualLine,
-        "Visual Line puts the cursor on the start of the next line (a parity bug)",
-    ),
+    stock("V", "a|bc\n", "a|bc\n").mode(Mode::VisualLine),
+    stock("Vj", "a|bc\nde\n", "abc\nd|e\n").mode(Mode::VisualLine),
     stock("vll\"ad", "|hello\n", "|lo\n").char_reg("hel"),
     stock("Vj\"ad", "|one\ntwo\nthree\n", "|three\n").line_reg("one\ntwo\n"),
     stock("viw\"ay", "foo b|ar\n", "foo |bar\n").char_reg("bar"),
@@ -307,39 +280,32 @@ const ROWS: &[Row] = &[
         .char_reg("c d e ")
         .note("a count before `.` replaces the recorded one"),
     stock("\"ax.", "|abc\n", "|c\n").char_reg("b"),
-    stock("\"aciwX<Esc>w.", "|foo bar\n", "X X|\n")
-        .char_reg("bar")
-        .vim_differs("X |X\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
-    stock("A;<Esc>j.", "|one\ntwo\n", "one;\ntwo;|\n").vim_differs("one;\ntwo|;\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
-    stock("ofoo<Esc>.", "|top\n", "top\nfoo\nfoo|\n").vim_differs("top\nfoo\nfo|o\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
+    stock("\"aciwX<Esc>w.", "|foo bar\n", "X |X\n").char_reg("bar"),
+    stock("A;<Esc>j.", "|one\ntwo\n", "one;\ntwo|;\n"),
+    stock("ofoo<Esc>.", "|top\n", "top\nfoo\nfo|o\n"),
+    stock("\"arX.", "|abc\n", "|Xbc\n").note("`.` repeats `r` where the cursor is"),
+    stock("J.", "|a\nb\nc\n", "a b| c\n"),
     // --- Insert mode
-    stock("iX<Esc>", "ab|c\n", "abX|c\n").vim_differs("ab|Xc\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
-    stock("aX<Esc>", "|abc\n", "aX|bc\n").vim_differs("a|Xbc\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
-    stock("AX<Esc>", "|abc\n", "abcX|\n").vim_differs("abc|X\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
-    stock("IX<Esc>", "  a|bc\n", "  X|abc\n").vim_differs("  |Xabc\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
-    stock("oX<Esc>", "|one\ntwo\n", "one\nX|\ntwo\n").vim_differs("one\n|X\ntwo\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
-    stock("OX<Esc>", "one\n|two\n", "one\nX|\ntwo\n").vim_differs("one\n|X\ntwo\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
+    stock("iX<Esc>", "ab|c\n", "ab|Xc\n"),
+    stock("aX<Esc>", "|abc\n", "a|Xbc\n"),
+    stock("AX<Esc>", "|abc\n", "abc|X\n"),
+    stock("IX<Esc>", "  a|bc\n", "  |Xabc\n"),
+    stock("oX<Esc>", "|one\ntwo\n", "one\n|X\ntwo\n"),
+    stock("OX<Esc>", "one\n|two\n", "one\n|X\ntwo\n"),
+    stock("i<Esc>", "|abc\n", "|abc\n").note("never steps back past the line's start"),
     stock("iX", "ab|c\n", "abX|c\n").mode(Mode::Insert),
-    stock("iXY<BS><Esc>", "|c\n", "X|c\n").vim_differs("|Xc\n", "leaving Insert mode does not move the cursor back onto the last typed character (a parity bug)"),
+    stock("iXY<BS><Esc>", "|c\n", "|Xc\n"),
     // --- undo and redo
-    stock("\"ax\"axu", "|abc\n", "b|c\n").char_reg("b").vim_differs(
-        "|bc\n",
-        "after `u` the cursor stays put instead of moving to the undone change (a parity bug)",
-    ),
-    stock("\"aciwXY<Esc>u", "|foo bar\n", "foo| bar\n")
+    stock("\"ax\"axu", "|abc\n", "|bc\n").char_reg("b"),
+    stock("\"aciwXY<Esc>u", "|foo bar\n", "|foo bar\n")
         .char_reg("foo")
-        .vim_differs(
-            "|foo bar\n",
-            "one `u` undoes the whole change, as in Vim; the cursor stays put (a parity bug)",
-        ),
-    stock("\"axu<C-r>", "|abc\n", "r|bc\n").vim_differs(
-        "|bc\n",
-        "`Ctrl-R` is not redo: Normal mode types an `r` into the buffer (a parity bug; Edit -> Redo works)",
-    ),
-    stock("\"ax\"axuug+", "|abc\n", "a|bc\n").vim_differs(
-        "|bc\n",
-        "`g-`/`g+` are not bound; Edit -> Undo Tree browses the tree instead",
-    ),
+        .note("one `u` undoes the whole change"),
+    stock("\"axu<C-r>", "|abc\n", "|bc\n"),
+    stock("\"ax\"ax2u2<C-r>", "|abc\n", "|c\n"),
+    stock("\"ax\"axuug+", "|abc\n", "|bc\n"),
+    stock("\"axul\"axg-", "a|bcd\n", "a|cd\n")
+        .char_reg("c")
+        .note("`g-` walks back in time across undo branches, where `u` would not"),
     // --- Ex commands
     stock(":2<CR>", "|one\ntwo\n", "one\n|two\n"),
     stock(":s/o/0/<CR>", "|foo\n", "|f0o\n"),
@@ -350,7 +316,7 @@ const ROWS: &[Row] = &[
         "`:s` takes literal patterns only and refuses Vim pattern syntax such as `.`, leaving the buffer unchanged",
     ),
     // --- optional Vix: Tree-sitter objects (a stock Vim has no such keys)
-    vix("\"aciaX<Esc>", "fn f(a: u8, |b: u8) {}\n", "fn f(a: u8, X|) {}\n")
+    vix("\"aciaX<Esc>", "fn f(a: u8, |b: u8) {}\n", "fn f(a: u8, |X) {}\n")
         .file("a.rs")
         .char_reg("b: u8")
         .note("Tree-sitter argument object (a plugin in Vim)"),
@@ -800,7 +766,7 @@ fn the_guide_shows_this_table() {
     }
     panic!(
         "docs/vix-for-vim-users/index.md's parity table is stale: rerun with \
-         VIX_UPDATE_VIM_PARITY=1 cargo test -p vix-tui --test integration vim_parity"
+         VIX_UPDATE_VIM_PARITY=1 cargo test -p vix-tui --lib integration::vim_parity"
     );
 }
 

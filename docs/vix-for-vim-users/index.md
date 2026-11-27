@@ -45,15 +45,14 @@ vix src/lib.rs                # with keymap = "vi"
 The automated test `tui/tests/integration/vim_exercise.rs` types exactly these
 keys into Vix, runs the real `cargo` and `git`, and checks every step's result.
 
-1. **Run the test at point.** `/a_quarter<CR><Esc>` puts the cursor on the test
-   `a_quarter_is_25_percent` (stock Vim keys; the `<Esc>` hands the keyboard
-   back from Vix's find bar and is harmless in Vim). Then **Project -> Test at
+1. **Run the test at point.** `/a_quarter<CR>` puts the cursor on the test
+   `a_quarter_is_25_percent` (stock Vim keys). Then **Project -> Test at
    Point** runs just that test (external tool: `cargo test -- --exact
    tests::a_quarter_is_25_percent`). It fails: `percent(1, 4)` is `2`, not `25`.
 2. **Jump to the failure.** `:cn<CR>` goes to the first problem the run
    reported, the failing `assert_eq!` on line 24 (the panic location is parsed
    from the test output, like Vim's quickfix list).
-3. **Edit the argument.** `gg/10<CR><Esc>` finds the wrong scale, and
+3. **Edit the argument.** `gg/10<CR>` finds the wrong scale, and
    `ciw100<Esc>` changes it (stock Vim). With a Tree-sitter grammar, `cia`
    changes the whole argument whatever it looks like (optional Vix).
 4. **Repeat.** `n.` finds the same mistake in `percent_label` and repeats the
@@ -63,8 +62,9 @@ keys into Vix, runs the real `cargo` and `git`, and checks every step's result.
    two branches. **Edit -> Undo Tree…** shows them; `Up` previews the other
    branch live (both scales `100`), `Enter` keeps it and `Esc` would put
    everything back (optional Vix: Vim keeps the same tree and walks it with
-   `g-`/`g+` and `:undolist`, but draws it only with a plugin).
-6. **Rerun the test.** `:w<CR>`, then `gg/a_quarter<CR><Esc>` and **Project ->
+   `g-`/`g+`, which Vix's Vi keymap has too, and `:undolist`, but draws it
+   only with a plugin).
+6. **Rerun the test.** `:w<CR>`, then `gg/a_quarter<CR>` and **Project ->
    Test at Point** again: it passes.
 7. **Stage the fix.** `:6<CR>` and **Git -> Stage Hunk**, then `:11<CR>` and
    **Git -> Stage Hunk** stage the two changed lines (external tool: `git`);
@@ -108,13 +108,14 @@ fails if Vim stops agreeing with a row.
 | `F.` | `a.b.¦c` | `a.b¦.c` | Normal | stock Vim | yes |
 | `T.` | `a.b.¦c` | `a.b.¦c` | Normal | stock Vim | yes |
 | `f.;` | `¦a.b.c` | `a¦.b.c` | Normal | stock Vim | no: Vim gives `a.b¦.c`. `;` and `,` (repeat the last `f`/`t`) are not implemented |
-| `}` | `¦one⏎two⏎⏎three` | `one⏎two⏎⏎¦three` | Normal | stock Vim | no: Vim gives `one⏎two⏎¦⏎three`. `}` stops on the next paragraph's first line, not on the blank line before it (a parity bug) |
+| `}` | `¦one⏎two⏎⏎three` | `one⏎two⏎¦⏎three` | Normal | stock Vim | yes |
+| `{` | `one⏎⏎two⏎th¦ree` | `one⏎¦⏎two⏎three` | Normal | stock Vim | yes |
 | `)` | `¦One. Two.` | `One. ¦Two.` | Normal | stock Vim | yes |
 | `%` | `¦(a [b] c)` | `(a [b] c¦)` | Normal | stock Vim | yes |
 | `*` | `¦foo bar foo` | `¦foo bar foo` | Normal | stock Vim | no: Vim gives `foo bar ¦foo`. `*` and `#` are not implemented |
 | `/bar<CR>` | `¦foo bar` | `foo ¦bar` | Normal | stock Vim | yes: `/` opens Vix's find bar |
 | `/o<CR>n` | `¦xo o` | `xo ¦o` | Normal | stock Vim | yes |
-| `/bar<CR>"ax` | `¦foo bar` | `foo ¦bar` | Normal | stock Vim | no: Vim gives `foo ¦ar`. after `/pattern<CR>` the find bar keeps the keyboard until `<Esc>`, so the next keys edit the search, not the buffer (a parity bug) |
+| `/bar<CR>"ax` | `¦foo bar` | `foo ¦ar` | Normal | stock Vim | yes: `<CR>` closes the find bar and returns to Normal mode |
 | `/bar<CR><Esc>"ax` | `¦foo bar` | `foo ¦ar` | Normal | stock Vim | yes |
 | `"adw` | `¦foo bar` | `¦bar` | Normal | stock Vim | yes |
 | `"ade` | `¦foo bar` | `¦ bar` | Normal | stock Vim | yes |
@@ -122,21 +123,24 @@ fails if Vim stops agreeing with a row.
 | `"a2dd` | `¦one⏎two⏎three` | `¦three` | Normal | stock Vim | yes |
 | `"adw` | `foo ¦bar⏎baz` | `foo¦ ⏎baz` | Normal | stock Vim | yes: `dw` on a line's last word keeps the line break |
 | `"ad$` | `fo¦o bar` | `f¦o` | Normal | stock Vim | yes |
-| `"aD` | `fo¦o bar` | `fo¦o bar` | Normal | stock Vim | no: Vim gives `f¦o`. `D` is not bound (`d$` is) |
+| `"aD` | `fo¦o bar` | `f¦o` | Normal | stock Vim | yes |
 | `"ax` | `¦abc` | `¦bc` | Normal | stock Vim | yes |
 | `"a3x` | `¦abcd` | `¦d` | Normal | stock Vim | yes |
-| `"aX` | `ab¦c` | `ab¦c` | Normal | stock Vim | no: Vim gives `a¦c`. `X` is not bound (`dh` is) |
+| `"aX` | `ab¦c` | `a¦c` | Normal | stock Vim | yes |
 | `"adf.` | `¦a.b.c` | `¦b.c` | Normal | stock Vim | yes |
 | `"a2d3w` | `¦a b c d e f g h` | `¦g h` | Normal | stock Vim | yes: the two counts multiply |
 | `"adj` | `¦one⏎two⏎three` | `¦three` | Normal | stock Vim | yes |
 | `"adG` | `one⏎¦two⏎three` | `¦one` | Normal | stock Vim | yes |
-| `"acwX<Esc>` | `¦foo bar` | `X¦ bar` | Normal | stock Vim | no: Vim gives `¦X bar`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `"accX<Esc>` | `  fo¦o⏎bar` | `X¦⏎bar` | Normal | stock Vim | no: Vim gives `¦X⏎bar`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug); an unconfigured Vim has `noautoindent`, so neither keeps the indent |
-| `"aCX<Esc>` | `fo¦o bar` | `fo¦o bar` | Normal | stock Vim | no: Vim gives `fo¦X`. `C` is not bound (`c$` is), and neither is the `X` typed after it |
-| `"asX<Esc>` | `¦abc` | `¦abc` | Normal | stock Vim | no: Vim gives `¦Xbc`. `s` is not bound (`cl` is) |
-| `rX` | `¦abc` | `¦abc` | Normal | stock Vim | no: Vim gives `¦Xbc`. `r` is not bound |
+| `"acwX<Esc>` | `¦foo bar` | `¦X bar` | Normal | stock Vim | yes |
+| `"accX<Esc>` | `  fo¦o⏎bar` | `¦X⏎bar` | Normal | stock Vim | yes: an unconfigured Vim has `noautoindent`, so neither keeps the indent |
+| `"aCX<Esc>` | `fo¦o bar` | `fo¦X` | Normal | stock Vim | yes |
+| `"asX<Esc>` | `¦abc` | `¦Xbc` | Normal | stock Vim | yes |
+| `rX` | `¦abc` | `¦Xbc` | Normal | stock Vim | yes |
+| `2rX` | `¦abc` | `X¦Xc` | Normal | stock Vim | yes |
+| `4rX` | `¦abc` | `¦abc` | Normal | stock Vim | yes: too few characters left: nothing happens |
 | `~` | `¦abc` | `¦abc` | Normal | stock Vim | no: Vim gives `A¦bc`. `~` is not implemented |
-| `J` | `¦one⏎two` | `¦one⏎two` | Normal | stock Vim | no: Vim gives `one¦ two`. `J` is not bound |
+| `J` | `¦one⏎two` | `one¦ two` | Normal | stock Vim | yes |
+| `3J` | `¦one⏎  two⏎)three` | `one two¦)three` | Normal | stock Vim | yes: leading white space goes; no space before `)` |
 | `>>` | `¦one` | `¦one` | Normal | stock Vim | no: Vim gives `	¦one`. `>` and `<` are not implemented |
 | `"ayy"ap` | `¦one⏎two` | `one⏎¦one⏎two` | Normal | stock Vim | yes |
 | `"ayw"aP` | `¦foo bar` | `foo¦ foo bar` | Normal | stock Vim | yes |
@@ -146,12 +150,14 @@ fails if Vim stops agreeing with a row.
 | `"adaw` | `foo b¦ar baz` | `foo ¦baz` | Normal | stock Vim | yes |
 | `"adi(` | `f(a, ¦b)` | `f(¦)` | Normal | stock Vim | yes |
 | `"adib` | `f(a, ¦b)` | `f(¦)` | Normal | stock Vim | yes |
-| `"ada"` | `say "h¦i" now` | `say ¦ now` | Normal | stock Vim | no: Vim gives `say ¦now`. `a"` leaves the white space after the closing quote (a parity bug) |
-| `"aci{X<Esc>` | `{ a¦b }` | `{X¦}` | Normal | stock Vim | no: Vim gives `{¦X}`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `"ada"` | `say "h¦i" now` | `say ¦now` | Normal | stock Vim | yes |
+| `"ada"` | `say  "h¦i"` | `sa¦y` | Normal | stock Vim | yes: no white space after the quote: the white space before it goes |
+| `"aci{X<Esc>` | `{ a¦b }` | `{¦X}` | Normal | stock Vim | yes |
 | `"adi<lt>` | `<a¦b>` | `<¦>` | Normal | stock Vim | yes |
 | `"adip` | `one⏎tw¦o⏎⏎three` | `one⏎tw¦o⏎⏎three` | Normal | stock Vim | no: Vim gives `¦⏎three`. `ip`/`ap` and `is`/`as` are not implemented: the operator is cancelled |
 | `v` | `¦abc` | `¦abc` | Visual | stock Vim | yes |
-| `V` | `¦abc` | `abc⏎¦` | Visual Line | stock Vim | no: Vim gives `¦abc`. Visual Line puts the cursor on the start of the next line (a parity bug) |
+| `V` | `a¦bc` | `a¦bc` | Visual Line | stock Vim | yes |
+| `Vj` | `a¦bc⏎de` | `abc⏎d¦e` | Visual Line | stock Vim | yes |
 | `vll"ad` | `¦hello` | `¦lo` | Normal | stock Vim | yes |
 | `Vj"ad` | `¦one⏎two⏎three` | `¦three` | Normal | stock Vim | yes |
 | `viw"ay` | `foo b¦ar` | `foo ¦bar` | Normal | stock Vim | yes |
@@ -161,27 +167,32 @@ fails if Vim stops agreeing with a row.
 | `"adw.` | `¦a b c` | `¦c` | Normal | stock Vim | yes |
 | `"a2dw3.` | `¦a b c d e f g` | `¦f g` | Normal | stock Vim | yes: a count before `.` replaces the recorded one |
 | `"ax.` | `¦abc` | `¦c` | Normal | stock Vim | yes |
-| `"aciwX<Esc>w.` | `¦foo bar` | `X X¦` | Normal | stock Vim | no: Vim gives `X ¦X`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `A;<Esc>j.` | `¦one⏎two` | `one;⏎two;¦` | Normal | stock Vim | no: Vim gives `one;⏎two¦;`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `ofoo<Esc>.` | `¦top` | `top⏎foo⏎foo¦` | Normal | stock Vim | no: Vim gives `top⏎foo⏎fo¦o`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `iX<Esc>` | `ab¦c` | `abX¦c` | Normal | stock Vim | no: Vim gives `ab¦Xc`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `aX<Esc>` | `¦abc` | `aX¦bc` | Normal | stock Vim | no: Vim gives `a¦Xbc`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `AX<Esc>` | `¦abc` | `abcX¦` | Normal | stock Vim | no: Vim gives `abc¦X`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `IX<Esc>` | `  a¦bc` | `  X¦abc` | Normal | stock Vim | no: Vim gives `  ¦Xabc`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `oX<Esc>` | `¦one⏎two` | `one⏎X¦⏎two` | Normal | stock Vim | no: Vim gives `one⏎¦X⏎two`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `OX<Esc>` | `one⏎¦two` | `one⏎X¦⏎two` | Normal | stock Vim | no: Vim gives `one⏎¦X⏎two`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `"aciwX<Esc>w.` | `¦foo bar` | `X ¦X` | Normal | stock Vim | yes |
+| `A;<Esc>j.` | `¦one⏎two` | `one;⏎two¦;` | Normal | stock Vim | yes |
+| `ofoo<Esc>.` | `¦top` | `top⏎foo⏎fo¦o` | Normal | stock Vim | yes |
+| `"arX.` | `¦abc` | `¦Xbc` | Normal | stock Vim | yes: `.` repeats `r` where the cursor is |
+| `J.` | `¦a⏎b⏎c` | `a b¦ c` | Normal | stock Vim | yes |
+| `iX<Esc>` | `ab¦c` | `ab¦Xc` | Normal | stock Vim | yes |
+| `aX<Esc>` | `¦abc` | `a¦Xbc` | Normal | stock Vim | yes |
+| `AX<Esc>` | `¦abc` | `abc¦X` | Normal | stock Vim | yes |
+| `IX<Esc>` | `  a¦bc` | `  ¦Xabc` | Normal | stock Vim | yes |
+| `oX<Esc>` | `¦one⏎two` | `one⏎¦X⏎two` | Normal | stock Vim | yes |
+| `OX<Esc>` | `one⏎¦two` | `one⏎¦X⏎two` | Normal | stock Vim | yes |
+| `i<Esc>` | `¦abc` | `¦abc` | Normal | stock Vim | yes: never steps back past the line's start |
 | `iX` | `ab¦c` | `abX¦c` | Insert | stock Vim | yes |
-| `iXY<BS><Esc>` | `¦c` | `X¦c` | Normal | stock Vim | no: Vim gives `¦Xc`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
-| `"ax"axu` | `¦abc` | `b¦c` | Normal | stock Vim | no: Vim gives `¦bc`. after `u` the cursor stays put instead of moving to the undone change (a parity bug) |
-| `"aciwXY<Esc>u` | `¦foo bar` | `foo¦ bar` | Normal | stock Vim | no: Vim gives `¦foo bar`. one `u` undoes the whole change, as in Vim; the cursor stays put (a parity bug) |
-| `"axu<C-r>` | `¦abc` | `r¦bc` | Normal | stock Vim | no: Vim gives `¦bc`. `Ctrl-R` is not redo: Normal mode types an `r` into the buffer (a parity bug; Edit -> Redo works) |
-| `"ax"axuug+` | `¦abc` | `a¦bc` | Normal | stock Vim | no: Vim gives `¦bc`. `g-`/`g+` are not bound; Edit -> Undo Tree browses the tree instead |
+| `iXY<BS><Esc>` | `¦c` | `¦Xc` | Normal | stock Vim | yes |
+| `"ax"axu` | `¦abc` | `¦bc` | Normal | stock Vim | yes |
+| `"aciwXY<Esc>u` | `¦foo bar` | `¦foo bar` | Normal | stock Vim | yes: one `u` undoes the whole change |
+| `"axu<C-r>` | `¦abc` | `¦bc` | Normal | stock Vim | yes |
+| `"ax"ax2u2<C-r>` | `¦abc` | `¦c` | Normal | stock Vim | yes |
+| `"ax"axuug+` | `¦abc` | `¦bc` | Normal | stock Vim | yes |
+| `"axul"axg-` | `a¦bcd` | `a¦cd` | Normal | stock Vim | yes: `g-` walks back in time across undo branches, where `u` would not |
 | `:2<CR>` | `¦one⏎two` | `one⏎¦two` | Normal | stock Vim | yes |
 | `:s/o/0/<CR>` | `¦foo` | `¦f0o` | Normal | stock Vim | yes |
 | `:s/o/0/g<CR>` | `¦foo` | `¦f00` | Normal | stock Vim | yes |
 | `:%s/a/b/g<CR>` | `¦a⏎a` | `b⏎¦b` | Normal | stock Vim | yes |
 | `:s/./X/<CR>` | `¦a.b` | `¦a.b` | Normal | stock Vim | no: Vim gives `¦X.b`. `:s` takes literal patterns only and refuses Vim pattern syntax such as `.`, leaving the buffer unchanged |
-| `"aciaX<Esc>` | `fn f(a: u8, ¦b: u8) {}` | `fn f(a: u8, X¦) {}` | Normal | optional Vix | n/a: Tree-sitter argument object (a plugin in Vim) |
+| `"aciaX<Esc>` | `fn f(a: u8, ¦b: u8) {}` | `fn f(a: u8, ¦X) {}` | Normal | optional Vix | n/a: Tree-sitter argument object (a plugin in Vim) |
 | `"adaf` | `fn a() {}⏎fn ¦b() {}` | `fn a() {}⏎¦` | Normal | optional Vix | n/a: Tree-sitter function object (a plugin in Vim) |
 | `]f` | `¦fn a() {}⏎fn b() {}` | `fn a() {}⏎¦fn b() {}` | Normal | optional Vix | n/a: Tree-sitter next-function motion (a plugin in Vim) |
 | `:cn<CR>` | `¦one⏎two` | `one⏎t¦wo` | Normal | external tool | n/a: after a task printed `a.txt:2:2: error: boom` (Vim: `:make` with a `makeprg`) |
@@ -194,16 +205,9 @@ fails if Vim stops agreeing with a row.
 From the table, the places where Vix's Vi keymap does not yet do what Vim
 does:
 
-- **Cursor placement.** Leaving Insert mode leaves the cursor after the typed
-  text instead of on its last character; `u` leaves the cursor where it was;
-  Visual Line puts the cursor on the next line's start; `}` stops on the next
-  paragraph's first line rather than the blank line before it.
-- **Search.** After `/pattern<CR>` the find bar keeps the keyboard until
-  `<Esc>`. `*` and `#` are not implemented.
-- **Keys not bound yet**: `W` `B` `E`, `;` `,`, `D` `X` `C` `s` `r` `J`, `~`,
-  `>` `<`, the `ip`/`ap`/`is`/`as` objects, `g-`/`g+`, and `Ctrl-R`, which
-  types an `r` (use **Edit -> Redo**).
-- **Text objects.** `a"` keeps the white space after the closing quote.
+- **Search.** `*` and `#` are not implemented.
+- **Keys not bound yet**: `W` `B` `E`, `;` `,`, `~`, `>` `<`, `r<CR>`, and the
+  `ip`/`ap`/`is`/`as` objects.
 - **Visual mode** moves with `h` `j` `k` `l` and the arrows only, its operators
   are not dot-repeatable, and a register typed before `v` applies to the
   Visual operator (Vim ignores it). There is no Visual Block.
