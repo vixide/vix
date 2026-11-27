@@ -10986,6 +10986,18 @@ Fix boundaries of everyday edits before adding Vi features.
   trailing blanks of an unterminated `:s/a/b  ` were lost; (5) Vi `r<CR>`
   did nothing (Vim splits the line, and `{count}r<CR>` replaces the
   characters with one line break).
+- [ ] **T848 — Close the three open risks the T832 threat model found.**
+  (1) HTTP client: a `.http` file from a cloned repository can put
+  `{{$processEnv NAME}}`, `$dotenv` or `$aadToken` values into a request to
+  a host the file chooses; gate those variables behind workspace trust and show
+  the resolved request (method, URL, which variables were filled, values
+  masked) before the first send from an untrusted or newly opened file.
+  (2) The HTTP client sets no connect/read timeouts of its own: add bounded
+  defaults, documented, overridable per request. (3) LSP/DAP framing accepts
+  any `Content-Length`, so a server can make Vix buffer an arbitrarily large
+  message: cap the frame size (named constant, measured against real servers'
+  largest messages), drop the connection with a translated error past it.
+  See `docs/threat-model.md`.
 
 ## Ideas backlog (unscoped)
 
