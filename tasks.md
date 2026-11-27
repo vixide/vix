@@ -10986,7 +10986,7 @@ Fix boundaries of everyday edits before adding Vi features.
   trailing blanks of an unterminated `:s/a/b  ` were lost; (5) Vi `r<CR>`
   did nothing (Vim splits the line, and `{count}r<CR>` replaces the
   characters with one line break).
-- [ ] **T848 — Close the three open risks the T832 threat model found.**
+- [x] **T848 — Close the three open risks the T832 threat model found.** (Done: `MAX_FRAME_BYTES` 64 MiB / 8 KiB header cap checked before buffering, shared `frame::read_messages` for LSP and DAP; HTTP 10 s connect / 60 s inactivity defaults with `# @timeout`; secret variables only after a masked preview, every send when untrusted.)
   (1) HTTP client: a `.http` file from a cloned repository can put
   `{{$processEnv NAME}}`, `$dotenv` or `$aadToken` values into a request to
   a host the file chooses; gate those variables behind workspace trust and show
