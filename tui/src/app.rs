@@ -46,6 +46,8 @@ mod file_index;
 mod focus;
 mod ghost;
 mod git_refresh;
+#[cfg(feature = "ai-agents")]
+mod native_agents;
 use crate::geo::{Geo, later};
 #[cfg(feature = "cowork")]
 use cowork as cowork_state;
@@ -2421,6 +2423,9 @@ pub struct App {
     acp: Option<AcpHost>,
     /// The AI chat panel, set aside while an ACP prompt is open (T635).
     acp_parked_panel: Option<crate::ai_panel::Panel>,
+    /// The active native provider conversation, shared by all front ends.
+    #[cfg(feature = "ai-agents")]
+    pub(crate) native_panel: Option<native_agents::NativePanel>,
     /// The last agent command and its session id, for **AI → Resume Agent**.
     acp_last_session: Option<(String, String)>,
     /// Files an ACP agent proposed a write to, each with the workspace root
@@ -3251,6 +3256,8 @@ impl App {
             ai_diff: None,
             acp: None,
             acp_parked_panel: None,
+            #[cfg(feature = "ai-agents")]
+            native_panel: None,
             acp_last_session: None,
             acp_written: std::collections::HashMap::new(),
             theme_preview: None,

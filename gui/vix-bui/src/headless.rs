@@ -178,3 +178,40 @@ fn quit_action_ends_the_loop_request() {
     });
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Exercise the shared agent chooser and composer through actual BUI events and pixels.
+#[cfg(feature = "ai-agents")]
+#[test]
+fn native_agent_conversation_draws_and_accepts_a_draft() {
+    let root = scratch("native-agents").canonicalize().unwrap();
+    let mut session = vix::session::Session::default();
+    session.set_scripts_trusted(&root.to_string_lossy(), Some(true));
+    session.save_to(&root.join("session.toml")).unwrap();
+    let shared = shared_at(&root);
+    Application::headless().run(|cx| {
+        let win = view::open(cx, &shared, "Vix".into(), 1000.0, 600.0).unwrap();
+        shared
+            .model
+            .borrow_mut()
+            .run_action("ai.agent_conversations");
+        cx.notify_all();
+        let (_, _, before) = cx.draw(win.id);
+        assert!(grid_has(&shared, "Claude Code"));
+        cx.simulate_mouse_move(win.id, 450.0, 200.0);
+        cx.simulate_key(win.id, "", "Return");
+        for ch in "draft".chars() {
+            let text = ch.to_string();
+            cx.simulate_key(win.id, &text, &text);
+        }
+        cx.notify_all();
+        let (_, _, after) = cx.draw(win.id);
+        assert!(
+            grid_has(&shared, "Codex"),
+            "{}",
+            shared.model.borrow().grid_lines().join("\n")
+        );
+        assert!(grid_has(&shared, "draft"));
+        assert_ne!(before, after);
+    });
+    std::fs::remove_dir_all(root).unwrap();
+}

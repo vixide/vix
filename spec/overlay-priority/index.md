@@ -171,3 +171,6 @@ integration and snapshot suites cover the unchanged single-overlay behavior.
 `overlay_capturing_keys`), `tui/src/ui.rs` (`draw_overlays`, `draw_overlay*`),
 `tui/src/app/keymap.rs` (the handlers that used to be inline: `help_key`,
 `dialog_key`, `clock_key`, `dashboard_key`, `qrcode_key`).
+
+The optional native coding conversation has its own row immediately before
+the AI chat panel in the overlay table. All front ends use the same handler.

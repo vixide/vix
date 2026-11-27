@@ -4,7 +4,7 @@
 will help you get started, whether you're fixing a bug, adding a feature, or
 improving documentation.
 
-Vix is a **keyboard-friendly terminal IDE** built on `ratatui`, with 147 focused
+Vix is a **keyboard-friendly terminal IDE** built on `ratatui`, with 148 focused
 crates, 14 keymaps, LSP/DAP, Git, a database workbench, Org mode, and more.
 
 ---
@@ -177,7 +177,7 @@ vix/
 ├── Cargo.toml           # Root workspace
 ├── tui/                 # Main app shell (vix-tui package)
 │   └── src/             # Application code
-├── crates/              # 147 feature crates (vix-*)
+├── crates/              # 148 feature crates (vix-*)
 │   ├── vix-editor/      # Editor core
 │   ├── vix-lsp/         # LSP client
 │   ├── vix-git/         # Git integration
@@ -449,7 +449,7 @@ We follow a **respectful, inclusive** code of conduct:
 
 | Resource | Description |
 |----------|-------------|
-| [crates/](crates/) | 147 feature crates |
+| [crates/](crates/) | 148 feature crates |
 | [tui/](tui/) | Main app shell |
 | [gui/](gui/) | Desktop GUI front ends |
 | [scripts/](scripts/) | Build and check scripts |

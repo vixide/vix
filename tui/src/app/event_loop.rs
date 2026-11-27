@@ -109,6 +109,8 @@ impl App {
         self.poll_editor_drag();
         self.poll_ai_replace();
         self.poll_acp();
+        #[cfg(feature = "ai-agents")]
+        self.poll_native_agents();
         self.poll_dashboard();
         self.poll_pomodoro();
         self.poll_terminal();
@@ -168,6 +170,10 @@ impl App {
     /// promptly), otherwise just often enough to keep the clock current.
     #[must_use]
     pub fn poll_interval(&self) -> Duration {
+        #[cfg(feature = "ai-agents")]
+        if self.native_panel.as_ref().is_some_and(|p| p.panel.busy) {
+            return Duration::from_millis(50);
+        }
         if self.command_running()
             || self.ai_replace_running()
             || self.dashboard_loading()

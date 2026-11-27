@@ -341,7 +341,7 @@ print(" ".join("-p " + n for n in sorted(want)))
 }
 
 semver_target=${VIX_SEMVER_TARGET:-${XDG_CACHE_HOME:-$HOME/.cache}/vix/semver-target}
-semver_excludes="--exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-authority --exclude vix-large-file --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp"
+semver_excludes="--exclude vix-cowork --exclude vix-cowork-net --exclude vix-encoding --exclude vix-fhir --exclude vix-git-graph --exclude vix-hl7 --exclude vix-im --exclude vix-im-irc --exclude vix-im-panel --exclude vix-oci --exclude vix-oci-panel --exclude vix-todo-tree --exclude vix-choice-list --exclude vix-mcp-server --exclude vix-authority --exclude vix-large-file --exclude vix-jupyter --exclude vix-jupyter-core --exclude vix-undo-tree-panel --exclude vix-review --exclude vix-project-env --exclude vix-acp --exclude vix-ai-agents"
 
 # Run cargo-semver-checks on the whole workspace (minus the crates that have no
 # release yet) or, with --scope changed, only on the changed crates and their
@@ -420,13 +420,15 @@ if in_tier full; then
 	cargo test -p vix-tui --features jupyter --test jupyter
 	# The opt-in `matrix` feature likewise (T793): the App against an in-memory
 	# helper, and the helper pump against a fake helper process (no server).
+	cargo clippy -p vix-tui --features ai-agents --all-targets -- -D warnings
+	cargo test -p vix-tui --features ai-agents --lib native_agents
 	cargo clippy -p vix-tui --features matrix --all-targets -- -D warnings
 	cargo test -p vix-tui --features matrix --lib matrix
 	cargo test -p vix-matrix-protocol --features net
 	# The whole lib suite once with every opt-in feature on: the lines above
 	# run only each feature's own tests, so a test elsewhere that assumed the
 	# feature was off failed unseen (the IM /follow test under cowork).
-	cargo test -p vix-tui --features cowork,jupyter,matrix --lib
+	cargo test -p vix-tui --features cowork,jupyter,matrix,ai-agents --lib
 	if command -v cargo-hack >/dev/null 2>&1; then
 		# --all-targets: the tests too, so a test of one feature's code is
 		# gated on that feature (a lib-only check let such tests rot).

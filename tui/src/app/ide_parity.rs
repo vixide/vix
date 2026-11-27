@@ -34,6 +34,11 @@ use crate::palette::{Action as PAction, Entry, Mode as PMode};
 /// What a chosen row of the [`ChoiceList`] overlay means.
 #[derive(Debug, Clone)]
 pub(crate) enum ChoicePurpose {
+    #[cfg(feature = "ai-agents")]
+    AgentConversations {
+        root: PathBuf,
+        choices: Vec<super::native_agents::Choice>,
+    },
     /// Local History snapshots of `file`, newest first; `lines` is the
     /// 0-based `start..end` line range "revert selection" applies to.
     LocalHistory {
@@ -207,6 +212,14 @@ impl App {
         };
         let row = open.panel.selected;
         match open.purpose {
+            #[cfg(feature = "ai-agents")]
+            ChoicePurpose::AgentConversations { root, choices } => {
+                if matches!(action, ChoiceAction::Primary)
+                    && let Some(choice) = choices.get(row)
+                {
+                    self.select_agent_conversation(&root, choice);
+                }
+            }
             ChoicePurpose::LocalHistory { file, ids, lines } => {
                 if let Some(&id) = ids.get(row) {
                     self.local_history_act(&file, id, lines, action);

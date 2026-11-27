@@ -108,6 +108,9 @@ pub(crate) enum OverlayId {
     LargeFile,
     /// The `Qrcode` layer.
     Qrcode,
+    /// The native coding agent conversation.
+    #[cfg(feature = "ai-agents")]
+    AgentConversation,
     /// The `AiPanel` layer.
     AiPanel,
     /// The `Terminal` layer.
@@ -390,6 +393,8 @@ pub(crate) const OVERLAYS: &[Overlay] = &[
     edit_surface!(EditBytes, edit_bytes, edit_bytes_key),
     unit!(LargeFile, large_file, large_file_key),
     unit!(Qrcode, qrcode, qrcode_key),
+    #[cfg(feature = "ai-agents")]
+    unit!(AgentConversation, native_panel, native_agent_key),
     unit!(AiPanel, ai_panel, ai_panel_key),
     Overlay {
         id: OverlayId::Terminal,

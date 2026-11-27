@@ -18,6 +18,9 @@ keywords = ["editor", "ide", "gui", "zgui", "vix"]
 categories = ["text-editors", "gui"]
 include = ["/src", "/LICENSE", "/spec"]
 
+[features]
+ai-agents = ["vix/ai-agents"]
+
 [dependencies]
 vix = { workspace = true }
 vix-input = { workspace = true }

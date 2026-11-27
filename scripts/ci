@@ -111,6 +111,8 @@ job_feature_combos() {
 	run cargo clippy -p vix-tui --features jupyter --all-targets -- -D warnings
 	run cargo test -p vix-tui --features jupyter --lib jupyter
 	run cargo test -p vix-tui --features jupyter --test jupyter
+	run cargo clippy -p vix-tui --features ai-agents --all-targets -- -D warnings
+	run cargo test -p vix-tui --features ai-agents --lib native_agents
 	run cargo clippy -p vix-tui --features matrix --all-targets -- -D warnings
 	run cargo test -p vix-tui --features matrix --lib matrix
 	run cargo test -p vix-matrix-protocol --features net

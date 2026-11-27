@@ -5895,6 +5895,16 @@ name = "vix-affix"
 version = "3.0.0"
 
 [[package]]
+name = "vix-ai-agents"
+version = "3.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uuid",
+ "vix-fileops",
+]
+
+[[package]]
 name = "vix-ai-core"
 version = "3.0.0"
 dependencies = [
@@ -7042,6 +7052,7 @@ dependencies = [
  "vix-acp",
  "vix-action-catalog",
  "vix-affix",
+ "vix-ai-agents",
  "vix-ai-core",
  "vix-ai-diff",
  "vix-ai-panel",

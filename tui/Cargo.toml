@@ -90,6 +90,7 @@ image = ["dep:image", "dep:ratatui-image", "vix-editor/image"]
 script = ["dep:vix-script"]
 terminal = ["dep:vix-terminal", "dep:vt100"]
 http = ["dep:vix-http-client", "vix-hl7/net", "vix-fhir/net"]
+ai-agents = ["ai", "dep:vix-ai-agents"]
 ai = ["dep:vix-ai-core", "dep:vix-ai-diff", "dep:vix-ai-panel", "dep:vix-acp", "vix-acp/process", "dep:keyring-core", "dep:apple-native-keyring-store", "dep:windows-native-keyring-store"]
 git = ["tasks", "dep:vix-review", "vix-git/process", "vix-git-graph/process", "vix-doctor/probe-git", "vix-script?/plugins"]
 jj = ["tasks"]
@@ -218,6 +219,7 @@ vix-action-catalog = { workspace = true }
 vix-affix = { workspace = true }
 # Direct HTTP clients for AI providers (Anthropic, OpenAI-compatible, Ollama)
 # plus keyring-backed API-key resolution.
+vix-ai-agents = { workspace = true, optional = true }
 vix-acp = { workspace = true, optional = true }
 vix-ai-core = { workspace = true, optional = true }
 # Reviewable diff for AI text transforms (Annotate / Improve).
