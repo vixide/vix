@@ -10854,7 +10854,9 @@ awareness, not capability. Items marked (stale?) may already exist.
   1,000 messages, a file read at startup) is now read on first IM use; Vi
   `(`/`)` scan from the cursor (`vix_textops::sentence_start_from` /
   `sentence_start_before`, 8 MiB `)`+`(` 34.7 ms → 4.8 µs) and
-  `sentence_starts` no longer decodes a `Vec<char>`. Remaining: the
+  `sentence_starts` no longer decodes a `Vec<char>`; Go → Sentence →
+  Next/Previous read the rope the same way (8 MiB Next+Previous 14.2 ms →
+  2.0 µs, `editor/go_sentences`). Remaining: the
   <100 ms / <50 ms empty-workspace and <50 MB with a 100 MB log targets (not yet measured end to end); incremental
   workspace search via filesystem watch; Tree-sitter on very large files;
   LRU eviction for caches; native file-watching efficiency; incremental

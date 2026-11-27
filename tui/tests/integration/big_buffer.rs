@@ -342,3 +342,29 @@ fn vi_sentence_motions_on_a_large_buffer_match_the_same_text_alone() {
         );
     }
 }
+
+/// T830: Go → Sentence → Next/Previous read the rope from the cursor to
+/// the start they land on, never the whole buffer, and land where they
+/// would in the same sentences alone.
+#[test]
+fn go_sentence_next_and_previous_make_no_whole_buffer_pass() {
+    use vix::editor_core::code::full_text_scans;
+    const SENTENCES: &str = "Alpha one. Beta two! Gamma (three)? Delta.\n";
+    let filler = vi_filler();
+    let mut app = vi_app_with("t830-go-sentence", &format!("{filler}{SENTENCES}{filler}"));
+    let off = filler.chars().count();
+    let at = |word: &str| off + SENTENCES.find(word).unwrap();
+    set_vi_cursor(&mut app, at("Beta") + 2);
+    let before = full_text_scans();
+    app.run_action("nav.sentence_next");
+    assert_eq!(vi_cursor(&app), at("Gamma"), "next");
+    app.run_action("nav.sentence_prev");
+    assert_eq!(vi_cursor(&app), at("Beta"), "previous");
+    app.run_action("nav.sentence_prev");
+    assert_eq!(vi_cursor(&app), at("Alpha"), "previous again");
+    assert_eq!(
+        full_text_scans(),
+        before,
+        "Go → Sentence read the whole buffer"
+    );
+}

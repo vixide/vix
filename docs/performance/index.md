@@ -236,6 +236,21 @@ of code with no sentence ends, 137 µs → 59 µs. A sentence motion in text
 with no sentence end (code, say) still walks to a buffer end, but over the
 rope without a copy.
 
+Go → Sentence → Next / Previous (`nav.sentence_next` /
+`nav.sentence_prev`) did the same whole-buffer copy and scan; they now
+read the rope through the same two functions (`vix-editor`'s
+`next_sentence_start` / `prev_sentence_start`, checked against the old
+scan at every offset). `editor/go_sentences` (`tui/benches/editor_ops.rs`):
+Next then Previous through `App::run_action` in the same prose buffer,
+measured 2026-11-27 with `--warm-up-time 1 --measurement-time 3`, load
+average around 15–23:
+
+| Buffer | Before | After |
+| ------ | ------ | ----- |
+| 4 KiB | 8.5 µs | 1.7 µs |
+| 512 KiB | 895 µs | 2.0 µs |
+| 8 MiB | 14.2 ms | 2.0 µs |
+
 ## Opening a large checkout (T823)
 
 How long a user waits after opening a big project: for the file named on

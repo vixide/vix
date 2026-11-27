@@ -158,6 +158,15 @@ Additional cursor keys handled directly by the editor (not in the menu):
 - **Match Bracket** (`edit.match_bracket`, `Ctrl+]`) jumps to the partner of the
   bracket at or just before the cursor; a no-op when the cursor is not on a
   bracket.
+- **Go → Sentence → Next / Previous** (`nav.sentence_next`,
+  `nav.sentence_prev`) move to the first sentence start after the cursor,
+  or the last one before it (`vix_textops::sentence_starts`'s definition),
+  and do nothing when there is none. They read the buffer's rope from the
+  cursor outward through `vix_textops::sentence_start_from` /
+  `sentence_start_before`, only as far as the start they land on, never a
+  copy of the whole buffer (T830); a unit test compares them with the old
+  whole-text scan at every offset of a table of texts and of generated ones.
+  Sentence Start, End and Number still scan the whole text.
 
 For position history (`Alt+Left` / `Alt+Right`), go to definition (`F12`), go to
 symbol, and the `path:line[:col]` open syntax, see

@@ -29,7 +29,7 @@ pub use vix_editor_core::editor::Editor as CodeEditor;
 use vix_editor_core::utils::get_lang_for;
 // Sentence boundaries are shared with the Edit → Transpose → Sentences command,
 // so navigation and transposition split text the same way.
-use vix_textops::sentence_starts;
+use vix_textops::{sentence_start_before, sentence_start_from, sentence_starts};
 
 use vix_theme as theme;
 
@@ -1533,27 +1533,24 @@ impl Editor {
         self.goto_offset(off, area);
     }
 
-    /// Move to the start of the next sentence (Go → Sentence → Next).
+    /// Move to the start of the next sentence (Go → Sentence → Next). Reads
+    /// the rope from just behind the cursor to the start it lands on, not
+    /// the whole buffer (T830).
     pub fn cursor_sentence_next(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        if let Some(next) = sentence_starts(&t.editor.get_content())
-            .into_iter()
-            .find(|&s| s > cur)
-        {
+        if let Some(next) = next_sentence_start(t.editor.code_ref().rope(), cur) {
             self.goto_offset(next, area);
         }
     }
 
-    /// Move to the start of the previous sentence (Go → Sentence → Previous).
+    /// Move to the start of the previous sentence (Go → Sentence →
+    /// Previous). Reads the rope back from the cursor only to the start it
+    /// lands on (T830).
     pub fn cursor_sentence_prev(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        if let Some(prev) = sentence_starts(&t.editor.get_content())
-            .into_iter()
-            .rev()
-            .find(|&s| s < cur)
-        {
+        if let Some(prev) = prev_sentence_start(t.editor.code_ref().rope(), cur) {
             self.goto_offset(prev, area);
         }
     }
@@ -1962,9 +1959,105 @@ fn prev_word(text: &[char], pos: usize) -> usize {
     i
 }
 
+/// The chars of `rope` before char offset `at` (clamped to its end),
+/// nearest first: `at - 1`, `at - 2`, …, `0`.
+fn rope_chars_before(rope: &ropey::Rope, at: usize) -> impl Iterator<Item = char> + '_ {
+    let mut chars = rope.chars_at(at.min(rope.len_chars()));
+    std::iter::from_fn(move || chars.prev())
+}
+
+/// The first sentence start ([`sentence_starts`]'s definition) after char
+/// offset `cur` in `rope`, read from just behind `cur + 1` onward
+/// (T830). `None` when no sentence starts after `cur`.
+fn next_sentence_start(rope: &ropey::Rope, cur: usize) -> Option<usize> {
+    let at = cur.checked_add(1)?;
+    if at > rope.len_chars() {
+        return None;
+    }
+    sentence_start_from(rope_chars_before(rope, at), rope.chars_at(at), at)
+}
+
+/// The last sentence start ([`sentence_starts`]'s definition) before char
+/// offset `cur` (clamped to the end) in `rope`, read backward from `cur`
+/// (T830). `None` when no sentence starts before it.
+fn prev_sentence_start(rope: &ropey::Rope, cur: usize) -> Option<usize> {
+    let at = cur.min(rope.len_chars());
+    sentence_start_before(rope_chars_before(rope, at), at)
+}
+
 #[cfg(test)]
 mod nav_tests {
-    use super::{sentence_starts, word_starts};
+    use super::{next_sentence_start, prev_sentence_start, sentence_starts, word_starts};
+    use proptest::prelude::*;
+
+    /// Go → Sentence → Next/Previous as they were before T830: copy the
+    /// buffer, list every start, pick the nearest one.
+    fn old_next_prev(text: &str, cur: usize) -> (Option<usize>, Option<usize>) {
+        let starts = sentence_starts(text);
+        let next = starts.iter().copied().find(|&s| s > cur);
+        let prev = starts.iter().copied().rev().find(|&s| s < cur);
+        (next, prev)
+    }
+
+    /// The rope scans give the old answer at every cursor position of
+    /// `text`, and one past its end.
+    fn assert_matches_old(text: &str) {
+        let rope = ropey::Rope::from_str(text);
+        let len = rope.len_chars();
+        for cur in 0..=len.saturating_add(1) {
+            let (next, prev) = old_next_prev(text, cur);
+            assert_eq!(
+                next_sentence_start(&rope, cur),
+                next,
+                "next from {cur} in {text:?}"
+            );
+            assert_eq!(
+                prev_sentence_start(&rope, cur),
+                prev,
+                "prev from {cur} in {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rope_sentence_scans_match_the_old_whole_text_scan_on_a_table() {
+        for text in [
+            "",
+            " ",
+            "   ",
+            "One. Two! Three?  Four.",
+            "  Hi. Yo.",
+            "He said \"Hi.\" Then.",
+            "Hi. ",
+            "a. . b",
+            ". b",
+            "pi is 3.14 today",
+            "End (really).) Next\n\nPara two? Yes!\n",
+            "日本語。 Ünïcode. ok! \"q?\"  'r.' (s.) [t!] {u?} v",
+            "no ends at all, just words\n",
+            ".!?\"')]}",
+            "\n\n\t. x.\ty!\r\nz",
+        ] {
+            assert_matches_old(text);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 256, ..ProptestConfig::default() })]
+        #[test]
+        fn rope_sentence_scans_match_the_old_whole_text_scan(
+            chars in proptest::collection::vec(
+                proptest::sample::select(vec![
+                    'a', 'B', 'é', '日', ' ', ' ', '\n', '\t', '.', '!', '?', '"', '\'', ')',
+                    ']', '}', '(',
+                ]),
+                0..60,
+            )
+        ) {
+            let text: String = chars.into_iter().collect();
+            assert_matches_old(&text);
+        }
+    }
 
     #[test]
     fn word_starts_finds_each_word() {

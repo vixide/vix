@@ -353,6 +353,34 @@ fn bench_vi_sentences(c: &mut Criterion) {
     group.finish();
 }
 
+/// Go → Sentence → Next then Previous (`nav.sentence_next` /
+/// `nav.sentence_prev` through `App::run_action`, T830) in the same prose
+/// buffer as [`bench_vi_sentences`]: each should read the sentences it
+/// crosses, not the whole buffer.
+fn bench_go_sentences(c: &mut Criterion) {
+    let mut group = c.benchmark_group("editor/go_sentences");
+    group.sample_size(20);
+    for (label, bytes) in [("4KiB", 4 << 10), ("512KiB", 512 << 10), ("8MiB", 8 << 20)] {
+        let (mut app, cursor) = vi_app_filled(
+            &format!("go-sentences-{label}"),
+            bytes,
+            "The quick brown fox jumps. Over the lazy dog! Again and again?\n",
+        );
+        group.bench_function(BenchmarkId::new("next_prev", label), |b| {
+            b.iter(|| {
+                app.run_action("nav.sentence_next");
+                app.run_action("nav.sentence_prev");
+                app.editor
+                    .active_tab_mut()
+                    .unwrap()
+                    .editor
+                    .set_cursor(cursor);
+            });
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_open,
@@ -362,6 +390,7 @@ criterion_group!(
     bench_paste_and_undo,
     bench_line_transforms,
     bench_vi_motions,
-    bench_vi_sentences
+    bench_vi_sentences,
+    bench_go_sentences
 );
 criterion_main!(benches);
