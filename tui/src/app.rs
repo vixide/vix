@@ -2811,6 +2811,11 @@ pub struct App {
     /// register was used instead, which carries its own
     /// [`vix_modal::register::RegisterKind`].
     modal_unnamed_kind: vix_modal::register::RegisterKind,
+    /// The Vi keymap's preferred display column for `j`/`k` (T838, Vim's
+    /// `curswant`): `(column, cursor, buffer length)` as the last vertical
+    /// motion or `$` left them; used only while the cursor and the length
+    /// still match, so any other motion or edit starts afresh.
+    modal_curswant: Option<(usize, usize, usize)>,
     /// The modal engine is waiting for the object-selector second key of a
     /// pending `i`/`a` (T115), holding which of the two it was.
     modal_pending_text_object: Option<char>,
@@ -3190,6 +3195,7 @@ impl App {
             modal_active_register: None,
             modal_registers: vix_modal::register::Registers::default(),
             modal_unnamed_kind: vix_modal::register::RegisterKind::Char,
+            modal_curswant: None,
             modal_pending_text_object: None,
             modal_recording: Vec::new(),
             modal_last_change: Vec::new(),

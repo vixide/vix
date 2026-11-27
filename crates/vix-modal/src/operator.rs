@@ -48,6 +48,61 @@ pub fn operator_range(
     }
 }
 
+/// [`operator_range`] for the Vi keymap (T838), with Vim's own range
+/// rules on top of the half-open one:
+///
+/// - An inclusive motion takes the whole grapheme it lands on (a decomposed
+///   `é` is never split), and nothing when it lands on a line's end (an
+///   empty line's `d$` deletes nothing, not the line break).
+/// - An exclusive motion that ends at the start of a later line
+///   (`:help exclusive`) ends instead at the end of the line before, so the
+///   line break stays; and when the range also starts in its line's indent
+///   (only blanks before it), the range becomes line-wise over the lines
+///   from the start through that line before (`dw` on an empty line deletes
+///   the line, as `dd` would).
+///
+/// A line-wise motion is [`operator_range`]'s. Reads only the lines at the
+/// range's ends.
+#[must_use]
+pub fn vi_operator_range(
+    text: &(impl Text + ?Sized),
+    before: usize,
+    after: usize,
+    kind: MotionKind,
+) -> (usize, usize, RegisterKind) {
+    let (lo, hi) = if before <= after {
+        (before, after)
+    } else {
+        (after, before)
+    };
+    match kind {
+        MotionKind::Inclusive => {
+            let end = crate::motion::grapheme_end(text, hi).min(text.len_chars());
+            (lo, end.max(lo), RegisterKind::Char)
+        }
+        MotionKind::Exclusive => {
+            let prev = hi.checked_sub(1).filter(|&p| p >= lo);
+            match prev {
+                Some(line_end) if text.char_at(line_end) == Some('\n') => {
+                    let start = crate::motion::line_start(text, lo);
+                    let in_indent = text
+                        .chars_from(start)
+                        .take(lo.saturating_sub(start))
+                        .all(|c| c == ' ' || c == '\t');
+                    if in_indent {
+                        let (s, e) = crate::motion::linewise_span(text, lo, line_end);
+                        (s, e, RegisterKind::Line)
+                    } else {
+                        (lo, line_end, RegisterKind::Char)
+                    }
+                }
+                _ => (lo, hi, RegisterKind::Char),
+            }
+        }
+        MotionKind::Linewise => operator_range(text, lo, hi, kind),
+    }
+}
+
 /// Extract `range` from `text` and remove it. Returns the rewritten text
 /// and the removed slice (for the register) — `d`/`c` use both, `y` uses
 /// only the removed slice and discards the rewritten text (the buffer is
@@ -260,6 +315,52 @@ pub fn change_word_end(text: &(impl Text + ?Sized), before: usize, after: usize)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vi_inclusive_range_takes_the_whole_last_grapheme() {
+        // c a f e U+0301: `de` from 0 lands on 3 and takes the accent too.
+        assert_eq!(
+            vi_operator_range("cafe\u{301} x", 0, 3, MotionKind::Inclusive),
+            (0, 5, RegisterKind::Char)
+        );
+        assert_eq!(
+            vi_operator_range("abc", 0, 2, MotionKind::Inclusive),
+            (0, 3, RegisterKind::Char)
+        );
+        // `d$` on an empty line: nothing, not the line break.
+        assert_eq!(
+            vi_operator_range("a\n\nb", 2, 2, MotionKind::Inclusive),
+            (2, 2, RegisterKind::Char)
+        );
+    }
+
+    #[test]
+    fn vi_exclusive_range_ending_at_a_line_start_keeps_the_line_break() {
+        // Ends at the next line's start, from mid-line: up to the line end.
+        assert_eq!(
+            vi_operator_range("ab cd\nef", 3, 6, MotionKind::Exclusive),
+            (3, 5, RegisterKind::Char)
+        );
+        // From the line's indent: line-wise over the lines before.
+        assert_eq!(
+            vi_operator_range("  ab\ncd\nef", 2, 5, MotionKind::Exclusive),
+            (0, 5, RegisterKind::Line)
+        );
+        // `dw` on an empty line deletes the line.
+        assert_eq!(
+            vi_operator_range("foo\n\nbar", 4, 5, MotionKind::Exclusive),
+            (4, 5, RegisterKind::Line)
+        );
+        // A range within one line is untouched.
+        assert_eq!(
+            vi_operator_range("ab cd", 0, 3, MotionKind::Exclusive),
+            (0, 3, RegisterKind::Char)
+        );
+        assert_eq!(
+            vi_operator_range("one\ntwo\n", 1, 5, MotionKind::Linewise),
+            (0, 8, RegisterKind::Line)
+        );
+    }
 
     #[test]
     fn change_word_end_stops_before_the_white_space_after_the_word() {

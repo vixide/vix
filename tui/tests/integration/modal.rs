@@ -180,7 +180,11 @@ fn word_motions_w_b_e_move_by_word_with_counts() {
     assert_eq!(cursor(&mut app), 4, "w -> start of 'bar'");
     app.on_key(key('2'));
     app.on_key(key('w'));
-    assert_eq!(cursor(&mut app), 12, "2w with no more words -> buffer end");
+    assert_eq!(
+        cursor(&mut app),
+        10,
+        "2w with no more words -> the last character (Vim never rests past it)"
+    );
     app.on_key(key('b'));
     assert_eq!(cursor(&mut app), 8, "b -> start of 'baz'");
 
@@ -557,8 +561,8 @@ fn yank_never_updates_what_dot_repeats() {
     app.on_key(key('.'));
     assert_eq!(
         buffer_text(&app),
-        "",
-        ". still repeats the earlier dw (deleting the rest of the buffer), not a no-op from yy"
+        "\n",
+        ". still repeats the earlier dw (deleting the line's last word), not a no-op from yy"
     );
 }
 

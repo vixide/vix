@@ -39,6 +39,11 @@ use vix_modal::text::Text;
 
 use super::App;
 use crate::editor_core::actions::InsertText;
+
+/// The cells a tab takes on screen, for the Vi keymap's display columns
+/// (T838): the editor draws a tab as one cell (`vix-editor-core`'s render
+/// and wrap layout), and `j`/`k` keep the column the user sees.
+const VI_TAB_CELLS: usize = 1;
 use crate::editor_core::textobject::{TextObjectDir, TextObjectKind};
 
 impl App {
@@ -156,8 +161,12 @@ impl App {
             // code path -- reusing the very same operator machinery is the
             // point, not just matching its visible behavior.
             let count = self.modal_effective_count();
+            // `x` is `dl`, and `dl` takes `count` displayed characters up to
+            // the line's end, so `$x` and `9x` reach the last one (T838).
             self.modal_pending_operator = Some('d');
-            self.apply_modal_motion(Exclusive, |t, p| vix_modal::motion::char_right(t, p, count));
+            self.apply_modal_motion(Exclusive, |t, p| {
+                vix_modal::motion::vi_chars_end(t, p, count)
+            });
             return true;
         }
         if let KeyCode::Char(c @ ('p' | 'P')) = key.code {
@@ -330,20 +339,23 @@ impl App {
         match key.code {
             KeyCode::Char('h') | KeyCode::Left => {
                 self.apply_modal_motion(Exclusive, |t, p| {
-                    vix_modal::motion::char_left(t, p, count)
+                    vix_modal::motion::vi_char_left(t, p, count)
+                });
+            }
+            // With an operator, `l` may reach the line's end (`dl` is `x`);
+            // as a cursor motion it stops on the last character (T838).
+            KeyCode::Char('l') | KeyCode::Right if self.modal_pending_operator.is_some() => {
+                self.apply_modal_motion(Exclusive, |t, p| {
+                    vix_modal::motion::vi_chars_end(t, p, count)
                 });
             }
             KeyCode::Char('l') | KeyCode::Right => {
                 self.apply_modal_motion(Exclusive, |t, p| {
-                    vix_modal::motion::char_right(t, p, count)
+                    vix_modal::motion::vi_char_right(t, p, count)
                 });
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.apply_modal_motion(Linewise, |t, p| vix_modal::motion::line_down(t, p, count));
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.apply_modal_motion(Linewise, |t, p| vix_modal::motion::line_up(t, p, count));
-            }
+            KeyCode::Char('j') | KeyCode::Down => self.modal_vertical(count, true),
+            KeyCode::Char('k') | KeyCode::Up => self.modal_vertical(count, false),
             KeyCode::Char('0') => {
                 self.apply_modal_motion(Exclusive, vix_modal::motion::line_start);
             }
@@ -354,20 +366,41 @@ impl App {
                 // Real Vim's own exception: $ is exclusive for plain
                 // movement but inclusive as an operator's motion (`d$`
                 // deletes through the line's last character, like `D`).
+                let moving = self.modal_pending_operator.is_none();
                 self.apply_modal_motion(Inclusive, |t, p| vix_modal::motion::line_end(t, p, count));
+                // After `$`, `j`/`k` keep to each line's end (Vim's
+                // `curswant` of MAXCOL).
+                if moving {
+                    self.modal_curswant = self.editor.active_tab().map(|t| {
+                        (
+                            usize::MAX,
+                            t.editor.get_cursor(),
+                            t.editor.code_ref().len_chars(),
+                        )
+                    });
+                }
+            }
+            // The Vi keymap's own word classes (T838): `pkg::run` is three
+            // words. With an operator, the last word stops at its line's end.
+            KeyCode::Char('w') if self.modal_pending_operator.is_some() => {
+                self.apply_modal_motion(Exclusive, |t, p| {
+                    vix_modal::motion::vi_word_forward_for_operator(t, p, count)
+                });
             }
             KeyCode::Char('w') => {
                 self.apply_modal_motion(Exclusive, |t, p| {
-                    vix_modal::motion::word_forward(t, p, count)
+                    vix_modal::motion::vi_word_forward(t, p, count)
                 });
             }
             KeyCode::Char('b') => {
                 self.apply_modal_motion(Exclusive, |t, p| {
-                    vix_modal::motion::word_backward(t, p, count)
+                    vix_modal::motion::vi_word_backward(t, p, count)
                 });
             }
             KeyCode::Char('e') => {
-                self.apply_modal_motion(Inclusive, |t, p| vix_modal::motion::word_end(t, p, count));
+                self.apply_modal_motion(Inclusive, |t, p| {
+                    vix_modal::motion::vi_word_end(t, p, count)
+                });
             }
             KeyCode::Char('{') => {
                 self.apply_modal_motion(Exclusive, |t, p| {
@@ -452,8 +485,46 @@ impl App {
         if let Some(op) = self.modal_pending_operator.take() {
             self.run_modal_operator(op, &text, pos, new_pos, kind);
         } else if let Some(tab) = self.editor.active_tab_mut() {
-            tab.editor.set_cursor(new_pos);
+            // A Normal-mode cursor rests on a grapheme, never on a line's
+            // end; an operator's range may end there (T838).
+            tab.editor
+                .set_cursor(vix_modal::motion::vi_normal_cursor(&text, new_pos));
         }
+    }
+
+    /// `j`/`k` (`down` picks which): with an operator, the line-wise motion;
+    /// as a cursor motion, onto the preferred display column carried across a
+    /// run of vertical motions (Vim's `curswant`, T838) — kept while the
+    /// cursor is still where the last `j`/`k`/`$` left it in an unchanged
+    /// buffer, otherwise the cursor's own column.
+    fn modal_vertical(&mut self, count: usize, down: bool) {
+        if self.modal_pending_operator.is_some() {
+            self.apply_modal_motion(Linewise, |t, p| {
+                if down {
+                    vix_modal::motion::line_down(t, p, count)
+                } else {
+                    vix_modal::motion::line_up(t, p, count)
+                }
+            });
+            return;
+        }
+        let stored = self.modal_curswant;
+        let mut landed = None;
+        self.apply_modal_motion(Linewise, |t, p| {
+            let len = t.len_chars();
+            let want = match stored {
+                Some((want, at, was)) if at == p && was == len => want,
+                _ => vix_modal::motion::display_column(t, p, VI_TAB_CELLS),
+            };
+            let to = if down {
+                vix_modal::motion::line_down_to_column(t, p, count, want, VI_TAB_CELLS)
+            } else {
+                vix_modal::motion::line_up_to_column(t, p, count, want, VI_TAB_CELLS)
+            };
+            landed = Some((want, to, len));
+            to
+        });
+        self.modal_curswant = landed;
     }
 
     /// Apply operator `op` (`d`/`c`/`y`) to the range between `before` (the
@@ -483,7 +554,8 @@ impl App {
         } else {
             after
         };
-        let (start, end, reg_kind) = vix_modal::operator::operator_range(text, before, after, kind);
+        let (start, end, reg_kind) =
+            vix_modal::operator::vi_operator_range(text, before, after, kind);
         self.apply_operator_to_range(op, text, start, end, reg_kind);
     }
 
@@ -499,6 +571,12 @@ impl App {
         end: usize,
         reg_kind: vix_modal::register::RegisterKind,
     ) {
+        // An empty character-wise range (`x` on an empty line, `d$` there)
+        // changes nothing and leaves the register alone, as in Vim; `c` still
+        // goes on into Insert mode.
+        if op != 'c' && start >= end && reg_kind == vix_modal::register::RegisterKind::Char {
+            return;
+        }
         let removed = text.range_string(start, end);
         // A line-wise change (`cc`, `Vc`) keeps one empty line to type
         // into, as Vim does: the register still gets the whole lines, but
@@ -540,6 +618,13 @@ impl App {
                     if op == 'd' && reg_kind == vix_modal::register::RegisterKind::Line {
                         let content = tab.editor.code_ref().rope();
                         let cursor = vix_modal::motion::line_first_non_blank(content, start);
+                        tab.editor.set_cursor(cursor);
+                    } else if op == 'd' {
+                        // A character-wise delete that took a line's last
+                        // characters leaves the cursor on the new last one,
+                        // not on the line break (`$x`, `dw` on a last word).
+                        let content = tab.editor.code_ref().rope();
+                        let cursor = vix_modal::motion::vi_normal_cursor(content, start);
                         tab.editor.set_cursor(cursor);
                     }
                 }
@@ -1180,3 +1265,7 @@ impl App {
 #[cfg(test)]
 #[path = "tests_r3_modal.rs"]
 mod r3_tests;
+
+#[cfg(test)]
+#[path = "tests_t838_modal.rs"]
+mod t838_tests;

@@ -10891,7 +10891,7 @@ Fix boundaries of everyday edits before adding Vi features.
   independently; include typed Unicode, a corrected typo, a preceding delete
   and a cancelled operator; run under both Vi and Spacemacs.
   `tui/src/app/modal.rs`, `tui/src/app/keymap.rs`
-- [ ] **T838 — Vi: operator ranges, word classes, graphemes, columns.**
+- [x] **T838 — Vi: operator ranges, word classes, graphemes, columns.** (Done: `motion::vi_*` word/char motions, `vi_normal_cursor`, `display_column` + `line_down_to_column`/`line_up_to_column` with a host `curswant`, `operator::vi_operator_range` with `:help exclusive`; CJK/emoji get no classes of their own, tab drawn as 1 cell.)
   Separate a Normal-mode cursor destination from the half-open operator range:
   `$x` and `9x` must delete the last character; `x` consumes displayed
   characters (a combining mark must not be left detached); give the Vi keymap

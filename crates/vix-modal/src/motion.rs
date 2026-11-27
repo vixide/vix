@@ -26,6 +26,14 @@
 use crate::text::Text;
 use vix_textops::sentence_units;
 
+mod vi;
+pub(crate) use vi::grapheme_end;
+pub use vi::{
+    display_column, line_down_to_column, line_up_to_column, vi_char_left, vi_char_right,
+    vi_chars_end, vi_normal_cursor, vi_word_backward, vi_word_end, vi_word_forward,
+    vi_word_forward_for_operator,
+};
+
 /// How an operator (T114: `d`/`c`/`y`) turns a motion's landing position
 /// into the actual range it acts on — real Vim's own three categories
 /// (`:help motion.txt`), since "`d{motion}` deletes the range" (§ Design:
@@ -197,7 +205,8 @@ pub fn char_right(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usiz
 /// v1 has no "sticky column" memory across a run of `j`/`k` — each step
 /// re-reads the column from `pos` itself, a deliberate simplification (not
 /// in the spec's own cut list, but the spec's `fn(text, pos, count)` motion
-/// shape has nowhere to carry that memory without a 5th parameter).
+/// shape has nowhere to carry that memory without a 5th parameter). The Vi
+/// keymap's `j` carries it: [`line_down_to_column`] (T838).
 #[must_use]
 pub fn line_down(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     let (mut row, col) = row_and_col(text, pos);
