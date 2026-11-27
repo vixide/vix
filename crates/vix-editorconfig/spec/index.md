@@ -32,7 +32,13 @@ modelines and Emacs file variables (see "Modelines" below), controlled by
 The `editorconfig` module is a dependency-free reader (reusing the crate's
 `regex`). `editorconfig::resolve(path) -> Resolved` walks the chain and merges
 properties; `Resolved::indent_string()` yields the Tab string. Pure data, unit
-tested (glob matching, precedence, indent string).
+tested (glob matching, precedence, indent string). Property tests
+(`crates/vix-editorconfig/tests/props.rs`, T831): `resolve` over a generated `.editorconfig` (sections
+over a fixed set of globs, recognized, junk and upper-case keys, comments, a
+preamble) agrees with applying the matching sections' keys in file order, and
+`modeline::parse` never panics, never returns a width out of bounds, sets
+nothing with `lines == 0`, and reads back generated Vim `set` modelines and
+Emacs `-*-` lines exactly.
 
 ## Modelines
 

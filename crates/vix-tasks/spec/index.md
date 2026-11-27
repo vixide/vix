@@ -295,7 +295,13 @@ when the run ends the status line reports the count.
   built-in single-line pattern plus the rustc arrow and the Python `File "…",
   line N` frame — resolved against the last run's cwd, and falls back to the
   plain `path:line[:col]` parse. `locate` is the one `path:line` parser later
-  terminal work (T666) can reuse.
+  terminal work (T666) can reuse. Property tests (`crates/vix-tasks/tests/locate_props.rs`,
+  T831): a location printed in each built-in format (rustc arrow and panic,
+  gcc with and without a column, both tsc forms, Go, a Python frame), with any
+  file name, line and column and with or without ANSI colors, reads back from
+  `locate`; `scan` with the gcc, tsc or Go built-in finds exactly its own
+  one-line problems, in order, from mixed output; neither panics on arbitrary
+  text.
 
 Repeat Last Task re-runs the command string with `auto`, since only the command
 is remembered.
