@@ -896,6 +896,11 @@ pub enum ConfirmKind {
     OpenLarge,
     /// Open [`Confirm::paths`] (one file) in the byte editor: it is binary (T571).
     OpenBinary,
+    /// Open [`Confirm::paths`] (one file) in the Large File Viewer. Since T830
+    /// a file past the 1 GiB ceiling opens there without asking, so Vix no
+    /// longer raises this prompt; the variant stays (and still works if raised)
+    /// so the published enum keeps its variants and order.
+    OpenLargeViewer,
     /// Discard the unstaged changes to [`Confirm::paths`] (one root-relative
     /// file) from the Git panel (T657).
     GitDiscard,
@@ -8586,12 +8591,12 @@ impl App {
         {
             return;
         }
-        if let Some(kind) = self
-            .confirm
-            .as_ref()
-            .map(|c| c.kind)
-            .filter(|k| matches!(k, ConfirmKind::OpenLarge | ConfirmKind::OpenBinary))
-        {
+        if let Some(kind) = self.confirm.as_ref().map(|c| c.kind).filter(|k| {
+            matches!(
+                k,
+                ConfirmKind::OpenLarge | ConfirmKind::OpenBinary | ConfirmKind::OpenLargeViewer
+            )
+        }) {
             let take_path =
                 |app: &mut Self| app.confirm.take().and_then(|c| c.paths.into_iter().next());
             match key.code {
@@ -8599,6 +8604,7 @@ impl App {
                     if let Some(path) = take_path(self) {
                         match kind {
                             ConfirmKind::OpenLarge => self.open_path_with(&path, false, true),
+                            ConfirmKind::OpenLargeViewer => self.open_large_file_viewer(&path),
                             _ => self.open_binary_file(&path),
                         }
                     }
