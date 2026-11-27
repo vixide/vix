@@ -393,6 +393,15 @@ pub fn write_in_place_with_recovery(
     data: &[u8],
     recovery: Option<&Path>,
 ) -> io::Result<()> {
+    write_in_place_with_recovery_with(target, &mut |w| w.write_all(data), recovery)
+}
+
+/// [`write_in_place_with_recovery`] with the bytes produced by `fill`.
+fn write_in_place_with_recovery_with(
+    target: &Path,
+    fill: &mut dyn FnMut(&mut dyn io::Write) -> io::Result<()>,
+    recovery: Option<&Path>,
+) -> io::Result<()> {
     use std::io::Write as _;
     // Open (without truncating) before taking the copy, so a target we cannot
     // write leaves no copy behind.
@@ -403,7 +412,11 @@ pub fn write_in_place_with_recovery(
         .open(target)?;
     let backup = recovery.and_then(|dir| make_recovery_copy(target, dir));
     f.set_len(0)?;
-    f.write_all(data)?;
+    {
+        let mut buffered = io::BufWriter::with_capacity(WRITE_BUFFER_BYTES, &mut f);
+        fill(&mut buffered)?;
+        buffered.flush()?;
+    }
     f.sync_all()?;
     if let Some(b) = backup {
         let _ = fs::remove_file(b);
@@ -556,6 +569,56 @@ pub fn write_atomic_private(path: &Path, data: &[u8]) -> io::Result<()> {
     }
 }
 
+/// [`write_atomic_private`] for data too large to hold in one buffer:
+/// `fill` writes the file's bytes, in as many pieces as it likes, into a
+/// buffered writer on the temp file (T859: a hot-exit backup of a 64 MiB
+/// buffer is streamed from its rope instead of copied first). The same
+/// guarantees hold: the temp is created `O_EXCL`, a new file is `0600`, the
+/// rename is atomic, and the in-place fallback (which calls `fill` again)
+/// is used only when the atomic attempt failed on its own.
+///
+/// An error `fill` returns aborts the write: the temp file is removed, the
+/// target is left untouched and that error is returned, without trying the
+/// in-place fallback. A caller cancels a superseded write this way.
+///
+/// # Errors
+///
+/// The error `fill` returned, or an error only if both the atomic write
+/// and the in-place fallback fail (as [`write_atomic_private`]).
+pub fn write_atomic_private_with<F>(path: &Path, mut fill: F) -> io::Result<()>
+where
+    F: FnMut(&mut dyn io::Write) -> io::Result<()>,
+{
+    refuse_foreign_sticky_symlink(path)?;
+    let existed = path.exists();
+    let mut fill_failed = false;
+    let atomic = write_atomic_inner_with(
+        path,
+        &mut |w| {
+            let result = fill(w);
+            fill_failed = result.is_err();
+            result
+        },
+        true,
+    );
+    match atomic {
+        Ok(()) => Ok(()),
+        Err(e) if fill_failed => Err(e),
+        Err(atomic_err) => {
+            let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+            write_in_place_with_recovery_with(&target, &mut fill, recovery_dir().as_deref())
+                .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))?;
+            if !existed {
+                restrict_to_owner(&target);
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Buffer size for the streamed writes of [`write_atomic_private_with`].
+const WRITE_BUFFER_BYTES: usize = 64 * 1024;
+
 /// Best-effort: narrow `path` to owner-only (0600) on Unix, no-op elsewhere
 /// and no-op on any error (the file still exists and still holds whatever
 /// permissions creation gave it; failing to tighten them further is not
@@ -582,6 +645,16 @@ pub fn restrict_to_owner(path: &Path) {
 /// or the rename fails. `force_private_for_new` is what tells the two apart
 /// for a file that doesn't exist yet — see [`write_atomic_private`].
 fn write_atomic_inner(path: &Path, data: &[u8], force_private_for_new: bool) -> io::Result<()> {
+    write_atomic_inner_with(path, &mut |w| w.write_all(data), force_private_for_new)
+}
+
+/// [`write_atomic_inner`] with the bytes produced by `fill` into a
+/// buffered writer on the temp file, instead of taken from one slice.
+fn write_atomic_inner_with(
+    path: &Path,
+    fill: &mut dyn FnMut(&mut dyn io::Write) -> io::Result<()>,
+    force_private_for_new: bool,
+) -> io::Result<()> {
     use std::io::Write as _;
 
     let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
@@ -616,7 +689,11 @@ fn write_atomic_inner(path: &Path, data: &[u8], force_private_for_new: bool) -> 
         return Err(io::Error::other(RenameWouldChangeIdentity));
     }
 
-    let write_result = f.write_all(data).and_then(|()| f.sync_all());
+    let write_result = {
+        let mut buffered = io::BufWriter::with_capacity(WRITE_BUFFER_BYTES, &mut f);
+        fill(&mut buffered).and_then(|()| buffered.flush())
+    }
+    .and_then(|()| f.sync_all());
     if let Err(e) = write_result {
         drop(f);
         let _ = fs::remove_file(&tmp);
@@ -1303,6 +1380,42 @@ mod tests {
             0o600,
             "a brand-new file must be owner-only, unlike write_atomic"
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// T859: a streamed private write lands the pieces in order, owner-only,
+    /// and an error from `fill` leaves the old file and no temp behind.
+    #[test]
+    fn write_atomic_private_with_streams_and_aborts_cleanly() {
+        let dir = scratch("atomic-private-with");
+        let p = dir.join("backup.json");
+        write_atomic_private_with(&p, |w| {
+            for piece in ["a", "bc", "", "def"] {
+                w.write_all(piece.as_bytes())?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(fs::read(&p).unwrap(), b"abcdef");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            assert_eq!(
+                fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        let aborted = write_atomic_private_with(&p, |w| {
+            w.write_all(b"half")?;
+            Err(io::Error::new(io::ErrorKind::Interrupted, "superseded"))
+        });
+        assert_eq!(aborted.unwrap_err().kind(), io::ErrorKind::Interrupted);
+        assert_eq!(
+            fs::read(&p).unwrap(),
+            b"abcdef",
+            "the old file is untouched"
+        );
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1, "no temp file left");
         let _ = fs::remove_dir_all(&dir);
     }
 

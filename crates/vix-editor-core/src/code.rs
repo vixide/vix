@@ -298,6 +298,13 @@ fn parse_worker_loop(
             }
         };
         let tree = parser.parse_with_options(&mut input, old.as_ref(), Some(options));
+        if tree.is_none() {
+            // A cancelled parse leaves its state in the parser so the next
+            // call can resume it; the next request is a newer snapshot with
+            // its own old tree, so resuming would grow that half-finished
+            // state on every superseded edit (T859). Start over instead.
+            parser.reset();
+        }
         if results.send(ParseResult { generation, tree }).is_err() {
             break;
         }
@@ -2266,6 +2273,57 @@ mod tests {
 
         // A language with no grammar is not "off for size": it never had one.
         assert!(!Code::new(&big, "text", None).unwrap().syntax_off_for_size());
+    }
+
+    #[cfg(feature = "lang-rust")]
+    /// T859: a parse cancelled by a newer edit must not leave its state in
+    /// the worker's parser. Tree-sitter resumes a cancelled parse on the
+    /// next call unless the parser is reset, so without the reset the next
+    /// (unrelated) snapshot was parsed as the continuation of the old one,
+    /// and the half-finished state grew on every superseded keystroke
+    /// (about 0.13 MiB per key at 7 MiB of Rust).
+    #[test]
+    fn a_cancelled_parse_does_not_leak_into_the_next_request() {
+        let language = Code::get_language("rust").unwrap();
+        let (req_tx, req_rx) = std::sync::mpsc::channel::<ParseRequest>();
+        let (res_tx, res_rx) = std::sync::mpsc::channel::<ParseResult>();
+        let worker = {
+            let language = language.clone();
+            std::thread::spawn(move || parse_worker_loop(&language, &req_rx, &res_tx))
+        };
+        let big = "fn f() { let x = 1; }\n".repeat(20_000);
+        req_tx
+            .send(ParseRequest {
+                generation: 1,
+                rope: Rope::from_str(&big),
+                old: None,
+                cancel: Arc::new(AtomicBool::new(true)),
+            })
+            .unwrap();
+        let small = "struct S;\n";
+        req_tx
+            .send(ParseRequest {
+                generation: 2,
+                rope: Rope::from_str(small),
+                old: None,
+                cancel: Arc::new(AtomicBool::new(false)),
+            })
+            .unwrap();
+        let first = res_rx.recv().unwrap();
+        assert!(first.tree.is_none(), "the first parse was cancelled");
+        let second = res_rx.recv().unwrap();
+        let mut fresh = Parser::new();
+        fresh.set_language(&language).unwrap();
+        let expected = fresh.parse(small, None).unwrap();
+        let got = second.tree.unwrap();
+        assert_eq!(
+            got.root_node().to_sexp(),
+            expected.root_node().to_sexp(),
+            "the second snapshot is parsed on its own"
+        );
+        assert_eq!(got.root_node().end_byte(), small.len());
+        drop(req_tx);
+        worker.join().unwrap();
     }
 
     #[cfg(feature = "lang-rust")]

@@ -23,9 +23,24 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+use sha2::{Digest as _, Sha256};
 
 use crate::sha;
+
+/// [`sha`] of the text the pieces join to, without joining them.
+fn sha_chunks<'t>(chunks: impl Iterator<Item = &'t str>) -> String {
+    use std::fmt::Write as _;
+    let mut h = Sha256::new();
+    for chunk in chunks {
+        h.update(chunk.as_bytes());
+    }
+    h.finalize().iter().fold(String::new(), |mut out, b| {
+        let _ = write!(out, "{b:02x}");
+        out
+    })
+}
 
 /// Prefix of an untitled buffer's backup file name.
 const UNTITLED_PREFIX: &str = "untitled-";
@@ -53,7 +68,9 @@ pub struct Backup {
     pub text: String,
 }
 
-/// Borrowed form written to disk (avoids copying the text).
+/// The file's JSON shape, borrowed: what [`BackupStore::write_chunks`]
+/// writes by hand, kept so a test checks the two agree byte for byte.
+#[cfg(test)]
 #[derive(serde::Serialize)]
 struct StoredRef<'a> {
     /// Which buffer this backup is for (path, `ssh://` form, or `untitled:<id>`).
@@ -166,19 +183,71 @@ impl BackupStore {
     /// # Errors
     /// Any I/O error creating the directory or writing the file.
     pub fn write(&self, key: BackupKey<'_>, text: &str) -> io::Result<()> {
+        self.write_chunks(key, std::iter::once(text), &AtomicBool::new(false))
+    }
+
+    /// [`BackupStore::write`] for text held in pieces, such as a rope's
+    /// chunks, without joining them (T859: a worker thread streams a large
+    /// buffer's backup from a rope snapshot). `chunks` is walked twice, once
+    /// for the hash and once to write, so it is cloned. The file's bytes are
+    /// exactly those [`BackupStore::write`] writes for the joined text, with
+    /// the same atomic, owner-only write.
+    ///
+    /// `cancel` is checked before the write and between chunks: once it is
+    /// set, the write stops, the earlier backup (if any) stays as it was,
+    /// and the result is an `Interrupted` error. A newer backup of the same
+    /// buffer cancels an older one still being written this way.
+    ///
+    /// # Errors
+    /// `Interrupted` when cancelled; any I/O error creating the directory or
+    /// writing the file.
+    pub fn write_chunks<'t, I>(
+        &self,
+        key: BackupKey<'_>,
+        chunks: I,
+        cancel: &AtomicBool,
+    ) -> io::Result<()>
+    where
+        I: Iterator<Item = &'t str> + Clone,
+    {
+        let cancelled = || io::Error::new(io::ErrorKind::Interrupted, "backup superseded");
+        if cancel.load(Ordering::Relaxed) {
+            return Err(cancelled());
+        }
         std::fs::create_dir_all(&self.root)?;
         let identity = match key {
             BackupKey::File(identity) => identity.to_owned(),
             BackupKey::Untitled { id, .. } => format!("untitled:{id}"),
         };
-        let hash = sha(text);
-        let json = serde_json::to_string(&StoredRef {
-            identity: &identity,
-            hash: &hash,
-            text,
+        let hash = sha_chunks(chunks.clone());
+        // The same bytes as `serde_json::to_string(&StoredRef { .. })`: the
+        // fields in declaration order, then the text escaped one chunk at a
+        // time (JSON escapes characters one by one, and a chunk never splits
+        // a character, so the pieces join to the whole text's escaping).
+        let head = format!(
+            "{{\"identity\":{},\"hash\":{},\"text\":\"",
+            serde_json::to_string(&identity).map_err(io::Error::other)?,
+            serde_json::to_string(&hash).map_err(io::Error::other)?,
+        );
+        // Owned here: the fallback write may call the closure a second time.
+        let source = chunks;
+        vix_fileops::write_atomic_private_with(&self.path_of(key), |w| {
+            w.write_all(head.as_bytes())?;
+            let mut escaped = Vec::new();
+            for chunk in source.clone() {
+                if cancel.load(Ordering::Relaxed) {
+                    return Err(cancelled());
+                }
+                escaped.clear();
+                serde_json::to_writer(&mut escaped, chunk).map_err(io::Error::other)?;
+                // Drop the quotes `to_writer` puts around one string.
+                let inner = escaped
+                    .get(1..escaped.len().saturating_sub(1))
+                    .unwrap_or_default();
+                w.write_all(inner)?;
+            }
+            w.write_all(b"\"}")
         })
-        .map_err(io::Error::other)?;
-        vix_fileops::write_atomic_private(&self.path_of(key), json.as_bytes())
     }
 
     /// Read the backup for `key`: `None` when there is none, or when it is
@@ -257,6 +326,60 @@ mod tests {
         let local = s.path_of(BackupKey::File("/etc/hosts"));
         let remote = s.path_of(BackupKey::File("ssh://box/etc/hosts"));
         assert_ne!(local, remote);
+    }
+
+    /// T859: the streamed write is byte for byte the old one-copy encoding,
+    /// for text that needs escaping and splits into many pieces.
+    #[test]
+    fn chunked_writes_match_the_serialized_form() {
+        let store = store("chunks");
+        let text = "quote \" back \\ tab \t nl \n ctl \u{1} é 日本 \u{7f} end";
+        let identity = "/tmp/a \"b\".txt";
+        let expected = serde_json::to_string(&StoredRef {
+            identity,
+            hash: &sha(text),
+            text,
+        })
+        .unwrap();
+        let pieces: Vec<&str> = text
+            .char_indices()
+            .map(|(i, c)| &text[i..i + c.len_utf8()])
+            .collect();
+        let key = BackupKey::File(identity);
+        store
+            .write_chunks(key, pieces.iter().copied(), &AtomicBool::new(false))
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(store.path_of(key)).unwrap(),
+            expected
+        );
+        store.write(key, text).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(store.path_of(key)).unwrap(),
+            expected
+        );
+        assert_eq!(store.read(key).unwrap().text, text);
+        assert_eq!(sha_chunks(pieces.iter().copied()), sha(text));
+    }
+
+    /// T859: a cancelled write leaves the earlier backup as it was.
+    #[test]
+    fn a_cancelled_chunked_write_keeps_the_earlier_backup() {
+        let store = store("cancel");
+        let key = BackupKey::File("/tmp/c.txt");
+        store.write(key, "first").unwrap();
+        let cancel = AtomicBool::new(false);
+        let pieces = ["second", " and more"].into_iter().inspect(|_| {
+            cancel.store(true, Ordering::Relaxed);
+        });
+        let err = store.write_chunks(key, pieces, &cancel).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::Interrupted);
+        assert_eq!(store.read(key).unwrap().text, "first");
+        let err = store
+            .write_chunks(key, std::iter::once("third"), &cancel)
+            .unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::Interrupted, "cancelled before");
+        assert_eq!(store.read(key).unwrap().text, "first");
     }
 
     #[test]

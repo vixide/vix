@@ -22,8 +22,11 @@
 )]
 
 use crate::geo::Geo;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use vix_input::{KeyCode, KeyEvent};
@@ -41,6 +44,102 @@ const LARGE_BYTES: usize = 4 * 1024 * 1024;
 
 /// The slowest backup cadence, for buffers over [`LARGE_BYTES`].
 const LARGE_INTERVAL: Duration = Duration::from_secs(60);
+
+/// A request to the backup worker thread (T859).
+enum WorkerMsg {
+    /// Write a snapshot of a buffer.
+    Write(WriteJob),
+    /// Delete a backup, after every write queued before it.
+    Remove {
+        /// Where the backup lives.
+        store: BackupStore,
+        /// Which backup.
+        key: OwnedKey,
+        /// The backup file, as `store.path_of(key)`.
+        path: PathBuf,
+        /// This request's number.
+        seq: u64,
+    },
+    /// Answer once every earlier request is done.
+    Sync(Sender<()>),
+}
+
+/// One buffer's snapshot, written by the worker.
+struct WriteJob {
+    /// Where the backup goes.
+    store: BackupStore,
+    /// Which backup.
+    key: OwnedKey,
+    /// The backup file, as `store.path_of(key)`.
+    path: PathBuf,
+    /// This request's number.
+    seq: u64,
+    /// The text: an O(1) clone of the buffer's rope, sharing its chunks.
+    rope: ropey::Rope,
+    /// Set when a newer request for the same backup supersedes this one.
+    cancel: Arc<AtomicBool>,
+}
+
+/// What the worker reports back for a write or a removal.
+struct Done {
+    /// The backup file.
+    path: PathBuf,
+    /// The request's number.
+    seq: u64,
+    /// `Err` with the message of a failed write; a superseded write is
+    /// not a failure.
+    result: Result<(), String>,
+}
+
+/// The backup worker thread's handle: started on the first backup of a
+/// buffer over [`LARGE_BYTES`], ending when the app is dropped.
+#[derive(Debug)]
+struct BackupWorker {
+    /// Requests, handled in order.
+    requests: Sender<WorkerMsg>,
+    /// Outcomes, read on the UI thread by [`App::drain_backup_results`].
+    done: Receiver<Done>,
+}
+
+/// The worker loop: handle each request in order until the app hangs up.
+fn backup_worker_loop(requests: &Receiver<WorkerMsg>, done: &Sender<Done>) {
+    while let Ok(msg) = requests.recv() {
+        let report = match msg {
+            WorkerMsg::Write(job) => {
+                let result =
+                    job.store
+                        .write_chunks(job.key.as_key(), job.rope.chunks(), &job.cancel);
+                Done {
+                    path: job.path,
+                    seq: job.seq,
+                    result: match result {
+                        Err(e) if e.kind() != std::io::ErrorKind::Interrupted => Err(e.to_string()),
+                        _ => Ok(()),
+                    },
+                }
+            }
+            WorkerMsg::Remove {
+                store,
+                key,
+                path,
+                seq,
+            } => {
+                store.remove(key.as_key());
+                Done {
+                    path,
+                    seq,
+                    result: Ok(()),
+                }
+            }
+            WorkerMsg::Sync(reply) => {
+                let _ = reply.send(());
+                continue;
+            }
+        };
+        // The app is gone: nothing reads outcomes, but finish the queue.
+        let _ = done.send(report);
+    }
+}
 
 /// One backup waiting to be offered back.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,6 +166,15 @@ pub(crate) struct HotExitState {
     pending: VecDeque<Recovery>,
     /// A failed write was already reported this session.
     warned: bool,
+    /// The worker thread that writes large buffers' backups (T859).
+    worker: Option<BackupWorker>,
+    /// Backup files with a request still queued or running on the worker:
+    /// the newest request's number, and its cancel flag (set when a newer
+    /// one supersedes it). A backup listed here is only touched through the
+    /// worker, so the requests for it land in the order they were made.
+    in_flight: HashMap<PathBuf, (u64, Arc<AtomicBool>)>,
+    /// The number of the last worker request.
+    seq: u64,
 }
 
 impl HotExitState {
@@ -80,6 +188,7 @@ impl HotExitState {
 }
 
 /// A buffer's backup key, owned.
+#[derive(Debug, Clone)]
 enum OwnedKey {
     /// A buffer with a file: its identity.
     File(String),
@@ -158,6 +267,7 @@ impl App {
     /// The idle half of hot exit, run every tick: back up changed buffers
     /// (at most every 2 seconds) and show the next recovery offer.
     pub fn poll_hot_exit(&mut self) {
+        self.drain_backup_results();
         self.show_next_recovery();
         if !self.settings.startup.hot_exit {
             return;
@@ -173,9 +283,185 @@ impl App {
         self.backup_dirty_tabs(false);
     }
 
+    /// The backup worker's request channel, starting the thread on first
+    /// use; `None` when no thread can be started.
+    fn backup_worker(&mut self) -> Option<Sender<WorkerMsg>> {
+        if self.hot_exit.worker.is_none() {
+            let (requests, inbox) = std::sync::mpsc::channel();
+            let (outbox, done) = std::sync::mpsc::channel();
+            std::thread::Builder::new()
+                .name("vix-hot-exit".to_string())
+                .spawn(move || backup_worker_loop(&inbox, &outbox))
+                .ok()?;
+            self.hot_exit.worker = Some(BackupWorker { requests, done });
+        }
+        self.hot_exit.worker.as_ref().map(|w| w.requests.clone())
+    }
+
+    /// The next worker request number, and `path` marked in flight under
+    /// it with a fresh cancel flag; an older request for `path` is
+    /// cancelled (T859: a newer snapshot supersedes it).
+    fn next_backup_request(&mut self, path: &Path) -> (u64, Arc<AtomicBool>) {
+        let seq = self.hot_exit.seq.wrapping_add(1);
+        self.hot_exit.seq = seq;
+        let cancel = Arc::new(AtomicBool::new(false));
+        if let Some((_, older)) = self
+            .hot_exit
+            .in_flight
+            .insert(path.to_path_buf(), (seq, Arc::clone(&cancel)))
+        {
+            older.store(true, Ordering::Relaxed);
+        }
+        (seq, cancel)
+    }
+
+    /// The worker hung up (it can only have panicked): forget it, so the
+    /// next backup starts a new one, and say whether `msg` was sent.
+    fn send_to_backup_worker(&mut self, requests: &Sender<WorkerMsg>, msg: WorkerMsg) -> bool {
+        if requests.send(msg).is_ok() {
+            return true;
+        }
+        self.hot_exit.worker = None;
+        self.hot_exit.in_flight.clear();
+        false
+    }
+
+    /// Hand a snapshot of a buffer to the worker. `false` when there is
+    /// no worker, so the caller writes it here instead.
+    fn queue_backup_write(
+        &mut self,
+        store: &BackupStore,
+        key: OwnedKey,
+        path: PathBuf,
+        rope: ropey::Rope,
+    ) -> bool {
+        let Some(requests) = self.backup_worker() else {
+            return false;
+        };
+        let (seq, cancel) = self.next_backup_request(&path);
+        let job = WriteJob {
+            store: store.clone(),
+            key,
+            path,
+            seq,
+            rope,
+            cancel,
+        };
+        self.send_to_backup_worker(&requests, WorkerMsg::Write(job))
+    }
+
+    /// Delete the backup `key`: through the worker when it still has a
+    /// request for it (cancelling that write and running after it), so a
+    /// write in flight cannot bring a deleted backup back; else at once.
+    fn remove_backup(&mut self, store: &BackupStore, key: OwnedKey) {
+        let path = store.path_of(key.as_key());
+        self.drain_backup_results();
+        if self.hot_exit.in_flight.contains_key(&path)
+            && let Some(requests) = self.backup_worker()
+        {
+            let (seq, _) = self.next_backup_request(&path);
+            let msg = WorkerMsg::Remove {
+                store: store.clone(),
+                key,
+                path: path.clone(),
+                seq,
+            };
+            if !self.send_to_backup_worker(&requests, msg) {
+                // No worker left to race with: delete it here, as
+                // `BackupStore::remove` does.
+                let _ = std::fs::remove_file(&path);
+            }
+            return;
+        }
+        store.remove(key.as_key());
+    }
+
+    /// Wait until the worker has handled every request so far, then take
+    /// its outcomes. Free when nothing is in flight.
+    fn settle_backups(&mut self) {
+        self.drain_backup_results();
+        if self.hot_exit.in_flight.is_empty() {
+            return;
+        }
+        if let Some(requests) = self.hot_exit.worker.as_ref().map(|w| w.requests.clone()) {
+            let (reply, answered) = std::sync::mpsc::channel();
+            if self.send_to_backup_worker(&requests, WorkerMsg::Sync(reply)) {
+                let _ = answered.recv();
+            }
+        }
+        self.drain_backup_results();
+    }
+
+    /// [`App::settle_backups`] when `path` has a request in flight: a read
+    /// of that backup must see the newest write.
+    fn settle_backup(&mut self, path: &Path) {
+        self.drain_backup_results();
+        if self.hot_exit.in_flight.contains_key(path) {
+            self.settle_backups();
+        }
+    }
+
+    /// Take the worker's outcomes: a request that was the newest for its
+    /// backup is no longer in flight, and a failed newest write is reported
+    /// (once a session) and leaves its buffer due for another backup.
+    fn drain_backup_results(&mut self) {
+        let Some(worker) = &self.hot_exit.worker else {
+            return;
+        };
+        let mut failed = Vec::new();
+        while let Ok(done) = worker.done.try_recv() {
+            let newest = self
+                .hot_exit
+                .in_flight
+                .get(&done.path)
+                .is_some_and(|(seq, _)| *seq == done.seq);
+            if !newest {
+                continue;
+            }
+            self.hot_exit.in_flight.remove(&done.path);
+            if let Err(e) = done.result {
+                failed.push((done.path, e));
+            }
+        }
+        if failed.is_empty() {
+            return;
+        }
+        let store = self.backup_store();
+        let workspace = self.session_key();
+        for (path, error) in failed {
+            self.backup_failed(&error);
+            let Some(store) = &store else {
+                continue;
+            };
+            for idx in 0..self.editor.tabs.len() {
+                let Some(key) = self.tab_backup_key(idx, &workspace, false) else {
+                    continue;
+                };
+                if store.path_of(key.as_key()) == path
+                    && let Some(tab) = self.editor.tabs.get_mut(idx)
+                {
+                    tab.backup.revision = None;
+                }
+            }
+        }
+    }
+
+    /// Report a failed backup write, once a session.
+    fn backup_failed(&mut self, error: &dyn std::fmt::Display) {
+        if !self.hot_exit.warned {
+            self.hot_exit.warned = true;
+            self.messages
+                .warn(t!("msg.hot_exit_failed", error = error).to_string());
+        }
+    }
+
     /// Back up every eligible buffer whose text changed since its last
-    /// backup. `force` (on quit) ignores the large-buffer cadence.
+    /// backup. `force` (on quit) ignores the large-buffer cadence. A buffer
+    /// over [`LARGE_BYTES`] (or one whose backup the worker is still
+    /// writing) is snapshotted, an O(1) rope clone, and written by the
+    /// worker thread (T859); a smaller one is written here.
     fn backup_dirty_tabs(&mut self, force: bool) {
+        self.drain_backup_results();
         let due: Vec<usize> = self
             .editor
             .tabs
@@ -207,32 +493,43 @@ impl App {
                 continue;
             };
             let revision = tab.editor.revision();
-            // Copying the text is the cost T749 cares about; it happens only
-            // for a buffer that changed since its last backup.
-            match store.write(key.as_key(), &tab.text()) {
+            let code = tab.editor.code_ref();
+            let path = store.path_of(key.as_key());
+            let snapshot = (code.len_bytes() > LARGE_BYTES
+                || self.hot_exit.in_flight.contains_key(&path))
+            .then(|| code.rope().clone());
+            let queued = snapshot
+                .is_some_and(|rope| self.queue_backup_write(&store, key.clone(), path, rope));
+            let written = if queued {
+                Ok(())
+            } else {
+                // Copying the text is the cost T749 cares about; it happens
+                // only for a buffer that changed since its last backup.
+                match self.editor.tabs.get(idx) {
+                    Some(tab) => store.write(key.as_key(), &tab.text()),
+                    None => continue,
+                }
+            };
+            match written {
                 Ok(()) => {
                     if let Some(tab) = self.editor.tabs.get_mut(idx) {
                         tab.backup.revision = Some(revision);
                         tab.backup.written_at = Some(Instant::now());
                     }
                 }
-                Err(e) => {
-                    if !self.hot_exit.warned {
-                        self.hot_exit.warned = true;
-                        self.messages
-                            .warn(t!("msg.hot_exit_failed", error = e).to_string());
-                    }
-                }
+                Err(e) => self.backup_failed(&e),
             }
         }
     }
 
     /// On quit: back up whatever is still unsaved (a forced quit, or a
-    /// front end that exits without asking).
+    /// front end that exits without asking), and wait until the worker has
+    /// written every backup it was given.
     pub(super) fn flush_hot_exit(&mut self) {
         if self.settings.startup.hot_exit {
             self.backup_dirty_tabs(true);
         }
+        self.settle_backups();
     }
 
     /// Delete the active tab's backup, under `prior` (its key before a Save
@@ -245,19 +542,18 @@ impl App {
         let workspace = self.session_key();
         let idx = self.editor.active;
         if let Some(key) = self.tab_backup_key(idx, &workspace, false) {
-            store.remove(key.as_key());
+            self.remove_backup(&store, key);
         }
         if let Some(prior) = prior {
-            store.remove(BackupKey::File(&self.backup_identity(&prior)));
+            let identity = self.backup_identity(&prior);
+            self.remove_backup(&store, OwnedKey::File(identity));
         }
         if let Some(tab) = self.editor.tabs.get_mut(idx) {
-            if let Some(id) = tab.backup.session_id.take() {
-                store.remove(BackupKey::Untitled {
-                    workspace: &workspace,
-                    id: &id,
-                });
-            }
+            let id = tab.backup.session_id.take();
             tab.backup = BackupMark::default();
+            if let Some(id) = id {
+                self.remove_backup(&store, OwnedKey::Untitled(workspace, id));
+            }
         }
     }
 
@@ -274,6 +570,7 @@ impl App {
         };
         let identity = self.backup_identity(path);
         let key = BackupKey::File(&identity);
+        self.settle_backup(&store.path_of(key));
         if !store.exists(key) {
             return;
         }
@@ -296,7 +593,7 @@ impl App {
                 }
                 self.show_next_recovery();
             }
-            _ => store.remove(key),
+            _ => self.remove_backup(&store, OwnedKey::File(identity)),
         }
     }
 
@@ -412,6 +709,7 @@ impl App {
         };
         match item {
             Recovery::File { path, identity } => {
+                self.settle_backup(&store.path_of(BackupKey::File(&identity)));
                 let Some(backup) = store.read(BackupKey::File(&identity)) else {
                     return;
                 };
@@ -444,6 +742,7 @@ impl App {
                         workspace: &workspace,
                         id: &id,
                     };
+                    self.settle_backup(&store.path_of(key));
                     let Some(backup) = store.read(key) else {
                         continue;
                     };
@@ -461,19 +760,18 @@ impl App {
     }
 
     /// Delete the backups behind `item`.
-    fn discard_backup(&self, item: &Recovery) {
+    fn discard_backup(&mut self, item: &Recovery) {
         let Some(store) = self.backup_store() else {
             return;
         };
         match item {
-            Recovery::File { identity, .. } => store.remove(BackupKey::File(identity)),
+            Recovery::File { identity, .. } => {
+                self.remove_backup(&store, OwnedKey::File(identity.clone()));
+            }
             Recovery::Untitled(ids) => {
                 let workspace = self.session_key();
                 for id in ids {
-                    store.remove(BackupKey::Untitled {
-                        workspace: &workspace,
-                        id,
-                    });
+                    self.remove_backup(&store, OwnedKey::Untitled(workspace.clone(), id.clone()));
                 }
             }
         }
@@ -481,6 +779,9 @@ impl App {
 
     /// Show the file as opened against its backup in the diff overlay.
     fn show_backup_diff(&mut self, path: &Path, identity: &str) {
+        if let Some(store) = self.backup_store() {
+            self.settle_backup(&store.path_of(BackupKey::File(identity)));
+        }
         let Some(backup) = self
             .backup_store()
             .and_then(|s| s.read(BackupKey::File(identity)))
