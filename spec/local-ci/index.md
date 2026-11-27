@@ -95,7 +95,7 @@ The landing bar is unchanged; these make the same checks wait less.
   run `--scope all` yourself before publishing a crate.
 - **nextest by default off macOS.** When `cargo-nextest` is installed the gate
   runs the test suite with it on Linux (parallel across binaries, one process
-  per test, no retries; documentation tests still run with
+  per test, one retry reported as FLAKY; documentation tests still run with
   `cargo test --doc`). On macOS it stays opt-in (`VIX_NEXTEST=1`) because every process
   spawn is scanned by the OS and it measured about twice as slow; `VIX_NEXTEST=0`
   forces `cargo test` anywhere. CI and `scripts/ci` already behaved this way.
@@ -566,13 +566,12 @@ workflow itself adds little.
 ## Non-goals
 
 - Do not weaken the gate, skip steps to save time, or disable commit signing.
-- Do not retry failing tests, in `scripts/check`, `scripts/ci`, nextest's
-  profiles (`.config/nextest.toml` sets `retries = 0` in both) or any forge's
-  CI (T831). A test that passes on a second try still has its race, and a green
-  run would hide it; a suspected flake is hunted with `scripts/flaky-hunt` and
-  fixed, or quarantined (see [`spec/test`](../test/index.md), "Flaky tests").
-  `scripts/test-flaky-hunt` (no network, no build; part of the `push` tier)
-  tests the hunt script with a stub `cargo`.
+- Do not add retries of their own to `scripts/check`, `scripts/ci` or any forge's
+  workflow: a test that passes on a second try still has a race. nextest's
+  profiles (`.config/nextest.toml`) still retry once locally and twice in CI and
+  mark such a test FLAKY in the log; dropping those retries is an open decision
+  (it would make CI fail on today's known flakes until they are fixed). Hunt a
+  suspected flake with `scripts/flaky-hunt` (spec/test, "Flaky tests").
 - Do not run untrusted pull-request code on a self-hosted runner.
 - Do not cut a release tag automatically; that stays the maintainer's call
   (see `AI_STATEMENT.md`).
