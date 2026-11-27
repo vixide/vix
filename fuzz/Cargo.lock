@@ -1125,6 +1125,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-capped-stack"
+version = "3.0.0"
+
+[[package]]
 name = "vix-conflict-tool"
 version = "3.0.0"
 dependencies = [
@@ -1175,6 +1179,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "vix-edit-sql"
+version = "3.0.0"
+dependencies = [
+ "vix-capped-stack",
+ "vix-input",
+ "vix-list-state",
+]
+
+[[package]]
+name = "vix-edit-value"
+version = "3.0.0"
+dependencies = [
+ "serde_json",
+ "serde_norway",
+ "vix-capped-stack",
+ "vix-input",
+ "vix-list-state",
+]
+
+[[package]]
 name = "vix-encoding"
 version = "3.0.0"
 dependencies = [
@@ -1211,6 +1235,7 @@ dependencies = [
  "libfuzzer-sys",
  "regex",
  "serde_json",
+ "toml 1.2.1+spec-1.1.0",
  "vix-authority",
  "vix-conflict-tool",
  "vix-convert-from-json-into-toml-tool",
@@ -1218,6 +1243,8 @@ dependencies = [
  "vix-convert-from-toml-into-json-tool",
  "vix-convert-from-yaml-into-json-tool",
  "vix-convert-tabular",
+ "vix-edit-sql",
+ "vix-edit-value",
  "vix-find-panel",
  "vix-http-client",
  "vix-im",
@@ -1225,6 +1252,7 @@ dependencies = [
  "vix-lsp-core",
  "vix-macros",
  "vix-org-table",
+ "vix-settings",
  "vix-textops",
  "vix-vcard-parser",
 ]
@@ -1295,6 +1323,16 @@ name = "vix-org-table"
 version = "3.0.0"
 dependencies = [
  "evalexpr",
+]
+
+[[package]]
+name = "vix-settings"
+version = "3.0.0"
+dependencies = [
+ "confy",
+ "serde",
+ "toml 1.2.1+spec-1.1.0",
+ "vix-fileops",
 ]
 
 [[package]]

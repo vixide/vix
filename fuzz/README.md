@@ -57,6 +57,10 @@ demand, with a chosen length). A failure uploads the crashing input as the
 | `structured_convert` | The four JSON⇄YAML/JSON⇄TOML `Tools → Convert` crates | Converting valid JSON to YAML/TOML and back reparses to an *equivalent* value (exact for strings/bools/null/structure; a tiny relative tolerance for numbers, since decimal-text float formatting isn't bit-exact — found on the first run: a 30-significant-digit float's last digit shifted) |
 | `macro_tokens` | `vix-macros`: `decode_key`/`decode`, the `macros.toml` token parser | No panic on any token text (a user can hand-edit the file); a token that decodes re-encodes to a non-empty token |
 | `im_message` | `vix-im`: `sanitize`/`sanitize_multiline`, `find_refs` + `resolve_in_root`, `find_mentions`, `parse_input`, `history::decode`, `Thread::from_json` + `reanchor` | Everything received from another person is handled totally; sanitized text holds no control or bidi-override character and sanitizing is idempotent; reference and mention ranges are on char boundaries |
+| `sql_split` | `vix-edit-sql`: `split_statements`, `Editor::from_text`/`to_text`, `format_sql`, `kind`/`preview` | Statements are trimmed and non-empty; saving then splitting gives the same statements and saving is a fixed point (found on the first run: a statement ending in an unclosed string gained a `;` per save); formatting only changes ASCII case and is idempotent |
+| `edit_value` | `vix-edit-value`: `Tree::from_text` (JSON and YAML), every row accessor, `to_text` | Parsing is total; every visible row is readable; the saved text reopens as a tree with the same rows that saves the same text (inputs with keys that render alike are only checked for not panicking; the first run found that limitation, now in the crate spec) |
+| `settings_toml` | `vix-settings` from a string, never a config path: `toml::from_str::<Settings>`, `unknown_keys`, `merge_layer` over the defaults, `language_key_problems` | Loading any text is total; merged settings save and reload unchanged, and what they save holds no unknown key |
+| `substitute` | `vix-find-panel::substitute`: the Ex `:s` `parse`, `plan` and `apply` | Parsing is total and never accepts an empty pattern; planned ranges are ascending, in bounds, exactly the pattern, on the cursor line for `:s` and at most one per line without `g`; `apply`'s length is exactly the planned one |
 | `jupyter_wire` | `vix-jupyter-core`: the Jupyter wire codec (`wire::decode`/`encode`), typed contents, `Output`, `strip_ansi` | Decoding is total; frames not signed with the key never get as far as JSON parsing; signed attacker-chosen JSON types and renders without a panic; error text and stripped text hold no control character except newline and tab |
 
 ## Adding a target
@@ -68,12 +72,16 @@ demand, with a chosen length). A failure uploads the crashing input as the
 3. Write `fuzz_targets/<name>.rs`. Assert the *invariants*, not just the absence
    of a panic — a fuzz target that only calls the function finds crashes but
    misses wrong answers.
-4. Document it in the table above.
+4. Optionally commit a few tiny seed inputs as `fuzz/corpus/<name>/seed-*`.
+5. Add it to `.github/workflows/fuzz.yml`'s matrix and document it in the table above.
 
 ## Notes
 
-- `fuzz/artifacts/` and `fuzz/corpus/` are gitignored; a crash worth keeping
-  becomes a unit test, not a committed corpus file.
+- `fuzz/artifacts/` is gitignored, and so is everything libFuzzer adds to
+  `fuzz/corpus/<target>/`; only hand-written seed files named `seed-*` there
+  are committed (a handful of tiny inputs per target, to start the fuzzer on
+  the interesting shapes). A crash worth keeping becomes a unit test, not a
+  corpus file.
 - Fuzzing is not part of the CI gate or the MSRV promise (`cargo-fuzz` needs
   nightly). It is a tool for the person changing a parser.
 - See [`spec/test/index.md`](../spec/test/index.md) for how fuzzing fits with the

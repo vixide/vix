@@ -1,0 +1,5 @@
+[languages.rust]
+tab_width = 2
+
+[im]
+enabled = false
