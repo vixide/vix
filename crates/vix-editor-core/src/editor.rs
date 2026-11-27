@@ -324,9 +324,10 @@ pub struct Editor {
     /// Syntax highlight cache by intervals to speed up rendering
     pub(crate) highlights_cache: RefCell<HightlightCache>,
 
-    /// [`Editor::max_line_width`]'s last answer, the buffer revision it was
-    /// computed for, and when.
-    pub(crate) max_width_cache: Cell<Option<(u64, usize, Instant)>>,
+    /// [`Editor::max_line_width`]'s last answer (the widest line, at the
+    /// buffer revision it was measured for), and when it was last measured
+    /// by a whole-buffer pass.
+    pub(crate) max_width_cache: Cell<Option<(crate::code::WidestLineAt, Instant)>>,
 
     /// Independent display/editing toggles (line numbers, whitespace, soft
     /// wrap, auto-pair, rainbow brackets) — see [`Flags`] for what each bit
@@ -1469,18 +1470,44 @@ impl Editor {
     /// would otherwise rescan the whole buffer on every keystroke, and a
     /// scrollbar thumb one keystroke out of date is harmless. The first frame
     /// after a pause in typing rescans.
+    ///
+    /// Before either, an edit is measured where it happened (T858): the
+    /// changed lines are measured, every other line is known to be no wider
+    /// than the cached widest one, so the width stays exact without a
+    /// whole-buffer pass — unless the edit narrowed the widest line itself
+    /// (or changed more than 1 MiB of lines), which falls back to the above.
     pub fn max_line_width(&self) -> usize {
         let rev = self.code.revision();
-        if let Some((cached_rev, width, at)) = self.max_width_cache.get()
-            && (cached_rev == rev
-                || (self.code.len_bytes() >= MAX_WIDTH_LAZY_BYTES
-                    && at.elapsed() < MAX_WIDTH_STALE))
-        {
-            return width;
+        let cached = self.max_width_cache.get();
+        if let Some((old, at)) = cached {
+            if old.revision == rev {
+                return old.line.width;
+            }
+            if let Some(line) = self.code.widest_line_after(&old) {
+                self.max_width_cache.set(Some((
+                    crate::code::WidestLineAt {
+                        line,
+                        revision: rev,
+                        len_chars: self.code.len_chars(),
+                    },
+                    at,
+                )));
+                return line.width;
+            }
+            if self.code.len_bytes() >= MAX_WIDTH_LAZY_BYTES && at.elapsed() < MAX_WIDTH_STALE {
+                return old.line.width;
+            }
         }
-        let width = self.code.max_line_chars();
-        self.max_width_cache.set(Some((rev, width, Instant::now())));
-        width
+        let line = self.code.widest_line();
+        self.max_width_cache.set(Some((
+            crate::code::WidestLineAt {
+                line,
+                revision: rev,
+                len_chars: self.code.len_chars(),
+            },
+            Instant::now(),
+        )));
+        line.width
     }
 
     /// Return a mutable reference to the underlying code buffer.
@@ -1766,31 +1793,54 @@ mod tests {
     /// every edit.
     #[test]
     fn max_line_width_is_lazy_only_in_large_buffers() {
+        use crate::actions::Delete;
         use crate::actions::InsertText;
         use crate::code::full_text_scans;
         let line = "x".repeat(99) + "\n";
-        let big = line.repeat(super::MAX_WIDTH_LAZY_BYTES / line.len() + 1);
+        // One line wider than the rest, first.
+        let big =
+            "w".repeat(200) + "\n" + &line.repeat(super::MAX_WIDTH_LAZY_BYTES / line.len() + 1);
         let mut e = Editor::new("text", &big, Vec::new()).unwrap();
         while e.parse_pending() {
             e.poll_parse();
         }
-        assert_eq!(e.max_line_width(), 99);
+        assert_eq!(e.max_line_width(), 200);
         let before = full_text_scans();
-        e.set_cursor(0);
+        // Typing elsewhere is measured where it happened (T858): exact, and
+        // no whole-buffer pass, however long since the last one.
+        let age = |e: &Editor| {
+            let (w, at) = e.max_width_cache.get().unwrap();
+            let old = at.checked_sub(super::MAX_WIDTH_STALE * 2).unwrap();
+            e.max_width_cache.set(Some((w, old)));
+        };
+        age(&e);
+        e.set_cursor(300);
         e.apply(InsertText {
             text: "y".to_string(),
         });
+        assert_eq!(e.max_line_width(), 200, "a narrower line changed");
+        e.apply(InsertText {
+            text: "y".repeat(150),
+        });
+        assert_eq!(e.max_line_width(), 250, "that line is now the widest");
+        assert_eq!(full_text_scans(), before, "no rescan for either edit");
+        // Narrowing the widest line itself needs a whole-buffer pass, so a
+        // fresh width is reused while typing...
+        e.max_width_cache.set(
+            e.max_width_cache
+                .get()
+                .map(|(w, _)| (w, std::time::Instant::now())),
+        );
+        e.apply(Delete);
         assert_eq!(
             e.max_line_width(),
-            99,
+            250,
             "a fresh width is reused while typing"
         );
         assert_eq!(full_text_scans(), before, "no rescan right after an edit");
-        // Age the cached width past the limit: the next call rescans.
-        let (rev, width, at) = e.max_width_cache.get().unwrap();
-        let old = at.checked_sub(super::MAX_WIDTH_STALE * 2).unwrap();
-        e.max_width_cache.set(Some((rev, width, old)));
-        assert_eq!(e.max_line_width(), 100);
+        // ...until it is older than the limit: the next call rescans.
+        age(&e);
+        assert_eq!(e.max_line_width(), 249);
         assert_eq!(full_text_scans(), before + 1);
 
         let mut small = Editor::new("text", "abc\n", Vec::new()).unwrap();

@@ -940,6 +940,62 @@ then 100 × `l`/`h` and 100 × `w`/`b`, 25 ms apart:
 ¹ The `68760G` that moved the cursor to the middle line (19.4 ms): a
 counted `G` walks the lines it skips, once.
 
+## A keystroke in a very large file (T858, measured 2026-11-27)
+
+T830's fifth slice found the frame after a keystroke costing about 7 ms per
+MiB of text, with Tree-sitter on or off, and five keystrokes at 64 MiB
+raising resident memory by about 320 MiB. `tui/examples/keystroke_cost.rs`
+reproduces it: it opens a generated file, puts the cursor in the middle and
+types through `App::on_key`, with a tick and a frame after each key. With the
+cursor at the top nothing was slow, which is why earlier measurements missed
+it. `/usr/bin/sample` on 30 keys at 64 MiB (`bench` profile) put 89% of the
+time under `ui::draw` → `draw_editor_region` → `App::sticky_header` →
+`App::active_tab_symbols`: after every edit the sticky-scroll header copied
+the whole buffer (`Code::get_content`) and ran `vix_palette::symbols` over
+every line to find the one declaration above the top line, then cloned the
+list of every declaration in the file (top frames: `vix_palette::symbols`,
+`memchr`, `regex_automata` searches, memory copies, `malloc`/`free`). Most of
+the rest (7%) was `Editor::max_line_width` → `Code::max_line_chars`: once
+the last width was 250 ms old, the frame after a key scanned the buffer again
+for its widest line, so a key after a pause cost 27 ms at 64 MiB. The undo
+history was not the cause: it already stores each edit's text, not copies of
+the buffer.
+
+Now the sticky-scroll header and the breadcrumb read up from their line to
+the nearest declaration and remember what they saw across edits
+(`crates/vix-editor/spec/sticky-scroll/index.md`), and the widest-line width
+is brought forward by measuring only the changed lines
+(`Code::changed_since`, `crates/vix-editor-core/spec/index.md`).
+
+`editor/keystroke` (`tui/benches/editor_ops.rs`): type `x` and draw, then
+Backspace and draw, in the middle of a plain-text buffer of Rust-shaped
+lines. On a heavily loaded machine (load average about 40), with
+`--warm-up-time 1 --measurement-time 3`, so read the shape, not the
+absolute numbers (at 4 KiB the two builds measured 1.0 to 2.4 ms on repeated
+runs):
+
+| Benchmark | 4 KiB | 512 KiB | 8 MiB | 64 MiB |
+| --------- | ----- | ------- | ----- | ------ |
+| Before T858 | 1.0 ms | 7.2 ms | 136 ms | 982 ms |
+| After T858 | 2.0 ms | 2.3 ms | 1.7 ms | 1.8 ms |
+
+`keystroke_cost`, one key with a tick and a frame, cursor in the middle of a
+`.txt` file:
+
+| | 8 MiB | 64 MiB | 64 MiB, 300 ms pause before each key | Resident memory, 5 keys at 64 MiB |
+| - | ----- | ------ | ------------------------------------ | --------------------------------- |
+| Before T858 | 43 ms | 380 ms | 380 ms | +396 MiB |
+| After T858 | 0.15 ms | 0.14 ms | 0.5 ms | +0.8 MiB |
+
+None of the keys after T858 makes a whole-buffer pass
+(`tui/tests/integration/big_buffer.rs`,
+`a_keystroke_and_its_frame_make_no_whole_buffer_pass` and
+`typing_in_a_large_file_costs_no_memory_per_key`). What is left is periodic,
+not per key: hot exit copies a changed buffer over 4 MiB into its backup at
+most once a minute (about 80 ms and 70 MiB at 64 MiB, specified in
+`crates/vix-undo-store/spec/hot-exit/index.md`), and narrowing the widest
+line itself still remeasures the buffer once typing pauses for 250 ms.
+
 ## Quick Open in a large checkout (T845, measured 2026-11-27)
 
 `palette/quick_open` (`tui/benches/search_and_palette.rs`) builds a checkout

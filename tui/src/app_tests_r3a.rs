@@ -44,7 +44,7 @@ fn editing_actions_without_any_tab_are_harmless() {
         assert!(a.editor.tabs.is_empty(), "{id} must not create a tab");
     }
     assert_eq!(a.breadcrumb(), "");
-    assert!(a.active_tab_symbols().is_empty());
+    assert!(a.enclosing_symbol(0, &a.crumb_scan).is_none());
     assert_eq!(a.word_prefix_before_cursor(), "");
     assert_eq!(a.cursor_lsp_position(Path::new("x.rs")), (0, 0));
     a.goto_matching_tag();

@@ -42,7 +42,22 @@ far (~20 ms per edit on a 100 MB file; an idle frame costs nothing). `Code::
 from_rope` / `Editor::from_rope` build a buffer from a rope the host already
 has. `code::full_text_scans()` counts this thread's whole-buffer passes
 (`get_content`, `max_line_chars`) so tests can assert an idle frame makes
-none. `Code::rope` hands out the rope itself for read-only walks; cloning it
+none.
+
+`Code::changed_since(revision)` (T858) says which characters changed since an
+earlier revision, as one range in the current text (`None` once the change is
+more than 256 edits old, or for a revision the buffer never had): the text
+before it is the old text and the text after it the old text shifted. It keeps
+the position and length of the last 256 changes only, never their text, so a
+cache keyed on `revision` can keep what it knew about the lines an edit did
+not touch. `Editor::max_line_width` uses it: after an edit it measures only
+the changed lines (split at `\n`, as `max_line_chars` splits them), and as
+every other line is no wider than the widest one it remembered, the width
+stays exact with no whole-buffer pass, however long since the last one.
+Only when the edit narrowed that widest line itself, or the changed lines
+are over 1 MiB, does it fall back to the rule above: a buffer of 4 MiB or
+more reuses the old width while typing and rescans once 250 ms have passed;
+a smaller one rescans at once. `Code::rope` hands out the rope itself for read-only walks; cloning it
 is an O(1) structural share, which is how the Vi motions and operators read
 the buffer without copying it (T843, `crates/vix-modal/spec/index.md` §
 Design: motions).

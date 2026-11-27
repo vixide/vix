@@ -481,6 +481,67 @@ fn bench_matching_tag(c: &mut Criterion) {
     group.finish();
 }
 
+/// One keystroke and the frame after it, through the real `App` key path
+/// with the default keymap (T858): type `x` and draw, then Backspace and
+/// draw, in the middle of a plain-text buffer of Rust-shaped lines (so the
+/// sticky-scroll header has declarations to find). Before T858 the frame
+/// after an edit scanned the whole buffer for declarations, about 7 ms per
+/// MiB; it should not depend on the size at all.
+fn bench_keystroke_frame(c: &mut Criterion) {
+    use vix::settings::Settings;
+    let mut group = c.benchmark_group("editor/keystroke");
+    group.sample_size(10);
+    for (label, bytes) in [
+        ("4KiB", 4 << 10),
+        ("512KiB", 512 << 10),
+        ("8MiB", 8 << 20),
+        ("64MiB", 64 << 20),
+    ] {
+        let mut text = source(bytes / 16);
+        // `source` is ASCII, so any byte length is a character boundary.
+        text.truncate(bytes);
+        let dir = std::env::temp_dir().join(format!(
+            "vix-bench-keystroke-{label}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("big.txt");
+        std::fs::write(&file, &text).unwrap();
+        let mut settings = Settings::default();
+        settings.editor_behavior.large_file_mb = 0;
+        let mut app = vix::app::App::new(dir.clone(), settings)
+            .with_session_path(dir.join("session.toml"))
+            .with_backup_dir(dir.join("backup"));
+        app.layout.editor = ratatui::layout::Rect::new(0, 0, 120, 40);
+        app.open_initial(&file);
+        let middle = text.chars().count() / 2;
+        drop(text);
+        app.editor
+            .active_tab_mut()
+            .unwrap()
+            .editor
+            .set_cursor(middle);
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 40)).unwrap();
+        term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+        let backspace =
+            vix_input::KeyEvent::new(vix_input::KeyCode::Backspace, vix_input::KeyModifiers::NONE);
+        group.bench_function(
+            BenchmarkId::new("type_and_backspace_with_frames", label),
+            |b| {
+                b.iter(|| {
+                    for k in [vi_key('x'), backspace] {
+                        app.on_key(k);
+                        term.draw(|f| vix::ui::draw(&mut app, f)).unwrap();
+                    }
+                });
+            },
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_open,
@@ -494,6 +555,7 @@ criterion_group!(
     bench_go_sentences,
     bench_word_highlight,
     bench_go_words,
-    bench_matching_tag
+    bench_matching_tag,
+    bench_keystroke_frame
 );
 criterion_main!(benches);

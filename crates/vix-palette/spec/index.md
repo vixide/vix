@@ -30,6 +30,14 @@ Tips:
 - In symbol mode (@), type to fuzzy-filter the current file's declarations (functions, types, classes, traits, modules, `#define`s, …) and press Enter to jump to one. The list is a fast, offline heuristic (the same family as go-to-definition), so it works for any language without a language server. Also reachable as the palette command "Go to Symbol in File".
 - In workspace-symbol mode (@@, or Ctrl+T, or the command "Go to Symbol in Workspace"), type to fuzzy-filter declarations across every file in the workspace; each result shows the symbol with its `file:line`, and Enter opens that file at the symbol. The query is required (an empty `@@` lists nothing, since the workspace is too large to enumerate); the search reads files on demand, skips images and files over 512 KB, and caps results at 200 to stay responsive.
 
+## Symbols one line at a time (T858)
+
+`symbols(text)` lists a buffer's declarations; `symbol_in_line(line, n)` is
+the same test on one line (without its line break), numbered `n`, and
+`symbols` is built on it. The sticky-scroll header and the breadcrumb use
+`symbol_in_line` to read up from one line to the nearest declaration instead
+of listing the whole buffer's (`crates/vix-editor/spec/sticky-scroll/index.md`).
+
 ## Preview pane (T630)
 
 When the screen is at least `MIN_PREVIEW_WIDTH` (100) columns wide, the file

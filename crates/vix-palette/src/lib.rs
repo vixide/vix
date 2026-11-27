@@ -603,25 +603,31 @@ pub struct Symbol {
 /// to top-level structure.
 #[must_use]
 pub fn symbols(text: &str) -> Vec<Symbol> {
-    let re = &*SYMBOL_RE;
-    let mut out = Vec::new();
-    for (i, line) in text.lines().enumerate() {
-        if let Some(caps) = re.captures(line)
-            && let Some(name) = caps.get(2).or_else(|| caps.get(4))
-        {
-            let kind = caps
-                .get(1)
-                .or_else(|| caps.get(3))
-                .map_or_else(String::new, |m| m.as_str().to_string());
-            out.push(Symbol {
-                kind,
-                name: name.as_str().to_string(),
-                line: add_or(i, 1, usize::MAX),
-                text: line.trim_start().chars().take(120).collect(),
-            });
-        }
-    }
-    out
+    text.lines()
+        .enumerate()
+        .filter_map(|(i, line)| symbol_in_line(line, add_or(i, 1, usize::MAX)))
+        .collect()
+}
+
+/// The declaration on one line, as [`symbols`] finds it, numbered `line`
+/// (1-based): what [`symbols`] would return for that line of a buffer, so a
+/// caller can look at only the lines it needs (T858: the sticky-scroll header
+/// and the breadcrumb scan up from one line instead of the whole buffer).
+/// `text` is the line without its line break.
+#[must_use]
+pub fn symbol_in_line(text: &str, line: usize) -> Option<Symbol> {
+    let caps = SYMBOL_RE.captures(text)?;
+    let name = caps.get(2).or_else(|| caps.get(4))?;
+    let kind = caps
+        .get(1)
+        .or_else(|| caps.get(3))
+        .map_or_else(String::new, |m| m.as_str().to_string());
+    Some(Symbol {
+        kind,
+        name: name.as_str().to_string(),
+        line,
+        text: text.trim_start().chars().take(120).collect(),
+    })
 }
 
 /// Case-insensitive, space-separated subsequence match. Every whitespace term
