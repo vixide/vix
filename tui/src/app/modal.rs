@@ -929,7 +929,12 @@ impl App {
             }
         } else if let Some(find_key) = self.modal_pending_find.take()
             && unmodified
-            && let KeyCode::Char(target) = key.code
+            && let Some(target) = match key.code {
+                KeyCode::Char(c) => Some(c),
+                // `r<CR>` (T847) splits the line; `f<CR>` finds nothing.
+                KeyCode::Enter if find_key == 'r' => Some('\n'),
+                _ => None,
+            }
         {
             if find_key == 'r' {
                 self.modal_reset_counts();
@@ -1269,7 +1274,10 @@ impl App {
     /// `r{char}` (T846): replace `count` characters from the cursor with
     /// `c`, the cursor ending on the last of them, as one undo step and a
     /// change `.` repeats. With fewer than `count` characters left on the
-    /// line nothing happens, as in Vim.
+    /// line nothing happens, as in Vim. `c == '\n'` is `r<CR>` (T847): the
+    /// `count` characters become **one** line break and the cursor goes to
+    /// the start of the new line, as in Vim (no indent: an unconfigured Vim
+    /// has `noautoindent`).
     fn modal_replace_chars(&mut self, c: char, count: usize) {
         let count = count.max(1);
         let Some(tab) = self.editor.active_tab_mut() else {
@@ -1289,10 +1297,16 @@ impl App {
             return;
         }
         tab.editor.set_selection_range(pos, end);
-        tab.editor.apply(InsertText {
-            text: std::iter::repeat_n(c, count).collect(),
-        });
-        tab.editor.set_cursor(pos.plus(count).minus(1));
+        let (text, cursor) = if c == '\n' {
+            ("\n".to_string(), pos.plus(1))
+        } else {
+            (
+                std::iter::repeat_n(c, count).collect(),
+                pos.plus(count).minus(1),
+            )
+        };
+        tab.editor.apply(InsertText { text });
+        tab.editor.set_cursor(cursor);
         self.modal_last_change = self.modal_recording.clone();
         self.modal_last_change_insert.clear();
     }

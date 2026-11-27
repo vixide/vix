@@ -164,7 +164,10 @@ family, resolved at the *nearest enclosing subproject of the active file*
 six lifecycle slots plus **Find File** (`project.subproject.find_file`,
 `C-c p c m f`), which opens the palette scoped to that subproject's
 directory. Any subproject action reports `status.project_no_subproject` when
-the active file is not inside one. The override file and command
+the active file is not inside one. The active file is placed under the root
+by its path, and, when that prefix does not match, by both paths
+canonicalized (a root given through a symlink, such as macOS's `/var`, while
+tabs hold canonical paths; T847). The override file and command
 cache/history stay workspace-root-scoped — only the project-type detection
 and the run's working directory vary by subproject.
 

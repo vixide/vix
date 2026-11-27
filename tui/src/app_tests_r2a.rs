@@ -4867,6 +4867,44 @@ fn compare_and_insert_prompts_need_an_open_buffer() {
     assert!(matches!(prompt_kind(&a), Some(PromptKind::InsertFile)));
 }
 
+/// A workspace root given through a symlink (macOS's `/var` is one) still
+/// finds the active file's subproject: open tabs hold the canonical path
+/// (T847).
+#[cfg(all(unix, feature = "tasks"))]
+#[test]
+fn subproject_actions_work_when_the_root_is_a_symlink() {
+    let real = tmp("subproject-real");
+    std::fs::write(real.join("Cargo.toml"), "[workspace]\n").unwrap();
+    std::fs::create_dir_all(real.join("crates/inner/src")).unwrap();
+    std::fs::write(
+        real.join("crates/inner/Cargo.toml"),
+        "[package]\nname=\"inner\"\nversion=\"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(real.join("crates/inner/src/lib.rs"), "fn f() {}\n").unwrap();
+    let link = std::env::temp_dir().join(format!("vix-r2a-{}-subproject-link", std::process::id()));
+    let _ = std::fs::remove_file(&link);
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let mut a = app_in(&link);
+    a.open_path(&link.join("crates/inner/src/lib.rs"), false);
+    a.run_action("project.subproject.find_file");
+    assert!(a.palette.is_some(), "status: {}", a.status);
+    assert_eq!(a.palette_file_scope.as_deref(), Some("crates/inner"));
+    a.palette = None;
+    a.prompt = None;
+    a.run_action("project.subproject.compile");
+    if let Some(pending) = a.pending_project_command.as_ref() {
+        assert_eq!(
+            pending.dir.as_deref(),
+            Some(link.join("crates/inner").as_path())
+        );
+    } else {
+        assert_ne!(a.status, t!("status.project_no_subproject").to_string());
+    }
+    let _ = std::fs::remove_file(&link);
+    let _ = std::fs::remove_dir_all(&real);
+}
+
 #[cfg(feature = "tasks")]
 #[test]
 fn subproject_actions_scope_to_the_nearest_nested_project() {

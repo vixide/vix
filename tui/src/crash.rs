@@ -52,6 +52,9 @@ pub fn crashes_dir() -> Option<PathBuf> {
 /// Install the panic hook that writes a report, in front of the hook already
 /// installed (ratatui's, which restores the terminal and prints the panic).
 pub fn install_hook() {
+    // Parse the active locale's messages now, not inside the hook (see
+    // [`saved_notice`]).
+    let _ = saved_notice(Path::new(""));
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let saved = crashes_dir().and_then(|dir| {
@@ -74,13 +77,26 @@ pub fn install_hook() {
         });
         previous(info);
         if let Some(path) = saved {
-            eprintln!(
-                "vix: a crash report was saved to {} (nothing was sent). \
-                 Help → Report a Crash… can open it as a GitHub issue.",
-                path.display()
-            );
+            eprintln!("{}", saved_notice(&path));
         }
     }));
+}
+
+/// The line printed after a crash, naming the saved report at `path`, in the
+/// UI language (`msg.crash_report_saved`).
+///
+/// It runs inside the panic hook, so the lookup must not block. It does not:
+/// `rust_i18n`'s current locale is an `ArcSwap` (lock-free), and each
+/// locale's table in `vix-i18n` is a `OnceLock` that only blocks while it is
+/// first being parsed. [`install_hook`] calls this once up front, so the
+/// active locale's table and the English fallback are parsed before any panic
+/// can happen; a later locale switch parses the new table on the next frame.
+/// The one blocking case left, a panic inside that very first parse on the
+/// same thread, cannot happen for a table that is already parsed, so no
+/// English fallback is kept.
+#[must_use]
+pub fn saved_notice(path: &Path) -> String {
+    t!("msg.crash_report_saved", path = path.display()).to_string()
 }
 
 /// What a panic reported.
@@ -383,6 +399,20 @@ mod tests {
         let url = issue_url("https://github.com/vixide/vix", &huge);
         assert!(url.contains("truncated"));
         assert!(url.len() < MAX_ISSUE_BODY * 3 + 1000);
+    }
+
+    /// The line printed after a crash is translated, names the report and
+    /// never comes back as the bare key (T847).
+    #[test]
+    fn the_saved_notice_is_translated_and_names_the_report() {
+        let path = Path::new("/tmp/crashes/crash-20260101T000000Z.txt");
+        let notice = saved_notice(path);
+        assert_eq!(
+            notice,
+            t!("msg.crash_report_saved", path = path.display()).to_string()
+        );
+        assert!(notice.contains("crash-20260101T000000Z.txt"), "{notice}");
+        assert!(!notice.contains("msg.crash_report_saved"), "{notice}");
     }
 
     #[test]

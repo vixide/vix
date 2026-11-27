@@ -1430,11 +1430,15 @@ impl App {
             KeyCode::Esc => self.vim_cmd = None,
             KeyCode::Enter => {
                 let cmd = self.vim_cmd.take().unwrap_or_default();
+                // Vim ignores leading blanks and colons; trailing blanks
+                // can be part of the command (an unterminated `:s`
+                // replacement), so each command trims its own end (T847).
+                let cmd = cmd.trim_start_matches([' ', '\t', ':']);
                 // Helix shares this command line, with its own long names.
                 if self.active_keymap() == Keymap::Helix {
-                    self.run_helix_command(cmd.trim());
+                    self.run_helix_command(cmd);
                 } else {
-                    self.run_vim_command(cmd.trim());
+                    self.run_vim_command(cmd);
                 }
             }
             KeyCode::Backspace => {
@@ -1460,6 +1464,8 @@ impl App {
         if self.try_ex_substitute(cmd) {
             return;
         }
+        // Every other command ignores trailing blanks (`:w `, `:q `).
+        let cmd = cmd.trim_end();
         // Quickfix (T841): the task problems are Vim's quickfix list.
         if ex_abbrev(cmd, "cn", "cnext") {
             self.run_action("go.next_error");
@@ -2144,6 +2150,35 @@ mod tests {
         });
         app.run_vim_command("e opened.txt");
         assert_eq!(content(&mut app), "contents\n");
+    }
+
+    /// Type `:` + `line` + Enter into the Vi command line.
+    fn type_ex(app: &mut App, line: &str) {
+        app.on_key(key(':'));
+        for c in line.chars() {
+            app.on_key(key(c));
+        }
+        app.on_key(code(KeyCode::Enter));
+    }
+
+    /// Trailing blanks reach the Ex command (an unterminated `:s`
+    /// replacement keeps them, as in Vim); leading blanks and colons are
+    /// ignored, and a plain command with a trailing blank still runs (T847).
+    #[test]
+    fn the_command_line_keeps_trailing_blanks_and_ignores_leading_ones() {
+        let mut app = with_keymap("km-ex-blanks", "vi");
+        app.modal_mode = vix_modal::Mode::Normal;
+        buffer_with(&mut app, "abc\nd\ne\n", 0);
+        type_ex(&mut app, "s/b/X  ");
+        assert_eq!(content(&mut app), "aX  c\nd\ne\n");
+        type_ex(&mut app, " ::s/X/Y");
+        assert_eq!(content(&mut app), "aY  c\nd\ne\n");
+        type_ex(&mut app, "3 ");
+        assert_eq!(app.editor.cursor_line(), 2, "`:3 ` still goes to line 3");
+        type_ex(&mut app, "Ex ");
+        assert_eq!(app.focus, Focus::Explorer);
+        type_ex(&mut app, "qa! ");
+        assert!(app.flags.contains(AppFlags::SHOULD_QUIT));
     }
 
     #[test]

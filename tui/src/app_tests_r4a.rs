@@ -482,6 +482,24 @@ fn applying_settings_with_an_unknown_keymap_falls_back_with_an_error() {
     assert_eq!(error_count(&a), before + 1);
 }
 
+/// A changed `large_file_mb` (and `read_only_paths`) reaches the editor at
+/// once, without a restart (T847).
+#[test]
+fn applying_settings_updates_the_editor_size_limit_and_read_only_paths() {
+    let mut a = app_at(&temp("r4-sess-large-limit"));
+    let old = a.settings.clone();
+    let mut new = old.clone();
+    new.editor_behavior.large_file_mb = 3;
+    new.editor_behavior.read_only_paths = vec!["**/*.lock".to_string()];
+    a.apply_settings(&old, new);
+    assert_eq!(a.editor.max_text_bytes, 3 * 1024 * 1024);
+    assert!(
+        a.editor
+            .read_only_paths
+            .matches(std::path::Path::new("/w/Cargo.lock"))
+    );
+}
+
 /// Editing helpers do nothing, and say nothing, when no tab is open.
 #[test]
 fn editing_helpers_without_a_tab_leave_everything_alone() {

@@ -11,7 +11,10 @@ automatically: Vix's "no telemetry, no phone-home" promise
   `ratatui::init`) runs before the terminal-restoring hook. It writes
   `crash-<UTC timestamp>.txt` to `<data dir>/crashes/` (for example
   `~/.local/share/vix/crashes/`) and keeps the newest ten. After the terminal
-  is restored it prints where the report is.
+  is restored it prints where the report is, translated
+  (`msg.crash_report_saved`). The lookup takes no lock that a panic could
+  hold: the locale is lock-free and the hook warms the active locale's table
+  when it is installed (see `vix::crash::saved_notice`).
 - **What a report holds.** The Vix version; the operating system and
   architecture; the panic message, at most 500 characters, with text between
   backquotes and double-quoted text over 40 characters replaced by
