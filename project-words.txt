@@ -947,3 +947,6 @@ mtimes
 
 # T831 (scripts/flaky-hunt: -l cpus)
 cpus
+
+# T860 (CommonMark's underlined heading form)
+setext

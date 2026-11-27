@@ -59,6 +59,7 @@ use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 
+mod markdown;
 pub mod tools;
 pub mod workspace;
 

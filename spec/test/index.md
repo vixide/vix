@@ -367,11 +367,12 @@ updated, which is the moment to place the crate in the crate map.
 
 ### Crate layering rules (T833)
 
-`tui/tests/crate_layering.rs` enforces the four layering rules of
+`tui/tests/crate_layering.rs` enforces the five layering rules of
 [`docs/architecture`](../../docs/architecture/index.md#layering-rules): nothing
 depends on `vix-tui`, only `vix-input` and `vix-tui` depend on `crossterm`,
 no `*-core`/`*-model` crate reaches a `*-panel`/`*-picker`/`*-preview`/`*-view`
-crate, and no GUI under `gui/` names another. It reads `cargo metadata` (through
+crate, no GUI under `gui/` names another, and `vix-mcp-server` reaches no
+such UI-surface crate (T860). It reads `cargo metadata` (through
 `tui/tests/support/crate_graph.rs`, shared with `docs_crate_graph.rs`) and the
 GUI manifests, and each failure names the edge (`from -> to`, and for rule 3
 the whole chain). A unit test feeds each rule a small broken graph so the
