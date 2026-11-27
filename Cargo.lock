@@ -6352,6 +6352,7 @@ dependencies = [
 name = "vix-editorconfig"
 version = "3.0.0"
 dependencies = [
+ "proptest",
  "regex",
  "vix-authority",
 ]

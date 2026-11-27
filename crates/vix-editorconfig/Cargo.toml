@@ -11,5 +11,8 @@ description = "Minimal EditorConfig and modeline support: resolve the indent set
 regex = { workspace = true }
 vix-authority = { workspace = true }
 
+[dev-dependencies]
+proptest = { workspace = true }
+
 [lints]
 workspace = true

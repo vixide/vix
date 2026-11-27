@@ -468,6 +468,20 @@ after undoing a few steps still undoes to the original, and squashing the states
 after any point skips exactly the folded intermediate states — every other
 undo and redo step lands on the same text as without the squash.
 
+Buffer property tests (`crates/vix-editor-core/tests/buffer_props.rs`, T831)
+check `Code` against a naive `String` model over text with one- to
+four-byte characters and `\n` line breaks: inserts and removes land where
+the model says (with the same character, byte and line counts); `char_to_byte`,
+`byte_to_char`, `char_to_line`, `byte_to_line`, `line_to_char`, `line_len`,
+`point` and `offset` agree with counting by hand and round-trip; character
+and byte slices return the model's text; inserting text and removing it again
+(or removing a range and inserting what it held) restores the buffer; the edit
+log replayed with `apply_remote` on the original text rebuilds the edited
+text; outside the range `changed_since` reports, the text is the old prefix
+and suffix; and `Editor::edit_selections` with non-overlapping edits gives the
+same text whatever order the edits are given in (carets that land on the same
+spot merge), and one undo restores the original.
+
 ## End-of-line virtual text (T614)
 
 The widget can draw **virtual text** after a line's content: text that is shown
