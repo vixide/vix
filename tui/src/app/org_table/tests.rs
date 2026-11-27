@@ -271,6 +271,24 @@ fn copy_down_and_sum_report_and_fill() {
     assert_eq!(app.status, t!("status.org_table_no_table").to_string());
 }
 
+/// T856: `S-RET` / `org.table.copy_down` on a numeric field copies it into
+/// the next row incremented, as Emacs's `org-table-copy-down` does with
+/// `org-table-copy-increment` on (its default).
+#[test]
+fn copy_down_increments_a_numeric_field() {
+    let mut app = table_app("copy-inc-action");
+    at_field(&mut app, 2, 1);
+    app.org_table_action("org.table.copy_down");
+    assert_eq!(text(&app).split('\n').nth(3).unwrap(), "| b    |   4 |");
+    assert_eq!(line(&app), 3);
+
+    let mut app = table_app("copy-inc-key");
+    at_field(&mut app, 3, 1);
+    assert!(app.org_table_key(key(KeyCode::Enter, SHIFT)));
+    assert_eq!(text(&app).split('\n').nth(4).unwrap(), "|      |  13 |");
+    assert_eq!(line(&app), 4);
+}
+
 #[test]
 fn table_actions_outside_a_table_report_it() {
     let mut app = app_with("act-outside", "just text\n", true);

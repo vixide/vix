@@ -1114,8 +1114,9 @@ impl App {
     }
 
     /// Start capturing with the `org_capture_templates` entry whose `key`
-    /// matches (the fixed **Capture → Anything…/Todo…/Contact…** menu items
-    /// resolve to the built-in `"a"`/`"t"`/`"c"` templates this way). Reports
+    /// matches (the fixed **Capture → Anything…/Task…/Babel…/Note…/Contact…**
+    /// menu items resolve to the built-in `"a"`/`"t"`/`"b"`/`"n"`/`"c"`
+    /// templates this way). Reports
     /// a status message instead if no such template is configured.
     pub(super) fn start_capture_by_key(&mut self, key: &str) {
         let Some(template) = self

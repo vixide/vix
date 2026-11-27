@@ -7,6 +7,12 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | Action ID | Title | Source |
 | --- | --- | --- |
 | `add_tab` | New Tab | Catalog |
+| `ai.agent_plan` | Agent Plan | Menu |
+| `ai.agent_plan_dock` | Toggle Agent Plan Pane | Menu |
+| `ai.agent_prompt` | Prompt Agent… | Menu |
+| `ai.agent_resume` | Resume Agent | Menu |
+| `ai.agent_start` | Start Agent | Menu |
+| `ai.agent_stop` | Stop Agent | Menu |
 | `ai.annotate` | Annotate | Menu |
 | `ai.chat` | Chat… | Menu |
 | `ai.define` | Define | Menu |
@@ -84,6 +90,12 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `delete_word_left` | Delete Word Left | Catalog |
 | `delete_word_right` | Delete Word Right | Catalog |
 | `deselect` | Deselect | Catalog |
+| `diff.close` | Close Comparison | Menu |
+| `diff.copy_to_left` | Copy Change to Left | Menu |
+| `diff.copy_to_right` | Copy Change to Right | Menu |
+| `diff.next` | Next Difference | Menu |
+| `diff.prev` | Previous Difference | Menu |
+| `diff.unified` | Show as Unified Diff | Menu |
 | `diff_next` | Next Diff | Catalog |
 | `diff_previous` | Previous Diff | Catalog |
 | `duplicate` | Duplicate Selection | Catalog |
@@ -164,6 +176,13 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.squeeze_blank_lines` | Squeeze Blank Lines | Menu |
 | `edit.structural_replace` | Structural Replace… | Menu |
 | `edit.structural_replace_workspace` | Structural Replace in Workspace… | Menu |
+| `edit.surround.angle` | < Angles > | Menu |
+| `edit.surround.backtick` | ` Backticks ` | Menu |
+| `edit.surround.brace` | { Braces } | Menu |
+| `edit.surround.bracket` | [ Brackets ] | Menu |
+| `edit.surround.double_quote` | " Double Quotes " | Menu |
+| `edit.surround.paren` | ( Parentheses ) | Menu |
+| `edit.surround.single_quote` | ' Single Quotes ' | Menu |
 | `edit.toggle_comment` | Comment | Menu |
 | `edit.toggle_value` | Toggle Value | Menu |
 | `edit.transpose_chars` | Characters | Menu |
@@ -319,21 +338,26 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `help.whats_new` | What's New… | Menu |
 | `hsplit` | Split Horizontally | Catalog |
 | `im.clear_history` | Clear History | Menu |
+| `im.comment_line` | Comment on Line… | Menu |
 | `im.connect` | Connect… | Menu |
 | `im.direct` | Direct Message… | Menu |
 | `im.disconnect` | Disconnect | Menu |
 | `im.join` | Join Room… | Menu |
 | `im.leave` | Leave Room | Menu |
+| `im.next_thread` | Next Thread | Menu |
 | `im.next_unread` | Next Unread | Menu |
 | `im.notify_all` | All Messages | Menu |
 | `im.notify_mentions` | Mentions Only | Menu |
 | `im.notify_off` | Off | Menu |
 | `im.panel` | Chat Panel | Menu |
+| `im.prev_thread` | Previous Thread | Menu |
+| `im.resolve_thread` | Resolve or Reopen Thread | Menu |
 | `im.share_location` | Share Location | Menu |
 | `im.share_selection` | Share Selection | Menu |
 | `im.status_available` | Available | Menu |
 | `im.status_away` | Away | Menu |
 | `im.status_busy` | Busy | Menu |
+| `im.threads` | Threads… | Menu |
 | `indent_line` | Indent Line | Catalog |
 | `indent_selection` | Indent Selection | Catalog |
 | `inline_completion.accept` | Accept Inline Suggestion | Catalog |
@@ -502,6 +526,12 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `org.agenda.unlock` | Remove Restriction Lock | Menu |
 | `org.archive.subtree` | Archive Subtree to File | Menu |
 | `org.archive.tag` | Toggle ARCHIVE Tag | Menu |
+| `org.block.center` | Center | Menu |
+| `org.block.comment` | Comment | Menu |
+| `org.block.example` | Example | Menu |
+| `org.block.quote` | Quote | Menu |
+| `org.block.src` | Source | Menu |
+| `org.block.verse` | Verse | Menu |
 | `org.capture` | Anything… | Menu |
 | `org.capture.babel` | Babel… | Menu |
 | `org.capture.contact` | Contact… | Menu |
@@ -528,6 +558,12 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `org.deadline` | Deadline… | Menu |
 | `org.demote` | Demote | Menu |
 | `org.edit_src` | Edit Source Block | Menu |
+| `org.emphasis.bold` | Bold | Menu |
+| `org.emphasis.code` | Code | Menu |
+| `org.emphasis.italic` | Italic | Menu |
+| `org.emphasis.strike` | Strikethrough | Menu |
+| `org.emphasis.underline` | Underline | Menu |
+| `org.emphasis.verbatim` | Verbatim | Menu |
 | `org.export_html` | HTML | Menu |
 | `org.export_ics` | iCalendar | Menu |
 | `org.export_latex` | LaTeX | Menu |
@@ -763,6 +799,21 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `tools.convert.yaml.json` | JSON | Menu |
 | `tools.dashboard` | Workspace… | Menu |
 | `tools.diff` | Compare With File… | Menu |
+| `tools.draw.arrow_down` | Arrow Down | Menu |
+| `tools.draw.arrow_left` | Arrow Left | Menu |
+| `tools.draw.arrow_right` | Arrow Right | Menu |
+| `tools.draw.arrow_up` | Arrow Up | Menu |
+| `tools.draw.color_box` | Colored Box | Menu |
+| `tools.draw.dashed_h` | Horizontal Dashed Line | Menu |
+| `tools.draw.dashed_v` | Vertical Dashed Line | Menu |
+| `tools.draw.document` | Document | Menu |
+| `tools.draw.flow` | Two-Box Flow | Menu |
+| `tools.draw.line_h` | Horizontal Line | Menu |
+| `tools.draw.line_v` | Vertical Line | Menu |
+| `tools.draw.point` | Point | Menu |
+| `tools.draw.rectangle` | Rectangle | Menu |
+| `tools.draw.rounded` | Rounded Rectangle | Menu |
+| `tools.draw.storage` | Storage | Menu |
 | `tools.edit_bytes` | Bytes… | Menu |
 | `tools.edit_json` | JSON… | Menu |
 | `tools.edit_outline` | Outline… | Menu |
@@ -782,6 +833,78 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `tools.http_fhir_bundle` | FHIR Bundle… | Menu |
 | `tools.http_fhir_request` | FHIR Request… | Menu |
 | `tools.http_send` | Send HTTP Request | Menu |
+| `tools.insert.block.center` | Center | Menu |
+| `tools.insert.block.comment` | Comment | Menu |
+| `tools.insert.block.quote` | Quote | Menu |
+| `tools.insert.block.verse` | Verse | Menu |
+| `tools.insert.datetime.epoch` | Epoch | Menu |
+| `tools.insert.datetime.iso8601` | ISO 8601 | Menu |
+| `tools.insert.datetime.rfc3339` | RFC 3339 | Menu |
+| `tools.insert.html.headline1` | Headline 1 | Menu |
+| `tools.insert.html.headline2` | Headline 2 | Menu |
+| `tools.insert.html.headline3` | Headline 3 | Menu |
+| `tools.insert.html.link` | Link | Menu |
+| `tools.insert.html.list` | List | Menu |
+| `tools.insert.html.table` | Table | Menu |
+| `tools.insert.latex.bold` | Bold | Menu |
+| `tools.insert.latex.center` | Center | Menu |
+| `tools.insert.latex.deadline` | Deadline | Menu |
+| `tools.insert.latex.drawer` | Drawer | Menu |
+| `tools.insert.latex.headline` | Headline | Menu |
+| `tools.insert.latex.italic` | Italic | Menu |
+| `tools.insert.latex.link` | Link | Menu |
+| `tools.insert.latex.quote` | Quote | Menu |
+| `tools.insert.latex.scheduled` | Scheduled | Menu |
+| `tools.insert.latex.subheadline` | Subheadline | Menu |
+| `tools.insert.latex.table` | Table | Menu |
+| `tools.insert.latex.time_range` | Time Range | Menu |
+| `tools.insert.latex.timestamp` | Timestamp | Menu |
+| `tools.insert.latex.timestamp_repeater` | Timestamp Repeater | Menu |
+| `tools.insert.latex.underline` | Underline | Menu |
+| `tools.insert.latex.verse` | Verse | Menu |
+| `tools.insert.lorem.paragraph` | Paragraph | Menu |
+| `tools.insert.lorem.sentence` | Sentence | Menu |
+| `tools.insert.lorem.words` | Words | Menu |
+| `tools.insert.markdown.headline1` | Headline 1 | Menu |
+| `tools.insert.markdown.headline2` | Headline 2 | Menu |
+| `tools.insert.markdown.headline3` | Headline 3 | Menu |
+| `tools.insert.markdown.link` | Link | Menu |
+| `tools.insert.markdown.list` | List | Menu |
+| `tools.insert.markdown.table` | Table | Menu |
+| `tools.insert.markdown.todos` | Todos | Menu |
+| `tools.insert.marker.bold` | Bold * | Menu |
+| `tools.insert.marker.code` | Code ~ | Menu |
+| `tools.insert.marker.italic` | Italic / | Menu |
+| `tools.insert.marker.strikethrough` | Strikethrough + | Menu |
+| `tools.insert.marker.tag` | Tag : | Menu |
+| `tools.insert.marker.underline` | Underline _ | Menu |
+| `tools.insert.marker.verbatim` | Verbatim = | Menu |
+| `tools.insert.org.author` | Author | Menu |
+| `tools.insert.org.check_list` | Check List | Menu |
+| `tools.insert.org.deadline` | Deadline | Menu |
+| `tools.insert.org.done` | DONE | Menu |
+| `tools.insert.org.drawer` | Drawer | Menu |
+| `tools.insert.org.headline` | Headline | Menu |
+| `tools.insert.org.image` | Image | Menu |
+| `tools.insert.org.link` | Link | Menu |
+| `tools.insert.org.list` | List | Menu |
+| `tools.insert.org.ordered_list` | Ordered List | Menu |
+| `tools.insert.org.properties` | Properties | Menu |
+| `tools.insert.org.scheduled` | Scheduled | Menu |
+| `tools.insert.org.subheadline` | Subheadline | Menu |
+| `tools.insert.org.table` | Table | Menu |
+| `tools.insert.org.time_range` | Time Range | Menu |
+| `tools.insert.org.timestamp` | Timestamp | Menu |
+| `tools.insert.org.timestamp_repeater` | Timestamp Repeater | Menu |
+| `tools.insert.org.title` | Title | Menu |
+| `tools.insert.org.todo` | TODO | Menu |
+| `tools.insert.sql.alter_role` | Alter Role | Menu |
+| `tools.insert.sql.create_extension` | Create Extension | Menu |
+| `tools.insert.sql.create_function` | Create Function | Menu |
+| `tools.insert.sql.create_table` | Create Table | Menu |
+| `tools.insert.sql.create_user` | Create User | Menu |
+| `tools.insert.sql.grant_create` | Grant Create | Menu |
+| `tools.insert.sql.grant_usage` | Grant Usage | Menu |
 | `tools.insert.uuid.v1` | 1 = Unsortable Time Count MAC | Menu |
 | `tools.insert.uuid.v2` | 2 = DCE Security | Menu |
 | `tools.insert.uuid.v3` | 3 = MD5 Name | Menu |
@@ -882,4 +1005,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**875 actions.**
+**998 actions.**

@@ -51,7 +51,7 @@ AI settings live in `config.toml`: `~/.config/vix/config.toml` on Linux,
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `ai` | `"on"` | Master switch. Any value other than `"on"` counts as off. |
-| `ai_provider` | `"cli"` | `"cli"` runs `ai_command`. `"anthropic"` or `"openai"` call that HTTP API directly. An unknown value falls back to `"cli"`. |
+| `ai_provider` | `"cli"` | `"cli"` runs `ai_command`. `"anthropic"`, `"openai"` or `"ollama"` call that HTTP API directly. An unknown value falls back to `"cli"`. |
 | `ai_command` | `"claude -p {prompt}"` | The command the `cli` provider runs. |
 | `ai_endpoint` | `""` | Overrides the HTTP provider's endpoint URL. Empty uses the default. |
 | `ai_model` | `""` | Overrides the HTTP provider's model id. Empty uses the default. |
@@ -76,7 +76,7 @@ stdin. If the template contains `{file}`, that is replaced with the path of a
 temporary file holding the text instead. Vix quotes both placeholders itself,
 so do **not** put quotes around them.
 
-### An HTTP API: Anthropic or OpenAI
+### An HTTP API: Anthropic, OpenAI or Ollama
 
 To call a provider's API directly, set the provider and, ideally, the model:
 
@@ -89,12 +89,22 @@ ai_model = "claude-sonnet-5"
 | --- | --- | --- |
 | `anthropic` | `https://api.anthropic.com/v1/messages` | `claude-sonnet-5` |
 | `openai` | `https://api.openai.com/v1/chat/completions` | `gpt-4o-mini` |
+| `ollama` | `http://localhost:11434/api/generate` | `llama3.2` |
 
-Requests go over HTTPS to that endpoint, with your key in a header.
+<!-- Facts: crates/vix-ai-core/src/lib.rs (Provider::parse, default_endpoint,
+default_model, requires_api_key); crates/vix-ai-core/src/ollama.rs (headers);
+tui/src/app/ai.rs (the msg.ai_no_api_key check). -->
+
+Requests to `anthropic` and `openai` go over HTTPS to that endpoint, with
+your key in a header. The `ollama` provider talks to an Ollama server's
+`/api/generate` endpoint, by default on your own machine over plain HTTP. It
+needs no key: when one is found (next step) it is sent as a bearer token, for
+an Ollama server behind authentication.
 
 ### A local model endpoint
 
-The `openai` provider works with anything that speaks the OpenAI Chat
+For an Ollama server, `ai_provider = "ollama"` is all it takes; set
+`ai_model` to a model the server has. The `openai` provider works with anything that speaks the OpenAI Chat
 Completions API, including a model server on your own machine. Point
 `ai_endpoint` at its full chat-completions URL:
 
@@ -113,7 +123,7 @@ stays on your machine.
 ## Step 2: Give Vix the API key without writing it down
 
 Never paste an API key into `config.toml`. Vix looks for the key in two
-places, in order, and needs no key at all for the `cli` provider:
+places, in order, and needs no key at all for the `cli` and `ollama` providers:
 
 1. **`ai_api_key_command`.** Its standard output is the key. It runs through
    `sh -c`, so a password manager works:
@@ -123,7 +133,7 @@ places, in order, and needs no key at all for the `cli` provider:
    ```
 
 2. **The OS keyring**, service `vix-ai`, account set to the provider name
-   (`anthropic` or `openai`). Store the key once, from your shell:
+   (`anthropic`, `openai` or `ollama`). Store the key once, from your shell:
 
    ```sh
    # macOS (login Keychain); -w with no value asks for the key
@@ -136,7 +146,8 @@ places, in order, and needs no key at all for the `cli` provider:
    On Windows, Vix reads Windows Credential Manager; using
    `ai_api_key_command` there is the simplest route.
 
-Vix never prompts for a key. If neither place has one, the request fails with
+Vix never prompts for a key. If neither place has one, an `anthropic` or `openai`
+request fails with
 *"No API key for anthropic (set ai_api_key_command, or store one in the OS
 keyring)"* in the message drawer.
 

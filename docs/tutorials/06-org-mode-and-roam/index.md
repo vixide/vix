@@ -230,7 +230,7 @@ by default, each its own menu item:
 | Task… | `t` | Multiline review buffer pre-filled `* TODO `. |
 | Note… | `n` | Prompt for note text, insert `* <note>` plus a `%U` timestamp. |
 | Babel… | `b` | Prompt for a language, open a `#+begin_src <language>` / `#+end_src` block for review. |
-| Contact… | `c` | Prompt for Name/Email/Phone/Address/Birthday, insert an org-contacts entry. |
+| Contact… | `c` | Prompt for Name/Email/Phone/Address/Birthday/Nickname/Note, insert an org-contacts entry. |
 
 Try **Org → Capture → Anything…** (`org.capture`) with the cursor anywhere
 in `meeting-2026-09-01.org`'s **Action items** subtree — it inserts a new
