@@ -250,3 +250,135 @@ fn recovering_a_file_whose_backup_or_tab_vanished_does_nothing() {
     app.show_backup_diff(&dir.join("no.txt"), "missing");
     assert!(app.diff_view.is_none());
 }
+
+/// Text over the 4 MiB line where backups move to the worker (T859), with
+/// characters JSON must escape.
+fn large_text(tag: &str) -> String {
+    let mut text = format!("{tag}\n");
+    while text.len() <= super::LARGE_BYTES {
+        text.push_str("let s = \"quoted\\path\";\t// \u{1} é 日本\n");
+    }
+    text
+}
+
+/// The bytes of the one backup in `dir`'s store.
+fn backup_bytes(dir: &Path) -> Vec<u8> {
+    let entries: Vec<PathBuf> = std::fs::read_dir(dir.join("backup"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    assert_eq!(entries.len(), 1, "one backup: {entries:?}");
+    std::fs::read(&entries[0]).unwrap()
+}
+
+#[test]
+fn the_worker_writes_a_large_buffer_byte_for_byte_like_the_old_path() {
+    let dir = temp("he-worker-bytes");
+    let mut app = app_in(&dir);
+    let text = large_text("bytes");
+    dirty_untitled(&mut app, &text);
+    app.hot_exit.make_pass_due();
+    app.poll_hot_exit();
+    assert!(
+        app.hot_exit.worker.is_some(),
+        "a large buffer goes to the worker"
+    );
+    app.settle_backups();
+    let streamed = backup_bytes(&dir);
+
+    // The old path: the whole text copied, then serialized and written.
+    let id = app
+        .editor
+        .active_tab()
+        .unwrap()
+        .backup
+        .session_id
+        .clone()
+        .unwrap();
+    let workspace = app.session_key();
+    let key = vix_undo_store::hot_exit::BackupKey::Untitled {
+        workspace: &workspace,
+        id: &id,
+    };
+    let old = vix_undo_store::hot_exit::BackupStore::at(dir.join("old"));
+    old.write(key, &text).unwrap();
+    assert_eq!(streamed, std::fs::read(old.path_of(key)).unwrap());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let path = app.backup_store().unwrap().path_of(key);
+        let mode = std::fs::metadata(path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "a backup stays owner-only");
+    }
+}
+
+#[test]
+fn a_newer_snapshot_supersedes_one_in_flight_and_a_removal_waits_for_it() {
+    let dir = temp("he-worker-supersede");
+    let file = dir.join("big.txt");
+    std::fs::write(&file, "disk\n").unwrap();
+    let mut app = app_in(&dir);
+    app.open_initial(&file);
+    let first = large_text("first");
+    {
+        let tab = app.editor.active_tab_mut().unwrap();
+        tab.editor.set_content(&first);
+        tab.dirty = true;
+    }
+    app.flush_hot_exit();
+    assert!(app.hot_exit.in_flight.is_empty(), "the quit flush waited");
+    // Two snapshots queued back to back: the first is cancelled, and the
+    // backup on disk is the second, whichever order the worker got to them.
+    let second = large_text("second");
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_content(&first);
+    app.backup_dirty_tabs(true);
+    let (_, older) = app.hot_exit.in_flight.values().next().unwrap().clone();
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_content(&second);
+    app.backup_dirty_tabs(true);
+    assert!(
+        older.load(std::sync::atomic::Ordering::Relaxed),
+        "superseded"
+    );
+    app.settle_backups();
+    let store = app.backup_store().unwrap();
+    let identity = app.backup_identity(&file);
+    let key = vix_undo_store::hot_exit::BackupKey::File(&identity);
+    assert_eq!(store.read(key).unwrap().text, second);
+
+    // A save while a write is in flight: the write cannot bring the
+    // backup back after the save deleted it.
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_content(&first);
+    app.backup_dirty_tabs(true);
+    assert!(!app.hot_exit.in_flight.is_empty());
+    app.drop_active_backup(None);
+    app.settle_backups();
+    assert_eq!(backups(&dir), 0, "the removal ran after the write");
+}
+
+#[test]
+fn quit_waits_for_the_worker_to_write_a_large_buffer() {
+    let dir = temp("he-worker-quit");
+    let mut app = app_in(&dir);
+    let text = large_text("quit");
+    dirty_untitled(&mut app, &text);
+    app.flush_hot_exit();
+    assert!(app.hot_exit.worker.is_some());
+    assert!(app.hot_exit.in_flight.is_empty());
+    drop(app);
+    let mut app = app_in(&dir);
+    app.offer_untitled_recovery();
+    app.hot_exit_confirm_key(key('r'));
+    assert_eq!(self::text(&app), text);
+}

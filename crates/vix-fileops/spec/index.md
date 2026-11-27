@@ -216,6 +216,14 @@ symlink rather than following it into some other file:
   `vix-macros`' `macros.toml` (a recorded macro can carry literally-typed
   text). An existing file's mode is still left alone, exactly like
   `write_atomic`.
+- `write_atomic_private_with(path, fill)` — `write_atomic_private` for
+  data too large to hold in one buffer (T859): `fill` writes the bytes, in
+  any number of pieces, into a 64 KiB buffered writer on the temp file. Same
+  `O_EXCL` temp, `0600` for a new file and atomic rename; the in-place
+  fallback calls `fill` again. An error from `fill` aborts the write: the
+  temp is removed, the target untouched, and that error returned without
+  trying the fallback, which is how `vix-undo-store` cancels a superseded
+  hot-exit backup.
 - `restrict_to_owner(path)` — best-effort, narrow an *already-written*
   file to owner-only on Unix. For persisted files written through
   [confy](https://docs.rs/confy) rather than this crate (`config.toml`,

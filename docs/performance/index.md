@@ -991,10 +991,55 @@ None of the keys after T858 makes a whole-buffer pass
 (`tui/tests/integration/big_buffer.rs`,
 `a_keystroke_and_its_frame_make_no_whole_buffer_pass` and
 `typing_in_a_large_file_costs_no_memory_per_key`). What is left is periodic,
-not per key: hot exit copies a changed buffer over 4 MiB into its backup at
-most once a minute (about 80 ms and 70 MiB at 64 MiB, specified in
-`crates/vix-undo-store/spec/hot-exit/index.md`), and narrowing the widest
-line itself still remeasures the buffer once typing pauses for 250 ms.
+not per key: hot exit copied a changed buffer over 4 MiB into its backup at
+most once a minute (moved off the UI thread by T859, next section), and
+narrowing the widest line itself still remeasures the buffer once typing
+pauses for 250 ms.
+
+## Hot exit and Tree-sitter after T858 (T859, measured 2026-11-27)
+
+**Hot exit.** The idle pass backed up a changed buffer over 4 MiB on the UI
+thread, at most once a minute: it copied the text (`Tab::text`), serialized
+it into a second string and wrote that. `tui/examples/hot_exit_cost.rs`
+opens a generated `.txt` file, types one key and times the
+`App::poll_hot_exit` call that backs it up, then waits for the backup file
+(`bench` profile, three runs each at 64 MiB):
+
+| | UI thread paused | Resident memory during the pass | Backup on disk after |
+| - | ---------------- | ------------------------------- | -------------------- |
+| Before T859, 64 MiB | 120, 154, 212 ms | +67 MiB | the same |
+| After T859, 64 MiB | 0.05 to 0.44 ms | +0.2 MiB | 115 to 126 ms |
+| After T859, 8 MiB | 0.10 ms | +0.2 MiB | 25 ms |
+
+Now the pass clones the rope (shared chunks, O(1)) and a `vix-hot-exit`
+worker thread streams the JSON from the chunks into the atomic, owner-only
+temp file (`BackupStore::write_chunks`,
+`vix_fileops::write_atomic_private_with`), so no whole copy is made on
+either thread. Rules for ordering, superseding and quit are in
+`crates/vix-undo-store/spec/hot-exit/index.md`.
+
+**Memory per key with Tree-sitter.** T858 saw a `.rs` file at 64 MiB grow
+about 0.15 MiB per key. Re-measured on main with `keystroke_cost` (20
+keys): at 64 MiB +0.9 MiB in all, flat, and at 8 MiB (the generator writes
+slightly over `SYNTAX_MAX_BYTES`, so Tree-sitter is off) +0.5 MiB: since
+T830 slice 5 turned Tree-sitter off above 8 MiB, nothing grows there. Just
+under the limit, at 7 MiB of Rust, it still grew, and without bound:
+
+| `keystroke_cost 7 400 rs` | after 40 keys | 200 keys | 360 keys |
+| ------------------------- | ------------- | -------- | -------- |
+| Before T859 | +2.1 MiB | +30.7 MiB | +48.0 MiB |
+| After T859 | +1.0 MiB | +1.2 MiB | +1.9 MiB |
+
+(`.txt` at 7 MiB, for comparison: +1.1 MiB after 400 keys.) The cause was
+not old trees, the highlight cache or undo: each key cancels the background
+reparse in flight (`vix-editor-core`'s `parse_worker_loop`), and
+Tree-sitter keeps a cancelled parse's state in the parser so that the next
+call *resumes* it. The next call was a newer snapshot, so the worker went
+on growing one half-finished parse across every superseded key, and the
+tree it finally produced could hold the old text's nodes (the new test
+`a_cancelled_parse_does_not_leak_into_the_next_request` got the previous
+document's functions back for a one-line `struct`). The worker now resets
+its parser after a cancelled parse.
 
 ## Quick Open in a large checkout (T845, measured 2026-11-27)
 
