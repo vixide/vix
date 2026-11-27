@@ -76,8 +76,12 @@ the same dialog, and the OC menu.
   `DirEntry` (path, own kind *not* following a link, `is_dir` *following*
   one) are owned values, so a remote authority can build them from a `stat`
   reply. `FileKind` is `File`/`Dir`/`Symlink`/`Other`.
-- `WalkOptions` (depth, hidden, ignore files, pruned directory names, limit);
-  `WalkOptions::file_index(limit)` is the fuzzy file finder's walk.
+- `WalkOptions` (depth, hidden, ignore files, pruned directory names, limit,
+  an optional `WalkCancel`); `WalkOptions::file_index(limit)` is the fuzzy
+  file finder's walk, and `with_cancel` attaches a `WalkCancel`, a shared flag
+  the local walk checks before each entry so a superseded background index
+  stops early, keeping what it found (T845). The flag is not sent over the
+  agent protocol: a remote walk runs to its end.
 - `ProcessSpec` describes a process as data (program, arguments, working
   directory, environment sets and removals; `raw_arg` for Windows `cmd /C`
   scripts). `Authority::command(&spec)` turns it into a `std::process::Command`

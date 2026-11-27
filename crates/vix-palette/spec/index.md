@@ -88,6 +88,58 @@ Code: `Preview`, `preview_from_bytes`, `preview_from_lines`, `QueryHistory`,
 `App::remember_palette` in `tui/src/app/command_palette.rs`; rendering in
 `tui/src/ui/search.rs`.
 
+## File index (T845)
+
+The file finder (no prefix) matches against the App's project file index,
+walked through the current `Authority` (`walk_files` with
+`WalkOptions::file_index`, so an SSH or container workspace is indexed on
+its own side): `.gitignore`, `.ignore`, git's global excludes and hidden
+files honored, `target`/`node_modules` pruned, depth 12.
+
+- **First results at once.** Opening Quick Open walks the first
+  `FILE_INDEX_FIRST_PASS` (5,000) files on the spot, the same walk the finder
+  always made, and lists them.
+- **The rest in the background.** When that pass is full, a worker thread
+  walks the whole workspace (up to `FILE_INDEX_CAP`) and posts the list on a
+  channel; `App::poll_file_index`, called from `App::tick` each loop, swaps
+  it in and re-filters an open palette with the query as typed. While it runs
+  the event loop polls at its fast (50 ms) interval.
+- **Replace, don't pile up.** Opening Quick Open again while a walk of the
+  same folders runs keeps that walk. A rebuild for other folders (a folder
+  added or removed) cancels the running walk through its `WalkCancel` and
+  starts a new one; a finished list for folders the workspace no longer has
+  is dropped. Re-rooting the workspace (opening a folder or a remote
+  workspace) cancels the walk and forgets which folders the index came from.
+  A local walk stops at its next entry; a remote walk runs to its end and its
+  answer is dropped.
+- **Refresh without losing files.** When the index already holds a finished
+  walk of the same folders that is larger than the first pass, reopening
+  keeps showing it while a background walk refreshes it (a file created since
+  is listed once the refresh lands).
+- **Safety cap.** `FILE_INDEX_CAP` is 150,000 files. Each keystroke
+  re-scores every indexed file; measured at about 0.1 ms per 1,000 files when
+  every file matches (`palette/quick_open/keystroke`,
+  `docs/performance/index.md`), so the cap keeps the worst keystroke inside
+  the 16 ms frame budget.
+- **The picker says so.** While the background walk runs, the palette's
+  bottom line reads "Indexing files… N so far" instead of the prefix hint;
+  when the walk stopped at the cap (or its worker died) it reads "File index
+  cut short at N files; open a smaller folder to find the rest"
+  (`ui.palette_indexing`, `ui.palette_index_cut_short`, every locale). Only
+  the file finder shows it, not the other modes or a Cowork guest's list.
+- **Per-keystroke cost.** Only the best 200 rows become entries: candidates
+  keep a borrowed path while scored, a partial selection picks the top 200,
+  and only those are sorted (score, then path). The path is made relative to
+  the root by a text prefix test, not `Path::strip_prefix`, and
+  `fuzzy_score` scores an ASCII haystack and query byte by byte without
+  allocating (same scores as the general path, checked against the reference
+  implementation by a property test).
+
+Code: `tui/src/app/file_index.rs` (the walk, the worker, the notice),
+`App::palette_file_entries` in `tui/src/app/command_palette.rs`, the
+bottom line in `draw_palette` (`tui/src/ui/search.rs`); benchmarks in
+`tui/benches/search_and_palette.rs` (`palette/quick_open`).
+
 ## Checked arithmetic
 
 The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Fuzzy scoring, history browsing, preview windows and path-target parsing use `get`, iterators and `checked_*`. **Declared (PALETTE-F1):** a relevance score past the top or bottom of the `i32` scale is that extreme; the highlight and history stop at their first and last entries; a preview line past the end of the buffer shows the nearest line (a bound on the display window, not a rewrite of the search result).

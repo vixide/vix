@@ -213,7 +213,53 @@ pub struct WalkOptions {
     pub prune_dirs: Vec<String>,
     /// Stop after this many files.
     pub limit: usize,
+    /// Stop early, keeping the files found so far, once this is cancelled.
+    /// The local walk checks it before each entry; a remote walk runs to
+    /// its end and the caller drops the answer (T845).
+    pub cancel: Option<WalkCancel>,
 }
+
+/// A shared flag that tells a walk in progress to stop (T845). Clones share
+/// one flag; two values are equal when they are the same flag.
+///
+/// # Examples
+/// ```
+/// use vix_authority::WalkCancel;
+/// let c = WalkCancel::new();
+/// let seen = c.clone();
+/// assert!(!seen.is_cancelled());
+/// c.cancel();
+/// assert!(seen.is_cancelled());
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct WalkCancel(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl WalkCancel {
+    /// A flag that is not cancelled yet.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Tell every walk holding this flag to stop.
+    pub fn cancel(&self) {
+        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Whether [`WalkCancel::cancel`] has been called.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+impl PartialEq for WalkCancel {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for WalkCancel {}
 
 impl WalkOptions {
     /// The fuzzy file finder's walk: depth 12, hidden files skipped, ignore
@@ -234,6 +280,22 @@ impl WalkOptions {
             honor_ignore_files: true,
             prune_dirs: vec!["target".into(), "node_modules".into()],
             limit,
+            cancel: None,
         }
+    }
+
+    /// The same walk, stopped early once `cancel` is cancelled.
+    ///
+    /// # Examples
+    /// ```
+    /// use vix_authority::{WalkCancel, WalkOptions};
+    /// let c = WalkCancel::new();
+    /// let o = WalkOptions::file_index(10).with_cancel(c.clone());
+    /// assert_eq!(o.cancel, Some(c));
+    /// ```
+    #[must_use]
+    pub fn with_cancel(mut self, cancel: WalkCancel) -> Self {
+        self.cancel = Some(cancel);
+        self
     }
 }

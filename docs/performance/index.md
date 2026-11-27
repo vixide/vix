@@ -594,6 +594,41 @@ then 100 × `l`/`h` and 100 × `w`/`b`, 25 ms apart:
 ¹ The `68760G` that moved the cursor to the middle line (19.4 ms): a
 counted `G` walks the lines it skips, once.
 
+## Quick Open in a large checkout (T845, measured 2026-11-27)
+
+`palette/quick_open` (`tui/benches/search_and_palette.rs`) builds a checkout
+of 20,000 or 100,000 empty files (`open/pkg<n>/mod<n>/item<n>.rs`, 100 to a
+directory) and drives the real `App`. `first_results` is a fresh `App`
+opening Quick Open until it lists files; `keystroke` types one character
+and deletes it (two re-filters) after a query that every file matches, so
+the whole index is scored and ranked: the worst case. Setup waits for the
+background index and checks that all `n` files are indexed
+and that the first, middle and last file are found by name.
+
+Before T845 the index stopped at 5,000 files, so most of these checkouts
+could not be found at all; the "before" keystroke is cheap only because it
+scored 5,000 files. "Old matcher" is the full index with the matching code
+as it was (an owned label, `Path::strip_prefix` and a lowercased copy of
+every path, a full sort); "after" is T845's (borrowed paths, a text prefix
+test, an allocation-free ASCII `fuzzy_score`, top 200 by partial
+selection). Measured on a heavily loaded machine (load average over 100 on
+16 cores; `palette/fuzzy/rank/20000` read 1.45–3.9 ms in these runs
+against 1.37 ms in the baseline above), so read the ratios.
+
+| Benchmark | Before (5,000-file cap) | Old matcher, full index | After |
+| --------- | ----------------------- | ----------------------- | ----- |
+| `first_results`, 20,000 files | 9.72 ms | 9.94 ms | 9.64 ms |
+| `first_results`, 100,000 files | 11.7 ms | 11.1 ms | 10.7 ms |
+| per keystroke, 20,000 files | 1.6 ms (5,000 indexed) | 9.6 ms | 2.7 ms |
+| per keystroke, 100,000 files | 1.6 ms (5,000 indexed) | 62 ms | 9.7 ms |
+
+First results cost what they did: the first pass is the old walk. Per
+keystroke the worst case is about 0.1 ms per 1,000 indexed files, so the
+safety cap `FILE_INDEX_CAP` is 150,000 files (about 15 ms, inside the
+16 ms frame budget); a more selective query is cheaper, since a path that
+cannot match is rejected before it is scored in full. See
+`crates/vix-palette/spec/index.md`, § File index.
+
 ## Reading the numbers
 
 Benchmark what the user waits for — a keystroke, a frame, a file open — not

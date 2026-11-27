@@ -211,7 +211,12 @@ pub(crate) fn walk_local(root: &Path, opts: &WalkOptions) -> Vec<PathBuf> {
         })
         .build();
     for entry in walker.flatten() {
-        if out.len() >= opts.limit {
+        if out.len() >= opts.limit
+            || opts
+                .cancel
+                .as_ref()
+                .is_some_and(crate::WalkCancel::is_cancelled)
+        {
             break;
         }
         if entry.file_type().is_some_and(|t| t.is_file()) {

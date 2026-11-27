@@ -22,6 +22,7 @@
 )]
 
 use crate::geo::Geo;
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use vix_input::{KeyCode, KeyEvent};
@@ -58,6 +59,9 @@ pub(crate) struct WorkspaceMemory {
     /// The highlighted hit.
     pub(crate) selected: usize,
 }
+
+/// How many rows the file finder lists: the best-scoring files.
+const MAX_FILE_ROWS: usize = 200;
 
 /// The last state of each picker plus which one closed last (T630).
 #[derive(Clone, Debug, Default)]
@@ -146,31 +150,6 @@ impl App {
         }
     }
 
-    /// Rebuild the project file index used by the fuzzy file finder.
-    ///
-    /// Walks the project with the `ignore` crate so the index honors `.gitignore`,
-    /// `.ignore`, git's global excludes, and hidden-file rules — the same engine
-    /// ripgrep uses — instead of a hand-rolled walk. `target`/`node_modules` are
-    /// always pruned (some projects don't ignore them), depth is bounded, and the
-    /// index is capped to keep startup and matching responsive.
-    pub(super) fn build_file_index(&mut self) {
-        // Hard cap on indexed files so startup and per-keystroke matching stay responsive in
-        // huge trees.
-        const CAP: usize = 5000;
-        let auth = crate::authority::current();
-        let mut out = Vec::new();
-        for folder in &self.workspace_folders {
-            if out.len() >= CAP {
-                break;
-            }
-            // Through the authority slot (T710); the local one walks with
-            // `ignore` exactly as before.
-            let opts = crate::authority::WalkOptions::file_index(CAP.minus(out.len()));
-            out.extend(auth.walk_files(folder, &opts));
-        }
-        self.file_index = out;
-    }
-
     /// The palette's Files-mode entries for `query`, honoring
     /// `palette_file_scope` when set (`project.subproject.find_file`).
     /// Grouped out of [`App::recompute_palette`] to keep it within the line
@@ -187,46 +166,83 @@ impl App {
     /// query scores every candidate `0` (see `fuzzy_score`'s docs), so the
     /// path tie-break alone puts the unfiltered list in alphabetical order,
     /// which is also strictly better than raw walk order.
+    ///
+    /// Only the best [`MAX_FILE_ROWS`] are built into entries: candidates
+    /// keep a borrowed path while they are scored, and a partial selection
+    /// finds the top rows before they are sorted, so a keystroke over a
+    /// 100,000-file index costs the matching and little else (T845).
     fn palette_file_entries(&self, query: &str) -> Vec<Entry> {
         let (qpath, target) = palette::parse_path_target(query);
-        let mut scored: Vec<(i32, String, Entry)> = Vec::new();
         let source = self
             .palette_files_override
             .as_ref()
             .unwrap_or(&self.file_index);
+        // `project.subproject.find_file` scopes this list to one
+        // subproject's files (see `App::palette_file_scope`).
+        let subproject = self.palette_file_scope.as_deref();
+        let subproject_dir = subproject.map(|s| format!("{s}/"));
+        let mut scored: Vec<(i32, Cow<'_, str>, &PathBuf)> = Vec::new();
+        let root = self.root.to_str();
         for path in source {
-            let shown = path.to_string_lossy();
-            // A Cowork guest's list holds `cowork:`-prefixed host paths (T696).
-            let rel = match shown.strip_prefix(crate::editor::REMOTE_PATH_PREFIX) {
-                Some(remote) => remote.to_string(),
-                None => path
-                    .strip_prefix(&self.root)
-                    .unwrap_or(path)
-                    .to_string_lossy()
-                    .into_owned(),
-            };
-            // `project.subproject.find_file` scopes this list to one
-            // subproject's files (see `App::palette_file_scope`).
-            if let Some(scope) = self.palette_file_scope.as_deref()
-                && rel != scope
-                && !rel.starts_with(&format!("{scope}/"))
+            let rel = self.palette_rel(path, root);
+            if let (Some(only), Some(dir)) = (subproject, subproject_dir.as_deref())
+                && rel != only
+                && !rel.starts_with(dir)
             {
                 continue;
             }
             let Some(score) = palette::fuzzy_score(&rel, &qpath) else {
                 continue;
             };
-            scored.push((
-                score,
-                rel.clone(),
-                Entry {
-                    label: rel,
-                    action: PAction::OpenFile(path.clone(), target),
-                },
-            ));
+            scored.push((score, rel, path));
         }
-        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-        scored.into_iter().take(200).map(|(_, _, e)| e).collect()
+        let order = |a: &(i32, Cow<'_, str>, &PathBuf), b: &(i32, Cow<'_, str>, &PathBuf)| {
+            b.0.cmp(&a.0)
+                .then_with(|| a.1.cmp(&b.1))
+                .then_with(|| a.2.cmp(b.2))
+        };
+        if scored.len() > MAX_FILE_ROWS {
+            scored.select_nth_unstable_by(MAX_FILE_ROWS.minus(1), order);
+            scored.truncate(MAX_FILE_ROWS);
+        }
+        scored.sort_by(order);
+        scored
+            .into_iter()
+            .map(|(_, rel, path)| Entry {
+                label: rel.into_owned(),
+                action: PAction::OpenFile(path.clone(), target),
+            })
+            .collect()
+    }
+
+    /// `path` as the file finder shows it: relative to the root, or a
+    /// Cowork guest's host path without its `cowork:` prefix (T696).
+    /// Borrowed when the path is valid UTF-8. `root` is `self.root` as
+    /// text, when it is UTF-8: a plain prefix test on it is several times
+    /// cheaper than `Path::strip_prefix`, which runs per file per keystroke.
+    fn palette_rel<'a>(&self, path: &'a Path, root: Option<&str>) -> Cow<'a, str> {
+        let prefix = crate::editor::REMOTE_PATH_PREFIX;
+        match path.to_str() {
+            Some(s) => {
+                if let Some(remote) = s.strip_prefix(prefix) {
+                    return Cow::Borrowed(remote);
+                }
+                if let Some(rest) = root.and_then(|r| s.strip_prefix(r))
+                    && let Some(rel) = rest.strip_prefix(std::path::MAIN_SEPARATOR)
+                    && !rel.is_empty()
+                {
+                    return Cow::Borrowed(rel);
+                }
+            }
+            None => {
+                if let Some(remote) = path.to_string_lossy().strip_prefix(prefix) {
+                    return Cow::Owned(remote.to_string());
+                }
+            }
+        }
+        path.strip_prefix(&self.root)
+            .unwrap_or(path)
+            .to_string_lossy()
     }
 
     /// Score every menu-bar command not already a [`palette::COMMANDS`] entry

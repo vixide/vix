@@ -42,6 +42,7 @@ mod fhir;
 mod fhir_http;
 #[cfg(not(feature = "http"))]
 mod fhir_http_off;
+mod file_index;
 mod focus;
 mod ghost;
 use crate::geo::{Geo, later};
@@ -2675,6 +2676,12 @@ pub struct App {
     pub terminal_caps: crate::term_caps::TerminalCaps,
     /// File paths under the workspace root, for the palette file finder.
     file_index: Vec<PathBuf>,
+    /// Whether `file_index` is complete, still building, or cut short (T845).
+    file_index_state: file_index::FileIndexState,
+    /// The workspace folders `file_index` was walked from.
+    file_index_folders: Vec<PathBuf>,
+    /// The background walk finishing `file_index`, while one runs (T845).
+    file_index_job: Option<file_index::FileIndexJob>,
     /// Cursor offset captured when the palette opened, so the `:` go-to-line
     /// preview can revert on cancel and the jump records the true origin.
     palette_origin: Option<usize>,
@@ -3152,6 +3159,9 @@ impl App {
             settings_path: None,
             session_path: None,
             file_index: Vec::new(),
+            file_index_state: file_index::FileIndexState::Complete,
+            file_index_folders: Vec::new(),
+            file_index_job: None,
             palette_origin: None,
             palette_file_scope: None,
             palette_files_override: None,

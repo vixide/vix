@@ -940,6 +940,7 @@ impl<'a> Dec<'a> {
                         honor_ignore_files,
                         prune_dirs,
                         limit,
+                        cancel: None,
                     },
                 }
             }
@@ -1481,6 +1482,7 @@ mod refusals {
                     honor_ignore_files: true,
                     prune_dirs: vec![],
                     limit: 3,
+                    cancel: None,
                 },
             },
         };
