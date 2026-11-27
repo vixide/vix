@@ -2426,6 +2426,9 @@ pub struct App {
     acp_parked_panel: Option<crate::ai_panel::Panel>,
     /// The last agent command and its session id, for **AI → Resume Agent**.
     acp_last_session: Option<(String, String)>,
+    /// Files an ACP agent proposed a write to, each with the workspace root
+    /// it was checked against (T857): a save of one re-checks containment.
+    acp_written: std::collections::HashMap<PathBuf, PathBuf>,
     /// Receiver for the dashboard's background metric computations.
     dashboard_rx: Option<std::sync::mpsc::Receiver<DashMsg>>,
     /// Code outline overlay, when open.
@@ -3245,6 +3248,7 @@ impl App {
             acp: None,
             acp_parked_panel: None,
             acp_last_session: None,
+            acp_written: std::collections::HashMap::new(),
             theme_preview: None,
             hbar_active: None,
             editor_hmax: 0,
@@ -4769,6 +4773,11 @@ impl App {
         // failure, and `save_active`'s `Err` case is a bare `io::Error` with
         // no path attached, so this is the only chance to name it.
         let path_before = self.editor.active_tab().and_then(|t| t.path.clone());
+        // T857: a file an agent proposed is checked again here, just before
+        // the write, so a link swapped in since the agent asked is refused.
+        if self.acp_save_refused() {
+            return false;
+        }
         let saved = if overwrite {
             self.editor.save_active_overwriting(opts)
         } else {

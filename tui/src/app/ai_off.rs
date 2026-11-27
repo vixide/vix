@@ -51,6 +51,12 @@ impl App {
         );
     }
 
+    /// No agent proposes writes in this build, so no save is refused.
+    pub(super) fn acp_save_refused(&mut self) -> bool {
+        debug_assert!(self.acp_written.is_empty());
+        false
+    }
+
     /// Never running.
     #[must_use]
     pub fn ai_replace_running(&self) -> bool {

@@ -590,10 +590,11 @@ impl<T: Transport> ShellAuthority<T> {
         expected: Expect<'_>,
     ) -> io::Result<()> {
         let flavor = self.flavor()?;
-        let mut sh = Sh::new()
-            .set("p", path)
-            .t(RESOLVE_LINKS)
-            .t("[ -d \"$p\" ] && exit 103\n\
+        let mut sh =
+            Sh::new()
+                .set("p", path)
+                .t(SAVE_RESOLVE_LINKS)
+                .t("[ -d \"$p\" ] && exit 103\n\
              d=$(dirname -- \"$p\")\n\
              [ -d \"$d\" ] || exit 100\n");
         match expected {
@@ -702,6 +703,43 @@ while [ -h \"$p\" ]; do\n\
   case $l in /*) p=$l ;; *) p=$(dirname -- \"$p\")/$l ;; esac\n\
   n=$((n + 1)); [ \"$n\" -gt 40 ] && exit 1\n\
 done\n";
+
+/// [`RESOLVE_LINKS`] for a save, with the shared-sticky-directory rule
+/// that `vix_fileops::write_atomic` applies locally (T832, T857): before
+/// each hop, if `$p` or any of its ancestors is a symlink in a sticky,
+/// world-writable directory (such as `/tmp`) that neither this user nor the
+/// directory's owner owns, the save stops with permission denied. That is
+/// Linux's `fs.protected_symlinks` rule, which `readlink` does not apply, so
+/// without it another remote user could swap `/tmp/notes` for
+/// `/tmp/notes -> ~/.bashrc` and the save would replace `~/.bashrc`.
+/// Owners come from `ls -ldn` (`$e/.` names the directory itself even when
+/// `$e` is a link to it); `id -u` runs only when such a link is found.
+const SAVE_RESOLVE_LINKS: &str = r#"vix_foreign() {
+  q=$1
+  while :; do
+    case $q in */*) e=${q%/*}; [ -n "$e" ] || e=/ ;; *) e=. ;; esac
+    if [ -h "$q" ]; then
+      s=$(ls -ldn -- "$e/." | awk 'NR == 1 {print $1 " " $3}')
+      case ${s%% *} in
+        ????????w[tT]*)
+          u=${u:-$(id -u)}
+          o=$(ls -ldn -- "$q" | awk 'NR == 1 {print $3}')
+          [ -n "$o" ] && [ "$o" != "$u" ] && [ "$o" != "${s#* }" ] && return 0 ;;
+      esac
+    fi
+    [ "$q" = / ] || [ "$q" = . ] || [ "$e" = "$q" ] && return 1
+    q=$e
+  done
+}
+n=0
+while :; do
+  vix_foreign "$p" && exit 101
+  [ -h "$p" ] || break
+  l=$(readlink -- "$p") || exit 1
+  case $l in /*) p=$l ;; *) p=$(dirname -- "$p")/$l ;; esac
+  n=$((n + 1)); [ "$n" -gt 40 ] && exit 1
+done
+"#;
 
 /// The save itself: a temp file created exclusively (`set -C`) next to the
 /// target, filled from stdin, given the old file's mode, then renamed over
@@ -1162,13 +1200,24 @@ impl<T: Transport> Authority for ShellAuthority<T> {
             .set("a", from)
             .set("b", to)
             // T832: a destination symlink is replaced, never written
-            // through (`cp` and `mkdir -p` would follow it).
+            // through (`cp` and `mkdir -p` would follow it). T857: so is
+            // one inside an existing destination tree, wherever the source
+            // tree has an entry of the same name (`find` does not follow
+            // links, and `-exec … {} +` passes any name intact).
             .t("[ -e \"$a\" ] || [ -h \"$a\" ] || exit 100\n\
                  if [ -h \"$b\" ]; then rm -f -- \"$b\" || exit 1; fi\n\
                  if [ -h \"$a\" ]; then\n\
                    mkdir -p -- \"$(dirname -- \"$b\")\" && l=$(readlink -- \"$a\") || exit 1\n\
                    exec ln -s -- \"$l\" \"$b\"\n\
                  elif [ -d \"$a\" ]; then\n\
+                   if [ -d \"$b\" ]; then\n\
+                     find \"$b\" -type l -exec sh -c '\
+                       a=$1 b=$2; shift 2\n\
+                       for l do\n\
+                         r=${l#\"$b\"}; r=${r#/}\n\
+                         if [ -e \"$a/$r\" ] || [ -h \"$a/$r\" ]; then rm -f -- \"$l\" || exit 1; fi\n\
+                       done' sh \"$a\" \"$b\" {} + || exit 1\n\
+                   fi\n\
                    mkdir -p -- \"$b\" && exec cp -RP -- \"$a/.\" \"$b\"\n\
                  else\n\
                    [ -d \"$b\" ] && exit 103\n\

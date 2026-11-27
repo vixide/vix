@@ -82,6 +82,14 @@ Agents can write files and run commands, so:
     A path not yet on disk is judged by its nearest existing ancestor, and a
     dangling symlink on the way is refused (T832): it names nothing, so where
     a save through it would land cannot be checked.
+    The check runs again when the user saves a file the agent proposed a
+    write to (T857): the save is later than the request, so an agent with its
+    own write access to the workspace could swap the file for a link out of
+    it in between. The App records each such path with the root it was
+    checked against, and its writer re-runs `contain_on_disk` on the final
+    path right before it writes; a path that now leads out is not saved, and
+    Messages says why (`msg.acp_save_refused`). What is left is the gap
+    between that check and the write itself, a few system calls.
     Reads prefer the open buffer's unsaved text.
   - `fs/read_text_file` refuses a file that may hold secrets, by the MCP
     server's rule (`vix_mcp_server::workspace::is_secret`: `.env` and

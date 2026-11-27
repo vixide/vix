@@ -953,11 +953,48 @@ impl App {
             return Some("could not open the file".into());
         };
         self.editor.active = idx;
+        // T857: remember the file, so its save re-checks containment.
+        let root = self.root.clone();
+        for written in [
+            Some(p),
+            self.editor.tabs.get(idx).and_then(|t| t.path.clone()),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            self.acp_written.insert(written, root.clone());
+        }
         self.open_ai_diff(idx, AiTarget::Whole, content);
         if self.ai_diff.is_some() {
             self.status = t!("status.acp_edit_pending", path = path).to_string();
         }
         None
+    }
+
+    /// Whether the active tab's save must be refused (T857): it is a file an
+    /// agent proposed a write to, and it no longer resolves inside the
+    /// workspace root it was checked against. [`acp_write`](Self::acp_write)
+    /// checks the path when the agent asks, but the save happens later, when
+    /// the user saves; an agent with its own write access to the workspace
+    /// could swap the file for a link out of it in between. So
+    /// [`policy::contain_on_disk`] runs again on the final path, called by
+    /// the writer right before it writes.
+    pub(super) fn acp_save_refused(&mut self) -> bool {
+        let Some(path) = self.editor.active_tab().and_then(|t| t.path.clone()) else {
+            return false;
+        };
+        let Some(root) = self.acp_written.get(&path) else {
+            return false;
+        };
+        let inside = path
+            .to_str()
+            .is_some_and(|p| policy::contain_on_disk(root, p).is_ok());
+        if inside {
+            return false;
+        }
+        self.messages
+            .error(t!("msg.acp_save_refused", path = path.display()).to_string());
+        true
     }
 }
 
@@ -1381,6 +1418,54 @@ mod tests {
         let tab = app.editor.active_tab().unwrap();
         assert_eq!(tab.path.as_deref(), Some(dir.join("fresh.txt").as_path()));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_link_swapped_in_after_the_agent_asked_is_refused_at_save_time() {
+        // T857: the path is checked when the agent asks, but the save runs
+        // later; an agent with its own write access could swap the file for
+        // a link out of the workspace in between. The save checks again.
+        let (mut app, dir) = trusted_app("save-swap", &[]);
+        let outside = dir.with_extension("outside");
+        let _ = std::fs::remove_dir_all(&outside);
+        std::fs::create_dir_all(&outside).unwrap();
+        let victim = outside.join("victim.txt");
+        std::fs::write(&victim, "precious\n").unwrap();
+        let accept = |app: &mut App, text: &str| {
+            app.ai_diff = None;
+            let tab = app.editor.active_tab_mut().unwrap();
+            tab.editor.set_content(text);
+            tab.dirty = true;
+        };
+        // An existing file, swapped for a link to a file outside.
+        std::fs::write(dir.join("a.txt"), "old\n").unwrap();
+        assert!(app.acp_write(&abs(&dir, "a.txt"), "new\n").is_none());
+        accept(&mut app, "new\n");
+        std::fs::remove_file(dir.join("a.txt")).unwrap();
+        std::os::unix::fs::symlink(&victim, dir.join("a.txt")).unwrap();
+        assert!(!app.write_active_to_disk());
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "precious\n");
+        let m = app.messages.items.last().unwrap();
+        assert_eq!(
+            m.text,
+            t!("msg.acp_save_refused", path = dir.join("a.txt").display()).to_string()
+        );
+        assert!(matches!(m.level, crate::messages::Level::Error));
+        // A new file, where a dangling link out of the workspace appears.
+        assert!(app.acp_write(&abs(&dir, "fresh.txt"), "hi\n").is_none());
+        accept(&mut app, "hi\n");
+        std::os::unix::fs::symlink(outside.join("planted.txt"), dir.join("fresh.txt")).unwrap();
+        assert!(!app.write_active_to_disk());
+        assert!(!outside.join("planted.txt").exists());
+        // Left alone, an agent-proposed file saves as usual.
+        std::fs::write(dir.join("b.txt"), "old\n").unwrap();
+        assert!(app.acp_write(&abs(&dir, "b.txt"), "new\n").is_none());
+        accept(&mut app, "new\n");
+        assert!(app.write_active_to_disk());
+        assert_eq!(std::fs::read_to_string(dir.join("b.txt")).unwrap(), "new\n");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&outside);
     }
 }
 

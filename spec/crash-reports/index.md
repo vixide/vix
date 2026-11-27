@@ -10,7 +10,10 @@ automatically: Vix's "no telemetry, no phone-home" promise
 - **Saving.** `vix::crash::install_hook` (called in `main` right after
   `ratatui::init`) runs before the terminal-restoring hook. It writes
   `crash-<UTC timestamp>.txt` to `<data dir>/crashes/` (for example
-  `~/.local/share/vix/crashes/`) and keeps the newest ten. After the terminal
+  `~/.local/share/vix/crashes/`) and keeps the newest ten. A new report is
+  owner-only (`0600` on Unix, whatever the umask), written with
+  `vix_fileops::write_atomic_private` like Vix's other private files (T857).
+  After the terminal
   is restored it prints where the report is, translated
   (`msg.crash_report_saved`). The lookup takes no lock that a panic could
   hold: the locale is lock-free and the hook warms the active locale's table
