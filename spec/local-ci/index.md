@@ -313,6 +313,28 @@ and pushing other refs (such as `refs/notes/vix-gate`) are not gated.
 `git push --no-verify` skips every hook, which is why the forge job below also
 exists.
 
+Before the attestation check, the hook runs `scripts/secret-scan-history`
+(T832) over the commits each pushed branch or tag adds: `<pushed sha> --not
+--remotes`, plus the remote's current tip when this clone has it. A finding
+refuses that ref, on every branch and whatever its attestation, so a secret
+committed with `git commit --no-verify` (which skips the pre-commit scan) is
+caught before it leaves the machine; a scan that cannot run (no pattern file,
+an unknown revision: exit 2) only warns. The script is also run by hand:
+with no argument it scans every ref's whole history (about 17 s for this
+repository's 2,700 commits), with arguments it takes `git log` revisions. It
+reads `git log -p -U0 -M --cc`, so each added line is seen once (a rename is
+not a new addition, and a merge contributes only the lines its conflict
+resolution added), applies the rules and the allowlist of
+`scripts/secret-patterns` exactly as the pre-commit hook does (an allowlisted
+path is skipped in every commit), prints `COMMIT PATH:LINE: RULE` and never
+the secret, and exits 1 on a finding. It never rewrites history: what to do
+about a real finding is in `docs/incident-response.md`.
+`scripts/test-secret-scan-history` tests the script and the hook's use of it
+in a throwaway repository with fakes built at run time (a removed secret is
+still found, a range that skips its commit is clean, renames, allowlist,
+merge resolutions, line numbers, the pre-push refusal), in the `push` tier
+and above.
+
 **The pre-commit hook (T760, T833).** `make hooks` installs
 `scripts/hooks/pre-commit` too. It checks what is staged, takes seconds, and
 never changes the index or the working tree (it used to run `cargo fmt` on the

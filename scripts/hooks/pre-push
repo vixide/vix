@@ -14,6 +14,13 @@
 # tree holds; a failing fast tier refuses the push. Pushing another commit
 # unattested prints that the fast tier was not run.
 #
+# Before that, the commits a pushed branch or tag would add (those no
+# remote-tracking ref already has) go through scripts/secret-scan-history
+# (T832), the history form of the pre-commit hook's secret scan, so a secret
+# committed with --no-verify is caught before it leaves the machine. A finding
+# refuses the push of that ref, on any branch and whatever the attestation; a
+# scan that cannot run (exit 2) only warns.
+#
 # Deleting a ref, and pushing other refs (such as refs/notes/vix-gate), is not
 # gated. `git push --no-verify` skips every hook; the forge's verify job is what
 # catches that.
@@ -21,12 +28,32 @@ top=$(git rev-parse --show-toplevel) || exit 1
 status=0
 fast=""
 head=$(git rev-parse --verify -q HEAD) || head=""
-while read -r _ local_sha remote_ref _; do
+scan="$top/scripts/secret-scan-history"
+while read -r _ local_sha remote_ref remote_sha; do
 	case "$local_sha" in *[!0]*) ;; *) continue ;; esac
 	case "$remote_ref" in
 	refs/heads/* | refs/tags/*) ;;
 	*) continue ;;
 	esac
+	if [ -x "$scan" ]; then
+		# The commits this push adds: on no remote-tracking ref, and not behind
+		# the remote's current tip when this clone has that commit.
+		known=""
+		case "$remote_sha" in *[!0]*)
+			if git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then known=$remote_sha; fi
+			;;
+		esac
+		"$scan" "$local_sha" --not --remotes ${known:+"$known"} </dev/null >/dev/null
+		case $? in
+		0) ;;
+		1)
+			echo "pre-push: refusing to push $remote_ref: a commit it adds holds what looks like a real secret (above)." >&2
+			status=1
+			continue
+			;;
+		*) echo "pre-push: the history secret scan could not run for $remote_ref (above); not checked." >&2 ;;
+		esac
+	fi
 	if "$top/scripts/attest" --verify "$local_sha" >/dev/null 2>&1; then
 		continue
 	fi

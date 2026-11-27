@@ -166,7 +166,9 @@ check-pnpm:
 # Sets core.hooksPath so the hooks in scripts/hooks/ are used. Includes:
 #   - pre-push: refuses to push main or a tag without a valid full-tier gate
 #     attestation (scripts/attest); an unattested branch push
-#     (VIX_ALLOW_UNATTESTED=1) runs scripts/check --tier fast first (T833)
+#     (VIX_ALLOW_UNATTESTED=1) runs scripts/check --tier fast first (T833);
+#     refuses any branch or tag whose new commits add what looks like a real
+#     secret (scripts/secret-scan-history, T832)
 #   - pre-commit: checks what is staged, in seconds, changing nothing: rustfmt
 #     on staged Rust files, the secret scan (scripts/secret-patterns), a 1 MiB
 #     limit on new files and the code lints (T833)
