@@ -278,7 +278,7 @@ impl App {
             .active_tab()
             .and_then(|t| t.path.clone().map(|p| (p, t.editor.cursor_line().plus(1))))
         else {
-            self.status = t!("status.blame_no_file").to_string();
+            self.status = t!("status.breakpoint_no_file").to_string();
             return;
         };
         let set = self.breakpoints.entry(path.clone()).or_default();
@@ -1269,7 +1269,8 @@ mod tests {
         let mut app = App::new(std::env::temp_dir(), Settings::default());
         app.editor.active_tab_mut().unwrap().path = None;
         app.run_dap_action("run.toggle_breakpoint");
-        assert_eq!(app.status, t!("status.blame_no_file").to_string());
+        // Its own message, not the Git blame one it used to borrow.
+        assert_eq!(app.status, t!("status.breakpoint_no_file").to_string());
 
         let (mut app, dir, _f) = app_with_file("bp", "a.rs", "one\ntwo\nthree\n");
         app.editor
