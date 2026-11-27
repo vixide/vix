@@ -187,7 +187,7 @@ const WINDOWS: &[Binding] = &[
     },
     Binding {
         key_token: "C-y",
-        action_id: "edit.delete_line",
+        action_id: "delete_line",
     },
     Binding {
         key_token: "C-/",

@@ -75,7 +75,7 @@ const NORMAL: &[Binding] = &[
     },
     Binding {
         key_token: "C-d",
-        action_id: "edit.delete_line",
+        action_id: "delete_line",
     },
     Binding {
         key_token: "C-o",

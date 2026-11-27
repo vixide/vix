@@ -139,7 +139,7 @@ const CTRL_K: &[Binding] = &[
     },
     Binding {
         key_token: "k",
-        action_id: "edit.delete_line",
+        action_id: "delete_line",
     },
     Binding {
         key_token: "o",
