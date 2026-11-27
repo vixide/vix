@@ -198,7 +198,10 @@ sentence rules (`vix_textops::sentence_starts`) are a whole-text scan; text
 objects, `p`/`P` and Visual operators also still take a copy of the
 buffer — follow-ons, not part of T843. Results are exactly those of the
 original whole-text implementation, which the crate's tests keep as an
-oracle and compare on every offset of thousands of generated texts.
+oracle and compare on every offset of thousands of generated texts, and on
+proptest-generated texts over a wider alphabet (upper case, digits, wide,
+zero-width and combining characters, an emoji, non-breaking and Unicode
+line/paragraph separators, form feed; T831).
 
 *Offsets* (RCA figure declaration): `pos` and every motion result are
 character offsets, `usize`, valid range `0..=len_chars`. A motion clamps by

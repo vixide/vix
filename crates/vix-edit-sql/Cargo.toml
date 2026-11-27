@@ -12,5 +12,8 @@ vix-input = { workspace = true }
 vix-capped-stack = { workspace = true }
 vix-list-state = { workspace = true }
 
+[dev-dependencies]
+proptest = { workspace = true }
+
 [lints]
 workspace = true
