@@ -10827,7 +10827,13 @@ awareness, not capability. Items marked (stale?) may already exist.
   already had pages; new `docs/git-hunks-and-conflicts` (hunk staging and
   merge conflicts had none) and `docs/debugger` rewritten as a full reference,
   facts cited per section; Vim guide's "no embedded script runtime" fixed.
-  Left: a deeper Org reference and AI page, and the rest of the list above.)
+  Slice 2: `docs/org` (68 to ~610 lines: structure, tasks, agenda and its
+  scope, capture templates, tables and TBLFM, column view, links and source
+  blocks, export, contacts, the Emacs chords) and `docs/agent-panel` (54 to
+  ~360 lines: off switch, the cli/anthropic/openai/ollama providers, keyring
+  keys, what is sent when, diff review, ACP agents) rewritten as references,
+  facts cited per section.
+  Left: the rest of the list above.)
 - [ ] **T829 — Packaging channels.** Prepared in `packaging/` but not
   published: AUR, winget, Scoop, Nix flake, mise; public Docker/ghcr.io image;
   official Homebrew cask (instead of the custom tap); also Chocolatey,
