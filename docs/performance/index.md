@@ -175,6 +175,67 @@ The open-time exercise below (`open/`) runs `App::start` and so now
 includes that spawn; its first editable frame (6.7 ms warm median for 20,000
 files on the same busy machine) is dominated by everything else.
 
+## Rarely used features at startup (T830)
+
+What `App::new` and the first frame spend on the rarely used features,
+measured 2026-11-27 with a throwaway timing test built with
+`[profile.bench]` (median of 300 runs; default features plus `cowork` and
+`jupyter`, which are opt-in; load average around 12 on 16 cores):
+
+| Feature | What `App::new` builds | Time | Size in `App` | Startup I/O |
+| ------- | ---------------------- | ---- | ------------- | ----------- |
+| DB workbench | `db: None`, built when the workbench first opens | 0 | an `Option` | none |
+| OC containers | `oc: None`, built when the OC panel first opens | 0 | an `Option` | none |
+| Jupyter | an empty kernel list (nothing is discovered until a kernel is asked for) | 0 ns | 344 B | none |
+| Cowork | an empty session state and one `mpsc` channel | 83 ns | 1.7 KB | none |
+| IM, `history = "session"` (default) | the inbox with Notes, the panel | 209 ns | 528 B | none |
+| IM, `history = "disk"` | the same, plus reading and decoding Notes' JSONL (1,000 messages, 110 KB) | 297 µs | 528 B | a file read (and a rewrite if pruned) |
+
+For scale, all of `App::new` took 187 µs in the same run and the first
+frame (120 × 40, nothing open) 140 µs. Only the disk-history read was worth
+deferring: it was larger than the rest of `App::new` together and was file
+I/O for a feature most sessions never open. Notes' history is now read on
+the first IM use (an `im.*` action, a delivered message, or the panel drawn;
+`ImState::ensure_notes_history`), so startup with disk history reads no file
+and costs what the default does. The others are already lazy, or too small
+to measure against the noise, and are unchanged.
+
+`cargo bench --bench startup -- startup/app_new` afterwards read 230 µs
+(load average around 25; 302 µs in the git-refresh run above at around
+45). It uses default settings, session-only history, so this change does
+not move it; with `history = "disk"` it saves the ~0.3 ms above.
+
+## Vi sentence motions (T830, measured 2026-11-27)
+
+In the T843 profile about half of a Vi `(` or `)` was
+`vix_textops::sentence_starts` decoding the whole buffer into a
+`Vec<char>`; the rest was copying it out of the rope first. Now `(`/`)` read
+the editor's rope from the cursor outward through
+`vix_textops::sentence_start_from` / `sentence_start_before` (a small state
+carried over the chars, seeded from the whitespace and closing marks just
+behind the cursor), and `sentence_starts` itself scans bytes from one
+sentence end to the next. Both give the same starts as before: the
+`vix-textops` tests compare them with the old scan at every offset of a
+table of texts and of proptest-generated ones, and the `vix-modal` oracle
+tests compare the motions.
+
+`editor/vi_sentences` (`tui/benches/editor_ops.rs`): `)` + `(` through the
+real `App` key path, in prose with a sentence end every few words around
+the same line; `--warm-up-time 1 --measurement-time 3`, load average
+around 10–15:
+
+| Buffer | Before | After |
+| ------ | ------ | ----- |
+| 4 KiB | 19.2 µs | 4.4 µs |
+| 512 KiB | 1.67 ms | 4.7 µs |
+| 8 MiB | 34.7 ms | 4.8 µs |
+
+`sentence_starts` on the `textops/whole_text` prose (144 KB), old and new
+timed alternately in one process (median of 400): 140 µs → 84 µs; on 140 KB
+of code with no sentence ends, 137 µs → 59 µs. A sentence motion in text
+with no sentence end (code, say) still walks to a buffer end, but over the
+rope without a copy.
+
 ## Opening a large checkout (T823)
 
 How long a user waits after opening a big project: for the file named on

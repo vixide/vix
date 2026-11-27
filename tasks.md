@@ -10846,9 +10846,16 @@ awareness, not capability. Items marked (stale?) may already exist.
   again without blocking the first frame — UI-thread cost 20–60 µs vs
   27–87 ms, numbers in `docs/performance`; a file over 500 MiB always asks
   with a memory warning and one over 1 GiB opens in the Large File Viewer
-  without asking, `vix_large_file::Thresholds`. Remaining: lazy-loading DB,
-  containers and Jupyter; the <100 ms / <50 ms empty-workspace and <50 MB
-  with a 100 MB log targets (not yet measured end to end); incremental
+  without asking, `vix_large_file::Thresholds`. Second slice: lazy-loading
+  measured (`docs/performance`, § Rarely used features at startup) — DB,
+  OC containers, Jupyter and Cowork already cost nothing in `App::new` (an
+  `Option` left `None`, or an empty state: 0–83 ns, no I/O), so they are
+  unchanged; IM's Notes disk history (`history = "disk"`, about 0.3 ms for
+  1,000 messages, a file read at startup) is now read on first IM use; Vi
+  `(`/`)` scan from the cursor (`vix_textops::sentence_start_from` /
+  `sentence_start_before`, 8 MiB `)`+`(` 34.7 ms → 4.8 µs) and
+  `sentence_starts` no longer decodes a `Vec<char>`. Remaining: the
+  <100 ms / <50 ms empty-workspace and <50 MB with a 100 MB log targets (not yet measured end to end); incremental
   workspace search via filesystem watch; Tree-sitter on very large files;
   LRU eviction for caches; native file-watching efficiency; incremental
   rendering; memory-usage tracking.)

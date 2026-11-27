@@ -187,7 +187,9 @@ beside `vix`, then on `PATH`. Matrix is specified in [matrix.md](matrix.md).
 History is in memory only by default. `history = "disk"` writes JSONL per
 conversation under the platform data directory (not the workspace), pruned
 to `history_days`. Passwords are never read from or written to a file
-Vix owns.
+Vix owns. Startup reads no history file: Notes' history is loaded on the
+first IM use — an `im.*` action, a delivered message, or the panel drawn —
+so a session that never touches IM never reads it (T830).
 
 ## Architecture
 

@@ -177,6 +177,46 @@ fn history_paths_skip_the_session_and_follow_the_directory() {
     assert_eq!(messages(&app, &id).len(), 0);
 }
 
+/// An app as `App::new` builds it with `history = "disk"` at `dir`: the
+/// Notes history is known but not read yet (T830).
+fn app_with_deferred_history(dir: &Path) -> App {
+    let mut app = app();
+    app.im.history_dir = Some(dir.to_path_buf());
+    app.im.notes_pending = Some(30);
+    app
+}
+
+#[test]
+fn notes_history_is_read_on_the_first_im_use_not_at_startup() {
+    let dir = temp("hist-deferred");
+    let line = vix_im::history::encode_line(&Message::text("ana", now_ms(), "kept")).unwrap();
+    std::fs::write(dir.join("notes.jsonl"), format!("{line}\n")).unwrap();
+    let mut app = app_with_deferred_history(&dir);
+    assert!(
+        messages(&app, &notes()).is_empty(),
+        "nothing read at startup"
+    );
+    // A non-IM action leaves it alone.
+    app.run_action("view.toggle_explorer");
+    assert!(app.im.notes_pending.is_some());
+    app.run_action("im.panel");
+    assert_eq!(messages(&app, &notes()), ["kept"]);
+    assert!(app.im.notes_pending.is_none());
+    assert_eq!(app.im.inbox.total_unread(), 0);
+}
+
+#[test]
+fn a_note_delivered_before_the_deferred_load_keeps_the_history() {
+    let dir = temp("hist-deferred-deliver");
+    let line = vix_im::history::encode_line(&Message::text("ana", now_ms(), "old")).unwrap();
+    std::fs::write(dir.join("notes.jsonl"), format!("{line}\n")).unwrap();
+    let mut app = app_with_deferred_history(&dir);
+    app.im_deliver(&notes(), Message::text("ana", now_ms(), "new"));
+    assert_eq!(messages(&app, &notes()), ["old", "new"]);
+    let raw = std::fs::read_to_string(dir.join("notes.jsonl")).unwrap();
+    assert_eq!(raw.lines().count(), 2);
+}
+
 #[test]
 fn delivered_messages_are_appended_and_reloaded() {
     let dir = temp("hist-roundtrip");

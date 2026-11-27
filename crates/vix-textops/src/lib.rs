@@ -165,39 +165,226 @@ pub fn transpose_words_at(text: &str, cursor: usize) -> Option<(String, usize)> 
     Some((out, new_cursor))
 }
 
+/// Whether `c` ends a sentence: `.`, `!` or `?`.
+fn is_sentence_end(c: char) -> bool {
+    matches!(c, '.' | '!' | '?')
+}
+
+/// Whether `c` may sit between a sentence end and the whitespace after it:
+/// another end mark, or a closing quote or bracket.
+fn is_sentence_closer(c: char) -> bool {
+    is_sentence_end(c) || matches!(c, '"' | '\'' | ')' | ']' | '}')
+}
+
+/// Where a forward sentence scan stands after a character (T830): enough
+/// to tell whether the next character starts a sentence, so the scan needs
+/// neither the text behind it nor a decoded copy of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SentenceScan {
+    /// Only whitespace so far: the next non-space char starts the first
+    /// sentence.
+    Leading,
+    /// In a run of non-space chars that ends in something other than a
+    /// closer.
+    Plain,
+    /// In a run of closers; `ended` when the run holds a sentence end.
+    Closers {
+        /// The run holds a `.`, `!` or `?`.
+        ended: bool,
+    },
+    /// In whitespace after text; `ended` when a sentence ended just before
+    /// it, so the next non-space char starts one.
+    Space {
+        /// A sentence ended just before this whitespace.
+        ended: bool,
+    },
+}
+
+impl SentenceScan {
+    /// The state after `c`, and whether `c` starts a sentence.
+    fn step(self, c: char) -> (Self, bool) {
+        if c.is_whitespace() {
+            let next = match self {
+                Self::Leading => Self::Leading,
+                Self::Plain => Self::Space { ended: false },
+                Self::Closers { ended } | Self::Space { ended } => Self::Space { ended },
+            };
+            return (next, false);
+        }
+        let starts = matches!(self, Self::Leading | Self::Space { ended: true });
+        let next = if is_sentence_closer(c) {
+            let ended = matches!(self, Self::Closers { ended: true }) || is_sentence_end(c);
+            Self::Closers { ended }
+        } else {
+            Self::Plain
+        };
+        (next, starts)
+    }
+
+    /// The state after the chars `before`, given nearest first. Reads back
+    /// over trailing whitespace and the closers before it only.
+    fn behind(before: impl IntoIterator<Item = char>) -> Self {
+        let mut chars = before.into_iter();
+        let mut spaced = false;
+        let last = loop {
+            match chars.next() {
+                None => return Self::Leading,
+                Some(c) if c.is_whitespace() => spaced = true,
+                Some(c) => break c,
+            }
+        };
+        let closer = is_sentence_closer(last);
+        let ended = closer
+            && (is_sentence_end(last)
+                || chars
+                    .take_while(|&c| is_sentence_closer(c))
+                    .any(is_sentence_end));
+        match (spaced, closer) {
+            (true, _) => Self::Space { ended },
+            (false, true) => Self::Closers { ended },
+            (false, false) => Self::Plain,
+        }
+    }
+}
+
 /// Char offsets where each sentence begins: the first non-space char, then the
 /// first non-space char after any `.`/`!`/`?` (plus trailing quotes/brackets)
 /// followed by whitespace. Shared by the Go → Sentence navigation and
 /// [`transpose_sentences_at`], so both agree on where a sentence starts.
+/// [`sentence_start_from`] and [`sentence_start_before`] find one start
+/// near an offset without scanning the whole text.
 #[must_use]
 pub fn sentence_starts(text: &str) -> Vec<usize> {
-    let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
+    // A byte scan from one sentence end to the next: the marks and closers
+    // are ASCII, so only the whitespace after them needs decoding, and the
+    // char offset of each start is the count of non-continuation bytes
+    // since the previous one (T830; no decoded copy of the text).
     let mut starts = Vec::new();
-    let first = scan_fwd(&chars, 0, n, char::is_whitespace);
-    if first < n {
-        starts.push(first);
-    }
-    // The first index the loop still has to look at; a sentence end found at
-    // `i` moves it past the whitespace that follows.
-    let mut next = first;
-    for i in first..n {
-        if i < next || !matches!(chars[i], '.' | '!' | '?') {
-            continue;
-        }
-        let j = scan_fwd(&chars, i + 1, n, |c| {
-            matches!(c, '.' | '!' | '?' | '"' | '\'' | ')' | ']' | '}')
+    let Some((first, _)) = text.char_indices().find(|&(_, c)| !c.is_whitespace()) else {
+        return starts;
+    };
+    let bytes = text.as_bytes();
+    let count_chars = |from: usize, to: usize| {
+        bytes
+            .get(from..to)
+            .map_or(0, |b| b.iter().filter(|&&b| b & 0xC0 != 0x80).count())
+    };
+    // `pos` is a byte offset on a char boundary and `index` its char offset.
+    let mut index = count_chars(0, first);
+    let mut pos = first;
+    starts.push(index);
+    while let Some(rest) = bytes.get(pos..) {
+        let Some(k) = rest.iter().position(|&b| matches!(b, b'.' | b'!' | b'?')) else {
+            break;
+        };
+        // Past the mark and every closer after it (all one byte each).
+        let Some(mark_end) = pos.checked_add(k).and_then(|m| m.checked_add(1)) else {
+            break;
+        };
+        let closers = bytes.get(mark_end..).map_or(0, |b| {
+            b.iter()
+                .take_while(|&&b| is_sentence_closer(char::from(b)))
+                .count()
         });
-        if j < n && chars[j].is_whitespace() {
-            let j = scan_fwd(&chars, j, n, char::is_whitespace);
-            if j < n {
-                starts.push(j);
-            }
-            next = j;
+        let Some(after) = mark_end.checked_add(closers) else {
+            break;
+        };
+        let space: usize = text.get(after..).map_or(0, |s| {
+            s.chars()
+                .take_while(|c| c.is_whitespace())
+                .map(char::len_utf8)
+                .sum()
+        });
+        let Some(next) = after.checked_add(space) else {
+            break;
+        };
+        if next >= text.len() {
+            break;
+        }
+        let Some(moved) = index.checked_add(count_chars(pos, next)) else {
+            break;
+        };
+        index = moved;
+        pos = next;
+        if space > 0 {
+            starts.push(index);
         }
     }
-    starts.dedup();
     starts
+}
+
+/// The first sentence start (as [`sentence_starts`] defines it) at or after
+/// char offset `at`, reading only as far as it needs (T830).
+///
+/// `before` is the text before `at`, nearest char first (offsets `at - 1`,
+/// `at - 2`, …); only the whitespace and closing marks just before `at` are
+/// read from it. `from` is the text from `at` on, in order; it is read up
+/// to the start found. `None` when no sentence starts at or after `at`.
+#[must_use]
+pub fn sentence_start_from(
+    before: impl IntoIterator<Item = char>,
+    from: impl IntoIterator<Item = char>,
+    at: usize,
+) -> Option<usize> {
+    let mut state = SentenceScan::behind(before);
+    for (k, c) in from.into_iter().enumerate() {
+        let (next, starts) = state.step(c);
+        if starts {
+            return at.checked_add(k);
+        }
+        state = next;
+    }
+    None
+}
+
+/// The last sentence start (as [`sentence_starts`] defines it) before char
+/// offset `at`, reading back only as far as it needs (T830).
+///
+/// `before` is the text before `at`, nearest char first (offsets `at - 1`,
+/// `at - 2`, …, `0`), and must hold exactly `at` chars. `None` when no
+/// sentence starts before `at`.
+#[must_use]
+pub fn sentence_start_before(before: impl IntoIterator<Item = char>, at: usize) -> Option<usize> {
+    /// What the backward scan has seen, nearest first.
+    enum Back {
+        /// Nothing yet.
+        Nothing,
+        /// A run of non-space chars whose lowest offset so far is this.
+        Run(usize),
+        /// Whitespace, after (in text order: before) the non-space char at
+        /// this offset, which starts a sentence if a sentence end precedes
+        /// the whitespace.
+        Space(Option<usize>),
+        /// Closers with no sentence end yet, before whitespace that follows
+        /// this candidate start.
+        Closers(usize),
+    }
+    let mut state = Back::Nothing;
+    for (k, c) in before.into_iter().enumerate() {
+        let i = at.checked_sub(k)?.checked_sub(1)?;
+        let space = c.is_whitespace();
+        state = match state {
+            Back::Nothing if space => Back::Space(None),
+            Back::Run(low) if space => Back::Space(Some(low)),
+            Back::Space(candidate) if space => Back::Space(candidate),
+            Back::Space(Some(s)) | Back::Closers(s) if is_sentence_closer(c) => {
+                if is_sentence_end(c) {
+                    return Some(s);
+                }
+                Back::Closers(s)
+            }
+            Back::Closers(_) if space => Back::Space(Some(i.checked_add(1)?)),
+            Back::Nothing | Back::Run(_) | Back::Space(_) | Back::Closers(_) => Back::Run(i),
+        };
+    }
+    match state {
+        Back::Nothing => None,
+        // The scan reached the text's start: the lowest non-space char read
+        // is its first, which always starts a sentence.
+        Back::Run(low) => Some(low),
+        Back::Space(candidate) => candidate,
+        Back::Closers(_) => Some(0),
+    }
 }
 
 /// Swap the two units around `cursor`, keeping the text between them (the
@@ -1216,5 +1403,109 @@ mod tests {
         assert_eq!(tag_column("MY_TODO", "TODO"), None);
         assert_eq!(tag_column("TODOS", "TODO"), None);
         assert_eq!(tag_column("a TODO: x", "TODO"), Some(2));
+    }
+
+    // ---- T830: the streaming sentence scan against the pre-T830 one -------
+
+    /// `sentence_starts` as it was before T830 (a decoded `Vec<char>` of
+    /// the whole text), kept as the oracle the streaming scan must match.
+    fn sentence_starts_oracle(text: &str) -> Vec<usize> {
+        let chars: Vec<char> = text.chars().collect();
+        let n = chars.len();
+        let mut starts = Vec::new();
+        let first = scan_fwd(&chars, 0, n, char::is_whitespace);
+        if first < n {
+            starts.push(first);
+        }
+        let mut next = first;
+        for i in first..n {
+            if i < next || !matches!(chars[i], '.' | '!' | '?') {
+                continue;
+            }
+            let j = scan_fwd(&chars, i + 1, n, |c| {
+                matches!(c, '.' | '!' | '?' | '"' | '\'' | ')' | ']' | '}')
+            });
+            if j < n && chars[j].is_whitespace() {
+                let j = scan_fwd(&chars, j, n, char::is_whitespace);
+                if j < n {
+                    starts.push(j);
+                }
+                next = j;
+            }
+        }
+        starts.dedup();
+        starts
+    }
+
+    /// Every offset of `text` (and one past its end): the whole-text scan,
+    /// the from-offset scan and the before-offset scan agree with the oracle.
+    fn sentence_scans_agree(text: &str) {
+        let chars: Vec<char> = text.chars().collect();
+        let starts = sentence_starts_oracle(text);
+        assert_eq!(sentence_starts(text), starts, "sentence_starts({text:?})");
+        for at in 0..=chars.len() + 1 {
+            let at_or_end = at.min(chars.len());
+            let before = chars[..at_or_end].iter().rev().copied();
+            let from = chars[at_or_end..].iter().copied();
+            assert_eq!(
+                sentence_start_from(before.clone(), from, at_or_end),
+                starts.iter().copied().find(|&s| s >= at_or_end),
+                "sentence_start_from({text:?}, {at_or_end})"
+            );
+            assert_eq!(
+                sentence_start_before(before, at_or_end),
+                starts.iter().copied().rev().find(|&s| s < at_or_end),
+                "sentence_start_before({text:?}, {at_or_end})"
+            );
+        }
+    }
+
+    #[test]
+    fn sentence_scans_match_the_whole_text_oracle_on_a_table() {
+        for text in [
+            "",
+            " ",
+            "a",
+            "One. Two!  Three? Four",
+            "pi is 3.14 today",
+            "  Hi. Yo.",
+            "He said \"Hi.\" Then.",
+            "Hi. ",
+            "a. . b",
+            ". b",
+            "...",
+            ".) x",
+            "a.) ) b. c",
+            "x)\" y",
+            "Wait... what?! Yes.\n\nNew paragraph.\tTab.",
+            "  \n  lead. trail  ",
+            "e.g. this. 日本. 😀! ok",
+        ] {
+            sentence_scans_agree(text);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            max_shrink_time: 2000,
+            ..ProptestConfig::default()
+        })]
+
+        /// T830: over generated text weighted towards sentence marks,
+        /// closers and whitespace, the streaming scans give exactly the
+        /// pre-T830 starts.
+        #[test]
+        fn sentence_scans_match_the_whole_text_oracle(
+            chars in proptest::collection::vec(
+                proptest::sample::select(vec![
+                    'a', 'Z', ' ', ' ', '\t', '\n', '.', '.', '!', '?', '"', '\'', ')', ']',
+                    '}', '(', ',', '\u{a0}', '\u{2028}', '日', '😀',
+                ]),
+                0..40,
+            )
+        ) {
+            let text: String = chars.into_iter().collect();
+            sentence_scans_agree(&text);
+        }
     }
 }

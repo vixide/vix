@@ -92,6 +92,11 @@ pub(crate) struct ImState {
     pub(crate) list_top: usize,
     /// The workspace's anchored threads (T753), loaded on first use.
     pub(crate) threads: super::im_threads::ThreadStore,
+    /// Notes' disk history, not read yet (T830): the retention in days to
+    /// load it with. Set by [`ImState::new`] when `history = "disk"`, so
+    /// startup reads no file; [`ImState::ensure_notes_history`] loads it on
+    /// the first IM use.
+    pub(crate) notes_pending: Option<u32>,
 }
 
 /// A small IM dialog over the editor: pick an account, confirm a share or a
@@ -201,8 +206,9 @@ pub(crate) fn is_channel(target: &str) -> bool {
 }
 
 impl ImState {
-    /// A fresh state from the settings: the inbox with Notes, blocked nicks,
-    /// and disk history loaded when `history = "disk"`.
+    /// A fresh state from the settings: the inbox with Notes and blocked
+    /// nicks. With `history = "disk"`, Notes' history is read on first use
+    /// ([`ImState::ensure_notes_history`]), not here (T830).
     pub(crate) fn new(settings: &crate::settings::Settings) -> ImState {
         let mut inbox = Inbox::new(default_nick(&settings.im.nick), CaseMapping::Rfc1459);
         inbox.set_blocked(settings.im.blocked.iter().cloned());
@@ -214,7 +220,8 @@ impl ImState {
         let history_dir = (settings.im.history == "disk")
             .then(|| crate::settings::Settings::data_dir().map(|d| d.join("im")))
             .flatten();
-        let mut state = ImState {
+        let notes_pending = history_dir.is_some().then_some(settings.im.history_days);
+        ImState {
             inbox,
             panel: Panel::new(),
             open: false,
@@ -225,15 +232,26 @@ impl ImState {
             history_dir,
             list_top: 0,
             threads: super::im_threads::ThreadStore::default(),
-        };
-        state.load_history(&ConversationId::new(NOTES), settings.im.history_days);
-        state
+            notes_pending,
+        }
+    }
+
+    /// Read Notes' disk history if [`ImState::new`] deferred it (T830):
+    /// called by every IM entry point (an `im.*` action, a delivered
+    /// message, drawing the panel) before it looks at Notes.
+    pub(crate) fn ensure_notes_history(&mut self) {
+        if let Some(days) = self.notes_pending {
+            self.load_history(&ConversationId::new(NOTES), days);
+        }
     }
 
     /// Read a conversation's history file (if disk history is on), drop
     /// messages older than `days`, and put the rest in the conversation as
     /// already read. A file that lost messages to pruning is rewritten.
     pub(crate) fn load_history(&mut self, id: &ConversationId, days: u32) {
+        if id.as_str() == NOTES {
+            self.notes_pending = None;
+        }
         let Some(path) = self.history_path(id) else {
             return;
         };
@@ -337,6 +355,9 @@ fn write_history(path: &Path, messages: &[Message]) {
 impl App {
     /// Dispatch an `im.*` action. Returns `true` if `action` was handled.
     pub(super) fn run_im_action(&mut self, action: &str) -> bool {
+        if action.starts_with("im.") {
+            self.im.ensure_notes_history();
+        }
         match action {
             "im.panel" => self.im_toggle_panel(),
             "im.connect" => self.im_connect(),
@@ -432,6 +453,7 @@ impl App {
     /// notify when the policy allows. A message landing in the conversation
     /// on screen is read at once.
     pub(crate) fn im_deliver(&mut self, id: &ConversationId, message: Message) -> Delivery {
+        self.im.ensure_notes_history();
         let delivery = self.im.inbox.push(id, message);
         if !matches!(delivery, Delivery::Read | Delivery::Unread { .. }) {
             return delivery;
