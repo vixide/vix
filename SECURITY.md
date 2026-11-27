@@ -43,7 +43,7 @@ Out of scope:
 
 | Version | Supported |
 | ------- | --------- |
-| Latest 2.x release | Yes |
+| Latest 3.x release | Yes |
 | Anything older | No |
 
 Only the latest published release gets fixes. There are no long-term-support
