@@ -51,7 +51,7 @@ from a **persistent branching undo tree**.
 ## Where Vix beats IntelliJ
 
 - **Startup and footprint.** Milliseconds and megabytes, not minutes and
-  gigabytes. No indexing phase — Tree-sitter parses your file instantly and
+  gigabytes ([measured](../performance/index.md#opening-a-large-checkout-t823)). No indexing phase — Tree-sitter parses your file instantly and
   LSP indexes in the background, per server.
 - **Runs where IntelliJ cannot.** ssh, tmux, containers, low-power machines.
   Your whole IDE is one static binary you can `scp` to a server.

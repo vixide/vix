@@ -52,8 +52,12 @@ colorization; word-occurrence highlighting; format-on-save and auto-save.
 
 ## Where Vix beats VS Code
 
-- **Weight.** A single native binary vs. an Electron app. Instant startup, tiny
-  memory footprint, no background update service, no telemetry.
+- **Weight.** A single native binary vs. an Electron app. Startup in tens of
+  milliseconds: about 40 ms from launch to the first screen
+  ([measured](../performance/index.md#startup-and-memory-vs-other-editors-t744)),
+  and in a 20,000-file checkout Quick Open lists files about 65 ms after you
+  open it ([measured](../performance/index.md#opening-a-large-checkout-t823));
+  tiny memory footprint, no background update service, no telemetry.
 - **The terminal is the native habitat.** ssh into a server and run the *same
   full IDE* there — no Remote-SSH extension, no server-side installer, no
   version skew. tmux, mosh, containers: it just runs.
