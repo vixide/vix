@@ -55,6 +55,9 @@ impl App {
         self.resolve_key_overrides();
         // First-run welcome screen (no-op after it has been seen once).
         self.maybe_show_welcome();
+        // What's New, once after a version change (T826); after the
+        // welcome so a first launch shows only the welcome.
+        self.maybe_show_whats_new();
 
         // Optional file argument(s): open each, focusing the last. A single `-`
         // reads stdin into a scratch buffer instead of opening a file named

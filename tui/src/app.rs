@@ -150,6 +150,7 @@ mod textobjects;
 mod trust;
 mod tutor;
 mod undo_tree;
+mod whats_new;
 
 use std::collections::VecDeque;
 use std::ops::ControlFlow;
@@ -3736,6 +3737,7 @@ impl App {
             "help.shortcuts" => self.open_help(),
             "help.welcome" => self.open_welcome(),
             "help.tutorial" => self.open_tutor(),
+            "help.whats_new" => self.open_whats_new(),
             "tutor.next_chapter" => self.tutor_next_chapter(),
             "tutor.prev_chapter" => self.tutor_prev_chapter(),
             "tutor.restart_chapter" => self.tutor_restart_chapter(),
