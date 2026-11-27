@@ -351,6 +351,8 @@ fn a_large_file_can_open_in_the_viewer_or_as_text() {
 
 /// A source file over `SYNTAX_MAX_BYTES` opens as plain text, and the status
 /// line says highlighting is off for its size; a small one opens as usual.
+/// Needs the Rust grammar: without it there is no parser to switch off.
+#[cfg(any(feature = "syntax-common", feature = "lang-rust"))]
 #[test]
 fn a_source_file_too_large_for_tree_sitter_says_so_on_open() {
     let dir = temp("r3-syntax-off");
