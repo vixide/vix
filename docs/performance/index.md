@@ -382,6 +382,68 @@ The rare word now costs the same at 512 KiB and 8 MiB (the window, not the
 buffer); the common word's cost is the 500 marks either way. At 4 KiB the
 stepwise search adds under a microsecond.
 
+## Tree-sitter on very large files (T830, measured 2026-11-27)
+
+Measured with `cargo run --release --example large_syntax -p vix-tui -- <MiB>
+[plain]`: an `App` with `large_file_mb = 0` opens a generated, deterministic
+Rust file (doc comments, structs, `impl` blocks with `match`, strings,
+numbers, a test module per item; about 29 bytes a line) and draws into a
+200×50 test terminal; `plain` opens the same bytes as `.txt`. *Open* is
+`App::open_initial`; *parse* is the wall time until the background parse is
+installed; *keystroke* is `on_key` in the middle of the file, then the
+frame after it, then the wall time of the background reparse (median of
+five). Resident memory is `vix_system_information_panel::resident_memory`
+before and after the open. Each size is its own process; Apple silicon.
+
+What the code already did before this slice, read from
+`crates/vix-editor-core/src/code.rs`: the first parse of a buffer at or above 50 KB
+runs on the `vix-parse` worker (T121), so opening never waits for it; each
+edit calls `Tree::edit` and reparses with the old tree on the worker, so
+typing never waits either; and highlighting runs a range-scoped
+`QueryCursor` over the visible rows only (plus the LRU of 256 ranges). The
+numbers confirm it: the keystroke reparse is incremental (19 ms at 64 MiB
+against a 9.7 s full parse) and the highlighted frame costs the same at every
+size.
+
+Before (2026-11-27; every Rust file parsed):
+
+| Size | Lines | Open | First frame (plain until parsed) | Parse (background) | First highlighted frame | Keystroke (`on_key`) | Reparse (background) | Memory the open added |
+| ---- | ----- | ---- | -------------------------------- | ------------------ | ----------------------- | ---------------------- | -------------------- | --------------------- |
+| 1 MiB | 36 k | 32 ms¹ | 1.2 ms | 125–160 ms | 0.85 ms | 19 µs | 0.5–6 ms | 47 MiB |
+| 8 MiB | 286 k | 31–50 ms¹ | 4–7 ms | 1.0–1.7 s | 0.9 ms | 22–33 µs | 2.5–4 ms | 343 MiB |
+| 16 MiB | 570 k | 36 ms | 8.7 ms | 2.2 s | 0.8 ms | 33 µs | 11 ms | 679 MiB |
+| 32 MiB | 1.14 M | 46 ms | 29 ms | 4.1 s | 0.8 ms | 35 µs | 15 ms | 1,350 MiB |
+| 64 MiB | 2.27 M | 261 ms | 97 ms | 9.7 s | 0.9 ms | 27 µs | 19 ms | 2,691 MiB |
+| 64 MiB as `.txt` | 2.27 M | 28 ms | 28 ms | — | — | 15 µs | — | 73 MiB |
+
+¹ Most of it is compiling the Rust highlight query, once per process.
+
+The one problem is memory: the parse tree costs about **42 bytes of resident
+memory per byte of text**, and the first parse about 140 ms per MiB of CPU on
+the worker. A 64 MiB source file held 2.7 GiB and kept a core busy for ten
+seconds before any color showed. Time on the UI thread was never the issue.
+
+The fix is a size limit, nothing else: a buffer larger than
+**`SYNTAX_MAX_BYTES` (8 MiB)** when it is created opens with Tree-sitter off
+(no tree, so no highlighting, textobjects or structural selection), and the
+status line says "Opened … ; syntax highlighting is off for files over 8 MiB"
+(`status.opened_syntax_off`). At or under 8 MiB nothing changed. 8 MiB keeps
+the tree near 340 MiB and the background parse near a second; VS Code's
+`editor.largeFileOptimizations` draws a similar line at 20 MB. After:
+
+| Size | Highlighted | Open | First frame | Keystroke (`on_key`) | Memory the open added |
+| ---- | ----------- | ---- | ----------- | ---------------------- | --------------------- |
+| 1 MiB | yes | 35 ms¹ | 1.4 ms | 23 µs | 47 MiB |
+| 8 MiB | yes | 50 ms¹ | 7.1 ms | 33 µs | 343 MiB |
+| 9 MiB | no | 4.4 ms | 4.5 ms | 16 µs | 11 MiB |
+| 64 MiB | no | 28 ms | 28 ms | 18 µs | 73 MiB (was 2,691) |
+
+Found and not changed here (they are the same with and without
+Tree-sitter, so they belong to "incremental rendering"): the first frame
+after a keystroke costs about 7 ms per MiB of text (66 ms at 8 MiB, 0.46 s at
+64 MiB, `.txt` included), and five keystrokes at 64 MiB raised resident
+memory by about 320 MiB in both cases.
+
 ## Opening a large checkout (T823)
 
 How long a user waits after opening a big project: for the file named on

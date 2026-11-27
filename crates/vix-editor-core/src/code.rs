@@ -216,6 +216,18 @@ pub struct EditState {
 /// Below it, parsing stays synchronous (identical behavior, no thread).
 const ASYNC_PARSE_THRESHOLD: usize = 50_000;
 
+/// Buffers larger than this many bytes (8 MiB) open with Tree-sitter off:
+/// no parse tree, so no syntax highlighting, textobjects or structural
+/// selection, and [`Code::syntax_off_for_size`] says so (T830).
+///
+/// Measured on generated Rust (`docs/performance`, § Tree-sitter on very
+/// large files): the tree costs about 42 bytes of resident memory per byte of
+/// text and the first parse about 140 ms per MiB, so 8 MiB is ~340 MiB and
+/// ~1.1 s on the background worker, while 64 MiB would be ~2.7 GiB and ~10 s.
+/// The size is checked once, when the buffer is created; a buffer edited past
+/// it keeps its tree.
+pub const SYNTAX_MAX_BYTES: usize = 8 << 20;
+
 /// A reparse job sent to the background worker.
 struct ParseRequest {
     /// Edit generation this snapshot corresponds to (for stale-result rejection).
@@ -332,6 +344,9 @@ pub struct Code {
     /// True while [`Code::apply_remote`] runs, so remote edits are neither
     /// logged (they would echo back) nor recorded in the undo history.
     applying_remote: bool,
+    /// The language has a grammar but the buffer was over
+    /// [`SYNTAX_MAX_BYTES`] when created, so Tree-sitter is off for it.
+    syntax_off_for_size: bool,
 }
 
 /// One content change as a splice: delete `delete` characters at `offset`,
@@ -413,9 +428,13 @@ impl Code {
             parse_worker: None,
             edit_log: None,
             applying_remote: false,
+            syntax_off_for_size: false,
         };
 
-        if let Some(language) = Self::get_language(lang) {
+        if len > SYNTAX_MAX_BYTES && Self::get_language(lang).is_some() {
+            // Too large to parse (T830): plain text, no tree.
+            code.syntax_off_for_size = true;
+        } else if let Some(language) = Self::get_language(lang) {
             let highlights = code.get_highlights(lang)?;
             let mut parser = Parser::new();
             parser.set_language(&language)?;
@@ -1028,6 +1047,14 @@ impl Code {
                 None,
             );
         }
+    }
+
+    /// Whether Tree-sitter is off for this buffer because it was larger than
+    /// [`SYNTAX_MAX_BYTES`] when created, although its language has a
+    /// grammar: the host says so instead of leaving the plain text unexplained.
+    #[must_use]
+    pub const fn syntax_off_for_size(&self) -> bool {
+        self.syntax_off_for_size
     }
 
     /// Return `true` if a Tree-sitter highlight query is loaded for this buffer.
@@ -1897,6 +1924,38 @@ mod tests {
             code.parse_pending(),
             "the initial parse was requested async, not run synchronously"
         );
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn a_buffer_over_the_syntax_limit_opens_with_tree_sitter_off() {
+        // T830: past `SYNTAX_MAX_BYTES` there is no parse at all, sync or
+        // async, so no tree, no highlights and nothing pending.
+        let line = "fn f() { let x = 1; }\n";
+        let mut big = line.repeat(SYNTAX_MAX_BYTES / line.len());
+        big.push_str(&"x".repeat(SYNTAX_MAX_BYTES - big.len()));
+        assert_eq!(big.len(), SYNTAX_MAX_BYTES);
+        let at_limit = Code::new(&big, "rust", None).unwrap();
+        assert!(
+            !at_limit.syntax_off_for_size(),
+            "the limit itself still parses"
+        );
+        assert!(at_limit.parse_pending());
+        drop(at_limit);
+
+        big.push('\n');
+        let mut code = Code::new(&big, "rust", None).unwrap();
+        assert!(code.syntax_off_for_size());
+        assert!(code.tree.is_none() && !code.is_highlight() && !code.parse_pending());
+        let theme: HashMap<String, u8> = [("keyword".to_string(), 1)].into();
+        assert_eq!(code.highlight_interval(0, 100, &theme), Vec::new());
+        // Editing it is plain-text editing: no reparse is requested.
+        code.insert(0, "// edit\n");
+        assert!(!code.parse_pending() && code.tree.is_none());
+        assert!(code.syntax_off_for_size());
+
+        // A language with no grammar is not "off for size": it never had one.
+        assert!(!Code::new(&big, "text", None).unwrap().syntax_off_for_size());
     }
 
     #[cfg(feature = "lang-rust")]

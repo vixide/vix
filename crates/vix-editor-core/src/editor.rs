@@ -1516,6 +1516,13 @@ impl Editor {
         self.code.parse_pending()
     }
 
+    /// Whether Tree-sitter is off for this buffer because it was too large
+    /// when opened ([`crate::code::SYNTAX_MAX_BYTES`], T830).
+    #[must_use]
+    pub const fn syntax_off_for_size(&self) -> bool {
+        self.code.syntax_off_for_size()
+    }
+
     /// Cycle which undo-tree branch the next `redo` will follow. Returns `true`
     /// when the current state has more than one branch.
     pub fn switch_undo_branch(&mut self) -> bool {

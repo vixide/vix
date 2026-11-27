@@ -512,6 +512,7 @@ ravif
 rebindable
 recalc
 recents
+redrawtime
 reimplementation
 reindent
 relevel

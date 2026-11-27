@@ -349,6 +349,39 @@ fn a_large_file_can_open_in_the_viewer_or_as_text() {
     );
 }
 
+/// A source file over `SYNTAX_MAX_BYTES` opens as plain text, and the status
+/// line says highlighting is off for its size; a small one opens as usual.
+/// Needs the Rust grammar: without it there is no parser to switch off.
+#[cfg(any(feature = "syntax-common", feature = "lang-rust"))]
+#[test]
+fn a_source_file_too_large_for_tree_sitter_says_so_on_open() {
+    let dir = temp("r3-syntax-off");
+    let mut a = app_at(&dir);
+    let limit = crate::editor_core::code::SYNTAX_MAX_BYTES;
+    let big = dir.join("big.rs");
+    std::fs::write(&big, "x".repeat(limit + 1)).unwrap();
+    a.open_path(&big, false);
+    assert_eq!(a.active_path().as_deref(), Some(big.as_path()));
+    assert!(a.editor.active_tab().unwrap().editor.syntax_off_for_size());
+    assert_eq!(
+        a.status,
+        t!(
+            "status.opened_syntax_off",
+            path = big.display(),
+            mb = limit >> 20
+        )
+        .to_string()
+    );
+    let small = dir.join("small.rs");
+    std::fs::write(&small, "fn main() {}\n").unwrap();
+    a.open_path(&small, false);
+    assert!(!a.editor.active_tab().unwrap().editor.syntax_off_for_size());
+    assert_eq!(
+        a.status,
+        t!("status.opened", path = small.display()).to_string()
+    );
+}
+
 /// The delete confirmation answers y/n; a stale save-as target is dropped
 /// when a different question replaces it.
 #[test]
