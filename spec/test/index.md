@@ -297,6 +297,32 @@ are not scanned. The same file keeps `.github/pull_request_template.md` and
 `.forgejo/pull_request_template.md` (GitHub's and Codeberg's copy of the
 contributor checklist) identical.
 
+### Contributor docs match the crate graph (T836)
+
+`tui/tests/docs_crate_graph.rs` runs `cargo metadata --no-deps --offline` and
+checks what the contributor docs say about the workspace against it:
+
+- **The architecture diagram's arrows are real.** In every `flowchart`/`graph`
+  Mermaid block of `docs/architecture/index.md`, an arrow between two nodes
+  whose labels start with a workspace crate name is a direct normal or build
+  dependency (dev-dependencies do not count). A subgraph titled
+  `Layer N (M crates)` holds only crates of layer `N` (the longest chain of
+  workspace dependencies below the crate; 0 for none), and the workspace has
+  exactly `M` of them; the page's "directly on N of the M" sentence about
+  `vix-tui` matches too.
+- **Crate names are real.** Every `vix-…` name in backticks on that page and in
+  `agents/share/crate-map.md` is a workspace member or a `gui/` crate; a name
+  with `*` matches at least one member.
+- **The crate map is complete and the counts agree.** Every member crate is
+  named in the crate map (directly or through a `*` pattern), and every
+  "N `vix-*`", "N focused `vix-*`", "N focused crates" or "N feature crates"
+  count in `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `README.md`,
+  `index.md`, `llms.txt`, the crate map, the architecture page and
+  `docs/development.md` equals the number of member crates under `crates/`.
+
+Adding or removing a crate therefore fails this test until the counts are
+updated, which is the moment to place the crate in the crate map.
+
 ## Manual scenarios
 
 A few things still need a human at a terminal, because they *are* the terminal:

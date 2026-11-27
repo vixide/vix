@@ -569,11 +569,47 @@ slowest inputs (ms, at s into the session):
 Nothing is timed when `VIX_PROFILE` is unset. Only the terminal front end
 records a profile.
 
-To find *where* the time goes, use a sampling profiler on a release build:
+### Finding where the time goes (sampling profilers)
+
+`VIX_PROFILE` and the benchmarks say *how long*; a sampling profiler says
+*where*. Profile an optimized build that keeps its symbols. That is not the
+release build: `[profile.release]` is `opt-level = "z"` and `strip = true`,
+so its stacks have no function names and its hot spots are not the shipped
+speed-optimized ones. `[profile.bench]` (`opt-level = 3`, `strip = false`)
+is the one to sample, and every benchmark already runs under it.
+
+The quickest loop profiles a benchmark that exercises the slow path. On
+macOS the built-in `/usr/bin/sample` needs no setup: start it waiting for the
+bench executable, then run the benchmark (from a second terminal, or start
+`sample` in the background first):
+
+```sh
+/usr/bin/sample text_ops 5 -wait -mayDie -file text_ops.sample.txt
+cargo bench --bench text_ops -- sentence_starts
+```
+
+`sample` attaches when a process whose name contains `text_ops` appears,
+records five seconds, and writes a call tree plus a "Sort by top of stack"
+summary to the file. The symbols are v0-mangled
+(`_RNvCs…_11vix_textops15sentence_starts` is `vix_textops::sentence_starts`),
+which is readable as it is. (Homebrew can shadow `sample` with an unrelated
+tool, hence the full path.)
+
+To profile a whole session instead, build the `vix` command with the same
+profile and point a profiler at it. `cargo build --profile bench` writes to
+`target/release/`, like a release build:
+
+```sh
+cargo build --profile bench --bin vix
+```
+
+Then use [samply](https://github.com/mstange/samply)
+(`samply record target/release/vix big.log`) or
 [`cargo flamegraph`](https://github.com/flamegraph-rs/flamegraph)
-(`cargo flamegraph -p vix-tui --bin vix -- big.log`) or
-[samply](https://github.com/mstange/samply) (`samply record target/release/vix
-big.log`).
+(`cargo flamegraph --profile bench --bin vix -- big.log`; on macOS it uses
+DTrace and needs `--root`); on Linux, `perf record -g target/release/vix
+big.log` works the same way. A later plain `cargo build --release` overwrites
+that binary with the stripped one.
 
 ### Typing in a large file (measured 2026-11-17)
 

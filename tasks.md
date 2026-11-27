@@ -10877,7 +10877,7 @@ awareness, not capability. Items marked (stale?) may already exist.
 - [ ] **T835 — Interactive web demo.** A WebAssembly build of `vix-tui` or a
   recorded terminal session that can be replayed on the site; VHS tapes for palette,
   find, git, LSP, DB.
-- [ ] **T836 — Contributor developer-experience docs.** Development-setup guide
+- [x] **T836 — Contributor developer-experience docs.** (Done: `docs/development.md` corrected and added to the book, with IDE setup and a debugging guide; a `cargo metadata`-checked crate-layer diagram in `docs/architecture`; crate map count fixed and kept in sync by `tui/tests/docs_crate_graph.rs`; profiling with symbols in `docs/performance`; code-review guidelines in `agents/workflow.md`; release docs already accurate.) Development-setup guide
   with IDE recommendations, an architecture overview diagram, a crate
   navigation map (which crate owns what), a debugging guide and a performance
   profiling guide, release-process and code-review guidelines. Check

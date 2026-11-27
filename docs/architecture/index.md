@@ -16,27 +16,115 @@ Vix follows several key architectural principles:
 
 ## High-Level Architecture
 
+At run time a key press travels from the terminal (through `crossterm`) into
+the App shell, `vix-tui`, which owns the event loop, the `App` state and all
+rendering (`ratatui`), and calls into the feature crates. The desktop GUIs in
+`gui/` wrap the same App shell instead of a terminal.
+
+### Crate layers (checked against `cargo metadata`)
+
+The build-time picture is a layered dependency graph. A crate's *layer* is the
+longest chain of workspace dependencies below it: layer 0 crates depend on no
+other workspace crate, and each layer depends only on layers below it. The App
+shell `vix-tui` is the single crate at the top: it depends directly on 142 of
+the 147 member crates under `crates/` (the other five, such as
+`vix-civil-date` and `vix-jupyter-core`, it reaches through other crates).
+The diagram shows the layers with a few well-known crates in each; every arrow
+is a real direct dependency ("depends on"), not every dependency is drawn.
+
 ```mermaid
-graph TD
-    A[Vix User] --> B[Terminal]
-    B --> C[vix-tui: App Shell]
-    C --> D[vix-editor: Editor Host]
-    C --> E[vix-editor-core: Editor Widget]
-    D --> F[vix-settings: Configuration]
-    D --> G[vix-session: Session State]
-    D --> H[vix-workspace: Workspace Management]
-    C --> I[vix-lsp: LSP Client]
-    C --> J[vix-dap: DAP Debugger]
-    C --> K[vix-git: Git Integration]
-    C --> L[vix-db: Database Workbench]
-    C --> M[vix-org: Org Mode]
-    C --> N[vix-terminal: Integrated Terminal]
-    C --> O[vix-http-client: REST Client]
-    C --> P[vix-file-browser-panel: Explorer]
-    C --> Q[... 140+ other crates]
-    E --> R[ratatui: TUI Framework]
-    R --> S[crossterm: Terminal Backend]
+flowchart TD
+    gui["Desktop GUIs in gui/ (a separate workspace)"]
+    subgraph L5["Layer 5: App shell (1 crate)"]
+        tui["vix-tui"]
+    end
+    subgraph L4["Layer 4 (2 crates)"]
+        script["vix-script"]
+        fhir["vix-fhir"]
+    end
+    subgraph L3["Layer 3: feature hosts (20 crates)"]
+        editor["vix-editor"]
+        lsp["vix-lsp"]
+        dap["vix-dap"]
+        git["vix-git"]
+        db["vix-db"]
+        undo["vix-undo-store"]
+        http["vix-http-client"]
+    end
+    subgraph L2["Layer 2 (7 crates)"]
+        settings["vix-settings"]
+        authority["vix-authority"]
+        session["vix-session"]
+        macros["vix-macros"]
+    end
+    subgraph L1["Layer 1 (54 crates)"]
+        core["vix-editor-core"]
+        fileops["vix-fileops"]
+        theme["vix-theme"]
+        menu["vix-menu"]
+        palette["vix-palette"]
+    end
+    subgraph L0["Layer 0: no workspace dependencies (64 crates)"]
+        input["vix-input"]
+        i18n["vix-i18n"]
+        list_state["vix-list-state"]
+        encoding["vix-encoding"]
+        lsp_core["vix-lsp-core"]
+        textops["vix-textops"]
+        theme_model["vix-theme-model"]
+        keymap_model["vix-keymap-model"]
+    end
+    gui --> tui
+    tui --> script
+    tui --> fhir
+    tui --> editor
+    tui --> lsp
+    tui --> dap
+    tui --> db
+    tui --> i18n
+    script --> git
+    script --> macros
+    fhir --> http
+    fhir --> list_state
+    editor --> core
+    editor --> authority
+    editor --> theme
+    editor --> textops
+    undo --> core
+    undo --> settings
+    lsp --> settings
+    lsp --> authority
+    lsp --> lsp_core
+    dap --> lsp_core
+    git --> authority
+    git --> list_state
+    db --> settings
+    db --> i18n
+    settings --> fileops
+    authority --> fileops
+    session --> fileops
+    core --> input
+    fileops --> encoding
+    theme --> theme_model
+    menu --> keymap_model
+    menu --> i18n
+    palette --> i18n
 ```
+
+`tui/tests/docs_crate_graph.rs` keeps this diagram honest: it runs
+`cargo metadata`, fails if an arrow between two crates is not a direct
+dependency, if a crate is drawn in the wrong layer, or if a layer's crate count
+or the "142 of the 147" sentence above no longer matches, and checks that every
+crate this page or the [crate map](../crate-map.md) names really exists. To
+list the layers yourself:
+
+```sh
+cargo metadata --no-deps --format-version 1 --offline
+```
+
+and follow each package's `dependencies` whose `kind` is not `"dev"`. For
+*which crate owns what*, read the [crate map](../crate-map.md); it is the
+maintained crate-by-crate reference, and this page only sketches the shape.
 
 ## Workspace Structure
 
@@ -162,17 +250,12 @@ classDiagram
 The editor is split across multiple crates:
 
 ```mermaid
-erDiagram
-    EditorHost ||--o{ EditorWidget : "uses"
-    EditorHost ||--o{ Buffer : "owns"
-    EditorHost ||--o{ History : "owns"
-    EditorHost ||--o{ Syntax : "owns"
-    
-    EditorHost [label="vix-editor\n Editor Host"]
-    EditorWidget [label="vix-editor-core\n Editor Widget"]
-    Buffer [label="vix-fileops\n Buffer Management"]
-    History [label="vix-undo-store\n Undo History"]
-    Syntax [label="tree-sitter\n Syntax Parsing"]
+flowchart TD
+    editor["vix-editor: editor host"] --> core["vix-editor-core: editor widget, rope buffer, Tree-sitter"]
+    editor --> fileops["vix-fileops: file operations"]
+    editor --> encoding["vix-encoding: character encodings"]
+    undo["vix-undo-store: persistent undo"] --> core
+    editorconfig["vix-editorconfig"] --> authority["vix-authority"]
 ```
 
 ### Editor Core Components
@@ -180,12 +263,11 @@ erDiagram
 | Crate | Purpose |
 |-------|---------|
 | `vix-editor` | Editor host, tab management, split panes |
-| `vix-editor-core` | Core editor widget, buffer, cursor, rendering |
+| `vix-editor-core` | Core editor widget: rope buffer, cursors, Tree-sitter parsing and highlighting, rendering |
 | `vix-editorconfig` | EditorConfig file support |
 | `vix-undo-store` | Persistent undo tree with branching |
 | `vix-fileops` | File operations (read, write, watch) |
 | `vix-encoding` | Character encoding handling |
-| `vix-syntax` | Syntax highlighting (Tree-sitter) |
 
 ## Feature Crate Categories
 
@@ -193,13 +275,11 @@ erDiagram
 
 ```mermaid
 flowchart TD
-    A[vix-lsp] -->|uses| B[vix-lsp-core]
-    A --> C[vix-dap]
-    A --> D[vix-lsp-status]
-    B --> E[LSP Protocol Types]
-    B --> F[LSP Message Parsing]
-    C --> G[DAP Protocol Types]
-    C --> H[Debug Session Management]
+    lsp["vix-lsp: LSP client"] --> lsp_core["vix-lsp-core: protocol framing and types"]
+    dap["vix-dap: DAP client"] --> lsp_core
+    lsp --> project_env["vix-project-env: project environment"]
+    lsp --> settings["vix-settings"]
+    dap --> settings
 ```
 
 | Crate | Description |
@@ -207,7 +287,6 @@ flowchart TD
 | `vix-lsp` | LSP client implementation |
 | `vix-lsp-core` | LSP protocol types and message parsing |
 | `vix-dap` | Debug Adapter Protocol client |
-| `vix-lsp-status` | LSP status bar indicators |
 
 ### Version Control
 
@@ -376,7 +455,7 @@ graph TD
 | `vix-egui` | egui | MIT/Apache-2.0 | Immediate mode, simple |
 | `vix-iced` | iced | MIT/Apache-2.0 | Elm-style, CSS styling |
 | `vix-slint` | Slint | GPL-3.0-only | Declarative, OpenGL |
-| `vui-gtk4` | GTK4 | LGPL | Native GTK integration |
+| `vix-gtk4` | GTK4 | LGPL | Native GTK integration |
 | `vix-bui` | BUI | GPL-3.0-only | Blender's UI toolkit |
 | `vix-zgui` | zgui | Apache-2.0 | Reactive, CSS, wgpu |
 
@@ -446,10 +525,10 @@ flowchart TD
     D --> E[Return Translated String]
     E --> F[Display to User]
     
-    C --> G[locales/en.yml]
-    C --> H[locales/es.yml]
-    C --> I[locales/fr.yml]
-    C --> J[... 15 languages]
+    C --> G[locales/action.yml]
+    C --> H[locales/menu.yml]
+    C --> I[locales/ui.yml]
+    C --> J[... one file per key namespace, each key holding all 15 languages]
 ```
 
 **Supported Languages:**
@@ -474,22 +553,18 @@ flowchart TD
 Vix uses a hierarchical settings system:
 
 ```mermaid
-erDiagram
-    Settings ||--o{ UserSettings : "extends"
-    Settings ||--o{ WorkspaceSettings : "extends"
-    Settings ||--o{ ProjectSettings : "extends"
-    
-    Settings [label="vix-settings\n Settings"]
-    UserSettings [label="~/.config/vix/config.toml"]
-    WorkspaceSettings [label="Per-workspace overrides"]
-    ProjectSettings [label=".vix/config.toml"]
+flowchart LR
+    builtin["Built-in defaults"] --> user["User: config.toml in the confy config folder (~/.config/vix/ on Linux)"]
+    user --> project["Project: .vix/settings.toml in the workspace root"]
+    project --> language["Language: a languages table per language id, per buffer"]
 ```
 
-Settings are loaded in this order (later overrides earlier):
+`vix-settings` loads four layers, each overriding the one before it
+(`crates/vix-settings/src/layers.rs`; see its spec for the details):
 1. Built-in defaults
-2. User settings (`~/.config/vix/config.toml`)
-3. Workspace settings (per-workspace)
-4. Project settings (`.vix/config.toml`)
+2. User settings (`config.toml`, located by `confy`)
+3. Project settings (`<root>/.vix/settings.toml`)
+4. Per-language overrides (`[languages.<id>]`), resolved per buffer
 
 ## Theme System
 

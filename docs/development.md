@@ -6,8 +6,11 @@ This guide helps you set up your development environment for contributing to Vix
 
 ### Required Tools
 
-1. **Rust**: Vix requires Rust 1.70 or later (as specified by `rust-version` in
-   `Cargo.toml`)
+1. **Rust**, through [rustup](https://rustup.rs). The repository's
+   `rust-toolchain.toml` pins the toolchain it builds with (1.100.0 today, with
+   `clippy`, `rustfmt` and `llvm-tools`), and rustup installs it the first
+   time you run `cargo` in the checkout. The minimum supported Rust version
+   for users is `rust-version` in the root `Cargo.toml` (1.98 today).
    ```sh
    # Install Rust
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -15,7 +18,7 @@ This guide helps you set up your development environment for contributing to Vix
    # Add to PATH
    source "$HOME/.cargo/env"
    
-   # Verify
+   # Verify (run inside the checkout, so the pinned toolchain answers)
    rustc --version
    cargo --version
    ```
@@ -32,7 +35,7 @@ This guide helps you set up your development environment for contributing to Vix
    sudo dnf install git
    ```
 
-3. **C++ Compiler**: Required for Tree-sitter grammars
+3. **C/C++ compiler**: required to build the Tree-sitter grammars
    ```sh
    # macOS (with Xcode)
    xcode-select --install
@@ -46,10 +49,8 @@ This guide helps you set up your development environment for contributing to Vix
 
 ### Recommended Tools
 
-1. **IDE/Editor**: Any editor that supports Rust LSP
-   - VS Code with rust-analyzer
-   - IntelliJ IDEA with Rust plugin
-   - Vix itself!
+1. **IDE/Editor**: any editor with a rust-analyzer client (see
+   [IDE Setup](#ide-setup) below)
 
 2. **Terminal**: A modern terminal with truecolor support
    - macOS: Terminal.app, iTerm2, Kitty, WezTerm
@@ -89,15 +90,26 @@ cd vix
 ### 2. Build Vix
 
 ```sh
-# First build (this will take a while as it downloads dependencies)
+# Build the `vix` command (the first build downloads and compiles every dependency)
 cargo build
 
-# For development, use the debug profile
-cargo build
+# Build every workspace crate, not only the App shell
+cargo build --workspace
 
-# For a release build
+# A release build (size-optimized and stripped, as shipped)
 cargo build --release
 ```
+
+The root `Cargo.toml` sets `default-members = ["tui"]`, so a bare `cargo
+build`, `cargo run` or `cargo test` at the root acts on the App shell
+(package `vix-tui`) only; pass `--workspace` or `-p <crate>` for the rest.
+The desktop GUIs (`gui/`) and the fuzz targets (`fuzz/`) are separate
+workspaces with their own `Cargo.toml`.
+
+**Several checkouts or worktrees?** Give each its own target directory
+(`CARGO_TARGET_DIR=…`): cargo locks a target directory while it builds, so
+two checkouts sharing one wait on each other, and a deleted worktree can leave
+stale compile-time paths behind in a shared one.
 
 ### 3. Run Vix
 
@@ -116,6 +128,22 @@ cargo run -- path/to/directory
 
 ## IDE Setup
 
+Any editor with a [rust-analyzer](https://rust-analyzer.github.io/) client
+works; the repository ships no editor-specific project files (there is no
+`.vscode/` or `.idea/`). Whatever you use, set it up so that it:
+
+- **opens the repository root**, so rust-analyzer loads the whole workspace
+  (all 147 member crates and `tui/`), not one crate;
+- **checks with clippy**, because the gate runs
+  `cargo clippy --workspace --all-targets -- -D warnings` with
+  `clippy::pedantic` on for every crate, and a pedantic warning is an error;
+- **formats with rustfmt on save** (the gate runs `cargo fmt --all --check`);
+- **keeps the default features.** The gate checks the default feature set and
+  `--no-default-features`; turning on every feature at once pulls in optional
+  integrations the gate never builds together;
+- **uses its own target directory**, so the language server's background
+  checks do not hold the cargo lock while you build or test in a terminal.
+
 ### VS Code
 
 1. Install the [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) extension
@@ -125,11 +153,8 @@ cargo run -- path/to/directory
 **Recommended VS Code settings** (`settings.json`):
 ```json
 {
-  "rust-analyzer.cargo.ex extraEnv": {
-    "RUSTFLAGS": "-Dwarnings"
-  },
-  "rust-analyzer.cargo.features": "all",
-  "rust-analyzer.checkOnSave.command": "clippy",
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.cargo.targetDir": true,
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer",
     "editor.formatOnSave": true
@@ -137,20 +162,35 @@ cargo run -- path/to/directory
 }
 ```
 
-### IntelliJ IDEA
+`"rust-analyzer.cargo.targetDir": true` makes rust-analyzer build in a
+subdirectory of the target directory instead of sharing (and locking) the one
+your terminal uses. For a debugger, the
+[CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
+extension drives the same `lldb` the [Debugging](#debugging) section uses.
 
-1. Install the Rust plugin
-2. Open the repository root
-3. The IDE will automatically detect the Cargo workspace
+### RustRover and IntelliJ IDEA
 
-**Tip:** Enable clippy in the Rust settings for on-the-fly linting.
+1. Use RustRover, or IntelliJ IDEA with the Rust plugin
+2. Open the repository root; the IDE detects the Cargo workspace
+3. In the Rust settings, choose Clippy as the external linter and enable
+   rustfmt on save
 
-### Vix (Yes, you can develop Vix with Vix!)
+### Vim, Neovim, Helix, Zed, Emacs
 
-1. Build Vix: `cargo build --release`
-2. Run: `./target/release/vix`
-3. Open the repository in Vix
-4. Use `Ctrl+P` to find files, `F12` for go-to-definition
+Point the editor's language-server client at `rust-analyzer` (installed with
+`rustup component add rust-analyzer`) and, where it offers the choice, set the
+check command to `clippy`.
+
+### Vix (yes, you can develop Vix with Vix)
+
+Vix's own LSP client starts `rust-analyzer` for Rust files (see
+[Language Server Protocol](language-server-protocol/index.md)), so building
+Vix and opening the repository root in it gives you diagnostics,
+go-to-definition and completion on its own source:
+
+```sh
+cargo run --release -- .
+```
 
 ---
 
@@ -168,15 +208,21 @@ cargo test -p vix-editor-core
 # Run a specific test
 cargo test test_name -p vix-editor-core
 
-# Run doc tests
+# Run doc tests (of the App shell; add -p <crate> for another)
 cargo test --doc
 
-# Run integration tests only
-cargo test --test '*'
+# Run one integration test file of the App shell (tui/tests/<name>.rs)
+cargo test -p vix-tui --test snapshots
+
+# See a test's output even when it passes
+cargo test -p vix-textops -- --nocapture
 ```
 
-**Note:** Some tests require a terminal and will be skipped in CI or when
-not running in a TTY.
+`tui/` sets `autotests = false`, so each integration test file under
+`tui/tests/` is listed as a `[[test]]` in `tui/Cargo.toml`; add yours there.
+A few integration tests drive an external tool (for example
+`tui/tests/e2e_tmux.rs` needs `tmux`) and skip themselves when it is not
+installed.
 
 ---
 
@@ -195,36 +241,40 @@ scripts/check --tier push
 scripts/check
 ```
 
-**Or use the Makefile:**
+**Or use the Makefile** (`make help` lists every target):
 ```sh
-# Run the gate
+# Run the gate (scripts/check)
 make check
 
-# Run tests only
+# Run the tests (it first checks over the network that GitHub Discussions is enabled)
 make test
 ```
+
+Only the default full tier of `scripts/check` counts before landing; the
+faster tiers are for iterating. See
+[Spec-Driven Workflow](contributing-workflow.md) for the whole landing loop.
 
 ---
 
 ## Running Benchmarks
 
-Vix includes Criterion benchmarks for performance-critical paths:
+Vix's Criterion benchmarks live in `tui/benches/` (`text_ops`, `editor_ops`,
+`search_and_palette`, `startup`, `frame_ops`, `gutter_diff`, `render_ops`):
 
 ```sh
-# Run all benchmarks
+# Run every benchmark
 cargo bench
 
-# Run benchmarks for a specific package
-cargo bench -p vix-editor-core
+# Run one benchmark file
+cargo bench --bench text_ops
 
-# Run a specific benchmark
-cargo bench editor_open
-
-# Compare with previous run
-cargo bench --bench editor_ops
+# Run only the benchmarks whose name contains a filter
+cargo bench --bench text_ops -- sentence_starts
 ```
 
-Benchmark results are saved in `target/criterion/`.
+Criterion keeps each run under `target/criterion/` and reports the change
+against the previous run. The baselines, the profiling tools and how to read
+the numbers are in [Performance](performance/index.md).
 
 ---
 
@@ -246,9 +296,10 @@ git checkout -b my-feature-branch
 git checkout -b fix-issue-123
 ```
 
-**Branch naming convention:**
-- Use kebab-case: `fix-bug-description`, `feat-new-feature`, `docs-update-guide`
-- Prefix with type: `fix-`, `feat-`, `docs-`, `refactor-`, `perf-`, `test-`
+**Branch naming convention:** a type, a slash and a short kebab-case name,
+with the task id when there is one: `fix/t846-vi-parity`,
+`feat/whole-word-search`, `docs/t836-contributor-docs`,
+`chore/t833-code-lints`.
 
 ### 3. Make Changes
 
@@ -280,20 +331,19 @@ git add -p  # Interactive staging
 git add -A
 
 # Commit with a good message
-git commit -m "feat: add new feature description
+git commit -m "feat(find): add whole-word search
 
-Details of what changed and why.
-
-Generated by Mistral Vibe.
-Co-Authored-By: Mistral Vibe <vibe@mistral.ai>"
+Details of what changed and why."
 ```
 
 **Commit message guidelines:**
 - Use the imperative mood: "Add feature" not "Added feature"
 - Start with a short summary line (50 chars or less)
 - Add a blank line, then a detailed description
-- Reference issue numbers if applicable
-- Sign off with your name if you have a DCO
+- Reference issue numbers or task ids (`T836`) if applicable
+- Sign the commit (the project uses SSH-signed commits)
+- If an AI assistant helped, end the message with a `Co-Authored-By:` trailer
+  naming the model; see [AI Statement](contributing-ai-statement.md)
 
 ### 6. Push and Create a Pull Request
 
@@ -327,17 +377,22 @@ git push origin my-feature-branch
 ```
 vix/
 ├── Cargo.toml           # Workspace manifest
-├── Cargo.lock           # Dependency lockfile (not checked in)
-├── crates/              # Member crates (124+ crates)
+├── Cargo.lock           # Dependency lockfile (checked in)
+├── crates/              # The 147 `vix-*` member crates
 │   ├── vix-*/           # Feature crates
 │   └── ...
 ├── tui/                 # App shell (vix-tui package)
 │   ├── src/
 │   │   ├── main.rs      # CLI entry point
 │   │   ├── lib.rs       # Library root
-│   │   ├── app.rs       # App state and logic
-│   │   └── ui.rs        # Rendering
+│   │   ├── app.rs       # App state and logic (more in app/*.rs)
+│   │   └── ui.rs        # Rendering (more in ui/*.rs)
+│   ├── tests/           # Integration and snapshot tests
+│   ├── benches/         # Criterion benchmarks
+│   ├── examples/        # Headless examples and doc generators
 │   └── Cargo.toml
+├── gui/                 # Desktop GUIs (a separate workspace)
+├── fuzz/                # Fuzz targets (a separate workspace)
 ├── docs/                # Documentation
 ├── spec/                # Specifications
 ├── scripts/             # Development scripts
@@ -357,7 +412,10 @@ vix/
 | `tui/src/app/` | App logic by feature area |
 | `tui/src/ui/` | UI rendering by component |
 | `docs/` | User documentation |
-| `spec/` | Specifications |
+| `spec/` | Cross-cutting specifications (each crate's own spec is `crates/<crate>/spec/index.md`) |
+
+For which crate owns which feature, see the [Crate Map](crate-map.md); for
+how the layers fit together, see [Architecture](architecture/index.md).
 
 ### Finding Code
 
@@ -449,75 +507,96 @@ podman run --rm -it -v "$PWD:/work" -w /work vix .
 **Note:** Podman is rootless by default and provides a Docker-compatible CLI.
 Use `podman` or `docker` commands interchangeably.
 
-### Running in Development Mode
-
-```sh
-# Run with logging enabled
-RUST_LOG=debug cargo run
-
-# Run with specific log modules
-RUST_LOG=vix_editor=debug cargo run
-
-# Run with backtrace on panic
-RUST_BACKTRACE=1 cargo run
-```
-
 ---
 
 ## Debugging
 
-### Using a Debugger
+### Where Vix's own diagnostics go
 
-Vix has a built-in debugger for debugging your code. For debugging Vix itself:
+The TUI owns the terminal, so Vix never prints while it runs: a stray
+`println!` would scribble over the frame, and `tui/tests/code_lints.rs`
+fails the tests on one in library code. Vix has no log file and reads no
+`RUST_LOG`; its warnings and errors go to the **Messages** drawer in the right
+dock, and the output of tasks, tests and language servers to the **Output**
+dock. When reporting or chasing a problem, look there first.
+
+`vix --doctor` (or **Help → Run Diagnostics**) checks the environment: `git` on
+`PATH`, the configured language servers, the spell-check dictionary and the
+terminal's color support (see `crates/vix-doctor/spec/index.md`).
+
+### Panics and crash reports
+
+A panic restores the terminal, saves a [crash report](crash-reports/index.md)
+with a backtrace (always captured, so `RUST_BACKTRACE` is not needed) to the
+`crashes` folder in Vix's data folder, and prints its path. **Help → Report a
+Crash…** opens the newest one. A debug build (`[profile.dev]` keeps line
+tables) gives file and line numbers in the backtrace's frames.
+
+### Reproducing without a terminal
+
+Most bugs reproduce faster without the terminal in the way. The App shell is
+also a library (crate name `vix`), and its examples drive it headlessly:
 
 ```sh
-# Build with debug symbols
-cargo build
+# Draw one 80x24 frame of the real TUI as plain text, with a file open
+cargo run --example render_frame -- Cargo.toml
 
-# Run with lldb (macOS)
-lldb -- ./target/debug/vix
-
-# Run with gdb (Linux)
-gdb --args ./target/debug/vix
-
-# Run with Visual Studio debugger (Windows)
-# Set the executable to ./target/debug/vix.exe
+# Type into a buffer, run a find-and-replace and save, all through key events
+cargo run --example headless_edit
 ```
 
-### Logging
+A bug you can reproduce that way belongs in a test: `tui/tests/snapshots.rs`
+renders frames the same way (with `ratatui`'s `TestBackend`) and compares them
+with golden screens under `tui/tests/snapshots/`.
 
-Vix uses the `log` crate for logging. Set the `RUST_LOG` environment variable
-to control logging:
+### Using a debugger
+
+Use `rust-lldb` or `rust-gdb` (shipped with the toolchain; they load Rust's
+pretty-printers, so a `PathBuf` or a `String` prints as text). `[profile.dev]`
+keeps only line tables, which is enough for breakpoints and backtraces; to
+inspect variables, build with full debug information:
 
 ```sh
-# Enable debug logging for all modules
-RUST_LOG=debug cargo run
+# Full debug information for the workspace crates (dependencies stay without)
+CARGO_PROFILE_DEV_DEBUG=full cargo build --example render_frame
 
-# Enable debug logging for specific modules
-RUST_LOG=vix_editor=debug,vix_lsp=debug cargo run
-
-# Enable trace logging (very verbose)
-RUST_LOG=trace cargo run
-
-# Log to a file
-RUST_LOG=debug cargo run 2>&1 | tee vix-debug.log
+# Stop in App::new and look at a variable
+rust-lldb --batch -o "breakpoint set --name '<vix::app::App>::new'" -o run \
+  -o "frame variable root" -o kill -- target/debug/examples/render_frame Cargo.toml
 ```
 
-### Common Debug Commands
+The toolchain uses Rust's v0 symbol mangling, so give `lldb` the full path the
+way it prints one: an inherent method is `<crate::module::Type>::method` (a short regex
+such as `App::new` matches nothing). `breakpoint set --file app.rs --line N`
+works too.
+
+To debug the interactive TUI itself, start it in one terminal
+(`cargo build && target/debug/vix`) and attach from another, so the debugger's
+own output does not fight the TUI for the screen: `rust-lldb -p <pid>` (or
+`rust-gdb -p <pid>` on Linux). On Windows, open `target\debug\vix.exe` in
+the Visual Studio debugger.
+
+### When it is slow, not wrong
+
+Start Vix with `VIX_PROFILE=profile.txt` to get per-frame timings of a real
+session, then use a sampling profiler to see where the time goes; both are in
+[Performance](performance/index.md#profiling-a-session-vix_profile).
+
+### Common debug commands
 
 ```sh
 # Check Vix version
 cargo run -- --version
 
-# Run doctor to check environment
+# Check the environment (git, language servers, dictionary, colors)
 cargo run -- --doctor
 
-# List all available actions
+# List every command-palette command with its i18n key and action id
 cargo run --example list_commands
-
-# Show keybindings for current keymap
-cargo run --example list_keybindings
 ```
+
+The full action, setting and keybinding references in `docs/reference/` are
+generated by `cargo run --example list_commands -p vix-tui -- --write`.
 
 ---
 
@@ -573,6 +652,14 @@ if any public item is missing documentation.
 5. Wait for CI to pass
 6. Request review from maintainers
 
+### Releases
+
+Contributors do not cut releases. A release is a signed version tag on a
+commit already on `main`, which starts `.github/workflows/release.yml`
+(generated by `dist` from `dist-workspace.toml`); tagging and publishing are
+the maintainer's decision. [Releasing](release/index.md) describes the whole
+process, including the local alternative `scripts/release-local`.
+
 ---
 
 ## Community
@@ -600,8 +687,10 @@ if any public item is missing documentation.
 - Check that your Rust version matches the `rust-version` in `Cargo.toml`
 
 **Tests fail:**
-- Make sure you're running tests in a TTY (some tests require a terminal)
-- Run `cargo test --workspace` for all tests
+- Run the one failing test on its own (`cargo test -p <crate> <name>`) to
+  rule out interference from another test
+- A snapshot test that fails after a deliberate UI change needs its golden
+  screen updated and read line by line (see `agents/conventions.md`)
 
 **Formatting errors:**
 - Run `cargo fmt` to fix formatting
