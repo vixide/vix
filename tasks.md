@@ -10852,7 +10852,7 @@ awareness, not capability. Items marked (stale?) may already exist.
   (seccomp / App Sandbox / Windows); input-validation and file-system (TOCTOU,
   canonicalization) audits; keep the zero-`unsafe`, license (`cargo-deny`) and
   i18n-coverage audits green.
-- [ ] **T833 — Code-quality tooling.** Project-specific lints (no `println!`,
+- [ ] **T833 — Code-quality tooling.** (Started: `tui/tests/code_lints.rs` forbids print macros in library code outside a counted allowlist and untranslated literals at the App's message/status sinks (it found and fixed `Paste failed`); "no blocking I/O in async" skipped and documented in `spec/test` (two async paths, each on a private runtime); PR template in `.github/` and `.forgejo/`. Left: pre-push/pre-commit hook additions, the quality-metrics dashboard, the `cargo-depgraph` layering report.) Project-specific lints (no `println!`,
   user strings via `t!`, no blocking I/O in async); pre-push and pre-commit
   hooks (already partly there: `make hooks`, `scripts/attest`); a PR review
   checklist/template; a quality-metrics dashboard; crate dependency layering

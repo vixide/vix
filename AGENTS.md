@@ -162,6 +162,7 @@ bins, tests, benches, examples and build scripts (T599). Therefore:
 | Add or reorder a modal overlay       | the `OVERLAYS` table in `tui/src/app/overlays.rs` (+ `ui::draw_overlay`); see `spec/overlay-priority/index.md` |
 | Return an error from a library fn    | a small `#[non_exhaustive]` error enum, not `Result<_, String>` (`agents/conventions.md`, T610) |
 | Spawn a child process                | list the site in `tui/tests/spawn_sites.rs` (T595) and gate it behind a capability feature |
+| Print to stdout/stderr               | don't, in library code: use the message drawer; a real CLI channel goes in `tui/tests/code_lints.rs` (T833) |
 | Add/route a command                  | `tui/src/app.rs` (`run_action`, dispatching into `tui/src/app/*.rs`), `crates/vix-menu/`, `crates/vix-palette/` |
 | Change rendering                     | `tui/src/ui.rs`, usually via one of its `tui/src/ui/*.rs` submodules |
 | Add/translate UI text                | `crates/vix-i18n/locales/*.yml` (+ `t!` at the call site)                  |
