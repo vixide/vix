@@ -230,13 +230,19 @@ does:
   (`Ctrl+P`, `>` for commands) and `F1` for every shortcut; `:` still works.
 - **Persistent undo by default.** The undo tree survives closing the file,
   guarded by a content hash. Vim keeps a tree too, and `undofile` persists it.
-- **Safety.** Rust, `#![forbid(unsafe_code)]`, and no embedded script runtime.
+- **Safety.** Rust and `#![forbid(unsafe_code)]`. The one embedded script
+  runtime, [Rhai](../scripting/index.md), is sandboxed: a script cannot read
+  files, open sockets or start processes, and a project's own scripts run only
+  after you trust the workspace.
 
 ## Where Vim still wins
 
 - **The full Vi language**, as the list above shows.
-- **Extensibility.** No Vimscript, no Lua, no plugin ecosystem: if your workflow
-  depends on a niche plugin, Vix cannot replace it today.
+- **Extensibility.** No Vimscript and no Lua. Rhai scripts (and git
+  repositories of them installed with `vix --plugin`) add commands, key
+  bindings and buffer transforms, but there is nothing like Vim's plugin
+  ecosystem: if your workflow depends on a niche plugin, Vix cannot replace it
+  today.
 - **Ubiquity.** Vim is on every server you will ssh into; Vix is a single static
   binary you bring along.
 - **Maturity.** Vim has decades of edge cases handled. Vix is young.
