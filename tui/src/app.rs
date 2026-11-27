@@ -8981,7 +8981,21 @@ impl App {
                     }
                 }
                 self.apply_editorconfig_indent(path);
-                self.status = t!("status.opened", path = path.display()).to_string();
+                self.status = if self
+                    .editor
+                    .active_tab()
+                    .is_some_and(|t| t.editor.syntax_off_for_size())
+                {
+                    // Too large for Tree-sitter (T830): say why it is plain.
+                    t!(
+                        "status.opened_syntax_off",
+                        path = path.display(),
+                        mb = crate::editor_core::code::SYNTAX_MAX_BYTES >> 20
+                    )
+                    .to_string()
+                } else {
+                    t!("status.opened", path = path.display()).to_string()
+                };
                 // A built-in language server would start for it: ask first
                 // (not for a preview, such as arrowing through the explorer).
                 if !preview {

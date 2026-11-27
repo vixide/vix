@@ -106,6 +106,33 @@ Two correctness details this reuses/preserves rather than reinvents:
   in-flight parse (of the pre-edit text) would still match the unchanged
   generation and get installed as if it reflected the buffer's real content.
 
+## Very large files: Tree-sitter off above 8 MiB (T830)
+
+**A buffer larger than `SYNTAX_MAX_BYTES` (8 MiB, `vix_editor_core::code`)
+when it is created gets no Tree-sitter parser**, even when its language has a
+grammar: no parse tree, no worker thread, so no syntax highlighting,
+textobjects, structural selection or comment/string ranges, and editing it is
+plain-text editing. `Code::syntax_off_for_size` / `Editor::syntax_off_for_size`
+report it, and opening such a file sets the status line to
+`status.opened_syntax_off` ("Opened *path*; syntax highlighting is off for
+files over 8 MiB") instead of `status.opened`. A file at or under the limit is
+unchanged. Org's line-based highlighter has no tree and stays on.
+
+The reason is memory, not latency. Everything that could block was already
+off the UI thread (the initial and post-edit parses run on the worker, edits
+reparse incrementally with `Tree::edit` and the old tree, and highlighting
+queries only the visible rows), but the tree costs about 42 bytes of resident
+memory per byte of text and the first parse about 140 ms per MiB: 64 MiB of
+Rust held 2.7 GiB and took 10 s to color (`docs/performance`, § Tree-sitter on
+very large files).
+
+The size is checked once, when the buffer is built (the file is opened): a
+buffer edited past 8 MiB keeps its tree, and one
+edited below it stays plain until it is opened again. Vim has no size limit
+but stops syntax highlighting for a window whose highlighting takes longer
+than `'redrawtime'` (2 s) until `CTRL-L`; a fixed byte limit gives the same
+outcome without first spending the time, and the same result every run.
+
 See [`crates/vix-editor-core/spec/index.md`](../index.md) for the action catalog
 and [`spec/test/index.md`](../../../../spec/test/index.md) for how the benchmark
 that found the query cost is run.
