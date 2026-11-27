@@ -23,16 +23,12 @@
     reason = "benches, examples and tests fail loudly on a broken fixture"
 )]
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+#[path = "support/crate_graph.rs"]
+mod crate_graph;
 
-/// The repository root (this test's package lives in `tui/`).
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf()
-}
+use std::collections::{BTreeMap, BTreeSet};
+
+use crate_graph::{gui_crates, layers, member_crates, repo_root};
 
 /// Read a repository file as text.
 fn read(rel: &str) -> String {
@@ -42,87 +38,7 @@ fn read(rel: &str) -> String {
 /// The workspace's direct normal and build dependencies between members:
 /// member name -> the members it depends on.
 fn workspace_graph() -> BTreeMap<String, BTreeSet<String>> {
-    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let out = std::process::Command::new(cargo)
-        .args([
-            "metadata",
-            "--no-deps",
-            "--format-version",
-            "1",
-            "--offline",
-        ])
-        .current_dir(repo_root())
-        .output()
-        .expect("run cargo metadata");
-    assert!(
-        out.status.success(),
-        "cargo metadata failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let meta: serde_json::Value = serde_json::from_slice(&out.stdout).expect("metadata JSON");
-    let packages = meta["packages"].as_array().expect("packages");
-    let names: BTreeSet<String> = packages
-        .iter()
-        .map(|p| p["name"].as_str().expect("name").to_owned())
-        .collect();
-    packages
-        .iter()
-        .map(|p| {
-            let deps = p["dependencies"]
-                .as_array()
-                .expect("dependencies")
-                .iter()
-                .filter(|d| d["kind"].as_str() != Some("dev"))
-                .filter_map(|d| d["name"].as_str())
-                .filter(|n| names.contains(*n))
-                .map(str::to_owned)
-                .collect();
-            (p["name"].as_str().expect("name").to_owned(), deps)
-        })
-        .collect()
-}
-
-/// Each member's layer: the longest chain of workspace dependencies below it.
-fn layers(graph: &BTreeMap<String, BTreeSet<String>>) -> BTreeMap<String, usize> {
-    fn layer(
-        name: &str,
-        graph: &BTreeMap<String, BTreeSet<String>>,
-        memo: &mut BTreeMap<String, usize>,
-    ) -> usize {
-        if let Some(&l) = memo.get(name) {
-            return l;
-        }
-        let l = graph
-            .get(name)
-            .into_iter()
-            .flatten()
-            .map(|d| layer(d, graph, memo).saturating_add(1))
-            .max()
-            .unwrap_or(0);
-        memo.insert(name.to_owned(), l);
-        l
-    }
-    let mut memo = BTreeMap::new();
-    for name in graph.keys() {
-        layer(name, graph, &mut memo);
-    }
-    memo
-}
-
-/// The member crates under `crates/` (every workspace member but `vix-tui`).
-fn member_crates(graph: &BTreeMap<String, BTreeSet<String>>) -> BTreeSet<String> {
-    graph.keys().filter(|n| *n != "vix-tui").cloned().collect()
-}
-
-/// The desktop GUI crates: the directories under `gui/` named `vix-*`.
-fn gui_crates() -> BTreeSet<String> {
-    std::fs::read_dir(repo_root().join("gui"))
-        .expect("read gui/")
-        .flatten()
-        .filter(|e| e.path().is_dir())
-        .filter_map(|e| e.file_name().into_string().ok())
-        .filter(|n| n.starts_with("vix-"))
-        .collect()
+    crate_graph::workspace().graph
 }
 
 /// The bodies of the `flowchart`/`graph` Mermaid blocks in `text`.

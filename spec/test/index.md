@@ -364,6 +364,21 @@ checks what the contributor docs say about the workspace against it:
 
 Adding or removing a crate therefore fails this test until the counts are
 updated, which is the moment to place the crate in the crate map.
+
+### Crate layering rules (T833)
+
+`tui/tests/crate_layering.rs` enforces the four layering rules of
+[`docs/architecture`](../../docs/architecture/index.md#layering-rules): nothing
+depends on `vix-tui`, only `vix-input` and `vix-tui` depend on `crossterm`,
+no `*-core`/`*-model` crate reaches a `*-panel`/`*-picker`/`*-preview`/`*-view`
+crate, and no GUI under `gui/` names another. It reads `cargo metadata` (through
+`tui/tests/support/crate_graph.rs`, shared with `docs_crate_graph.rs`) and the
+GUI manifests, and each failure names the edge (`from -> to`, and for rule 3
+the whole chain). A unit test feeds each rule a small broken graph so the
+messages stay right. The same module writes
+`docs/reference/crate-layers.md` from `cargo run --example list_commands --
+--write`, so the gate's "generated reference docs current?" step keeps it in
+step with the workspace.
 ### Secret scanning (T832)
 
 `tui/tests/secret_scan.rs` fails `cargo test` when a tracked file holds what
