@@ -102,6 +102,48 @@ the Windows rules are tested on every OS; `file_uri_native` and
 `vix-lsp`'s `uri_to_path` also canonicalizes a decoded Windows drive path
 that exists, so it matches the (verbatim) paths of open tabs.
 
+## Frame size limits (T848)
+
+`frame::Decoder` used to accept any `Content-Length` and keep buffering
+until that many bytes arrived, so a server could make Vix hold an
+arbitrarily large message. Now two named limits are checked as soon as a
+header is complete, before any of its body is waited for:
+
+- `MAX_FRAME_BYTES` = 64 MiB: the largest body a header may declare.
+- `MAX_HEADER_BYTES` = 8 KiB: the longest header block (a real one is one
+  `Content-Length` line and at most a `Content-Type` line).
+
+`Decoder::try_pop` returns `Err(FrameError)` for `TooLarge { length,
+limit }` (a declared length over the limit; digits too large for `u64`
+read as `u64::MAX`), `HeaderTooLarge { limit }` (no `\r\n\r\n` within the
+limit) and `BadHeader` (no `Content-Length`, or a value that is not
+digits). After an error the decoder drops what it buffered, ignores further
+`push`es and repeats the error: the stream has lost sync and the host must
+close the connection. `Decoder::pop` (kept for compatibility) returns
+`None` then. A body that is not valid JSON is still consumed and skipped,
+and the next frame pops in the same call. `Decoder::buffered` reports the
+buffered byte count.
+
+`frame::read_messages(reader, on_message)` is the reader-thread loop the
+LSP and DAP clients share: it reads 8 KiB chunks, hands each message to the
+callback (which returns `false` to stop) and ends with a `ReadEnd`:
+`Closed` (EOF or a read error), `Stopped`, or `Frame(FrameError)`. A header
+declaring 10^12 bytes stops it after the chunk holding the header, without
+reading the body.
+
+**Why 64 MiB.** Measured on 2026-11-27 with rust-analyzer (the VS Code
+extension's server, build scripts and proc macros off) on this repository's
+largest file, `tui/src/app.rs` (17 158 lines): the largest messages were
+the completion list after `self.` on `App` (1.42 MB),
+`semanticTokens/full` (0.88 MB), `documentSymbol` (0.40 MB) and
+`publishDiagnostics` (0.10 MB). Semantic tokens grow with file length
+(five integers per token) and completion lists with the number of
+candidates, so a file ten times larger, or a server that puts the
+documentation in every completion item, stays well under 64 MiB; a message
+past it is far more likely a broken or hostile server than a real reply.
+The limit is a constant rather than a setting: raising it needs a code
+change and a new measurement.
+
 ## See also
 
 - [lsp spec](../../vix-lsp/spec/) — shared LSP behavior

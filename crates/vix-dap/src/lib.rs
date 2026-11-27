@@ -560,6 +560,11 @@ pub enum DapEvent {
     /// but `evaluate`, which already reports its own failure inline, used to
     /// have this silently discarded).
     RequestFailed(String),
+    /// The adapter broke the message framing, most often a header declaring
+    /// a message larger than [`vix_lsp_core::frame::MAX_FRAME_BYTES`]
+    /// (T848). The adapter was stopped before the body was buffered; a
+    /// [`DapEvent::Terminated`] follows.
+    ConnectionDropped(vix_lsp_core::frame::FrameError),
 }
 
 /// Messages from the reader thread.
@@ -568,6 +573,8 @@ enum Incoming {
     Message(Value),
     /// The adapter's stdout closed (it exited or crashed).
     Exited,
+    /// The adapter broke the framing (T848); the reader stopped.
+    Framing(frame::FrameError),
 }
 
 /// What a pending request was, so its response can be interpreted.
@@ -1048,6 +1055,17 @@ impl Dap {
             match inc {
                 Incoming::Exited => {
                     self.session = None;
+                    events.push(DapEvent::Terminated);
+                    return events;
+                }
+                Incoming::Framing(error) => {
+                    // The stream has lost sync: stop the adapter rather than
+                    // wait for a body that will not be read.
+                    if let Some(mut s) = self.session.take() {
+                        let _ = s.child.kill();
+                        let _ = s.child.wait();
+                    }
+                    events.push(DapEvent::ConnectionDropped(error));
                     events.push(DapEvent::Terminated);
                     return events;
                 }
@@ -1563,32 +1581,19 @@ fn spawn_writer(mut stdin: ChildStdin, wrx: Receiver<Vec<u8>>) {
     });
 }
 
-/// Background thread: decode framed DAP messages from `stdout` into `tx`.
-fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
+/// Background thread: decode framed DAP messages from `stdout` into `tx`,
+/// then `Exited` when the stream ends or `Framing` when the adapter broke
+/// the framing (T848: an oversized frame stops the reader before its body
+/// is buffered).
+fn spawn_reader(mut stdout: impl Read + Send + 'static, tx: Sender<Incoming>) {
     std::thread::spawn(move || {
-        let mut decoder = frame::Decoder::new();
-        let mut chunk = [0u8; 8192];
-        loop {
-            match stdout.read(&mut chunk) {
-                Ok(0) | Err(_) => {
-                    let _ = tx.send(Incoming::Exited);
-                    return;
-                }
-                Ok(n) => {
-                    #[expect(
-                        clippy::indexing_slicing,
-                        reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most chunk.len()"
-                    )]
-                    let received = &chunk[..n];
-                    decoder.push(received);
-                    while let Some(msg) = decoder.pop() {
-                        if tx.send(Incoming::Message(msg)).is_err() {
-                            return;
-                        }
-                    }
-                }
-            }
-        }
+        let end = frame::read_messages(&mut stdout, |msg| tx.send(Incoming::Message(msg)).is_ok());
+        let last = match end {
+            frame::ReadEnd::Frame(error) => Incoming::Framing(error),
+            frame::ReadEnd::Stopped => return,
+            _ => Incoming::Exited,
+        };
+        let _ = tx.send(last);
     });
 }
 

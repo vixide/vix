@@ -168,6 +168,17 @@ gutter markers (`Editor::set_breakpoints`/`set_debug_line`), and the Debug
 panel drawing (`ui::draw_debug_panel`). The fast event-loop cadence engages
 while `dap_busy()`.
 
+### Oversized or malformed frames (T848)
+
+The adapter's stdout is read with `lsp_core::frame::read_messages`, so the
+same limits as the LSP client apply (`MAX_FRAME_BYTES` = 64 MiB per message,
+`MAX_HEADER_BYTES` = 8 KiB per header). An adapter that breaks them is
+stopped before the body is buffered: `Dap::poll` kills and reaps it and
+emits `DapEvent::ConnectionDropped(error)` followed by
+`DapEvent::Terminated`. The App shows `msg.dap_connection_dropped` in
+Messages with the translated reason. `crates/vix-dap/tests/mock_adapter.rs` checks it with
+an adapter that declares 10^12 bytes and then streams forever.
+
 ## Remote workspaces (T710, T716)
 
 The adapter starts through the workspace authority, so in a remote workspace it

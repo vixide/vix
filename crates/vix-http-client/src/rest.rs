@@ -204,12 +204,67 @@ const MAX_DEPTH: usize = 8;
 /// # Errors
 /// A [`VarError`] for the first reference that cannot be resolved.
 pub fn expand(text: &str, ctx: &Context<'_>) -> Result<String, VarError> {
-    expand_depth(text, ctx, 0)
+    expand_depth(text, ctx, 0, &mut None)
+}
+
+/// The system variables that read a secret from outside the `.http` file:
+/// the process environment, a `.env` file, or an Azure AD token (T848).
+/// [`expand_masked`] reports and masks them instead of reading them.
+pub const SECRET_VARIABLES: [&str; 3] = ["processEnv", "dotenv", "aadToken"];
+
+/// What [`expand_masked`] writes in place of a secret variable's value.
+pub const MASK: &str = "••••••";
+
+/// A request block expanded for preview, with its secrets masked (T848).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Masked {
+    /// The block with every `{{...}}` expanded, but each secret variable
+    /// (see [`SECRET_VARIABLES`]) replaced by [`MASK`].
+    pub text: String,
+    /// The secret variables the block uses, each once, in first-use order,
+    /// as written without braces (`$processEnv TOKEN`, `$dotenv KEY`,
+    /// `$aadToken`). Empty when it uses none.
+    pub secrets: Vec<String>,
+}
+
+/// Expand `text` like [`expand`], but without reading any secret: each
+/// `$processEnv`, `$dotenv` and `$aadToken` (also inside a file or
+/// environment variable's value) becomes [`MASK`] and is listed in
+/// [`Masked::secrets`]. The host uses this to show what a request would send,
+/// and to decide whether it must ask first (T848).
+///
+/// # Errors
+/// A [`VarError`] for the first reference that cannot be resolved; never
+/// [`VarError::AzureCliMissing`] or [`VarError::AzureTokenFailed`], since no
+/// token is fetched.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::HashMap;
+/// use vix_http_client::rest::{Context, MASK, expand_masked};
+/// let named = HashMap::new();
+/// let ctx = Context { vars: &[], named: &named, base_dir: None, now_ms: 0, local_offset_min: 0 };
+/// let m = expand_masked("GET https://e.com/?k={{$processEnv KEY}}", &ctx).unwrap();
+/// assert_eq!(m.text, format!("GET https://e.com/?k={MASK}"));
+/// assert_eq!(m.secrets, ["$processEnv KEY"]);
+/// ```
+pub fn expand_masked(text: &str, ctx: &Context<'_>) -> Result<Masked, VarError> {
+    let mut secrets = Vec::new();
+    let text = expand_depth(text, ctx, 0, &mut Some(&mut secrets))?;
+    Ok(Masked { text, secrets })
 }
 
 /// [`expand`] with the current nesting `depth` (variables referencing
-/// variables); `depth` is capped at `MAX_DEPTH`.
-fn expand_depth(text: &str, ctx: &Context<'_>, depth: usize) -> Result<String, VarError> {
+/// variables); `depth` is capped at `MAX_DEPTH`. With `secrets`, secret
+/// variables are masked and recorded there instead of read.
+fn expand_depth(
+    text: &str,
+    ctx: &Context<'_>,
+    depth: usize,
+    secrets: &mut Option<&mut Vec<String>>,
+) -> Result<String, VarError> {
     let mut out = String::new();
     let mut rest = text;
     while let Some((before, after)) = rest.split_once("{{") {
@@ -221,7 +276,7 @@ fn expand_depth(text: &str, ctx: &Context<'_>, depth: usize) -> Result<String, V
         if depth >= MAX_DEPTH {
             return Err(VarError::TooDeep(name.to_string()));
         }
-        out.push_str(&resolve(name, ctx, depth)?);
+        out.push_str(&resolve(name, ctx, depth, secrets)?);
         rest = tail;
     }
     out.push_str(rest);
@@ -230,8 +285,25 @@ fn expand_depth(text: &str, ctx: &Context<'_>, depth: usize) -> Result<String, V
 
 /// Resolve one `{{name}}` body: system variable, named-response reference, or
 /// file/environment variable, in that order.
-fn resolve(name: &str, ctx: &Context<'_>, depth: usize) -> Result<String, VarError> {
+fn resolve(
+    name: &str,
+    ctx: &Context<'_>,
+    depth: usize,
+    secrets: &mut Option<&mut Vec<String>>,
+) -> Result<String, VarError> {
     if let Some(sys) = name.strip_prefix('$') {
+        if let Some(found) = secrets.as_deref_mut()
+            && sys
+                .split_whitespace()
+                .next()
+                .is_some_and(|n| SECRET_VARIABLES.contains(&n))
+        {
+            let written = format!("${}", sys.split_whitespace().collect::<Vec<_>>().join(" "));
+            if !found.contains(&written) {
+                found.push(written);
+            }
+            return Ok(MASK.to_string());
+        }
         return system_variable(sys, name, ctx);
     }
     if let Some((req, tail)) = name.split_once(".response.") {
@@ -249,7 +321,7 @@ fn resolve(name: &str, ctx: &Context<'_>, depth: usize) -> Result<String, VarErr
         .find(|(n, _)| n == name)
         .map(|(_, v)| v.as_str())
         .ok_or_else(|| VarError::Unknown(name.to_string()))?;
-    expand_depth(value, ctx, add_or(depth, 1, usize::MAX))
+    expand_depth(value, ctx, add_or(depth, 1, usize::MAX), secrets)
 }
 
 /// `body`, `body.$.path` (JSON), `body.*`, or `headers.Name`. A body path
@@ -535,6 +607,93 @@ fn rfc1123(ms: i64) -> Option<String> {
         rem.div_euclid(60_000).rem_euclid(60),
         rem.div_euclid(1000).rem_euclid(60)
     ))
+}
+
+/// A `# @timeout` or `# @connection-timeout` line whose value is not a
+/// positive duration (T848).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct BadTimeout {
+    /// The line as written, trimmed.
+    pub line: String,
+}
+
+impl std::fmt::Display for BadTimeout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "bad timeout (expected a number and ms, s or m): {}",
+            self.line
+        )
+    }
+}
+
+impl std::error::Error for BadTimeout {}
+
+/// The timeouts for a request block (T848): [`crate::Timeouts::DEFAULT`],
+/// overridden by `# @timeout N` (the read timeout) and
+/// `# @connection-timeout N` comment lines, as in the `JetBrains` HTTP
+/// client. `N` is a positive whole number of seconds, or of `ms`, `s` or
+/// `m` when followed by that unit (`500 ms`, `2m`). `//` comments work
+/// too; the last line of each kind wins.
+///
+/// # Errors
+/// A [`BadTimeout`] for a value that is missing, zero, not a number, or
+/// has another unit.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+/// use vix_http_client::rest::timeouts;
+/// let t = timeouts("# @timeout 5\n# @connection-timeout 500 ms\nGET https://e.com\n").unwrap();
+/// assert_eq!((t.read, t.connect), (Duration::from_secs(5), Duration::from_millis(500)));
+/// assert!(timeouts("# @timeout soon\nGET https://e.com\n").is_err());
+/// ```
+pub fn timeouts(block: &str) -> Result<crate::Timeouts, BadTimeout> {
+    let mut out = crate::Timeouts::DEFAULT;
+    for line in block.lines() {
+        let t = line.trim();
+        let Some(body) = t.strip_prefix('#').or_else(|| t.strip_prefix("//")) else {
+            continue;
+        };
+        let body = body.trim();
+        // `@connection-timeout` first: `@timeout` is not its prefix, but keep
+        // the longer name checked first anyway.
+        let (slot, value) = if let Some(v) = body.strip_prefix("@connection-timeout") {
+            (&mut out.connect, v)
+        } else if let Some(v) = body.strip_prefix("@timeout") {
+            (&mut out.read, v)
+        } else {
+            continue;
+        };
+        // `@timeoutX` is some other name, not this one.
+        if !value.is_empty() && !value.starts_with(char::is_whitespace) {
+            continue;
+        }
+        *slot = parse_duration(value).ok_or_else(|| BadTimeout {
+            line: t.to_string(),
+        })?;
+    }
+    Ok(out)
+}
+
+/// `N`, `N unit` or `Nunit` (unit `ms`, `s` or `m`; seconds when absent)
+/// as a positive duration.
+fn parse_duration(text: &str) -> Option<std::time::Duration> {
+    let text = text.trim();
+    let digits = text
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(text.len());
+    let (number, unit) = text.split_at(digits);
+    let n: u64 = number.parse().ok().filter(|&n| n > 0)?;
+    let millis = match unit.trim() {
+        "ms" => n,
+        "" | "s" => n.checked_mul(1_000)?,
+        "m" => n.checked_mul(60_000)?,
+        _ => return None,
+    };
+    Some(std::time::Duration::from_millis(millis))
 }
 
 /// Why a `< path` body file could not be loaded.
@@ -1216,5 +1375,89 @@ mod cov_tests {
             to_curl(&req),
             "curl -X POST 'https://e.com/x' \\\n  --data-raw 'it'\\''s {\"a\":1}'"
         );
+    }
+}
+
+#[cfg(test)]
+mod t848_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn ctx<'a>(vars: &'a [(String, String)], named: &'a HashMap<String, Response>) -> Context<'a> {
+        Context {
+            vars,
+            named,
+            base_dir: None,
+            now_ms: 0,
+            local_offset_min: 0,
+        }
+    }
+
+    #[test]
+    fn masked_expansion_lists_secrets_and_never_reads_them() {
+        let named = HashMap::new();
+        // Through a file variable too, and each secret once.
+        let vars = vec![(
+            "tok".to_string(),
+            "{{$processEnv VIX_T848_UNSET_VAR}}".to_string(),
+        )];
+        let text = "POST https://e.com/{{$dotenv KEY}}\nAuthorization: Bearer {{tok}}\nX-A: {{ $aadToken  res }}\nX-B: {{tok}}\n\n{{$guid}}";
+        let m = expand_masked(text, &ctx(&vars, &named)).unwrap();
+        assert_eq!(
+            m.secrets,
+            [
+                "$dotenv KEY",
+                "$processEnv VIX_T848_UNSET_VAR",
+                "$aadToken res"
+            ]
+        );
+        assert!(m.text.starts_with(&format!("POST https://e.com/{MASK}\n")));
+        assert!(m.text.contains(&format!("Bearer {MASK}")));
+        // An unset variable, a missing .env (no base dir) and no Azure CLI
+        // would all fail a real expansion; masking reads none of them.
+        assert!(expand(text, &ctx(&vars, &named)).is_err());
+    }
+
+    #[test]
+    fn a_block_without_secrets_masks_nothing() {
+        let named = HashMap::new();
+        let m = expand_masked("GET https://e.com/{{$timestamp}}", &ctx(&[], &named)).unwrap();
+        assert_eq!(m.secrets, [] as [String; 0]);
+        assert_eq!(m.text, "GET https://e.com/0");
+    }
+
+    #[test]
+    fn timeouts_default_and_override_per_request() {
+        assert_eq!(
+            timeouts("GET https://e.com").unwrap(),
+            crate::Timeouts::DEFAULT
+        );
+        let t =
+            timeouts("# @timeout 2 m\n// @connection-timeout 750ms\nGET https://e.com").unwrap();
+        assert_eq!(t.read, Duration::from_secs(120));
+        assert_eq!(t.connect, Duration::from_millis(750));
+        let t = timeouts("# @timeout 3 s\n# @timeout 4\nGET https://e.com").unwrap();
+        assert_eq!(t.read, Duration::from_secs(4), "the last one wins");
+        // Other `@` comments are not timeouts.
+        assert_eq!(
+            timeouts("# @timeouts 9\n# @name x\nGET https://e.com").unwrap(),
+            crate::Timeouts::DEFAULT
+        );
+    }
+
+    #[test]
+    fn bad_timeouts_are_errors_naming_the_line() {
+        for bad in [
+            "# @timeout",
+            "# @timeout 0",
+            "# @timeout 5 h",
+            "# @timeout -1",
+            "# @connection-timeout x",
+        ] {
+            let err = timeouts(&format!("{bad}\nGET https://e.com")).unwrap_err();
+            assert_eq!(err.line, bad);
+            assert!(err.to_string().contains(bad));
+        }
+        assert!(timeouts("# @timeout 99999999999999999999 m\nGET https://e.com").is_err());
     }
 }

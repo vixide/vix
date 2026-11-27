@@ -38,6 +38,12 @@ impl App {
         debug_assert!(self.layout.edit_sql.width < u16::MAX);
     }
 
+    /// No secret-variable confirmation in this build (never raised).
+    pub(super) fn http_confirm_key(&mut self, _key: vix_input::KeyEvent) -> bool {
+        debug_assert!(self.layout.edit_sql.width < u16::MAX);
+        false
+    }
+
     /// Never running.
     #[must_use]
     pub fn http_running(&self) -> bool {

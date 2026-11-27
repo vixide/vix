@@ -116,6 +116,25 @@ fn threads_stack_scopes_and_variables_build_the_tree() {
 }
 
 #[test]
+fn an_adapter_dropped_for_its_framing_is_reported() {
+    // T848: `ConnectionDropped` explains, the `Terminated` after it resets.
+    let mut app = app_at(&temp("dbg-frame"));
+    app.apply_dap_event(DapEvent::ConnectionDropped(
+        crate::lsp_core::frame::FrameError::HeaderTooLarge { limit: 8192 },
+    ));
+    assert_eq!(
+        app.messages.items.last().map(|m| m.text.clone()),
+        Some(
+            t!(
+                "msg.dap_connection_dropped",
+                reason = t!("msg.frame_invalid")
+            )
+            .to_string()
+        )
+    );
+}
+
+#[test]
 fn data_breakpoint_answers_without_a_live_session_report_why() {
     let d = temp("dbg-data");
     let mut app = app_at(&d);
