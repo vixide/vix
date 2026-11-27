@@ -10954,6 +10954,17 @@ Fix boundaries of everyday edits before adding Vi features.
   when an index is still building or was cut short. Acceptance: in the
   `open/` bench checkout every file is findable; first results and typing
   latency stay within the numbers in docs/performance/index.md.
+- [ ] **T846 — Vi parity bugs found by the T844 table.** Each is a row in
+  `tui/tests/integration/vim_parity.rs` that asserts Vix's current behavior;
+  fix it, flip the row to Vim's result, and check it against `vim -u NONE`.
+  First: `Ctrl-R` in Normal mode types an `r` into the buffer instead of
+  redoing (an edit the user did not ask for). Then the unbound `D`, `X`,
+  `C`, `s`, `r`, `J`, `g-`/`g+`; `<Esc>` from Insert leaves the cursor
+  after the typed text (Vim steps back one); `u` leaves the cursor in place
+  (Vim moves to the undone change); `V` moves the cursor to the next line's
+  start; `}` lands on the next paragraph's first line, not the blank line;
+  `da"` keeps the white space after the closing quote; after `/pattern<CR>`
+  the find bar keeps the keyboard until `<Esc>`.
 
 ## Ideas backlog (unscoped)
 
