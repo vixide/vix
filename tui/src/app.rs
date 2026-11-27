@@ -15715,13 +15715,13 @@ mod tests {
         app.build_file_index();
 
         // New Contact runs the built-in Contact capture template: a Name
-        // prompt, then Email/Phone/Address/Birthday (left blank here), then
-        // files immediately (its `immediate_finish` is set).
+        // prompt, then Email/Phone/Address/Birthday/Nickname/Note (left blank
+        // here), then files immediately (its `immediate_finish` is set).
         app.run_action("org.capture.contact");
         for c in "Grace".chars() {
             app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
         }
-        for _ in 0..5 {
+        for _ in 0..7 {
             app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         }
         let buf = app.editor.active_tab().unwrap().text();

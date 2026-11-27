@@ -326,6 +326,8 @@ template = """
   :PHONE: %^{Phone}
   :ADDRESS: %^{Address}
   :BIRTHDAY: %^{Birthday}
+  :NICKNAME: %^{Nickname}
+  :NOTE: %^{Note}
   :END:"""
 prepend = false
 empty_lines = 0

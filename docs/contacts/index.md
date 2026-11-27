@@ -44,8 +44,8 @@ Emacs org-contacts. Vix reads the property names in any case.
   :END:
 ```
 
-- **Org → Capture → Contact…** asks for a name, email, phone, address and
-  birthday, and inserts an entry like the one above.
+- **Org → Capture → Contact…** asks for a name, email, phone, address,
+  birthday, nickname and note, and inserts an entry like the one above.
 - **Org → Contacts → Insert Field** inserts one `:EMAIL:`, `:PHONE:`, … line
   at the cursor.
 - **Find Contacts**, **Birthdays** and **Export to vCard** read every `.org`

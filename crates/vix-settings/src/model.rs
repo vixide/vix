@@ -365,6 +365,8 @@ pub fn default_capture_templates() -> Vec<CaptureTemplate> {
                 "  :PHONE: %^{Phone}\n",
                 "  :ADDRESS: %^{Address}\n",
                 "  :BIRTHDAY: %^{Birthday}\n",
+                "  :NICKNAME: %^{Nickname}\n",
+                "  :NOTE: %^{Note}\n",
                 "  :END:",
             )
             .to_string(),
