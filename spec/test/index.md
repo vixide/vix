@@ -173,7 +173,7 @@ signal, not a formality — read *why* the screen changed before accepting it.
 root `cargo build` never touches it. Targets cover the code that parses input
 Vix did not write: `textops`, `org_table`, `lsp_frame`, `vcard`, `conflict`,
 `http_request`, `query_replace`, `tabular_convert`, `structured_convert`,
-`macro_tokens`, `im_message`, `agent_frame`, `jupyter_wire`. See [`fuzz/README.md`](../../fuzz/README.md) for running them,
+`macro_tokens`, `im_message`, `agent_frame`, `jupyter_wire`, `sql_split`, `edit_value`, `settings_toml`, `substitute`. See [`fuzz/README.md`](../../fuzz/README.md) for running them,
 minimizing a crash, and adding a target. `.github/workflows/fuzz.yml` runs every
 target for two minutes each week (see [`spec/ci`](../ci/index.md)); a new target
 is added to its matrix too.
@@ -192,7 +192,7 @@ code is supposed to do is as much a false alarm as no invariant at all.
 
 When a target finds something: minimize it (`cargo +nightly fuzz tmin`), then
 write the minimized input as a **unit test in the crate that owns the code**.
-The corpus is not committed; the regression is.
+The generated corpus is not committed (only a few hand-written `seed-*` inputs per target); the regression is.
 
 ## Benchmarking
 

@@ -25,7 +25,11 @@ From the overlay you can:
 - **Save** — `Ctrl+S` serializes the statements back into the buffer (one per
   block, `;`-terminated) and saves via the normal flow. A statement that ends
   in a `--` line comment gets its `;` on the next line, so the comment cannot
-  swallow it. Saving then reopening gives the same statements. **Esc** / `q`
+  swallow it. A statement that ends inside an unclosed quoted string or
+  `/* …` block comment (which the splitter only produces as the last
+  statement, since it runs to the end of the text) gets no `;` at all: one
+  would become part of the string or comment, and every save would add
+  another. Saving then reopening gives the same statements. **Esc** / `q`
   closes.
 
 This is a pragmatic helper for organizing and tidying SQL files, not a full SQL
@@ -34,7 +38,10 @@ parser or query engine. The `edit_sql` module is unit-tested
 Property tests (`crates/vix-edit-sql/tests/props.rs`, T831) check that the splitter never panics
 and returns trimmed pieces of its input in order, that `to_text` splits back
 to the same statements for any mix of strings and comments holding `;`, and
-that `format_sql` changes only letter case and is idempotent.
+that `format_sql` changes only letter case and is idempotent. The
+`sql_split` fuzz target (`fuzz/fuzz_targets/sql_split.rs`) checks the same
+round trip and formatter properties on arbitrary text, including unclosed
+strings and comments.
 
 ## Checked arithmetic
 

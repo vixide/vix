@@ -249,12 +249,17 @@ impl Editor {
         for s in &self.statements {
             let s = s.trim();
             out.push_str(s);
-            // A statement ending in a `--` comment gets its `;` on the
-            // next line, or the comment would swallow it (T831).
-            if scan(s).1 {
-                out.push('\n');
+            match scan(s).1 {
+                // A statement ending in a `--` comment gets its `;` on the
+                // next line, or the comment would swallow it (T831).
+                End::LineComment => out.push_str("\n;\n\n"),
+                // One ending inside an unclosed string or block comment gets
+                // none: the `;` would land inside it and grow the statement
+                // by one `;` per save (T831, found by the `sql_split` fuzz
+                // target).
+                End::Open => out.push_str("\n\n"),
+                End::Code => out.push_str(";\n\n"),
             }
-            out.push_str(";\n\n");
         }
         // Trim the trailing blank line, keeping a single newline.
         while out.ends_with('\n') {
@@ -469,9 +474,20 @@ pub fn split_statements(sql: &str) -> Vec<String> {
     scan(sql).0
 }
 
-/// [`split_statements`], plus whether `sql` ends inside a `--` line
-/// comment (so a `;` appended to it would be commented out).
-fn scan(sql: &str) -> (Vec<String>, bool) {
+/// Where [`scan`] stopped: what a `;` appended to the text would land in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum End {
+    /// Ordinary SQL: a `;` appended here terminates the statement.
+    Code,
+    /// A `--` line comment: a `;` appended here is commented out.
+    LineComment,
+    /// An unclosed quoted string or block comment: a `;` appended here is
+    /// part of it, and nothing appended can close the statement.
+    Open,
+}
+
+/// [`split_statements`], plus where `sql` ends ([`End`]).
+fn scan(sql: &str) -> (Vec<String>, End) {
     let mut out = Vec::new();
     let mut cur = String::new();
     let mut chars = sql.chars().peekable();
@@ -539,7 +555,14 @@ fn scan(sql: &str) -> (Vec<String>, bool) {
     if !cur.trim().is_empty() {
         out.push(cur.trim().to_string());
     }
-    (out, line_c)
+    let end = if line_c {
+        End::LineComment
+    } else if single || double || block_c {
+        End::Open
+    } else {
+        End::Code
+    };
+    (out, end)
 }
 
 /// Uppercase SQL keywords in `stmt`, leaving string/comment spans untouched.
@@ -999,6 +1022,21 @@ mod tests {
         );
         assert_eq!(format_sql(""), "");
         assert_eq!(format_sql("a1 In (1)"), "a1 IN (1)");
+    }
+
+    /// T831 (found by the `sql_split` fuzz target): a statement ending in an
+    /// unclosed string or block comment gets no `;`, which would land inside
+    /// it, so saving the same text again does not keep growing it.
+    #[test]
+    fn to_text_adds_no_terminator_inside_an_unclosed_string_or_comment() {
+        for text in ["select 'abc; select 2", "select \"x", "select 1 /* open; x"] {
+            let saved = Editor::from_text(text).to_text();
+            assert_eq!(saved, format!("{text}\n"));
+            assert_eq!(split_statements(&saved), split_statements(text));
+            assert_eq!(Editor::from_text(&saved).to_text(), saved);
+        }
+        let saved = Editor::from_text("select 1; select 'open").to_text();
+        assert_eq!(saved, "select 1;\n\nselect 'open\n");
     }
 
     /// T831: a statement ending in a `--` comment keeps its terminator out

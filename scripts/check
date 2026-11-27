@@ -222,6 +222,11 @@ changed_crates() {
 			return
 			;;
 		esac
+		# fuzz/, gui/ and matrix/ are separate Cargo workspaces: their packages
+		# are not members here, so `cargo doc -p` / semver cannot name them.
+		case "$f" in
+		fuzz/* | gui/* | matrix/*) continue ;;
+		esac
 		d=$(dirname "$f")
 		while [ "$d" != "." ] && [ "$d" != "/" ] && [ ! -f "$d/Cargo.toml" ]; do
 			d=$(dirname "$d")

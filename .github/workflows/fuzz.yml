@@ -42,6 +42,7 @@ jobs:
         target:
           - agent_frame
           - conflict
+          - edit_value
           - http_request
           - im_message
           - jupyter_wire
@@ -49,7 +50,10 @@ jobs:
           - macro_tokens
           - org_table
           - query_replace
+          - settings_toml
+          - sql_split
           - structured_convert
+          - substitute
           - tabular_convert
           - textops
           - vcard

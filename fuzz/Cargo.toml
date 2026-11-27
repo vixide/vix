@@ -21,6 +21,7 @@ members = ["."]
 libfuzzer-sys = "0.4"
 regex = "1"
 serde_json = "1"
+toml = "1.2"
 
 vix-authority = { path = "../crates/vix-authority" }
 vix-conflict-tool = { path = "../crates/vix-conflict-tool" }
@@ -29,6 +30,8 @@ vix-convert-from-json-into-yaml-tool = { path = "../crates/vix-convert-from-json
 vix-convert-from-toml-into-json-tool = { path = "../crates/vix-convert-from-toml-into-json-tool" }
 vix-convert-from-yaml-into-json-tool = { path = "../crates/vix-convert-from-yaml-into-json-tool" }
 vix-convert-tabular = { path = "../crates/vix-convert-tabular" }
+vix-edit-sql = { path = "../crates/vix-edit-sql" }
+vix-edit-value = { path = "../crates/vix-edit-value" }
 vix-find-panel = { path = "../crates/vix-find-panel" }
 vix-http-client = { path = "../crates/vix-http-client" }
 vix-im = { path = "../crates/vix-im" }
@@ -36,6 +39,7 @@ vix-jupyter-core = { path = "../crates/vix-jupyter-core" }
 vix-lsp-core = { path = "../crates/vix-lsp-core" }
 vix-macros = { path = "../crates/vix-macros" }
 vix-org-table = { path = "../crates/vix-org-table" }
+vix-settings = { path = "../crates/vix-settings" }
 vix-textops = { path = "../crates/vix-textops" }
 vix-vcard-parser = { path = "../crates/vix-vcard-parser" }
 
@@ -126,6 +130,34 @@ bench = false
 [[bin]]
 name = "jupyter_wire"
 path = "fuzz_targets/jupyter_wire.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sql_split"
+path = "fuzz_targets/sql_split.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "edit_value"
+path = "fuzz_targets/edit_value.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "settings_toml"
+path = "fuzz_targets/settings_toml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "substitute"
+path = "fuzz_targets/substitute.rs"
 test = false
 doc = false
 bench = false

@@ -18,6 +18,12 @@ or the command palette. The logic lives in the `edit_value` module; the host
   so they round-trip unchanged.
 - Saving serializes back to the chosen [`Format`]: a key-order-preserving JSON
   pretty-printer, or `serde_norway` for YAML. Scalar edits are undoable.
+- **Known limitation:** object keys are kept as strings, so YAML keys that are
+  distinct values but render alike (`1` and `"1"`; a tagged or complex key,
+  shown as `?`) collide on save: YAML keeps one of them, and JSON writes the
+  key twice, which does not parse again. Any other document saves to text that
+  reopens as the same tree and saves to the same text again; the `edit_value`
+  fuzz target (`fuzz/fuzz_targets/edit_value.rs`) checks both.
 
 ## Keys
 
