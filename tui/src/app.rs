@@ -8378,7 +8378,9 @@ impl App {
                     continue;
                 };
                 dest = free;
-            } else if auth.exists(&dest) {
+            } else if auth.exists(&dest) || auth.symlink_metadata(&dest).is_ok() {
+                // `symlink_metadata` too, so a dangling link is a conflict
+                // (T832): `exists` follows it and says no.
                 if overwrite_all {
                     // fall through and overwrite
                 } else if skip_all {

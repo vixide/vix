@@ -89,7 +89,7 @@ error output.
 | `read_dir` | glob `* .[!.]* ..?*`, kind and followed-dir flag per entry, NUL-separated |
 | `create_dir_all`, `remove_file`, `remove_path` | `mkdir -p`, `rm -f`, `rm -rf` (a link is removed, never followed) |
 | `rename`, `move_path` | `mv -f`, refusing to move *into* an existing directory (`std::fs::rename` semantics: an empty target directory is replaced) |
-| `copy_recursive` | `ln -s` for a link, `cp -RP src/. dst` for a tree, `cp -P` for a file |
+| `copy_recursive` | a destination that is a symlink is removed first (T832: `cp` and `mkdir -p` would follow it), then `ln -s` for a link, `cp -RP src/. dst` for a tree, `cp -P` for a file; a symlink *inside* an existing destination tree is still written through by `cp -R` (the agent path, which uses `vix_fileops::copy_recursive`, replaces those too) |
 | `trash` | `gio trash` or `trash-put` if present, else `Unsupported` |
 | `is_unwritable` | `[ -f ] && ! [ -w ]` |
 | `walk_files` | `git ls-files -co --exclude-standard` (filtered to real files) when ignore files are honored and the root is a git work tree, else `find -mindepth 1 -maxdepth D … -prune -o -type f -print0`; read as a stream and cut off at the limit; depth, hidden and pruned names re-applied locally |

@@ -162,7 +162,10 @@ code.
   ever pick a one-shot allow, and every write becomes a diff you accept or
   reject. ACP agents start only in a trusted workspace.
 - **Open risks.** As with MCP, the secret list is by file name. An agent's
-  own tools (outside ACP) are the agent's business, not Vix's.
+  own tools (outside ACP) are the agent's business, not Vix's. A path is
+  checked when the agent asks and saved when you save, so an agent that can
+  also write the workspace itself could swap the file for a link in between
+  (see the file-system audit below).
 
 ### AI providers and their API keys
 
@@ -296,6 +299,30 @@ code.
   `SECURITY.md`.
 - **Open risks.** The scan sees only the working tree, not history, and only
   the listed token shapes.
+
+## File-system audit (T832)
+
+Every place where Vix decides something about a path and then acts on it,
+checked for `..`, symlinks, case-insensitive file systems (macOS, Windows,
+case-folding Linux directories) and the gap between the check and the use.
+"Same account" means the only party that could win the race already runs as
+you, which is out of scope (above).
+
+| Area | The check | The use | Bypass? | Result |
+| --- | --- | --- | --- | --- |
+| Workspace trust (`tui/src/app/trust.rs`, `session_key` in `tui/src/app/session.rs`) | The decision is keyed by the root's canonical path (symlinks resolved; on macOS and Windows `canonicalize` returns the on-disk case, so `~/Proj` and `~/proj` are one key) | `.vix/scripts`, `.vix/settings.toml`, language servers, read under the root | A symlink to the root, or a case variant, is the same key, so it is the same decision; re-pointing a link at a new clone gives a new key, which asks again | Not exploitable. Replacing a trusted directory's contents in place keeps the trust (already an open risk above). |
+| Saving through a link (`write_atomic`, `crates/vix-fileops/src/lib.rs`) | `canonicalize` the target, then write a temp file beside the *resolved* target and rename it over | The resolved file | Another user who owns `/tmp/notes` swaps it for `/tmp/notes -> ~/.bashrc` after you open it; your save resolves the link (`readlink`, which Linux's `fs.protected_symlinks` does not cover) and replaces `~/.bashrc` | **Fixed.** Both writers refuse to follow a link in a sticky, world-writable directory unless you or the directory's owner own it (the kernel's rule), `PermissionDenied`; test `a_symlink_another_user_owns_in_a_sticky_shared_directory_is_not_followed`. |
+| Saving a dangling link (same) | `canonicalize` fails, so the path is used as given | The temp file is renamed over the link | None: the link is replaced and its target is never created | Not exploitable; pinned by `write_atomic_replaces_a_dangling_symlink_rather_than_creating_its_target`. The in-place fallback (directory not writable) follows the link, but then the directory also stops anyone else planting one. |
+| Save conflict check (`write_atomic_if_unchanged`, `crates/vix-authority/src/lib.rs`, `crates/vix-authority/src/ssh/authority.rs`) | Length and modification time compared with what the buffer saw | The atomic write | A change inside the same second with the same length is missed; the local check runs only for a remote workspace | Not a security check: it guards against lost edits, not an attacker (who would have to be on the same account or remote host). |
+| Explorer copy (`copy_recursive`, `crates/vix-fileops/src/lib.rs`; paste in `tui/src/app.rs`) | Source type from `symlink_metadata`; the conflict prompt asked `exists` | `fs::copy` / `create_dir_all` on the destination | A tree ships `notes.txt -> ~/.bashrc` (or a dangling `id.pub -> ~/.ssh/authorized_keys`); pasting a file of that name "overwrote" the link's target, and a dangling link did not even prompt | **Fixed.** A destination symlink, at any level, is removed and replaced; a dangling link is a conflict. Tests `copy_recursive_replaces_a_destination_symlink_instead_of_writing_through_it`, `a_dangling_symlink_at_the_paste_destination_asks_first`. Swapping a *source* file for a link between the stat and the copy needs a concurrent writer in the source tree (same account). |
+| Remote copy without the agent (`crates/vix-authority/src/ssh/authority.rs`) | None on the destination | `cp -P` / `mkdir -p` + `cp -RP` | As above, on the remote host | **Fixed** for a top-level destination link (removed first; test `a_copy_replaces_a_destination_symlink_instead_of_writing_through_it` in `crates/vix-authority/tests/ssh.rs`). A link *inside* an existing destination tree is still followed by `cp -R`; the agent path uses `copy_recursive` and replaces those too. |
+| Explorer move, delete, trash (`move_path`, `remove_path`, `trash_path`, `freedesktop_trash.rs`; `tui/src/app/dir_edit.rs`) | `symlink_metadata` (a link is a link) | `rename`, `remove_file`, `remove_dir_all`, a rename into the trash | A directory replaced by a link to outside between the stat and the removal: `std::fs::remove_dir_all` removes a top-level link as a link and walks the tree without following links (the CVE-2022-21658 fix), and `rename` never follows its operands | Not exploitable. |
+| Remote path mapping (`crates/vix-authority`) | None: a remote workspace's root is where it opens, not a jail | The remote account's own file system | A remote path can name anything the remote account can; that is the feature. Remote results never become local paths (backups and undo are keyed by `ssh://` names, hashed) | Not a boundary. Only `FakeAuthority` (`crates/vix-authority/src/fake.rs`, tests) confines paths to a backing directory, and it refuses `..` and escaping links (`crates/vix-authority/tests/api_misc.rs`). |
+| Rhai scripts and plugins (`crates/vix-script/src/engine.rs`, `plugins.rs`) | The engine has no file access; a plugin's tree is hashed (links by target text) and links must resolve inside it | Scripts are read after the hash check | The hash and the load are two reads, but the plugin directory is in your config directory | Not exploitable (same account). |
+| MCP file tools (`resolve` in `crates/vix-mcp-server/src/workspace.rs`) | Lexical join, then `canonicalize`, then a prefix check against the canonical root and `is_secret` on the canonical relative path | `fs::read` of the canonical path | A link out of the root, `..`, and `notes.txt -> .env` are all caught. `is_secret` compared `.git`/`.ssh` case-sensitively, so in a case-folding directory where `canonicalize` keeps the requested case, `.GIT/config` passed | **Fixed** (defense in depth: on macOS `canonicalize` returns the on-disk case, so it was not reachable there): directory names compare in ASCII lower case; tests `secret_files_are_recognized`, `a_case_variant_of_a_secret_directory_is_refused`. The resolve-then-read gap needs a concurrent writer in the workspace; the MCP tools are read-only, so the client cannot make one through Vix. |
+| ACP agent paths (`contain_on_disk` in `crates/vix-acp/src/policy.rs`; `acp_read`/`acp_write` in `tui/src/app/acp.rs`) | Absolute, no `..`, lexically under the root, then the canonical path (or its nearest existing ancestor) under the canonical root | A read of the path; a write becomes a pending diff, saved later by you | A dangling link `root/planted -> /outside/new` cannot be canonicalized, so it was judged by its parent (inside) and accepted | **Fixed:** a dangling link on the way is refused; test `symlink_out_of_root_is_refused`. Still open: the check runs when the agent asks, the save runs when you save, so an agent with its own write access to the workspace could swap the file for a link before you save. That agent can already write anywhere its own tools reach; it matters only for an agent sandboxed to the workspace, and is the same for every editor. |
+| Hot-exit backups and undo histories (`crates/vix-undo-store/src/hot_exit.rs`, `crates/vix-undo-store/src/lib.rs`) | File names are a SHA-256 of the identity, or a validated id; a tampered backup is rejected | `write_atomic_private` (new files `0600`) under the data and config directories | Planting a link there needs your account | Not exploitable. A restored backup goes into a buffer, not to disk. |
+| Crash reports (`tui/src/crash.rs`) and interrupted-save copies (`recovery_dir`) | None | `fs::write` of `crash-<stamp>.txt` under the data directory; `*.vixrecover` files created `0600` and `create_new` | Same account | Not exploitable. Crash reports are written with the default mode, not `0600`; they hold only scrubbed text. |
 
 ## Checklist for a new feature
 

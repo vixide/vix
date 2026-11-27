@@ -155,12 +155,35 @@ Shift+Up / Shift+Down extend a multi-select range from the current anchor; all c
 
 Buffers follow files — renaming or moving a file (via cut+paste) relocates any open buffers pointing at it; deleting a file closes its buffer. Renaming a directory relocates buffers for every file inside it.
 
+**Symlinks in a copy (T832).** `copy_recursive` copies a source symlink as a
+link, never its target's contents. A destination that is a symlink, at the
+top or at any level of a copied tree, is removed and replaced by the copy,
+never written through: pasting `notes.txt` over a tree's
+`notes.txt -> ~/.bashrc` replaces the link and leaves `~/.bashrc` alone
+(`cp` would write through it). A dangling symlink at the destination counts
+as a name conflict, so the paste asks before replacing it (`exists` alone
+follows the link and says no).
+
 ## Atomic and private writes
 
 Two crash-safe writers, both write-temp-then-rename (never a truncating
 in-place write a reader could observe half-done) and both written through a
 symlink rather than following it into some other file:
 
+- **Symlinks on save (T832).** A link to an existing file is written
+  through, as above. A **dangling** link cannot be resolved, so the temp
+  file is renamed over the link itself: the save replaces the link with a
+  regular file and never creates the file it pointed at (Vim would create
+  it; Vix chooses the side that cannot be steered outside the directory).
+  A save that would follow a symlink another user owns in a sticky,
+  world-writable directory such as `/tmp` is refused with
+  `PermissionDenied` (both writers, Unix only): Linux's
+  `fs.protected_symlinks` rule (the link is followed only when you or the
+  directory's owner own it), applied in Vix because the save resolves the
+  path with `canonicalize` (`readlink`, which the kernel rule does not
+  cover) and then writes the resolved target directly. Otherwise another
+  user could swap `/tmp/notes` for `/tmp/notes -> ~/.bashrc` between your
+  open and your save.
 - `write_atomic(path, data)` — the general-purpose saver used across the
   app (editor save, workspace save, …). An *existing* file's permission
   bits are preserved exactly; a brand-new one gets the process's normal

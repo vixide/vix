@@ -70,7 +70,9 @@ pub fn contain(root: &Path, requested: &str) -> Result<PathBuf, PathError> {
 
 /// [`contain`], and additionally the real path (symlinks resolved) must stay
 /// inside the real root. A path that does not exist yet is judged by its
-/// nearest existing ancestor.
+/// nearest existing ancestor. A dangling symlink on the way (one that names
+/// nothing, so it cannot be resolved) is refused rather than skipped (T832):
+/// it could point anywhere, and saving through it would create its target.
 ///
 /// # Errors
 /// [`PathError`] as for [`contain`], or [`PathError::Outside`] when a symlink
@@ -90,6 +92,11 @@ pub fn contain_on_disk(root: &Path, requested: &str) -> Result<PathBuf, PathErro
             } else {
                 Err(PathError::Outside)
             };
+        }
+        // A name that exists but cannot be resolved is a dangling symlink
+        // (or a link loop): where a write to it would land is not knowable.
+        if probe.symlink_metadata().is_ok() {
+            return Err(PathError::Outside);
         }
         match probe.parent() {
             Some(p) => probe = p,
@@ -163,6 +170,17 @@ mod tests {
         assert!(contain_on_disk(&real_root, &ok).is_ok());
         let fresh = format!("{}/new/file", real_root.display());
         assert!(contain_on_disk(&real_root, &fresh).is_ok());
+        // T832: a dangling link cannot be canonicalized, so it must not be
+        // judged by its parent: `root/planted -> outside/new` would let an
+        // agent name a file that, once saved, lands outside the workspace.
+        std::os::unix::fs::symlink(outside.join("new"), root.join("planted")).unwrap();
+        let planted = format!("{}/planted", real_root.display());
+        assert_eq!(
+            contain_on_disk(&real_root, &planted),
+            Err(PathError::Outside)
+        );
+        let below = format!("{}/planted/x", real_root.display());
+        assert_eq!(contain_on_disk(&real_root, &below), Err(PathError::Outside));
         std::fs::remove_dir_all(&base).ok();
     }
 

@@ -283,6 +283,47 @@ fn run_terminal(spec: &ProcessSpec) -> String {
 }
 
 #[test]
+fn a_copy_replaces_a_destination_symlink_instead_of_writing_through_it() {
+    // T832: `cp` writes through a destination symlink, so a pasted file
+    // named like a tree's `notes.txt -> <outside>` overwrote the target.
+    let dir = scratch("copy-dst-link");
+    let auth = authority(&dir, "/bin/sh");
+    let outside = dir.join("outside");
+    std::fs::create_dir_all(&outside).unwrap();
+    let victim = outside.join("victim.txt");
+    std::fs::write(&victim, "precious").unwrap();
+    let work = dir.join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    std::os::unix::fs::symlink(&victim, work.join("notes.txt")).unwrap();
+    std::os::unix::fs::symlink(&outside, work.join("sub")).unwrap();
+    let src = dir.join("src");
+    std::fs::create_dir_all(src.join("sub")).unwrap();
+    std::fs::write(src.join("notes.txt"), "pasted").unwrap();
+    std::fs::write(src.join("sub/inner.txt"), "pasted").unwrap();
+    auth.copy_recursive(&src.join("notes.txt"), &work.join("notes.txt"))
+        .unwrap();
+    auth.copy_recursive(&src.join("sub"), &work.join("sub"))
+        .unwrap();
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "precious");
+    assert!(!outside.join("inner.txt").exists());
+    assert!(
+        std::fs::symlink_metadata(work.join("notes.txt"))
+            .unwrap()
+            .is_file()
+    );
+    assert!(
+        std::fs::symlink_metadata(work.join("sub"))
+            .unwrap()
+            .is_dir()
+    );
+    assert_eq!(
+        std::fs::read_to_string(work.join("sub/inner.txt")).unwrap(),
+        "pasted"
+    );
+    cleanup(&dir);
+}
+
+#[test]
 fn saves_write_through_links_keep_the_mode_and_report_conflicts() {
     let dir = scratch("save");
     let auth = authority(&dir, "/bin/sh");

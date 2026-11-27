@@ -739,6 +739,36 @@ fn paste_op(target: &Path, cut: bool, queue: &[PathBuf]) -> PasteOp {
     }
 }
 
+/// T832: a dangling symlink at the destination is a conflict like any other
+/// name there, so the paste asks before replacing it; it never creates the
+/// file the link points at.
+#[cfg(unix)]
+#[test]
+fn a_dangling_symlink_at_the_paste_destination_asks_first() {
+    let dir = temp("r3-paste-dangling");
+    let src = dir.join("src");
+    let dst = dir.join("dst");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::create_dir_all(&dst).unwrap();
+    std::fs::write(src.join("a"), "new-a").unwrap();
+    std::os::unix::fs::symlink(dir.join("planted"), dst.join("a")).unwrap();
+    let all = vec![src.join("a")];
+    let mut a = app_at(&dir);
+    a.paste = Some(paste_op(&dst, false, &all));
+    a.process_paste();
+    assert_eq!(
+        a.paste.as_ref().unwrap().conflict.as_deref(),
+        Some(all[0].as_path())
+    );
+    a.paste_key(k(KeyCode::Char('o')));
+    assert!(
+        !dir.join("planted").exists(),
+        "the link's target was created"
+    );
+    assert!(std::fs::symlink_metadata(dst.join("a")).unwrap().is_file());
+    assert_eq!(std::fs::read_to_string(dst.join("a")).unwrap(), "new-a");
+}
+
 /// Paste conflict handling: `o` overwrites one, `O` all, `s` skips one,
 /// `S` all, `c` cancels; every choice resumes the queue.
 #[test]

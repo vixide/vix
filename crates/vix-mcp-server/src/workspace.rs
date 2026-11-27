@@ -222,12 +222,14 @@ fn lexical_join(root: &Path, request: &Path) -> Option<PathBuf> {
 ///
 /// The match is deliberately broad and prefix-based (so `id_rsa.pub` is also
 /// refused): a false refusal costs the client one file, a false accept could
-/// leak a credential. Names compare in ASCII lower case.
+/// leak a credential. Names compare in ASCII lower case, directory names too
+/// (T832): on a case-insensitive file system `.GIT/config` is `.git/config`.
 #[must_use]
 pub fn is_secret(rel: &Path) -> bool {
-    let in_secret_dir = rel
-        .components()
-        .any(|c| matches!(c, Component::Normal(part) if part == ".git" || part == ".ssh"));
+    let in_secret_dir = rel.components().any(|c| {
+        matches!(c, Component::Normal(part)
+            if part.eq_ignore_ascii_case(".git") || part.eq_ignore_ascii_case(".ssh"))
+    });
     if in_secret_dir {
         return true;
     }
@@ -472,11 +474,30 @@ mod tests {
             "credentials.json",
             ".git/config",
             "home/.ssh/known_hosts",
+            // T832: on a case-insensitive file system `.GIT` is `.git`.
+            ".GIT/config",
+            "home/.SSH/known_hosts",
+            ".Git/HEAD",
         ] {
             assert!(is_secret(Path::new(name)), "{name}");
         }
         for name in ["src/main.rs", "README.md", "environment.md", "keys.rs"] {
             assert!(!is_secret(Path::new(name)), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_case_variant_of_a_secret_directory_is_refused() {
+        // On a case-insensitive file system (macOS, Windows, a casefolded
+        // Linux directory) `.GIT/config` opens `.git/config`.
+        let root = scratch("case");
+        fs::create_dir_all(root.join(".git")).unwrap();
+        fs::write(root.join(".git/config"), "[core]").unwrap();
+        if root.join(".GIT/config").exists() {
+            assert!(matches!(
+                resolve(&root, ".GIT/config"),
+                Err(WorkspaceError::Secret { .. })
+            ));
         }
     }
 
