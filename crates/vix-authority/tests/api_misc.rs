@@ -21,7 +21,7 @@ use vix_authority::remote::RemoteTarget;
 use vix_authority::ssh::{SshTarget, TargetError};
 use vix_authority::{
     Arg, Authority, DirEntry, FakeAuthority, FileKind, FileStat, LocalAuthority, ProcessSpec,
-    TextFile, TextStream, WalkOptions, can_run, same_version,
+    TextFile, TextStream, WalkCancel, WalkOptions, can_run, same_version,
 };
 
 static SEQ: AtomicUsize = AtomicUsize::new(0);
@@ -471,6 +471,28 @@ fn a_walk_with_a_zero_limit_finds_nothing() {
         LocalAuthority.walk_files(&dir, &opts),
         vec![dir.join("a.txt")]
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_cancelled_walk_stops_and_an_uncancelled_one_finishes() {
+    let dir = scratch("walk-cancel");
+    for i in 0..5 {
+        std::fs::write(dir.join(format!("f{i}.txt")), b"x").unwrap();
+    }
+    let cancel = WalkCancel::new();
+    let opts = WalkOptions::file_index(100).with_cancel(cancel.clone());
+    assert_eq!(
+        LocalAuthority.walk_files(&dir, &opts).len(),
+        5,
+        "not cancelled yet"
+    );
+    cancel.cancel();
+    assert!(
+        LocalAuthority.walk_files(&dir, &opts).is_empty(),
+        "a walk cancelled before it starts finds nothing"
+    );
+    assert_ne!(cancel, WalkCancel::new(), "equality is identity");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

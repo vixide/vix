@@ -165,3 +165,30 @@ fn the_theme_editor_lists_slots_with_swatches() {
     let short = render(&mut app, 80, 8, draw_theme_editor);
     assert!(!blank(&short));
 }
+
+/// T845: while the file index is still building the palette says so in place
+/// of the prefix hint, and the hint comes back once every file is in.
+#[test]
+fn the_file_finder_says_when_its_index_is_still_building() {
+    let dir = temp("pp-draw-indexing");
+    for i in 0..5_100 {
+        let sub = dir.join(format!("d{}", i / 500));
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join(format!("f{i}.txt")), "").unwrap();
+    }
+    let mut app = app_at(&dir);
+    app.run_action("tools.palette");
+    assert!(app.file_index_busy());
+    let building = text(&render(&mut app, 120, 30, crate::ui::search::draw_palette));
+    assert!(building.contains("Indexing files"), "{building}");
+    let start = std::time::Instant::now();
+    while app.file_index_busy() {
+        assert!(start.elapsed().as_secs() < 60, "index never landed");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        app.tick();
+    }
+    assert_eq!(app.file_index_len(), 5_100);
+    let done = text(&render(&mut app, 120, 30, crate::ui::search::draw_palette));
+    assert!(!done.contains("Indexing files"), "{done}");
+    assert!(done.contains("prefixes"), "{done}");
+}

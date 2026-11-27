@@ -510,6 +510,7 @@ impl App {
         self.lsp.shutdown();
         self.lsp_synced.clear();
         self.root = new_root.to_path_buf();
+        self.reset_file_index();
         self.workspace_folders = if folders.is_empty() {
             vec![new_root.to_path_buf()]
         } else {

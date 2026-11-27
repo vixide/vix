@@ -643,6 +643,11 @@ pub fn fuzzy_score(haystack: &str, query: &str) -> Option<i32> {
     // workspace — so it allocates once (the lowercased haystack) and never per
     // character. It used to also collect a `Vec<char>` and copy that back into a
     // `String` for the exact/prefix test, which cost more than the matching did.
+    // Paths and command names are nearly always ASCII: score those without
+    // allocating at all (T845).
+    if haystack.is_ascii() && query.is_ascii() {
+        return fuzzy_score_ascii(haystack.as_bytes(), query);
+    }
     let hay = haystack.to_lowercase();
     let hay_len = hay.chars().count();
     let mut total = 0;
@@ -667,6 +672,86 @@ pub fn fuzzy_score(haystack: &str, query: &str) -> Option<i32> {
         }
     }
     Some(total)
+}
+
+/// [`fuzzy_score`] for an ASCII haystack and query, with no allocation in
+/// the common one-term case. ASCII lowercasing is byte-wise and keeps every
+/// position, so lowercasing each byte as it is compared gives exactly the
+/// scores the general path gives on lowercased copies.
+fn fuzzy_score_ascii(hay: &[u8], query: &str) -> Option<i32> {
+    let mut total = 0;
+    for term in query.split_whitespace() {
+        total = add_score(total, term_score_ascii(hay, term.as_bytes())?);
+    }
+    // Bonus for matching the whole (whitespace-normalized) query.
+    let mut terms = query.split_whitespace();
+    let bonus = match (terms.next(), terms.next()) {
+        (None, _) => 0,
+        (Some(only), None) => whole_query_bonus(hay, only.as_bytes()),
+        (Some(_), Some(_)) => {
+            let q = query.split_whitespace().collect::<Vec<_>>().join(" ");
+            whole_query_bonus(hay, q.as_bytes())
+        }
+    };
+    Some(add_score(total, bonus))
+}
+
+/// 100 when `hay` is the query `q`, 40 when it starts with it, ignoring
+/// ASCII case.
+fn whole_query_bonus(hay: &[u8], q: &[u8]) -> i32 {
+    if hay.eq_ignore_ascii_case(q) {
+        100 // exact match
+    } else if hay
+        .get(..q.len())
+        .is_some_and(|p| p.eq_ignore_ascii_case(q))
+    {
+        40 // prefix match
+    } else {
+        0
+    }
+}
+
+/// [`term_score`] over ASCII bytes, lowercasing each as it is compared.
+fn term_score_ascii(hay: &[u8], needle: &[u8]) -> Option<i32> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    let mut score = 0i32;
+    let mut prev: Option<usize> = None;
+    let mut first: Option<usize> = None;
+    let mut cursor = hay.iter().enumerate();
+    let mut before: Option<u8> = None;
+    for nc in needle {
+        let nc = nc.to_ascii_lowercase();
+        let mut found = None;
+        for (idx, hc) in cursor.by_ref() {
+            let preceding = before;
+            before = Some(*hc);
+            if hc.to_ascii_lowercase() == nc {
+                found = Some((idx, preceding));
+                break;
+            }
+        }
+        let (idx, preceding) = found?;
+        if first.is_none() {
+            first = Some(idx);
+        }
+        if prev.is_some_and(|p| p.checked_add(1) == Some(idx)) {
+            score = add_score(score, 15); // contiguous with the previous matched char
+        }
+        if preceding.is_none_or(|c| !c.is_ascii_alphanumeric()) {
+            score = add_score(score, 10); // start of a word (or of the haystack)
+        }
+        prev = Some(idx);
+    }
+    // Earlier is better, and a shorter haystack is slightly better.
+    let early = i32::try_from(first.unwrap_or(0)).unwrap_or(i32::MAX);
+    let length = i32::try_from(hay.len()).unwrap_or(i32::MAX);
+    score = score.checked_sub(early).unwrap_or(i32::MIN);
+    score = score
+        .checked_sub(length.checked_div(4).unwrap_or(0))
+        .unwrap_or(i32::MIN);
+    Some(score)
 }
 
 /// Score a single (already-lowercased) term against the lowercased `hay`, whose
@@ -861,6 +946,10 @@ mod tests {
             ("sort lines", "sort lines"),
             ("sort lines extra", "sort lines"),
             ("no match here", "zzz"),
+            ("Open/PKG0/Mod1/Item12.RS", "pkg mod item"),
+            ("README.md", "readme.MD"),
+            ("README.md", "READ"),
+            ("a b", "a  b"),
         ];
         for (haystack, query) in CASES {
             assert_eq!(
@@ -878,6 +967,19 @@ mod tests {
         fn fuzzy_score_matches_the_reference_for_any_input(
             haystack in ".{0,64}",
             query in ".{0,16}",
+        ) {
+            proptest::prop_assert_eq!(
+                fuzzy_score(&haystack, &query),
+                reference_score(&haystack, &query)
+            );
+        }
+
+        /// The allocation-free ASCII path (T845) agrees with the reference
+        /// on mixed-case paths, punctuation and multi-term queries.
+        #[test]
+        fn ascii_fuzzy_score_matches_the_reference(
+            haystack in "[A-Za-z0-9_./ -]{0,48}",
+            query in "[A-Za-z0-9_./ -]{0,12}",
         ) {
             proptest::prop_assert_eq!(
                 fuzzy_score(&haystack, &query),

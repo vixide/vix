@@ -151,6 +151,8 @@ impl App {
         self.poll_remote();
         // The Large File Viewer's search result or pending goto (T733).
         self.poll_large_file();
+        // Install a finished background file index (T845).
+        self.poll_file_index();
     }
 
     /// How long the loop may wait for input before ticking again: short
@@ -176,6 +178,7 @@ impl App {
             || self.im_connected()
             || self.jupyter_busy()
             || self.large_file_busy()
+            || self.file_index_busy()
         {
             Duration::from_millis(50)
         } else {

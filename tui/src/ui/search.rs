@@ -145,7 +145,11 @@ pub(super) fn draw_palette(app: &mut App, frame: &mut Frame, area: Rect) {
         draw_preview(frame, pane, preview.flatten().as_ref());
     }
 
-    let hint = Line::from(Span::styled(t!("ui.palette_prefixes"), theme::dim()));
+    // An incomplete file index says so in place of the prefix hint (T845).
+    let hint = match app.file_index_notice() {
+        Some(note) => Line::from(Span::styled(note, theme::title(true))),
+        None => Line::from(Span::styled(t!("ui.palette_prefixes"), theme::dim())),
+    };
     frame.render_widget(Paragraph::new(hint), chunk(&rows, 2));
 }
 

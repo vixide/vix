@@ -56,7 +56,7 @@ mod types;
 pub use fake::{Call, FakeAuthority};
 pub use local::LocalAuthority;
 pub use process::{Arg, ProcessSpec};
-pub use types::{DirEntry, FileKind, FileStat, WalkOptions};
+pub use types::{DirEntry, FileKind, FileStat, WalkCancel, WalkOptions};
 pub use vix_fileops::{HARD_MAX_TEXT_BYTES, MAX_TEXT_BYTES, TextFile, TextReadError, TextStream};
 
 use std::io;
