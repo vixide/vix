@@ -347,6 +347,56 @@ pub struct Code {
     /// The language has a grammar but the buffer was over
     /// [`SYNTAX_MAX_BYTES`] when created, so Tree-sitter is off for it.
     syntax_off_for_size: bool,
+    /// Where the last [`RECENT_CHANGES_KEPT`] content changes happened, for
+    /// [`Code::changed_since`] (T858). Positions only, never the text.
+    recent_changes: std::collections::VecDeque<RecentChange>,
+}
+
+/// How many content changes [`Code::changed_since`] can look back over.
+const RECENT_CHANGES_KEPT: usize = 256;
+
+/// The longest run of changed lines [`Code::widest_line_after`] measures
+/// before it leaves the answer to a whole-buffer pass (T858): typing in a
+/// single 64 MiB line must not rescan it on every key.
+const WIDEST_LINE_MAX_RESCAN_BYTES: usize = 1 << 20;
+
+/// The widest line of a buffer (see [`Code::widest_line_in`]), in characters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct WidestLine {
+    /// Its width, as [`Code::max_line_chars`] counts it.
+    pub(crate) width: usize,
+    /// Its first character.
+    pub(crate) start: usize,
+    /// Just past its `\n`, or the buffer end.
+    pub(crate) end: usize,
+    /// Whether it ends in a `\n` (the last line may not).
+    pub(crate) newline: bool,
+}
+
+/// A [`WidestLine`] as it was at `revision`, when the buffer was
+/// `len_chars` characters long: what [`Code::widest_line_after`] brings
+/// forward.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct WidestLineAt {
+    /// The line.
+    pub(crate) line: WidestLine,
+    /// The buffer revision it was measured at.
+    pub(crate) revision: u64,
+    /// The buffer's length then, in characters.
+    pub(crate) len_chars: usize,
+}
+
+/// One content change, by position only (see [`Code::changed_since`]).
+#[derive(Debug, Clone, Copy)]
+struct RecentChange {
+    /// The buffer's revision once the change was made.
+    revision: u64,
+    /// Start, in characters.
+    offset: usize,
+    /// Characters removed.
+    removed: usize,
+    /// Characters inserted.
+    inserted: usize,
 }
 
 /// One content change as a splice: delete `delete` characters at `offset`,
@@ -429,6 +479,7 @@ impl Code {
             edit_log: None,
             applying_remote: false,
             syntax_off_for_size: false,
+            recent_changes: std::collections::VecDeque::new(),
         };
 
         if len > SYNTAX_MAX_BYTES && Self::get_language(lang).is_some() {
@@ -621,18 +672,43 @@ impl Code {
     /// [`Code::revision`] (see `Editor::max_line_width`).
     #[must_use]
     pub fn max_line_chars(&self) -> usize {
+        self.widest_line().width
+    }
+
+    /// [`Code::max_line_chars`] and where that line is: one whole-buffer pass.
+    pub(crate) fn widest_line(&self) -> WidestLine {
         note_full_text_scan();
+        self.widest_line_in(0..self.content.len_chars())
+    }
+
+    /// The widest line among the lines in `chars`, which starts at the start
+    /// of a line and ends just past a `\n` or at the buffer end: the same
+    /// count as [`Code::max_line_chars`], over those lines only (T858).
+    fn widest_line_in(&self, chars: std::ops::Range<usize>) -> WidestLine {
+        let base = self.content.char_to_byte(chars.start);
+        let slice = self
+            .content
+            .byte_slice(base..self.content.char_to_byte(chars.end));
         let mut max = 0;
+        // Where the widest line so far starts and ends (just past its
+        // `\n`), in bytes, and whether it ends in a `\n`.
+        let mut best = (base, base, false);
+        // Byte offset of the piece being read, and of the current line.
+        let mut pos = base;
+        let mut line_start = base;
         // Characters so far of a line that continues into the next chunk.
         let mut cur = 0usize;
         let mut ends_cr = false;
-        for chunk in self.content.chunks() {
+        for chunk in slice.chunks() {
             let mut pieces = chunk.split('\n').peekable();
             while let Some(piece) = pieces.next() {
                 let line_ends = pieces.peek().is_some();
+                let piece_end = add_or(pos, piece.len(), usize::MAX);
                 if line_ends && cur == 0 && piece.len() <= max {
                     // A whole line no longer in bytes than the longest so
                     // far can't be longer in characters: skip counting.
+                    pos = add_or(piece_end, 1, usize::MAX);
+                    line_start = pos;
                     continue;
                 }
                 if !piece.is_empty() {
@@ -643,15 +719,106 @@ impl Code {
                 if line_ends {
                     // A line break follows: the line ends (`\r\n` counts as
                     // the break, as `str::lines` treats it).
-                    max = max.max(sub_or(cur, usize::from(ends_cr), 0));
+                    let width = sub_or(cur, usize::from(ends_cr), 0);
+                    pos = add_or(piece_end, 1, usize::MAX);
+                    if width > max {
+                        max = width;
+                        best = (line_start, pos, true);
+                    }
                     cur = 0;
                     ends_cr = false;
+                    line_start = pos;
+                } else {
+                    pos = piece_end;
                 }
             }
         }
         // A last line without a line break: a lone `\r` at its end is text
         // to `str::lines`, so it counts here too.
-        max.max(cur)
+        if cur > max {
+            max = cur;
+            best = (line_start, pos, false);
+        }
+        WidestLine {
+            width: max,
+            start: self.content.byte_to_char(best.0),
+            end: self.content.byte_to_char(best.1),
+            newline: best.2,
+        }
+    }
+
+    /// The widest line now, from `old` (the widest line at an earlier
+    /// revision) and the lines changed since (T858): the changed lines are
+    /// measured, the rest are known to be no wider than `old`. `None` when
+    /// only a whole-buffer pass can tell — the history is too old, the
+    /// changed lines are longer than [`WIDEST_LINE_MAX_RESCAN_BYTES`], or
+    /// they are all narrower than `old` and include the line `old` was.
+    pub(crate) fn widest_line_after(&self, old: &WidestLineAt) -> Option<WidestLine> {
+        if old.revision == self.revision {
+            return Some(old.line);
+        }
+        let changed = self.changed_since(old.revision)?;
+        let lines = self.newline_lines_around(changed.clone());
+        let bytes = sub_or(
+            self.content.char_to_byte(lines.end),
+            self.content.char_to_byte(lines.start),
+            usize::MAX,
+        );
+        if bytes > WIDEST_LINE_MAX_RESCAN_BYTES {
+            return None;
+        }
+        let measured = self.widest_line_in(lines);
+        if measured.width >= old.line.width {
+            return Some(measured);
+        }
+        // Still there, untouched, before or after the change?
+        let was = old.line;
+        if was.newline && was.end <= changed.start {
+            return Some(was);
+        }
+        let len = self.content.len_chars();
+        let start = sub_or(add_or(was.start, len, usize::MAX), old.len_chars, 0);
+        if was.start > 0 && start > changed.end {
+            let end = sub_or(add_or(was.end, len, usize::MAX), old.len_chars, 0);
+            return Some(WidestLine { start, end, ..was });
+        }
+        None
+    }
+
+    /// The lines (split at `\n` only, as [`Code::max_line_chars`] splits
+    /// them) holding any character of `chars`: from the start of the first
+    /// to just past the `\n` of the last, or the buffer end.
+    fn newline_lines_around(&self, chars: std::ops::Range<usize>) -> std::ops::Range<usize> {
+        let len = self.content.len_chars();
+        let a = chars.start.min(len);
+        let b = chars.end.min(len).max(a);
+        // Rope lines also break at a lone `\r` and Unicode separators: walk
+        // back to one that follows a `\n`.
+        let mut line = self.content.char_to_line(a);
+        let start = loop {
+            let s = self.content.line_to_char(line);
+            if s == 0 || self.content.char(sub_or(s, 1, 0)) == '\n' {
+                break s;
+            }
+            let Some(up) = line.checked_sub(1) else {
+                break 0;
+            };
+            line = up;
+        };
+        let lines = self.content.len_lines();
+        let mut line = self.content.char_to_line(b);
+        let end = loop {
+            let next = add_or(line, 1, usize::MAX);
+            if next >= lines {
+                break len;
+            }
+            let e = self.content.line_to_char(next);
+            if self.content.char(sub_or(e, 1, 0)) == '\n' {
+                break e;
+            }
+            line = next;
+        };
+        start..end
     }
 
     /// Return the text between two character offsets as a `String`.
@@ -692,6 +859,72 @@ impl Code {
     #[must_use]
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// The characters that changed since the buffer was at revision `since`
+    /// (T858), as one range in the buffer as it is now: every character
+    /// before `range.start` and from `range.end` on is the same text as at
+    /// `since`, the ones after only shifted by the change in length. The
+    /// lines from the one holding `range.start` to the one holding
+    /// `range.end` are the only ones that can differ (a pure deletion gives
+    /// an empty range, inside the line it joined). An unchanged buffer
+    /// (`since` is the current revision) gives `0..0`.
+    ///
+    /// `None` when it cannot tell: `since` is older than the last
+    /// 256 changes, or is not a revision of this buffer.
+    /// Positions only are kept, so this costs nothing per edit beyond a few
+    /// words and lets a per-frame cache keyed on [`Code::revision`] keep what
+    /// it knows about the lines an edit did not touch.
+    #[must_use]
+    pub fn changed_since(&self, since: u64) -> Option<std::ops::Range<usize>> {
+        if since == self.revision {
+            return Some(0..0);
+        }
+        if since > self.revision {
+            return None;
+        }
+        // The changes after `since`, which must all still be here.
+        let first = self
+            .recent_changes
+            .iter()
+            .position(|c| c.revision > since)?;
+        let oldest = self.recent_changes.get(first)?;
+        if oldest.revision != add_u64_or(since, 1, 0) {
+            return None;
+        }
+        let mut range: Option<(usize, usize)> = None;
+        for c in self.recent_changes.iter().skip(first) {
+            let end_new = add_or(c.offset, c.inserted, usize::MAX);
+            range = Some(match range {
+                None => (c.offset, end_new),
+                Some((lo, hi)) => {
+                    let removed_end = add_or(c.offset, c.removed, usize::MAX);
+                    // Where the old end lands once this change is made.
+                    let hi = if hi <= c.offset {
+                        hi
+                    } else if hi >= removed_end {
+                        add_or(sub_or(hi, c.removed, 0), c.inserted, usize::MAX)
+                    } else {
+                        end_new
+                    };
+                    (lo.min(c.offset), hi.max(end_new))
+                }
+            });
+        }
+        range.map(|(lo, hi)| lo..hi)
+    }
+
+    /// Remember where a content change happened, for [`Code::changed_since`].
+    fn note_change(&mut self, offset: usize, removed: usize, inserted: usize) {
+        if self.recent_changes.len() >= RECENT_CHANGES_KEPT {
+            self.recent_changes.pop_front();
+        }
+        self.recent_changes.push_back(RecentChange {
+            revision: self.revision,
+            offset,
+            removed,
+            inserted,
+        });
     }
 
     /// Return the number of lines in the buffer.
@@ -824,6 +1057,7 @@ impl Code {
 
         self.revision = add_u64_or(self.revision, 1, 0);
         self.content.insert(from, text);
+        self.note_change(from, 0, text.chars().count());
         if !self.applying_remote
             && let Some(log) = self.edit_log.as_mut()
         {
@@ -869,6 +1103,7 @@ impl Code {
 
         self.revision = add_u64_or(self.revision, 1, 0);
         self.content.remove(from..to);
+        self.note_change(from, sub_or(to, from, 0), 0);
         if !self.applying_remote
             && let Some(log) = self.edit_log.as_mut()
         {
@@ -1870,6 +2105,81 @@ mod tests {
             assert_eq!(code.max_line_chars(), want, "{text:?}");
             assert_eq!(code.get_content(), text);
         }
+    }
+
+    /// T858: after random edits, [`Code::changed_since`] covers every
+    /// change (the text outside its range is the old text, shifted), and
+    /// [`Code::widest_line_after`], when it answers, gives the width a
+    /// whole-buffer count would.
+    #[test]
+    fn changed_since_and_widest_line_after_match_the_text() {
+        let pieces = [
+            "a",
+            "\n",
+            "\r\n",
+            "xyz\n",
+            "",
+            "\r",
+            "日本\n",
+            "longer line here",
+        ];
+        let mut seed: u64 = 0x5eed;
+        let mut next = |n: usize| {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            usize::try_from(seed >> 33).unwrap() % n.max(1)
+        };
+        let mut code = Code::new("ab\ncdef\n\nxyz", "", None).unwrap();
+        let mut answered = 0;
+        for round in 0..400 {
+            let old_text = code.get_content();
+            let old_rev = code.revision();
+            let old = WidestLineAt {
+                line: code.widest_line(),
+                revision: old_rev,
+                len_chars: code.len_chars(),
+            };
+            for _ in 0..=next(3) {
+                let len = code.len_chars();
+                let at = next(len + 1);
+                if next(2) == 0 && at < len {
+                    let to = (at + 1 + next(4)).min(len);
+                    code.remove(at, to);
+                } else {
+                    code.insert(at, pieces[next(pieces.len())]);
+                }
+            }
+            let now = code.get_content();
+            let range = code.changed_since(old_rev).unwrap();
+            let old_chars: Vec<char> = old_text.chars().collect();
+            let new_chars: Vec<char> = now.chars().collect();
+            assert_eq!(
+                new_chars[..range.start],
+                old_chars[..range.start],
+                "round {round}"
+            );
+            let tail = new_chars.len() - range.end;
+            assert_eq!(
+                new_chars[range.end..],
+                old_chars[old_chars.len() - tail..],
+                "round {round}"
+            );
+            let want = now.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+            if let Some(line) = code.widest_line_after(&old) {
+                answered += 1;
+                assert_eq!(line.width, want, "round {round}: {now:?}");
+                let text: String = new_chars[line.start..line.end].iter().collect();
+                assert_eq!(text.lines().next().map_or(0, |l| l.chars().count()), want);
+            }
+        }
+        assert!(
+            answered > 200,
+            "most edits are measured in place: {answered}"
+        );
+        assert_eq!(code.changed_since(code.revision()), Some(0..0));
+        assert_eq!(code.changed_since(code.revision() + 1), None);
+        assert_eq!(code.changed_since(0), None, "older than the changes kept");
     }
 
     /// Both whole-buffer passes are counted, so a test can assert that an

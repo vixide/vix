@@ -424,3 +424,161 @@ fn go_word_sentence_tag_and_highlight_word_make_no_whole_buffer_pass() {
     );
     assert_eq!(full_text_scans(), before, "a whole-buffer pass");
 }
+
+/// `n` lines of Rust-shaped text, a declaration every five lines, so the
+/// sticky-scroll header and the breadcrumb have something to find.
+fn rust_lines(n: usize) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    for i in 0..n.div_ceil(5) {
+        write!(
+            out,
+            "/// Item {i}.\npub fn item_{i}(value: &str) -> usize {{\n    let n = value.len();\n    n + {i}\n}}\n"
+        )
+        .unwrap();
+    }
+    out
+}
+
+/// T858: typing in the middle of a large buffer, with a frame drawn after
+/// every key, makes no whole-buffer pass — with the sticky-scroll header
+/// and the breadcrumb both showing the enclosing declaration. Before T858
+/// the frame after each edit copied the whole buffer and scanned every line
+/// for declarations (0.4 s and 64 MiB per key at 64 MiB), and the
+/// horizontal scrollbar rescanned it for its widest line.
+#[test]
+fn a_keystroke_and_its_frame_make_no_whole_buffer_pass() {
+    use vix::editor_core::code::full_text_scans;
+    let dir = unique_dir("t858-keystroke");
+    let path = dir.join("big.txt");
+    let text = rust_lines(20_000);
+    fs::write(&path, &text).unwrap();
+    let mut settings = Settings::default();
+    settings.editor_behavior.sticky_scroll = true;
+    settings.secondary_panels.show_breadcrumbs = true;
+    let mut app = app_at_with(&dir, settings);
+    app.open_initial(&path);
+    // Into a function body in the middle: "    let n = value.len();".
+    let middle = text
+        .find("    let n = value.len();\n    n + 2000\n")
+        .unwrap();
+    app.layout.editor = Rect::new(0, 0, 120, 40);
+    let line = text[..middle].matches('\n').count() + 1;
+    app.editor.goto(line, None, app.layout.editor);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor(text[..middle].chars().count() + 4);
+    // The first frames may measure the buffer once.
+    draw(&mut app);
+    draw(&mut app);
+    assert!(app.editor.top_visible_line() > 0, "scrolled to the middle");
+    let header = app.sticky_header().unwrap_or_default();
+    assert!(
+        header.starts_with("pub fn item_"),
+        "the declaration above the top line is pinned: {header:?}"
+    );
+    let before = full_text_scans();
+    let bs = keycode(KeyCode::Backspace);
+    let enter = keycode(KeyCode::Enter);
+    for k in [key('x'), key('y'), key('z'), bs, enter, bs, bs, bs] {
+        app.on_key(k);
+        draw(&mut app);
+        assert!(
+            app.breadcrumb().contains("item_2000"),
+            "{}",
+            app.breadcrumb()
+        );
+    }
+    assert_eq!(
+        full_text_scans(),
+        before,
+        "a keystroke and its frame read the whole buffer"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+const TYPING_CHILD_ENV: &str = "VIX_T858_TYPING_CHILD";
+
+/// Run in a process of its own (see the test below): open a ~20 MB file,
+/// type in its middle with a frame after each key, and print how much the
+/// resident memory grew while typing.
+#[cfg(unix)]
+#[test]
+#[ignore = "run as a child process by typing_in_a_large_file_costs_no_memory_per_key"]
+fn typing_memory_child() {
+    if std::env::var_os(TYPING_CHILD_ENV).is_none() {
+        return;
+    }
+    let dir = unique_dir("t858-typing-memory");
+    let path = dir.join("big.txt");
+    let text = rust_lines(FILE_MB * 1_000_000 / 21);
+    fs::write(&path, &text).unwrap();
+    let size = text.len();
+    let middle = text.chars().count() / 2;
+    drop(text);
+    let mut settings = Settings::default();
+    settings.editor_behavior.large_file_mb = 0;
+    let mut app = app_at_with(&dir, settings);
+    app.open_initial(&path);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_cursor(middle);
+    draw(&mut app);
+    draw(&mut app);
+    let before = resident_kib();
+    for c in "typing".chars() {
+        app.on_key(key(c));
+        draw(&mut app);
+    }
+    let after = resident_kib();
+    println!("T858 size={size} grew_kib={}", after.saturating_sub(before));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// T858: six keystrokes in a 20 MB buffer leave resident memory about where
+/// it was. Before T858 each frame after a key copied the buffer and built
+/// the whole list of its declarations, and the allocator kept the copies:
+/// five keys at 64 MiB grew Vix by about 320 MiB. The budget here is a
+/// quarter of the file's size for all six. Measured in a child process so no
+/// other test's allocations count.
+#[cfg(unix)]
+#[test]
+fn typing_in_a_large_file_costs_no_memory_per_key() {
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "integration::big_buffer::typing_memory_child",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(TYPING_CHILD_ENV, "1")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let line = stdout
+        .lines()
+        .find_map(|l| l.find("T858 ").map(|i| &l[i..]))
+        .unwrap_or_else(|| panic!("no measurement in {stdout}"));
+    let field = |name: &str| -> u64 {
+        line.split_whitespace()
+            .find_map(|w| w.strip_prefix(name))
+            .and_then(|v| v.parse().ok())
+            .unwrap()
+    };
+    let size_kib = field("size=") / 1024;
+    let grew = field("grew_kib=");
+    assert!(
+        grew < size_kib / 4,
+        "six keys in a {size_kib} KiB file grew resident memory by {grew} KiB"
+    );
+}

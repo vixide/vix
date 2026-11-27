@@ -113,6 +113,7 @@ pub(crate) use overlays::OverlayId;
 #[cfg(test)]
 #[path = "app/tests_cov4.rs"]
 pub(crate) mod cov4;
+mod enclosing_symbol;
 mod large_file;
 mod lsp_dap;
 mod lsp_file_ops;
@@ -1038,10 +1039,6 @@ pub struct GitPanel {
 /// One row of the right-click context menu: an i18n label key and the action to
 /// run (or [`SEP_ACTION`] for a separator).
 type ContextItem = (&'static str, &'static str);
-
-/// The key/value cached by [`App::active_tab_symbols`] (T511): `(active tab
-/// index, path, buffer revision)` and the symbols found for that state.
-type SymbolsCache = Option<(usize, Option<PathBuf>, u64, Vec<crate::palette::Symbol>)>;
 
 /// Sentinel action marking a context-menu separator.
 const SEP_ACTION: &str = "menu.separator";
@@ -2659,13 +2656,15 @@ pub struct App {
     /// The branch review shown in the editor (T665: **Git -> Review Range**).
     #[cfg(feature = "git")]
     pub review: Option<git_review::ReviewState>,
-    /// Cache for the declaration scan behind [`App::sticky_header`] and
-    /// [`App::breadcrumb`]: `(active tab index, path, buffer revision, the
-    /// symbols found)`. A cache hit avoids re-materializing the whole buffer
-    /// and rescanning it for declarations on every frame (T511). `RefCell`
-    /// because both callers only have `&App` — sticky-scroll and the
-    /// breadcrumb bar are read-only rendering queries, not state mutations.
-    symbols_cache: std::cell::RefCell<SymbolsCache>,
+    /// What the scans behind [`App::sticky_header`] and [`App::breadcrumb`]
+    /// learned (T511, T858): each reads up from its own line to the nearest
+    /// declaration, never the whole buffer, and keeps what it saw across an
+    /// edit for the lines above it. `RefCell` because both callers only have
+    /// `&App` — sticky-scroll and the breadcrumb bar are read-only rendering
+    /// queries, not state mutations.
+    sticky_scan: std::cell::RefCell<Option<enclosing_symbol::SymbolScan>>,
+    /// The breadcrumb's half of [`App::sticky_scan`].
+    crumb_scan: std::cell::RefCell<Option<enclosing_symbol::SymbolScan>>,
     /// Parsed coverage report (T210: **Tools → Load Coverage File…**), if one
     /// has been loaded. Stays cached across a Toggle Coverage Gutter off/on.
     coverage: Option<vix_coverage::Report>,
@@ -3202,7 +3201,8 @@ impl App {
             git_gutter_base_cache: std::collections::HashMap::new(),
             #[cfg(feature = "git")]
             review: None,
-            symbols_cache: std::cell::RefCell::new(None),
+            sticky_scan: std::cell::RefCell::new(None),
+            crumb_scan: std::cell::RefCell::new(None),
             coverage: None,
             speller: None,
             speller_locale: None,
@@ -4942,12 +4942,9 @@ impl App {
         if top == 0 {
             return None;
         }
-        // The enclosing symbol is the last one declared at or above the first
-        // visible line; show it only when its own header line is scrolled off.
-        self.active_tab_symbols()
-            .into_iter()
-            .rev()
-            .find(|s| s.line <= top) // 1-based line <= top means strictly above the first visible (top+1)
+        // The enclosing symbol is the last one declared strictly above the
+        // first visible line (0-based `top`), so its own header is scrolled off.
+        self.enclosing_symbol(top.checked_sub(1)?, &self.sticky_scan)
             .map(|s| s.text)
     }
 
@@ -4966,39 +4963,33 @@ impl App {
             return name;
         }
         let line = self.editor.cursor_1based().0;
-        let symbols = self.active_tab_symbols();
-        match symbols.iter().rev().find(|s| s.line <= line) {
+        let symbol = line
+            .checked_sub(1)
+            .and_then(|at| self.enclosing_symbol(at, &self.crumb_scan));
+        match symbol {
             Some(sym) => format!("{name}  \u{25b8}  {}", sym.name),
             None => name,
         }
     }
 
-    /// The declarations found in the active tab's buffer, from a cache keyed
-    /// on `(tab index, path, buffer revision)` (T511: [`App::sticky_header`]
-    /// and [`App::breadcrumb`] both need this on every frame the file is
-    /// scrolled/has a cursor; without the cache each would re-materialize the
-    /// whole buffer and rescan it for declarations independently, per frame).
-    /// Empty when there is no active tab.
-    fn active_tab_symbols(&self) -> Vec<crate::palette::Symbol> {
-        let Some(tab) = self.editor.active_tab() else {
-            return Vec::new();
-        };
-        let revision = tab.editor.revision();
-        if let Some((idx, path, rev, symbols)) = self.symbols_cache.borrow().as_ref()
-            && *idx == self.editor.active
-            && *path == tab.path
-            && *rev == revision
-        {
-            return symbols.clone();
-        }
-        let symbols = crate::palette::symbols(&tab.text());
-        *self.symbols_cache.borrow_mut() = Some((
+    /// The last declaration at or above 0-based line `at` of the active
+    /// tab's buffer (T858), read up from that line rather than out of the
+    /// whole buffer; `memo` is the caller's own record of what it saw
+    /// ([`App::sticky_scan`] or [`App::crumb_scan`]). `None` when there is
+    /// no active tab or no declaration above.
+    fn enclosing_symbol(
+        &self,
+        at: usize,
+        memo: &std::cell::RefCell<Option<enclosing_symbol::SymbolScan>>,
+    ) -> Option<crate::palette::Symbol> {
+        let tab = self.editor.active_tab()?;
+        enclosing_symbol::enclosing_symbol(
+            tab.editor.code_ref(),
             self.editor.active,
-            tab.path.clone(),
-            revision,
-            symbols.clone(),
-        ));
-        symbols
+            tab.path.as_ref(),
+            at,
+            &mut memo.borrow_mut(),
+        )
     }
 
     /// Toggle the bottom dock (log/output/data panel), persisting the choice.
