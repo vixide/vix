@@ -18,7 +18,11 @@ and [vix-for-helix-users](../vix-for-helix-users/index.md) for the prose version
 of some of these same comparisons.
 
 For VS Code, Neovim, JetBrains IDEs and Sublime Text, see
-[Why Vix?](../why-vix/index.md).
+[Why Vix?](../why-vix/index.md). Three editors also have a page of their own,
+each with a side-by-side table, when to pick which, and how to switch:
+[Vix compared with VS Code](vix-vs-visual-studio-code/index.md),
+[Vix compared with Neovim](vix-vs-neovim/index.md) and
+[Vix compared with Helix](vix-vs-helix/index.md).
 
 `✓` built in, no plugin needed. `-` not built in (a plugin may exist).
 `~` partial — see the footnote.

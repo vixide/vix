@@ -1,97 +1,104 @@
 # Vix™ for Eclipse users
 
-Eclipse taught a generation of engineers what an IDE workspace is: perspectives,
-Open Resource, Quick Outline, incremental builds. It also taught us what a long
-startup feels like. Vix is a different bargain: a real IDE — language
-intelligence, debugger, git, test runner — as one small native binary that
-opens in a terminal before Eclipse finishes drawing its splash screen.
+Eclipse is a desktop IDE built around workspaces, perspectives and a large
+plugin ecosystem, with compiler-backed Java tooling. Vix is a terminal editor
+that gets its language features from language servers and ships a debugger, a
+Git client and a terminal in one binary. This page shows which of your
+Eclipse keys work in Vix's **Eclipse** keymap, what is different, and where
+Eclipse is still the better tool.
 
-## The one-minute pitch
+Claims about Eclipse describe its documented defaults; see the
+[Eclipse documentation](https://help.eclipse.org/). Every claim about Vix
+cites the test or file that checks it.
 
-Vix is a terminal IDE written in Rust. Language features come from LSP
-(diagnostics, completion, rename, references, code actions, formatting), the
-debugger speaks DAP (the protocol Eclipse's own LSP4E/debug tooling helped
-popularize), and it ships an **Eclipse keymap**, so `Ctrl+Shift+R`, `Ctrl+O`,
-and `Ctrl+3` behave the way your hands remember.
+## Turn on the Eclipse keymap
 
-```sh
-cargo run                    # open Vix in the current directory
-# then: View -> Keymap -> Eclipse
-```
+Pick **View → Keymap… → Eclipse**, or set `keymap = "eclipse"` in
+`config.toml`.[^keymap-menu] The keymap follows Eclipse's Windows defaults.
+`F1` lists every key the active keymap binds.[^f1]
 
-## Your muscle memory, mapped
+## Your keys
 
-| Eclipse habit | In Vix (Eclipse keymap) |
-| ------------- | ----------------------- |
-| Quick Access (`Ctrl+3`) | `Ctrl+3` — the command palette |
-| Open Resource (`Ctrl+Shift+R`) | `Ctrl+Shift+R` — fuzzy file finder |
-| Open Type (`Ctrl+Shift+T`) | `Ctrl+Shift+T` — workspace symbol |
-| Quick Outline (`Ctrl+O`) | `Ctrl+O` — go to symbol |
-| Go to Line (`Ctrl+L`) | `Ctrl+L` |
-| Find / Replace (`Ctrl+F`) | `Ctrl+F` / `Ctrl+R` |
-| Find Next / Previous (`Ctrl+K` / `Ctrl+Shift+K`) | `Ctrl+K` / `Ctrl+Shift+K` |
-| Search (`Ctrl+H`) | `Ctrl+H` — find in workspace |
-| Word completion (`Alt+/`) | `Alt+/` — buffer-word autocomplete |
-| Toggle Comment (`Ctrl+/`) | `Ctrl+/` |
-| Delete Line (`Ctrl+D`) | `Ctrl+D` |
-| Format (`Ctrl+Shift+F`) | `Ctrl+Shift+F` — LSP format |
-| Toggle Breakpoint (`Ctrl+Shift+B`) | `Ctrl+Shift+B` |
-| Build / run tests (`Ctrl+B`) | `Ctrl+B` — run the test suite |
-| Save / Save As / Close / Redo | `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+W` / `Ctrl+Y` |
+These rows are copied from the generated
+[Eclipse keybindings reference](../reference/keybindings-eclipse.md); a test
+fails if a row here stops matching it. The keys every keymap shares (`F2`
+rename, `F12` go to definition, `Ctrl+Space` completion, `Alt+Left` back)
+are in the [shared bindings](../reference/keybindings-shared.md).
 
-Around them: a file-explorer sidebar (your Package Explorer instinct), a
-Problems view (`Ctrl+Shift+M` in the VS Code keymap; Tools → Language Server →
-Diagnostics in any keymap), split panes, an integrated terminal, tasks, and
-full git tooling with per-hunk staging and a merge-conflict resolver.
+<!-- keys-from: ../reference/keybindings-eclipse.md -->
 
-## Where Vix beats Eclipse
+| Key | Action | Action ID |
+| --- | --- | --- |
+| `C-3` | Command Palette | `tools.palette` |
+| `C-S-r` | Open… | `file.open` |
+| `C-S-t` | Go to Symbol in Workspace | `nav.goto_workspace_symbol` |
+| `C-o` | Go to Symbol | `nav.goto_symbol` |
+| `C-l` | Number | `nav.goto_line` |
+| `C-f` | Find… | `edit.find` |
+| `C-r` | Find & Replace | `edit.replace` |
+| `C-k` | Find Next | `edit.find_next` |
+| `C-S-k` | Find Previous | `edit.find_prev` |
+| `C-h` | Search in Workspace | `search.workspace` |
+| `A-/` | Autocomplete Word | `autocomplete` |
+| `C-/` | Comment | `edit.toggle_comment` |
+| `C-S-f` | Format Document | `lsp.format` |
+| `C-S-b` | Toggle Breakpoint | `run.toggle_breakpoint` |
+| `C-b` | Run Tests | `tools.test` |
+| `C-s` | Save | `file.save` |
+| `C-S-s` | Save As… | `file.save_as` |
+| `C-w` | Close | `file.close` |
+| `C-S-w` | Close All Tabs | `file.close_all` |
+| `C-y` | Redo | `edit.redo` |
 
-- **Startup, memory, and no workspace ceremony.** One native binary, instant
-  open, no `.metadata` directory, no "Building workspace…" in the corner.
-- **Terminal-native.** Works over ssh, in tmux, in containers — the whole IDE
-  goes wherever a shell goes. Eclipse RAP/Che need a very different setup for
-  that.
-- **No plugin-compatibility matrix.** LSP, DAP, git, themes, and keymaps ship
-  in the core, versioned and tested together. No update site roulette.
-- **Modern editing niceties built in**: multi-cursor, fuzzy palette, snippets,
-  sticky scroll, minimap, jump labels, clipboard history, a persistent
-  branching undo tree (local history, but structured), Org-mode notes.
-- **Memory safety.** Rust with `unsafe` forbidden; a different reliability
-  posture than a large JVM plugin surface.
+## What is different
 
-## Where Eclipse still wins
+- **`Ctrl+3` is the command palette.** Inside it, `@` jumps to a symbol in
+  the file, `:` to a line and `>` runs a command.[^palette]
+- **`Alt+/` completes a word** from the buffer, separately from `Ctrl+/`,
+  which toggles a comment.[^eclipse-alt-slash]
+- **`Ctrl+B` runs the project's tests** (`tools.test`) rather than building
+  a workspace. Vix finds tasks in `Makefile`, `package.json`, a `justfile`
+  and more (see [Tasks](../tasks/index.md)).
+- **No `.metadata` workspace.** A Vix workspace is a folder; project settings
+  live in `.vix/settings.toml` (see [Migrating](../migrating/index.md)).
+- **Language features come from language servers**, for Java from `jdtls`.
+  The usual server for a language starts once you trust the workspace.[^lsp]
 
-- **Java depth.** JDT's compiler-backed refactoring, quick fixes, and
-  incremental builds remain best-in-class for Java. Vix's Java story is
-  whatever `jdtls` (the same engine, via LSP) provides — good, but the full
-  IDE integration is richer in Eclipse.
-- **The plugin universe.** Modeling tools, embedded/RCP development, vendor
-  toolchains — decades of ecosystem Vix does not attempt.
-- **GUI surfaces.** Visual diff/merge, GUI builders, profilers.
-- **Perspectives and multi-project workspaces.** Vix has workspaces with
-  multiple folders, but not Eclipse's perspective switching.
+## What Vix adds
 
-## An honest experiment
+- It runs in a terminal, so it works over SSH and in tmux; remote folders
+  open with **File → Open Remote…**.[^remote]
+- A debugger for any Debug Adapter Protocol adapter; `Ctrl+Shift+B` toggles a
+  breakpoint.[^dap]
+- A Git panel that stages and commits, and blame.[^git]
+- Integrated terminals.[^terminal]
+- Persistent, branching undo with a tree you can browse.[^undo]
 
-1. `cargo build --release`; put `vix` on your `PATH`.
-2. In a project: `vix .` — press `Ctrl+3` (Quick Access lives!) and type
-   `keymap` to choose **Eclipse**.
-3. Navigate the way you always have: `Ctrl+Shift+R` to a file, `Ctrl+O` to a
-   symbol, `Ctrl+H` to search the workspace, `Alt+/` to complete a word.
-4. Then try what Eclipse makes heavy: open the same project on a remote box
-   over ssh, stage one hunk from the Git menu, and notice the editor started
-   faster than your last workspace switch.
+## Where Eclipse is the better choice
 
-Eclipse earned its place; nothing here asks you to uninstall it. But for the
-80% of editing that does not need JDT's full weight, `vix .` may become the
-thing you reach for first.
+- **Java tooling.** Eclipse's own Java compiler and refactorings are richer
+  than what a language server exposes.
+- **Plugins** for modeling, embedded and vendor toolchains, which Vix does not
+  attempt.
+- **Perspectives and a desktop GUI**, including visual diff and merge.
 
 ## See also
 
-- [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every binding.
-- [`docs/language-server-protocol/index.md`](../language-server-protocol/index.md)
-  — configuring language servers.
-- [`index.md`](../../index.md) — the full feature tour.
+- [Migrating from another editor](../migrating/index.md): settings, language
+  servers, snippets and themes.
+- [Keymaps](../keymaps/index.md#eclipse).
+- [Why Vix?](../why-vix/index.md).
+
+[^keymap-menu]: **View → Keymap…** sets the `keymap` setting: `tui/tests/integration/keymaps.rs`, `view_keymap_submenu_actions_set_the_keymap`.
+[^f1]: `F1` lists the active keymap's keys: `tui/tests/integration/keymaps.rs`, `help_overlay_includes_the_active_keymap_chords`.
+[^palette]: The prefixes are `Mode::from_input` in `crates/vix-palette/src/lib.rs`.
+[^eclipse-alt-slash]: `tui/tests/integration/keymaps.rs`, `eclipse_keymap_alt_slash_completes_a_word_distinct_from_ctrl_slash`.
+[^lsp]: Every LSP action against a mock server: `tui/tests/integration/lsp.rs`, `every_lsp_action_applies_a_mock_servers_reply`; servers start only in a trusted workspace: `a_builtin_language_server_starts_only_in_a_trusted_workspace`.
+[^remote]: Experimental. `tui/tests/remote_ui.rs`, `open_remote_connects_saves_survives_a_lost_connection_and_reconnects`; see [remote editing](../remote-editing/index.md).
+[^dap]: Breakpoints and the debugger actions: `tui/tests/integration/debugger.rs`, `edit_breakpoint_sets_condition_hit_count_and_log_message`.
+[^git]: Stage and commit, blame: `tui/tests/integration/git.rs`, `git_panel_stages_and_commits` and `git_blame_annotates_the_current_line`.
+[^terminal]: `tui/tests/integration/terminals.rs`, `several_terminals_each_get_their_own_keys`.
+[^undo]: `persistent_undo` defaults to `true` in `crates/vix-settings/src/lib.rs`; the tree view: `tui/tests/integration/undo_tree.rs`, `moving_the_selection_previews_and_enter_keeps_the_state`.
 
 ---
 

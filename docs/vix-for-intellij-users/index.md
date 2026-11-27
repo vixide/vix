@@ -1,100 +1,136 @@
-# Vix™ for IntelliJ / JetBrains users
+# Vix™ for IntelliJ and JetBrains users
 
-You picked IntelliJ because it *understands* code: rename actually renames,
-Find Action finds everything, and the debugger just works. The trade you
-accepted is weight — gigabytes of IDE, index rebuilds, a splash screen with a
-progress bar. Vix is an experiment in keeping the parts of that deal you like:
-a real IDE — LSP intelligence, a debugger, refactoring, test running — as one
-small native binary in a terminal.
+IntelliJ IDEA and the other JetBrains IDEs analyze code with their own engines
+and offer deep refactorings, database tools and framework support. Vix is a
+terminal editor that gets its language features from language servers and
+ships a debugger, a Git client and a terminal in one binary. This page shows
+which of your IntelliJ keys work in Vix's two **IntelliJ** keymaps, what is
+different, and where a JetBrains IDE is still the better tool.
 
-## The one-minute pitch
+Claims about JetBrains IDEs describe their documented defaults; see the
+[IntelliJ IDEA documentation](https://www.jetbrains.com/help/idea/). Every
+claim about Vix cites the test or file that checks it.
 
-Vix is a terminal IDE written in Rust. Language smarts come from LSP (the same
-protocol behind most modern editors): diagnostics, completion, rename,
-references, code actions, call hierarchy, formatting. A DAP debugger gives you
-breakpoints, stepping, watches, and an evaluate REPL. And it ships an
-**IntelliJ keymap** in both macOS and Windows flavors, so Find Action, Go to
-Class, and Duplicate Line are where your fingers expect.
+## Turn on an IntelliJ keymap
 
-```sh
-cargo run                    # open Vix in the current directory
-# then: View -> Keymap -> IntelliJ macOS (or IntelliJ Windows)
-```
+Pick **View → Keymap… → IntelliJ macOS** or **IntelliJ Windows**, or set
+`keymap = "intellij-macos"` or `"intellij-windows"` in
+`config.toml`.[^keymap-menu] In a terminal, `Ctrl` stands in for `Cmd` on
+macOS. `F1` lists every key the active keymap binds.[^f1]
 
-In the terminal, `Ctrl` stands in for `Cmd` on macOS.
+## Your keys
 
-## Your muscle memory, mapped
+These rows are copied from the generated keybindings references; a test fails
+if a row here stops matching them. The keys every keymap shares (`F2`
+rename, `F12` go to definition, `Ctrl+Space` completion, `Alt+Left` back)
+are in the [shared bindings](../reference/keybindings-shared.md).
 
-| IntelliJ habit | In Vix (IntelliJ keymap) |
-| -------------- | ------------------------ |
-| Find Action (`Cmd+Shift+A`) | `Ctrl+Shift+A` — the command palette |
-| Go to Class (`Cmd+O` / `Ctrl+N`) | `Ctrl+O` (macOS flavor) / `Ctrl+N` (Windows flavor) |
-| Go to File (`Cmd+Shift+O` / `Ctrl+Shift+N`) | `Ctrl+Shift+O` / `Ctrl+Shift+N` |
-| Go to Symbol (`Cmd+Alt+O`) | `Ctrl+Alt+O` |
-| Go to Line (`Cmd+L` / `Ctrl+G`) | `Ctrl+L` / `Ctrl+G` |
-| Go to Declaration (`Cmd+B`) | `Ctrl+B` (also `F12`) |
-| Find / Replace | `Ctrl+F` / `Ctrl+R` |
-| Find / Replace in Path | `Ctrl+Shift+F` / `Ctrl+Shift+R` |
-| Find Next / Previous (`Cmd+G`) | `Ctrl+G` / `Ctrl+Shift+G` (macOS flavor) |
-| Duplicate Line (`Cmd+D`) | `Ctrl+D` |
-| Delete Line (`Ctrl+Y`, Windows) | `Ctrl+Y` (Windows flavor) |
-| Comment (`Cmd+/`) | `Ctrl+/` |
-| Reformat Code (`Cmd+Alt+L`) | `Ctrl+Alt+L` (LSP format) |
-| Settings (`Cmd+,`) | `Ctrl+,` (macOS flavor) |
-| Save / Save As / Close | `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+W` |
+### IntelliJ macOS
 
-Around them: a file-explorer sidebar, split panes, an integrated terminal, a
-test runner with jump-to-failure, git status / diff / blame / per-hunk staging
-/ branches / stash / merge-conflict resolution, and local-history-like safety
-from a **persistent branching undo tree**.
+From the [IntelliJ macOS reference](../reference/keybindings-intellij-macos.md):
 
-## Where Vix beats IntelliJ
+<!-- keys-from: ../reference/keybindings-intellij-macos.md -->
 
-- **Startup and footprint.** Milliseconds and megabytes, not minutes and
-  gigabytes ([measured](../performance/index.md#opening-a-large-checkout-t823)). No indexing phase — Tree-sitter parses your file instantly and
-  LSP indexes in the background, per server.
-- **Runs where IntelliJ cannot.** ssh, tmux, containers, low-power machines.
-  Your whole IDE is one static binary you can `scp` to a server.
-- **No license, no accounts, no telemetry.** MIT/Apache-2.0, offline-first.
-- **A calmer surface.** Menus + a fuzzy palette + `F1` shortcut help instead of
-  nested settings dialogs. Configuration is one readable TOML file.
-- **Extras IntelliJ charges plugins or Ultimate for**: an HTTP client for
-  `.http` buffers, Org-mode notes with backlinks, a CSV table editor, a hex
-  editor, QR/UUID/checksum utilities — built in.
+| Key | Action | Action ID |
+| --- | --- | --- |
+| `C-S-a` | Command Palette | `tools.palette` |
+| `C-o` | Go to Symbol | `nav.goto_symbol` |
+| `C-S-o` | Open… | `file.open` |
+| `C-A-o` | Go to Symbol in Workspace | `nav.goto_workspace_symbol` |
+| `C-l` | Number | `nav.goto_line` |
+| `C-b` | Go to Definition | `nav.goto_definition` |
+| `C-f` | Find… | `edit.find` |
+| `C-r` | Find & Replace | `edit.replace` |
+| `C-g` | Find Next | `edit.find_next` |
+| `C-S-g` | Find Previous | `edit.find_prev` |
+| `C-S-f` | Search in Workspace | `search.workspace` |
+| `C-S-r` | Search and Replace in Workspace | `search.workspace_replace` |
+| `C-d` | Duplicate Line | `edit.duplicate_line` |
+| `C-/` | Comment | `edit.toggle_comment` |
+| `C-A-l` | Format Document | `lsp.format` |
+| `C-,` | Settings… | `vix.settings` |
+| `C-s` | Save | `file.save` |
+| `C-S-s` | Save As… | `file.save_as` |
+| `C-w` | Close | `file.close` |
 
-## Where IntelliJ still wins
+### IntelliJ Windows
 
-- **Deep semantic refactoring.** LSP rename/code-actions are good; IntelliJ's
-  extract-method / change-signature / move-class family is deeper, especially
-  for Java/Kotlin. If you refactor large JVM codebases all day, keep IntelliJ.
-- **Framework intelligence.** Spring, Android, database tooling, profilers —
-  ecosystem depth a terminal IDE does not attempt.
-- **GUI affordances.** Diff-merge side-by-side with drag, visual debuggers for
-  collections, embedded browsers.
-- **Everything works without configuring a language server.** With Vix you
-  point it at `rust-analyzer` / `gopls` / `pylsp` once per language.
+From the [IntelliJ Windows reference](../reference/keybindings-intellij-windows.md):
 
-## An honest experiment
+<!-- keys-from: ../reference/keybindings-intellij-windows.md -->
 
-1. `cargo build --release`; put `vix` on your `PATH`.
-2. In a project: `vix .` — open the palette (`Ctrl+P`, then `>`), type
-   `keymap`, and pick **IntelliJ macOS** or **IntelliJ Windows**. From then on
-   `Ctrl+Shift+A` *is* your Find Action.
-3. Work normally: `Ctrl+O`/`Ctrl+N` to classes, `Ctrl+B` to declarations,
-   `Ctrl+D` to duplicate, `Ctrl+Alt+L` to reformat.
-4. Try the terminal-native wins: open the same project over ssh; stage a
-   single hunk from the Git menu; run the debugger from the Run menu.
+| Key | Action | Action ID |
+| --- | --- | --- |
+| `C-S-a` | Command Palette | `tools.palette` |
+| `C-n` | Go to Symbol | `nav.goto_symbol` |
+| `C-S-n` | Open… | `file.open` |
+| `C-A-o` | Go to Symbol in Workspace | `nav.goto_workspace_symbol` |
+| `C-g` | Number | `nav.goto_line` |
+| `C-b` | Go to Definition | `nav.goto_definition` |
+| `C-f` | Find… | `edit.find` |
+| `C-r` | Find & Replace | `edit.replace` |
+| `C-S-f` | Search in Workspace | `search.workspace` |
+| `C-S-r` | Search and Replace in Workspace | `search.workspace_replace` |
+| `C-d` | Duplicate Line | `edit.duplicate_line` |
+| `C-/` | Comment | `edit.toggle_comment` |
+| `C-A-l` | Format Document | `lsp.format` |
+| `C-s` | Save | `file.save` |
+| `C-S-s` | Save As… | `file.save_as` |
+| `C-w` | Close | `file.close` |
 
-Keep IntelliJ for the heavy refactoring days. For everything else — quick
-edits, servers, code review, notes — you may find the splash screen was the
-part you needed least.
+The two keymaps differ in the "go to" family: `Ctrl+O` / `Ctrl+L` on macOS,
+`Ctrl+N` / `Ctrl+G` on Windows.[^intellij-go-to]
+
+## What is different
+
+- **Language features come from language servers.** Completion, rename,
+  references, code actions, call hierarchy and formatting work through LSP, and
+  the usual server for a language starts once you trust the workspace.[^lsp]
+  Install the server yourself (`rust-analyzer`, `jdtls`, `pyright`, …); see
+  [Language servers](../language-server-protocol/index.md).
+- **The debugger is menu-driven.** Breakpoints, conditions, hit counts and log
+  messages are set from the **Run** menu, for any Debug Adapter Protocol
+  adapter.[^dap]
+- **Local history is the undo tree.** Undo history persists across sessions
+  and branches, and **Edit → Undo Tree…** browses it.[^undo]
+- **Settings are TOML**, in `config.toml` (`Ctrl+,` runs **Settings…** in the
+  macOS keymap); see [Configuration](../configuration/index.md).
+
+## What Vix adds
+
+- It runs in a terminal, so it works over SSH and in tmux; remote folders
+  open with **File → Open Remote…**.[^remote]
+- A Git panel that stages and commits, and blame.[^git]
+- Integrated terminals.[^terminal]
+- Search and replace across the workspace, with results you can edit in
+  place.[^search]
+
+## Where a JetBrains IDE is the better choice
+
+- **Code analysis and refactoring** for the languages it targets, especially
+  Java and Kotlin, go further than a language server.
+- **Framework, database and profiling tools**, which Vix does not attempt at
+  the same depth.
+- **A desktop GUI** with visual diff and merge, and graphical debugger views.
 
 ## See also
 
-- [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every binding.
-- [`docs/language-server-protocol/index.md`](../language-server-protocol/index.md)
-  — configuring language servers.
-- [`index.md`](../../index.md) — the full feature tour.
+- [Migrating from another editor](../migrating/index.md): settings, language
+  servers, snippets and themes.
+- [Keymaps](../keymaps/index.md#intellij).
+- [Why Vix?](../why-vix/index.md): Vix next to VS Code, Neovim, JetBrains IDEs
+  and Sublime Text.
+
+[^keymap-menu]: **View → Keymap…** sets the `keymap` setting: `tui/tests/integration/keymaps.rs`, `view_keymap_submenu_actions_set_the_keymap`.
+[^f1]: `F1` lists the active keymap's keys: `tui/tests/integration/keymaps.rs`, `help_overlay_includes_the_active_keymap_chords`.
+[^intellij-go-to]: `tui/tests/integration/keymaps.rs`, `intellij_go_to_family_differs_by_platform`.
+[^lsp]: Every LSP action against a mock server: `tui/tests/integration/lsp.rs`, `every_lsp_action_applies_a_mock_servers_reply`; servers start only in a trusted workspace: `a_builtin_language_server_starts_only_in_a_trusted_workspace`.
+[^dap]: Breakpoints and the debugger actions: `tui/tests/integration/debugger.rs`, `edit_breakpoint_sets_condition_hit_count_and_log_message`.
+[^undo]: `persistent_undo` defaults to `true` in `crates/vix-settings/src/lib.rs`; the tree view: `tui/tests/integration/undo_tree.rs`, `moving_the_selection_previews_and_enter_keeps_the_state`.
+[^remote]: Experimental. `tui/tests/remote_ui.rs`, `open_remote_connects_saves_survives_a_lost_connection_and_reconnects`; see [remote editing](../remote-editing/index.md).
+[^git]: Stage and commit, blame: `tui/tests/integration/git.rs`, `git_panel_stages_and_commits` and `git_blame_annotates_the_current_line`.
+[^terminal]: `tui/tests/integration/terminals.rs`, `several_terminals_each_get_their_own_keys`.
+[^search]: `tui/tests/integration/workspace.rs`, `workspace_search_finds_matches_across_files` and `workspace_replace_rewrites_files`.
 
 ---
 
