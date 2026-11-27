@@ -236,6 +236,28 @@ and never a glob: staging `app/[id]/p` (a Next.js-style route folder) no longer
 also stages `app/i/p`. No caller relies on pathspec magic; one that ever needs
 it opts back in with `:(glob)`.
 
+## When git state is read (T830)
+
+The App keeps a snapshot of the workspace's git state: whether it is a
+repository, the branch, and `git status --porcelain` (`App::refresh_git`,
+three `git` runs). At startup that snapshot is taken **in the background**:
+`App::start` calls `App::start_git_refresh`, which runs the same three
+commands on a worker thread through the same authority slot, and
+`App::poll_git_refresh` (from `App::tick`, ticking every 50 ms while it runs)
+installs it. Until it lands the App shows "not a repository" (no branch, no
+gutter), which renders correctly. When it lands the status-bar branch fills
+in and the gutter caches are cleared, so the next frame computes the change
+gutter of a tracked file.
+
+Everything that needs git state at once still reads it synchronously, and
+that read supersedes a background one in flight, whose older answer is
+dropped: opening the Git panel, a save, a finished command, any git action.
+A snapshot taken for a workspace root the App has since left is dropped too.
+Without the `git` capability `start_git_refresh` does nothing.
+
+Implemented in `tui/src/app/git_refresh.rs` (`GitSnapshot`, the job, polling)
+and `tui/src/app/git.rs` (`GitSnapshot::take`, `App::apply_git_snapshot`).
+
 ## Checked arithmetic
 
 The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Status, gutter and blame parsing use `chars`, `get`, `checked_*` and `skip` instead of slicing and casts. **Changed:** a blame entry whose `author-time` or `author-tz` is malformed (a zone that is not a sign and four digits with minutes below 60) is no longer read as time 0 or offset 0: the entry is `None`, as for any other unreadable entry. **Declared (GIT-F1):** outside a repository, or when git fails, the branch list is empty; a rebase todo line with no action word or hash is kept as an `Other` line; moving a rebase commit past either end does nothing. Diff run ends carry an `RCA-EXC-2` proof.

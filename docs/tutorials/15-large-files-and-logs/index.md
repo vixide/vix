@@ -32,9 +32,11 @@ The size limit is the `large_file_mb` setting:
 | --- | --- | --- | --- |
 | `large_file_mb` | integer | `50` | Ask before opening a file larger than this many megabytes. `0` never asks. |
 
-Whatever you set, a text buffer can never hold more than **1 GiB**. That
-ceiling still applies after you answer "yes", and when `large_file_mb` is `0`.
-Setting `large_file_mb` above `1024` has no further effect. (Vix counts a
+Whatever you set, a file over **500 MiB** always asks first, with a warning
+that loading it may use several times that much memory, and a file over
+**1 GiB**, more than a text buffer can ever hold, opens straight in the Large
+File Viewer instead. Both apply when `large_file_mb` is `0` too, so setting
+it above `500` has no further effect. (Vix counts a
 megabyte as 1,048,576 bytes here.)
 
 ## Make a big log

@@ -32,6 +32,11 @@ impl App {
         debug_assert!(self.git_branch.is_none());
     }
 
+    /// No git snapshot is ever taken, so there is none to install.
+    pub(super) fn apply_git_snapshot(&mut self, _snapshot: super::git_refresh::GitSnapshot) {
+        debug_assert!(self.git_branch.is_none());
+    }
+
     /// No git gutter to refresh.
     pub fn refresh_git_gutter(&mut self) {
         debug_assert!(self.git_branch.is_none());

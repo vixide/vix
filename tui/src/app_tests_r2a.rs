@@ -4318,21 +4318,17 @@ fn opening_a_directory_path_reports_it_is_not_a_regular_file() {
 }
 
 #[test]
-fn a_file_over_the_hard_cap_offers_only_the_viewer() {
+fn a_file_over_the_hard_cap_opens_in_the_viewer_without_asking() {
     let dir = tmp("over-cap");
     let p = dir.join("huge.bin");
+    // Sparse: no gigabyte is written to disk.
     let f = std::fs::File::create(&p).unwrap();
     f.set_len(crate::fileops::HARD_MAX_TEXT_BYTES + 4096)
         .unwrap();
     drop(f);
     let mut a = app_in(&dir);
     a.open_path(&p, false);
-    let c = a.confirm.as_ref().expect("asks about the viewer");
-    assert_eq!(c.kind, ConfirmKind::OpenLargeViewer);
-    a.on_key(key(KeyCode::Char('n')));
-    assert!(a.confirm.is_none());
-    a.open_path(&p, false);
-    a.on_key(key(KeyCode::Char('y')));
+    assert!(a.confirm.is_none(), "no question past 1 GiB (T830)");
     assert!(a.large_file.is_some());
     let _ = std::fs::remove_dir_all(&dir);
 }

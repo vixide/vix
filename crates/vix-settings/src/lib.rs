@@ -784,7 +784,8 @@ pub struct EditorBehaviorSettings {
     /// browses them. `0` turns Local History off.
     pub local_history_keep: usize,
     /// Ask before opening a file larger than this many megabytes (T571); `0`
-    /// never asks and refuses nothing on size (the 1 GiB ceiling still applies).
+    /// sets no limit of its own. A file over 500 MiB always asks, with a memory
+    /// warning, and one over 1 GiB opens in the Large File Viewer (T830).
     pub large_file_mb: u64,
     /// Path globs that open read-only (T662): dependency and toolchain sources
     /// Go to Definition lands in. `~/` is the home directory and `**` spans

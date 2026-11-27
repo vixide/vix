@@ -10833,6 +10833,17 @@ awareness, not capability. Items marked (stale?) may already exist.
   incremental workspace search via filesystem watch (100k files < 1 s);
   Tree-sitter on very large files; LRU eviction for caches; native
   file-watching efficiency; incremental rendering; memory-usage tracking.
+  (Started: the startup git refresh runs on a worker thread, `App::start` →
+  `start_git_refresh`, installed by `tick`, so the branch and gutter show
+  again without blocking the first frame — UI-thread cost 20–60 µs vs
+  27–87 ms, numbers in `docs/performance`; a file over 500 MiB always asks
+  with a memory warning and one over 1 GiB opens in the Large File Viewer
+  without asking, `vix_large_file::Thresholds`. Remaining: lazy-loading DB,
+  containers and Jupyter; the <100 ms / <50 ms empty-workspace and <50 MB
+  with a 100 MB log targets (not yet measured end to end); incremental
+  workspace search via filesystem watch; Tree-sitter on very large files;
+  LRU eviction for caches; native file-watching efficiency; incremental
+  rendering; memory-usage tracking.)
 - [ ] **T831 — Test infrastructure.** Coverage ≥90% on `vix-editor-core`,
   `vix-fileops`, `vix-git`, `vix-lsp`, `vix-db` (tarpaulin; see the coverage
   push); more integration tests for editor+LSP, editor+Git, DB+SQLite/Postgres,

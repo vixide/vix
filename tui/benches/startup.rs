@@ -7,7 +7,9 @@
 //!   the path before the first frame can draw) and `startup/refresh_git`
 //!   (three `git` subprocesses — repo?/branch/status — deliberately moved
 //!   *off* that path in `main.rs`), benchmarked separately since T122's fix
-//!   is exactly that these two are no longer paid at the same point.
+//!   is exactly that these two are no longer paid at the same point;
+//!   `startup/start_git_refresh` and `startup/git_refresh_landed` (T830)
+//!   the same refresh run on a worker thread, as `App::start` now does.
 //! - **The large-checkout open-time exercise** (T823): a deterministic
 //!   synthetic checkout (20,000 files by default) is generated in a temp
 //!   directory and opened again and again with a fresh `App` each run,
@@ -87,19 +89,67 @@ fn bench_app_new(c: &mut Criterion) {
 /// workspace does, not the cheap "not a repo" short-circuit. Skipped with a
 /// note if `git` itself isn't on `PATH` — this is a developer-run benchmark,
 /// not a CI gate (`scripts/check` never runs `cargo bench`).
+///
+/// `VIX_BENCH_GIT_DIR` points this (and [`bench_git_refresh_background`]) at
+/// a real repository instead, such as this checkout.
 fn bench_refresh_git(c: &mut Criterion) {
+    let Some(dir) = git_fixture() else {
+        eprintln!("skipping startup/refresh_git: `git init` did not succeed");
+        return;
+    };
+    let mut app = App::new(dir, Settings::default());
+    c.bench_function("startup/refresh_git", |b| {
+        b.iter(|| app.refresh_git());
+    });
+}
+
+/// The repository the git benchmarks read: `VIX_BENCH_GIT_DIR`, or a fresh
+/// empty fixture repository. `None` when `git init` fails.
+fn git_fixture() -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("VIX_BENCH_GIT_DIR").filter(|d| !d.is_empty()) {
+        return Some(PathBuf::from(dir));
+    }
     let dir = fixture_dir("refresh-git");
     let init = Command::new("git")
         .args(["init", "-q"])
         .current_dir(&dir)
         .status();
-    if !init.is_ok_and(|s| s.success()) {
-        eprintln!("skipping startup/refresh_git: `git init` did not succeed");
+    init.is_ok_and(|s| s.success()).then_some(dir)
+}
+
+/// The startup git refresh as `App::start` runs it since T830, on a worker
+/// thread: `startup/start_git_refresh` is what the UI thread pays (spawning
+/// the worker), `startup/git_refresh_landed` the wall time until
+/// `App::tick` has installed the answer (the branch is on screen).
+fn bench_git_refresh_background(c: &mut Criterion) {
+    let Some(dir) = git_fixture() else {
+        eprintln!("skipping startup/start_git_refresh: `git init` did not succeed");
         return;
-    }
+    };
     let mut app = App::new(dir, Settings::default());
-    c.bench_function("startup/refresh_git", |b| {
-        b.iter(|| app.refresh_git());
+    let settle = |app: &mut App| {
+        while app.git_refresh_busy() {
+            app.poll_git_refresh();
+            std::thread::sleep(Duration::from_micros(100));
+        }
+    };
+    c.bench_function("startup/start_git_refresh", |b| {
+        b.iter_custom(|iters| {
+            let mut spent = Duration::ZERO;
+            for _ in 0..iters {
+                let start = Instant::now();
+                app.start_git_refresh();
+                spent = spent.saturating_add(start.elapsed());
+                settle(&mut app);
+            }
+            spent
+        });
+    });
+    c.bench_function("startup/git_refresh_landed", |b| {
+        b.iter(|| {
+            app.start_git_refresh();
+            settle(&mut app);
+        });
     });
 }
 
@@ -689,6 +739,7 @@ fn main() {
     let mut c = criterion();
     bench_app_new(&mut c);
     bench_refresh_git(&mut c);
+    bench_git_refresh_background(&mut c);
     c.final_summary();
     // `cargo test --benches` runs bench targets without `--bench`: only the
     // Criterion smoke run then, never the multi-second open-time exercise.

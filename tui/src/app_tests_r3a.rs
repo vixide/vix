@@ -2027,20 +2027,81 @@ fn lsp_positions_clamp_to_the_buffer() {
 }
 
 #[test]
-fn the_text_size_limit_follows_the_setting_and_the_hard_ceiling() {
+fn the_text_size_limit_follows_the_setting_and_the_warning_threshold() {
+    let t = crate::large_file::Thresholds::default();
     let mut settings = Settings::default();
+    // No limit of one's own still asks past the 500 MiB warning (T830).
     settings.editor_behavior.large_file_mb = 0;
     assert_eq!(
-        App::max_text_bytes(&settings),
-        crate::fileops::HARD_MAX_TEXT_BYTES
+        App::max_text_bytes(&settings, t),
+        crate::large_file::WARN_BYTES
     );
     settings.editor_behavior.large_file_mb = 3;
-    assert_eq!(App::max_text_bytes(&settings), 3 * 1024 * 1024);
+    assert_eq!(App::max_text_bytes(&settings, t), 3 * 1024 * 1024);
     settings.editor_behavior.large_file_mb = u64::MAX / (1024 * 1024);
     assert_eq!(
-        App::max_text_bytes(&settings),
-        crate::fileops::HARD_MAX_TEXT_BYTES
+        App::max_text_bytes(&settings, t),
+        crate::large_file::WARN_BYTES
     );
+    const { assert!(crate::large_file::WARN_BYTES < crate::fileops::HARD_MAX_TEXT_BYTES) };
+    assert_eq!(
+        crate::large_file::VIEWER_BYTES,
+        crate::fileops::HARD_MAX_TEXT_BYTES,
+        "the viewer takes over exactly where a buffer can no longer hold the file"
+    );
+}
+
+/// With the thresholds injected small (T830): past the warning threshold
+/// the question carries a memory warning, even with `large_file_mb = 0`;
+/// past the viewer threshold the file opens in the Large File Viewer with
+/// no question.
+#[test]
+fn large_files_warn_then_degrade_to_the_viewer() {
+    let dir = temp("r3-thresholds");
+    let mut settings = Settings::default();
+    settings.editor_behavior.large_file_mb = 0;
+    let mut a = crate::app::cov4::app_with(&dir, settings);
+    a.set_open_thresholds(crate::large_file::Thresholds {
+        warn: 1_000,
+        viewer: 2_000,
+    });
+    let small = dir.join("small.txt");
+    std::fs::write(&small, "s".repeat(900)).unwrap();
+    a.open_path(&small, false);
+    assert!(a.confirm.is_none(), "under the warning threshold: loads");
+    assert_eq!(a.active_path().as_deref(), Some(small.as_path()));
+
+    let warned = dir.join("warned.txt");
+    std::fs::write(&warned, "w".repeat(1_500)).unwrap();
+    a.open_path(&warned, false);
+    let c = a.confirm.as_ref().expect("asks first");
+    assert_eq!(c.kind, ConfirmKind::OpenLarge);
+    assert!(
+        c.message
+            .contains(&t!("confirm.open_large_warning").to_string()),
+        "{}",
+        c.message
+    );
+    a.confirm_key(k(KeyCode::Char('y')));
+    assert_eq!(a.active_path().as_deref(), Some(warned.as_path()));
+
+    let huge = dir.join("huge.txt");
+    std::fs::write(&huge, "h".repeat(2_500)).unwrap();
+    a.open_path(&huge, false);
+    assert!(
+        a.confirm.is_none(),
+        "past the viewer threshold: no question"
+    );
+    assert_eq!(
+        a.large_file.as_ref().map(|v| v.path().to_path_buf()),
+        Some(huge.clone())
+    );
+    assert_ne!(a.active_path().as_deref(), Some(huge.as_path()));
+    // An arrow-key preview still only reports it.
+    a.large_file = None;
+    a.open_path(&huge, true);
+    assert!(a.large_file.is_none());
+    assert!(a.confirm.is_none());
 }
 
 #[cfg(feature = "git")]
