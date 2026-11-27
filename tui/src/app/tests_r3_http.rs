@@ -274,3 +274,140 @@ fn a_failed_send_is_reported_in_the_message_log() {
     );
     let _ = code(KeyCode::Esc);
 }
+
+// ----- T848: secret variables wait for a masked preview ---------------------
+
+/// Write `name` in `dir` as a request using `$processEnv HOME` in a
+/// header, and open it.
+fn open_secret_request(app: &mut App, dir: &std::path::Path, name: &str, port: u16) {
+    let path = dir.join(name);
+    std::fs::write(
+        &path,
+        format!("GET http://127.0.0.1:{port}/s\nX-Home: {{{{$processEnv HOME}}}}\n"),
+    )
+    .unwrap();
+    app.open_path(&path, false);
+}
+
+fn press(app: &mut App, c: char) {
+    app.confirm_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+}
+
+fn asking(app: &App) -> bool {
+    app.confirm.as_ref().map(|c| c.kind) == Some(super::ConfirmKind::HttpSendSecrets)
+}
+
+#[test]
+fn an_untrusted_request_with_process_env_is_not_sent_until_confirmed() {
+    let home = std::env::var("HOME").unwrap();
+    let (port, server) = serve_once("ok");
+    let dir = temp("http-secret-untrusted");
+    let mut app = app_at(&dir);
+    open_secret_request(&mut app, &dir, "api.http", port);
+    app.http_send();
+    assert!(!app.http_running(), "nothing is sent before the answer");
+    assert!(asking(&app), "the preview is shown");
+    let message = app.confirm.as_ref().unwrap().message.clone();
+    assert_eq!(
+        message,
+        t!(
+            "confirm.http_secrets_untrusted",
+            request = format!("GET http://127.0.0.1:{port}/s"),
+            variables = "$processEnv HOME"
+        )
+        .to_string()
+    );
+    assert!(!message.contains(&home), "the value stays hidden");
+    // No cancels.
+    press(&mut app, 'n');
+    assert!(app.confirm.is_none() && !app.http_running());
+    assert_eq!(app.status, t!("status.http_send_cancelled").to_string());
+    // Yes sends, with the real value.
+    app.http_send();
+    press(&mut app, 'y');
+    assert!(app.http_running());
+    wait_for_response(&mut app);
+    let request = server.join().unwrap().to_ascii_lowercase();
+    assert!(
+        request.contains(&format!("x-home: {}", home.to_ascii_lowercase())),
+        "{request}"
+    );
+    // An untrusted workspace asks again next time, even for the same file.
+    app.open_path(&dir.join("api.http"), false);
+    app.http_send();
+    assert!(!app.http_running());
+    assert!(asking(&app));
+}
+
+#[test]
+fn a_trusted_workspace_asks_once_per_file_and_origin() {
+    let dir = temp("http-secret-trusted");
+    let mut app = app_at(&dir);
+    let mut store = app.load_session();
+    store.set_scripts_trusted(&app.session_key(), Some(true));
+    app.store_session(&store).unwrap();
+    let (port, server) = serve_once("ok");
+    open_secret_request(&mut app, &dir, "a.http", port);
+    app.http_send();
+    assert!(asking(&app), "a newly opened file still shows the preview");
+    assert_eq!(
+        app.confirm.as_ref().unwrap().message,
+        t!(
+            "confirm.http_secrets",
+            request = format!("GET http://127.0.0.1:{port}/s"),
+            variables = "$processEnv HOME"
+        )
+        .to_string()
+    );
+    press(&mut app, 'y');
+    wait_for_response(&mut app);
+    server.join().unwrap();
+    // The same file and origin is sent straight away (its server is gone
+    // now, so the send itself fails; only the question matters here).
+    app.open_path(&dir.join("a.http"), false);
+    app.http_send();
+    assert!(app.confirm.is_none() && app.http_running());
+    wait_for_response(&mut app);
+    // Another file, same origin: asked again.
+    open_secret_request(&mut app, &dir, "b.http", port);
+    app.http_send();
+    assert!(asking(&app), "another file asks again");
+    press(&mut app, 'n');
+    // The first file aimed at another origin: asked again too.
+    app.open_path(&dir.join("a.http"), false);
+    let other = port.wrapping_add(1);
+    buffer_with(
+        &mut app,
+        &format!("GET http://127.0.0.1:{other}/s\nX-Home: {{{{$processEnv HOME}}}}\n"),
+        0,
+    );
+    app.http_send();
+    assert!(asking(&app), "another origin asks again");
+    press(&mut app, 'n');
+}
+
+#[test]
+fn a_request_without_secret_variables_needs_no_confirmation() {
+    let (port, server) = serve_once("ok");
+    let mut app = app_at(&temp("http-no-secret"));
+    buffer_with(
+        &mut app,
+        &format!("GET http://127.0.0.1:{port}/p\nX-Id: {{{{$guid}}}}\n"),
+        0,
+    );
+    app.http_send();
+    assert!(app.confirm.is_none());
+    assert!(app.http_running());
+    wait_for_response(&mut app);
+    server.join().unwrap();
+}
+
+#[test]
+fn a_bad_timeout_line_stops_the_send() {
+    let mut app = app_at(&temp("http-bad-timeout"));
+    buffer_with(&mut app, "# @timeout soon\nGET http://127.0.0.1:1/x\n", 0);
+    app.messages.items.clear();
+    app.http_send();
+    assert!(!app.http_running());
+    assert!(last_message(&app).is_some_and(|m| m.contains("@timeout soon")));
+}

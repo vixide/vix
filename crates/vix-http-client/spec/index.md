@@ -23,6 +23,59 @@ Several requests per buffer, separated by `###` lines; the action sends the one 
 
 Not yet: `$aadToken` blocks the UI thread for the CLI call (about a second); there is no `$aadV2Token`, token caching, or full XPath (functions, axes, unions).
 
+## Timeouts (T848)
+
+`ureq` sets no timeouts by default, so a server that accepted the
+connection and never answered used to keep a send waiting forever. Every
+request now has two bounds (`Timeouts`, `#[non_exhaustive]`, built with
+`Timeouts::new` or `Timeouts::DEFAULT`):
+
+| Timeout | Default | Covers |
+| --- | --- | --- |
+| `connect` | `DEFAULT_CONNECT_TIMEOUT` = 10 s | resolving the host and opening the connection, TLS included |
+| `read` | `DEFAULT_READ_TIMEOUT` = 60 s | how long the server may stay silent: each transport read or write (request, response headers, every piece of the body) restarts it, so a download that keeps flowing is not cut off |
+
+`send_response` (and `send`) use the defaults; `send_response_with(req,
+timeouts)` takes explicit ones. A timeout that runs out is
+`HttpError::Timeout(stage)`. Per request, `rest::timeouts(block)` reads
+`# @timeout N` (read) and `# @connection-timeout N` comment lines, the
+JetBrains HTTP client's spelling: `N` is a positive whole number of seconds,
+or of `ms`, `s` or `m` after it (`500 ms`, `2m`); `//` comments work,
+and the last line of each kind wins. A malformed value is
+`rest::BadTimeout` and stops the send with `msg.http_error`. The FHIR
+client (`vix-fhir`) goes through `send_response`, so it gets the defaults
+too.
+
+## Secret variables wait for a masked preview (T848)
+
+A `.http` file from a cloned repository chooses its own URL, so without a
+check it could put `{{$processEnv NAME}}`, `{{$dotenv NAME}}` or
+`{{$aadToken}}` values (directly, or through a file or environment
+variable) into a request to a host of its choosing. Those three are
+`rest::SECRET_VARIABLES`. `rest::expand_masked(text, ctx)` expands a block
+without reading any of them: each becomes `rest::MASK` and is listed once,
+in first-use order, as written (`$processEnv TOKEN`), in `Masked::secrets`;
+no environment variable or `.env` file is read and `az` is not run.
+
+`tools.http_send` (`App::http_send`) expands the block masked first. When
+it uses no secret variable it is sent as before. Otherwise a confirmation
+(`ConfirmKind::HttpSendSecrets`) shows the masked request line (method and
+URL) and the secret variables it fills, with the values hidden:
+`confirm.http_secrets_untrusted` in a workspace that is not trusted (no
+T132 trust decision, or a remote workspace not trusted under T714),
+`confirm.http_secrets` in a trusted one. `y` expands it for real and
+sends it; `n`/Esc sends nothing (`status.http_send_cancelled`). Nothing
+secret is read before the answer.
+
+Decision (the task left it open; closest to the "ask before running
+something a cloned project chose" model the workspace-trust prompt already
+uses): in an **untrusted** workspace every send that uses a secret variable
+asks; in a **trusted** workspace the answer is remembered for the session per
+`.http` file (none for an unsaved buffer) and origin (`scheme://host:port`,
+lower-cased), so the first send from a newly opened file, or to another
+origin, asks, and later ones do not. Nothing is persisted. **Copy as curl**
+(`tools.http_copy_curl`) still expands real values, since it sends nothing.
+
 ## Errors (T610)
 
 `rest::BodyFileError`; `load_body_file` returns `Result<(), BodyFileError>`:

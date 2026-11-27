@@ -46,6 +46,7 @@ fn error_text(error: Option<&ServerError>) -> String {
             t!("ui.lsp_error_not_installed", install = install).to_string()
         }
         Some(ServerError::Request(message)) => message.clone(),
+        Some(ServerError::Framing(error)) => crate::app::frame_error_text(error),
         // Any error kind added later.
         Some(_) => t!("ui.lsp_state_failed").to_string(),
     }

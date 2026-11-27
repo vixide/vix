@@ -2595,6 +2595,33 @@ fn cancelling_with_nothing_running_does_nothing() {
 // ----- language-server notices -----------------------------------------------------
 
 #[test]
+fn a_server_dropped_for_an_oversized_frame_is_reported_with_the_sizes() {
+    // T848.
+    let mut a = app();
+    let error = crate::lsp_core::frame::FrameError::TooLarge {
+        length: 1_000_000_000_000,
+        limit: crate::lsp_core::frame::MAX_FRAME_BYTES,
+    };
+    a.report_lsp_server_down(&crate::lsp::LspEvent::ServerDropped {
+        language_id: "rust".to_string(),
+        error,
+    });
+    let reason = t!(
+        "msg.frame_too_large",
+        size = 1_000_000_000_000_u64,
+        limit = crate::lsp_core::frame::MAX_FRAME_BYTES
+    );
+    assert_eq!(
+        a.messages.items.last().map(|m| m.text.clone()),
+        Some(t!("msg.lsp_server_dropped", language = "rust", reason = reason).to_string())
+    );
+    assert_eq!(
+        crate::app::frame_error_text(&crate::lsp_core::frame::FrameError::BadHeader),
+        t!("msg.frame_invalid").to_string()
+    );
+}
+
+#[test]
 fn language_server_down_events_become_error_messages() {
     let mut a = app();
     a.report_lsp_server_down(&crate::lsp::LspEvent::ServerCrashed("rust".to_string()));

@@ -110,10 +110,11 @@ code.
   Debug adapters start only on **Run → Start Debugging** or **Run → Attach**
   (`crates/vix-dap/src/lib.rs`, `tui/src/app/lsp_dap.rs`). Every spawn site is
   listed in `tui/tests/spawn_sites.rs`.
-- **Open risks.** The `Content-Length` framing has no upper bound
-  (`crates/vix-lsp-core/src/frame.rs`): a server that announces a huge body
-  makes Vix buffer it. The server already runs as you, so this is a
-  robustness issue rather than an escalation.
+- **Open risks.** None from framing since T848: frames over
+  `MAX_FRAME_BYTES` (64 MiB, about 45 times the largest measured
+  rust-analyzer reply) or headers over 8 KiB are refused before the body is
+  buffered, and the connection is dropped with a translated error
+  (`crates/vix-lsp-core/src/frame.rs`).
 
 ### Rhai scripts
 
@@ -276,12 +277,13 @@ code.
   it. Azure tokens come from `az` by argv
   (`crates/vix-http-client/src/aad.rs`).
 - **Open risks.** No loopback or private-address guard (an accepted risk in
-  `SECURITY.md`). No explicit timeouts: `ureq`'s defaults apply. A `.http`
-  file from a hostile repository can reference `{{$processEnv NAME}}`,
-  `{{$dotenv NAME}}` or `{{$aadToken}}` and send the value to a host it
-  chooses, the moment you send the request
-  (`crates/vix-http-client/src/rest.rs`); there is no workspace-trust gate or
-  preview of the resolved request for those variables.
+  `SECURITY.md`). Closed by T848: requests default to a 10 s connect and 60 s
+  inactivity timeout, overridable with `# @timeout` and
+  `# @connection-timeout`; and `{{$processEnv}}`, `{{$dotenv}}` and
+  `{{$aadToken}}` are never read before you approve a masked preview (method,
+  URL, variable names) — an untrusted workspace asks before every such send, a
+  trusted one once per file and origin per session
+  (`crates/vix-http-client/src/rest.rs`, `tui/src/app/http.rs`).
 
 ### The repository itself
 

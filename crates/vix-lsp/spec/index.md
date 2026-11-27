@@ -695,6 +695,22 @@ with `ServerError::NotInstalled(install)` and the host gets
 error. The stderr reader can lag the exit by a moment, so the check runs on
 every crash and the first one may still be respawned once.
 
+## Oversized or malformed frames (T848)
+
+The reader thread runs `vix_lsp_core::frame::read_messages`. When a server
+breaks the framing, above all a header declaring more than
+`frame::MAX_FRAME_BYTES` (64 MiB; see the
+[lsp-core spec](../../vix-lsp-core/spec/index.md#frame-size-limits-t848)),
+the thread stops before buffering the body and reports it. `Lsp::poll` then
+kills and reaps the server, marks it failed with
+`ServerError::Framing(error)` and emits
+`LspEvent::ServerDropped { language_id, error }`. It is not respawned (a
+server that sent one such frame would send it again) and does not count
+against the crash budget; **Restart Server** starts it again. The App shows
+`msg.lsp_server_dropped` in Messages with the translated reason
+(`msg.frame_too_large` with both sizes, or `msg.frame_invalid`), and the
+LSP Status overlay shows the same reason as the last error.
+
 ## Server status (T732)
 
 `Lsp::statuses()` returns one `ServerStatus` per configured language id, in
@@ -706,7 +722,7 @@ budget ran out), the capabilities advertised in the `initialize` result
 (`vix_lsp_core::message::parse_capability_names`: every non-`false`, non-null
 key of `capabilities`, a trailing `Provider` dropped, sorted), the number of
 open documents, the in-flight progress lines, and the last `ServerError`
-since the last restart (`SpawnFailed`, `Crashed`, `NotInstalled(install)`, or `Request(message)` for a
+since the last restart (`SpawnFailed`, `Crashed`, `NotInstalled(install)`, `Framing(error)` (T848), or `Request(message)` for a
 JSON-RPC error reply that was surfaced to the user). `Lsp::restart_language`
 restarts one server by language id, exactly like `Lsp::restart` does for one
 file's servers, and clears its error and failed state.

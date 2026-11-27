@@ -561,3 +561,58 @@ fn start_fails_cleanly_when_the_adapter_cannot_spawn() {
     assert!(!dap.is_active());
     assert!(dap.poll().is_empty());
 }
+
+/// T848: an adapter whose first message declares 10^12 bytes and then
+/// streams an endless body. Vix must not buffer it: the session is dropped
+/// with `ConnectionDropped` (then `Terminated`) as soon as the header is in.
+const HUGE_FRAME_ADAPTER: &str = r"
+import sys
+sys.stdout.buffer.write(b'Content-Length: 1000000000000\r\n\r\n')
+sys.stdout.buffer.flush()
+chunk = b' ' * 65536
+try:
+    while True:
+        sys.stdout.buffer.write(chunk)
+except Exception:
+    pass
+";
+
+#[test]
+fn an_adapter_declaring_a_terabyte_message_is_dropped_with_an_error() {
+    if !python_available() {
+        eprintln!("skipping: python3 not found");
+        return;
+    }
+    let root = std::env::temp_dir().join(format!("vix-dap-huge-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let script = root.join("huge.py");
+    std::fs::write(&script, HUGE_FRAME_ADAPTER).unwrap();
+    let adapter = DebugAdapter::new(
+        "huge",
+        vec!["rs".into()],
+        vec!["python3".into(), script.to_string_lossy().into_owned()],
+    );
+    let mut dap = Dap::new();
+    assert!(dap.start(&adapter, "/tmp/a.rs", HashMap::new(), StartMode::Launch));
+    let mut events = Vec::new();
+    poll_until(&mut dap, &mut events, |e| {
+        e.iter().any(|x| matches!(x, DapEvent::Terminated))
+    });
+    let error = first(
+        &events,
+        |e| match e {
+            DapEvent::ConnectionDropped(error) => Some(error.clone()),
+            _ => None,
+        },
+        "ConnectionDropped event",
+    );
+    assert_eq!(
+        error,
+        vix_lsp_core::frame::FrameError::TooLarge {
+            length: 1_000_000_000_000,
+            limit: vix_lsp_core::frame::MAX_FRAME_BYTES,
+        }
+    );
+    assert!(!dap.is_active(), "the session is closed");
+    let _ = std::fs::remove_dir_all(&root);
+}

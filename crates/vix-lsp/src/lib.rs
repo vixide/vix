@@ -194,6 +194,10 @@ enum Incoming {
     Message(Value),
     /// The server's stdout closed: the process has gone.
     Exited,
+    /// The server broke the message framing, such as declaring a message
+    /// past [`frame::MAX_FRAME_BYTES`] (T848): the reader stopped before
+    /// buffering it, and the host drops the connection.
+    Framing(frame::FrameError),
 }
 
 /// One file's edits in a workspace/code-action edit: `(file, [(range, new_text)])`.
@@ -385,6 +389,17 @@ pub enum LspEvent {
     /// active when the response arrives, same established limitation those
     /// already have under rapid tab switching.
     SemanticTokens(Vec<vix_lsp_core::SemanticToken>),
+    /// The connection to a server was dropped because it broke the message
+    /// framing (T848): most often a header declaring a message larger than
+    /// [`vix_lsp_core::frame::MAX_FRAME_BYTES`]. The server was stopped
+    /// before the body was buffered and is not respawned; it stays down
+    /// until restarted.
+    ServerDropped {
+        /// The configured language id.
+        language_id: String,
+        /// What the server sent wrong.
+        error: vix_lsp_core::frame::FrameError,
+    },
 }
 
 /// A reply to an edit-returning request (formatting, range formatting, linked
@@ -460,6 +475,8 @@ pub enum ServerError {
     NotInstalled(String),
     /// A request returned a JSON-RPC error with this message.
     Request(String),
+    /// The server broke the message framing and was dropped (T848).
+    Framing(vix_lsp_core::frame::FrameError),
 }
 
 /// A snapshot of one configured language server (T732), from
@@ -2175,6 +2192,20 @@ impl Lsp {
                         }
                         break;
                     }
+                    Incoming::Framing(error) => {
+                        // Not a crash: a server that sent one oversized frame
+                        // would send it again, so it is stopped, not respawned.
+                        if let Some(mut server) = self.servers.remove(&lang) {
+                            let _ = server.child.kill();
+                            let _ = server.child.wait();
+                        }
+                        self.mark_failed(&lang, ServerError::Framing(error.clone()));
+                        events.push(LspEvent::ServerDropped {
+                            language_id: lang.clone(),
+                            error,
+                        });
+                        break;
+                    }
                     Incoming::Message(msg) => self.handle(&lang, &msg, &mut events),
                 }
             }
@@ -3124,32 +3155,20 @@ fn spawn_writer(mut stdin: ChildStdin, wrx: Receiver<Vec<u8>>) {
     });
 }
 
-/// Read framed messages off `stdout` and forward each decoded value to `tx`.
-fn spawn_reader(mut stdout: std::process::ChildStdout, tx: Sender<Incoming>) {
+/// Read framed messages off `stdout` and forward each decoded value to `tx`;
+/// then `Exited` when the stream ends, or `Framing` when the server broke
+/// the framing (T848: an oversized frame stops the reader before its body
+/// is buffered).
+fn spawn_reader(mut stdout: impl Read + Send + 'static, tx: Sender<Incoming>) {
     std::thread::spawn(move || {
-        let mut decoder = frame::Decoder::new();
-        let mut chunk = [0u8; 8192];
-        loop {
-            match stdout.read(&mut chunk) {
-                Ok(0) | Err(_) => {
-                    let _ = tx.send(Incoming::Exited);
-                    return;
-                }
-                Ok(n) => {
-                    #[expect(
-                        clippy::indexing_slicing,
-                        reason = "RCA-EXC-2: read returns at most the buffer length, so n is at most chunk.len()"
-                    )]
-                    let received = &chunk[..n];
-                    decoder.push(received);
-                    while let Some(msg) = decoder.pop() {
-                        if tx.send(Incoming::Message(msg)).is_err() {
-                            return; // host dropped the receiver
-                        }
-                    }
-                }
-            }
-        }
+        let end = frame::read_messages(&mut stdout, |msg| tx.send(Incoming::Message(msg)).is_ok());
+        let last = match end {
+            frame::ReadEnd::Frame(error) => Incoming::Framing(error),
+            // The host dropped the receiver: nobody is listening.
+            frame::ReadEnd::Stopped => return,
+            _ => Incoming::Exited,
+        };
+        let _ = tx.send(last);
     });
 }
 
@@ -3207,6 +3226,58 @@ pub fn uri_to_path(uri: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fake server's stdout: a header declaring 10^12 bytes, then an
+    /// endless body. Counts the bytes the reader took.
+    struct HugeFrame {
+        header: &'static [u8],
+        sent: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl Read for HugeFrame {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            use std::sync::atomic::Ordering;
+            let sent = self.sent.load(Ordering::SeqCst);
+            let n = if sent < self.header.len() {
+                let rest = &self.header[sent..];
+                let n = rest.len().min(buf.len());
+                buf[..n].copy_from_slice(&rest[..n]);
+                n
+            } else {
+                buf.fill(b'x');
+                buf.len()
+            };
+            self.sent.fetch_add(n, Ordering::SeqCst);
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn the_reader_stops_a_server_declaring_a_terabyte_message() {
+        let sent = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (tx, rx) = std::sync::mpsc::channel();
+        spawn_reader(
+            HugeFrame {
+                header: b"Content-Length: 1000000000000\r\n\r\n",
+                sent: std::sync::Arc::clone(&sent),
+            },
+            tx,
+        );
+        let got = rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("the reader reports the error");
+        assert!(matches!(
+            got,
+            Incoming::Framing(frame::FrameError::TooLarge {
+                length: 1_000_000_000_000,
+                ..
+            })
+        ));
+        assert!(
+            sent.load(std::sync::atomic::Ordering::SeqCst) <= 8192,
+            "the body was never read, let alone buffered"
+        );
+    }
 
     #[test]
     fn uri_round_trips_paths_with_spaces() {

@@ -809,6 +809,34 @@ fn a_missing_rustup_component_is_reported_with_its_install_command() {
 }
 
 #[test]
+fn a_server_sending_an_oversized_frame_is_dropped_not_respawned() {
+    // T848: the reader thread reports the framing error (see
+    // `tests::the_reader_stops_a_server_declaring_a_terabyte_message`).
+    let mut rig = Rig::open();
+    let error = vix_lsp_core::frame::FrameError::TooLarge {
+        length: 1_000_000_000_000,
+        limit: vix_lsp_core::frame::MAX_FRAME_BYTES,
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    tx.send(crate::Incoming::Framing(error.clone())).unwrap();
+    rig.server().rx = rx;
+    let events = rig.lsp.poll();
+    assert!(matches!(events.as_slice(),
+        [LspEvent::ServerDropped { language_id, error: e }] if language_id == LANG && *e == error));
+    assert!(
+        !rig.lsp.servers.contains_key(LANG),
+        "the connection is closed"
+    );
+    let status = &rig.lsp.statuses()[0];
+    assert_eq!(status.state, ServerState::Failed);
+    assert_eq!(status.last_error, Some(ServerError::Framing(error)));
+    assert!(
+        !rig.lsp.restart_attempts.contains_key(LANG),
+        "not counted as a crash"
+    );
+}
+
+#[test]
 fn a_crashed_server_that_cannot_be_started_again_is_reported_crashed() {
     let mut rig = Rig::open();
     rig.lsp.configs[0].command = vec!["vix-no-such-language-server-cov".into()];

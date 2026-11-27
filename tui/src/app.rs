@@ -941,6 +941,21 @@ pub enum ConfirmKind {
     /// Open a prefilled GitHub issue for the crash report in
     /// [`Confirm::paths`] in the browser (`spec/crash-reports`).
     ReportCrash,
+    /// Send an HTTP request that uses secret variables (`$processEnv`,
+    /// `$dotenv`, `$aadToken`) after showing it masked (T848);
+    /// [`Confirm::paths`] holds the `.http` file, when it has one.
+    HttpSendSecrets,
+}
+
+/// What a consent to send secret variables covers (T848): the `.http` file
+/// (none for an unsaved buffer) and the request's origin.
+#[cfg(feature = "http")]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct HttpConsentKey {
+    /// The file the request came from.
+    pub(crate) file: Option<PathBuf>,
+    /// `scheme://host[:port]`, lower-cased.
+    pub(crate) origin: String,
 }
 
 /// A yes/no confirmation (explorer delete, smart commit).
@@ -976,6 +991,17 @@ pub struct ScriptTrustPrompt {
 /// How long after the script-trust prompt opens its keys are ignored (T655):
 /// long enough to swallow a typed-ahead key, short enough not to be noticed.
 pub const SCRIPT_TRUST_KEY_GUARD: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// The translated reason a language server or debug adapter was dropped for
+/// breaking the message framing (T848).
+pub(crate) fn frame_error_text(error: &crate::lsp_core::frame::FrameError) -> String {
+    match error {
+        crate::lsp_core::frame::FrameError::TooLarge { length, limit } => {
+            t!("msg.frame_too_large", size = length, limit = limit).to_string()
+        }
+        _ => t!("msg.frame_invalid").to_string(),
+    }
+}
 
 /// A previewed project-wide replace awaiting confirmation. Holds the computed
 /// per-file results so applying writes exactly what was previewed.
@@ -2363,6 +2389,16 @@ pub struct App {
     /// Responses of `# @name`d requests already sent, for `{{name.response…}}`.
     #[cfg(feature = "http")]
     http_named: std::collections::HashMap<String, crate::http_client::Response>,
+    /// File and origin pairs whose secret variables the user agreed to send
+    /// this session, in a trusted workspace (T848).
+    #[cfg(feature = "http")]
+    http_consented: std::collections::HashSet<HttpConsentKey>,
+    /// The consent the open secret-variable confirmation would grant (T848).
+    #[cfg(feature = "http")]
+    http_consent_pending: Option<HttpConsentKey>,
+    /// A consent just given, good for the one send it was asked for (T848).
+    #[cfg(feature = "http")]
+    http_consent_once: Option<HttpConsentKey>,
     /// Real-time collaboration state (T695); a zero-size stand-in unless the
     /// `cowork` feature is on.
     pub(crate) cowork: cowork_state::State,
@@ -3052,6 +3088,12 @@ impl App {
             http_pending_name: None,
             #[cfg(feature = "http")]
             http_named: std::collections::HashMap::new(),
+            #[cfg(feature = "http")]
+            http_consented: std::collections::HashSet::new(),
+            #[cfg(feature = "http")]
+            http_consent_pending: None,
+            #[cfg(feature = "http")]
+            http_consent_once: None,
             cowork: cowork_state::State::default(),
             jupyter: jupyter_state::State::default(),
             html_panel: None,
@@ -8004,6 +8046,11 @@ impl App {
             crate::lsp::LspEvent::ServerCrashed(language_id) => {
                 t!("msg.lsp_server_crashed", language = language_id)
             }
+            crate::lsp::LspEvent::ServerDropped { language_id, error } => t!(
+                "msg.lsp_server_dropped",
+                language = language_id,
+                reason = frame_error_text(error)
+            ),
             _ => return,
         };
         self.messages.error(text.to_string());
@@ -8102,7 +8149,8 @@ impl App {
                     }
                 }
                 event @ (crate::lsp::LspEvent::ServerCrashed(_)
-                | crate::lsp::LspEvent::ServerNotInstalled { .. }) => {
+                | crate::lsp::LspEvent::ServerNotInstalled { .. }
+                | crate::lsp::LspEvent::ServerDropped { .. }) => {
                     self.report_lsp_server_down(&event);
                 }
                 crate::lsp::LspEvent::SemanticTokens(tokens) => {
@@ -8602,6 +8650,7 @@ impl App {
     /// confirmation.
     fn confirm_key(&mut self, key: KeyEvent) {
         if self.remote_confirm_key(key)
+            || self.http_confirm_key(key)
             || self.jupyter_confirm_key(key)
             || self.hot_exit_confirm_key(key)
             || self.crash_confirm_key(key)

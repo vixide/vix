@@ -160,6 +160,8 @@ pub enum HttpError {
     InvalidRequest(String),
     /// The request never got a reply: DNS, connection or TLS failure.
     Transport(String),
+    /// A connect or read timeout (see [`Timeouts`]) ran out (T848).
+    Timeout(String),
 }
 
 impl std::fmt::Display for HttpError {
@@ -169,11 +171,55 @@ impl std::fmt::Display for HttpError {
                 write!(f, "unsupported URL scheme (only http/https): {url}")
             }
             Self::InvalidRequest(why) | Self::Transport(why) => f.write_str(why),
+            Self::Timeout(why) => write!(f, "timed out: {why}"),
         }
     }
 }
 
 impl std::error::Error for HttpError {}
+
+/// How long to connect, and then to wait for each stage of the reply (T848).
+///
+/// [`send_response`] uses [`Timeouts::DEFAULT`]; a request block overrides
+/// either with `# @timeout` / `# @connection-timeout` lines (see
+/// [`rest::timeouts`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Timeouts {
+    /// Resolving the host and opening the connection (TCP and TLS).
+    pub connect: std::time::Duration,
+    /// The longest the server may stay silent: each wait to send to it or
+    /// to read from it (the response headers, then every piece of the
+    /// body) restarts this clock, so a long download that keeps flowing is
+    /// not cut off, but a server that accepts and never answers is.
+    pub read: std::time::Duration,
+}
+
+/// The default connect timeout: 10 seconds.
+pub const DEFAULT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The default read timeout: 60 seconds.
+pub const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+impl Timeouts {
+    /// [`DEFAULT_CONNECT_TIMEOUT`] and [`DEFAULT_READ_TIMEOUT`].
+    pub const DEFAULT: Self = Self {
+        connect: DEFAULT_CONNECT_TIMEOUT,
+        read: DEFAULT_READ_TIMEOUT,
+    };
+
+    /// Timeouts of `connect` and `read`.
+    #[must_use]
+    pub const fn new(connect: std::time::Duration, read: std::time::Duration) -> Self {
+        Self { connect, read }
+    }
+}
+
+impl Default for Timeouts {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
 
 /// A received HTTP response.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -219,15 +265,25 @@ pub fn send(req: &Request) -> Result<String, HttpError> {
     send_response(req).map(|r| r.format())
 }
 
-/// Perform `req` (blocking) and return the structured [`Response`].
+/// Perform `req` (blocking) with [`Timeouts::DEFAULT`] and return the
+/// structured [`Response`].
+///
+/// # Errors
+/// See [`send_response_with`].
+pub fn send_response(req: &Request) -> Result<Response, HttpError> {
+    send_response_with(req, Timeouts::DEFAULT)
+}
+
+/// Perform `req` (blocking) with `timeouts` and return the structured
+/// [`Response`].
 ///
 /// # Errors
 /// [`HttpError::UnsupportedScheme`] for a non-`http(s)` URL,
 /// [`HttpError::InvalidRequest`] when the request can't be built, and
-/// [`HttpError::Transport`] when it can't be completed (DNS, connection, TLS).
-/// An HTTP error *status* is not an error here: the error response is
-/// returned as `Ok`.
-pub fn send_response(req: &Request) -> Result<Response, HttpError> {
+/// [`HttpError::Transport`] when it can't be completed (DNS, connection, TLS),
+/// and [`HttpError::Timeout`] when a timeout runs out. An HTTP error
+/// *status* is not an error here: the error response is returned as `Ok`.
+pub fn send_response_with(req: &Request, timeouts: Timeouts) -> Result<Response, HttpError> {
     // Only http(s) may be requested. A `.http` buffer can be an opened file, so
     // restricting the scheme keeps a crafted request from reaching other URL
     // handlers (e.g. `file://`); ureq itself doesn't implement such schemes, but
@@ -237,10 +293,16 @@ pub fn send_response(req: &Request) -> Result<Response, HttpError> {
     }
     // An HTTP error *status* carries a response worth showing, so it must not
     // surface as an `Err`.
-    // No explicit timeouts are set: ureq's defaults apply, and callers run this
-    // on a background thread so a slow server never blocks the UI.
+    // Callers run this on a background thread so a slow server never blocks
+    // the UI, but ureq itself would wait forever (T848): the lookup and the
+    // connection get `timeouts.connect`, and every transport read and write
+    // after that gets `timeouts.read` (an inactivity bound, not a total).
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
+        .timeout_resolve(Some(timeouts.connect))
+        .timeout_connect(Some(timeouts.connect))
+        .timeout_per_read(Some(timeouts.read))
+        .timeout_per_write(Some(timeouts.read))
         .build()
         .into();
     let mut builder = ureq::http::Request::builder()
@@ -254,6 +316,7 @@ pub fn send_response(req: &Request) -> Result<Response, HttpError> {
         .map_err(|e| HttpError::InvalidRequest(e.to_string()))?;
     match agent.run(request) {
         Ok(resp) => Ok(read_response(resp)),
+        Err(ureq::Error::Timeout(stage)) => Err(HttpError::Timeout(stage.to_string())),
         Err(e) => Err(HttpError::Transport(e.to_string())),
     }
 }

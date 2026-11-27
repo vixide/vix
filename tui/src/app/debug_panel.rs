@@ -103,6 +103,16 @@ impl App {
                 self.refresh_debug_markers();
                 self.status = t!("status.debug_terminated").to_string();
             }
+            DapEvent::ConnectionDropped(error) => {
+                // T848: a `Terminated` follows and resets the panel.
+                self.messages.error(
+                    t!(
+                        "msg.dap_connection_dropped",
+                        reason = crate::app::frame_error_text(&error)
+                    )
+                    .to_string(),
+                );
+            }
             DapEvent::RequestFailed(message) => {
                 // T536 (Run H): mirrors the LSP handling
                 // (`LspEvent::RequestFailed`) — a rejected breakpoint or an
