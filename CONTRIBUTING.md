@@ -124,7 +124,16 @@ git push origin feat/your-feature-name
 ```
 
 The `pre-push` hook (installed via `make hooks`) will verify you have a valid
-attestation before pushing to `main` or tags.
+attestation before pushing to `main` or tags. Another branch can be pushed
+unattested with `VIX_ALLOW_UNATTESTED=1`, after the hook runs
+`scripts/check --tier fast` on it.
+
+`make hooks` also installs a `pre-commit` hook that takes seconds and changes
+nothing: it refuses a commit whose staged Rust files are not formatted, whose
+staged files hold what looks like a real secret (the rules in
+`scripts/secret-patterns`), that adds a file over 1 MiB, or, when library
+code is staged, that fails `tui/tests/code_lints.rs`. See
+[Development Setup](docs/development.md#git-hooks) for the switches.
 
 ### 7. Create a Pull Request
 

@@ -165,10 +165,14 @@ check-pnpm:
 # make hooks: Install the repository hooks (T761, T760).
 # Sets core.hooksPath so the hooks in scripts/hooks/ are used. Includes:
 #   - pre-push: refuses to push main or a tag without a valid full-tier gate
-#     attestation (scripts/attest)
-#   - pre-commit: runs cargo fmt on staged Rust files for consistent formatting
+#     attestation (scripts/attest); an unattested branch push
+#     (VIX_ALLOW_UNATTESTED=1) runs scripts/check --tier fast first (T833)
+#   - pre-commit: checks what is staged, in seconds, changing nothing: rustfmt
+#     on staged Rust files, the secret scan (scripts/secret-patterns), a 1 MiB
+#     limit on new files and the code lints (T833)
 # It only sets git config; `git config --unset core.hooksPath` removes it.
-# Skip pre-commit formatting with VIX_SKIP_PRECOMMIT_FMT=1.
+# Skips: VIX_SKIP_PRECOMMIT_FMT=1, VIX_SKIP_PRECOMMIT_LINTS=1,
+# VIX_MAX_ADD_BYTES=<bytes>; `git commit --no-verify` skips the hook.
 ##
 .PHONY: hooks
 hooks:

@@ -8,11 +8,19 @@
 #
 #   VIX_ALLOW_UNATTESTED=1 git push origin my-branch     (non-main branches only)
 #
+# An unattested push still runs the fast tier of the gate once (T833:
+# `scripts/check --tier fast`: fmt, clippy and the tests of the crates changed
+# since main) when the pushed commit is HEAD, since that is what the working
+# tree holds; a failing fast tier refuses the push. Pushing another commit
+# unattested prints that the fast tier was not run.
+#
 # Deleting a ref, and pushing other refs (such as refs/notes/vix-gate), is not
 # gated. `git push --no-verify` skips every hook; the forge's verify job is what
 # catches that.
 top=$(git rev-parse --show-toplevel) || exit 1
 status=0
+fast=""
+head=$(git rev-parse --verify -q HEAD) || head=""
 while read -r _ local_sha remote_ref _; do
 	case "$local_sha" in *[!0]*) ;; *) continue ;; esac
 	case "$remote_ref" in
@@ -32,6 +40,21 @@ while read -r _ local_sha remote_ref _; do
 	*)
 		if [ "${VIX_ALLOW_UNATTESTED:-}" = 1 ]; then
 			echo "pre-push: pushing $remote_ref UNATTESTED (VIX_ALLOW_UNATTESTED=1, non-main branch)." >&2
+			if [ "$local_sha" != "$head" ]; then
+				echo "pre-push: $remote_ref is not HEAD, so the fast tier was not run on it." >&2
+			elif [ -z "$fast" ]; then
+				echo "pre-push: running scripts/check --tier fast on the working tree..." >&2
+				# </dev/null: the gate must not read the ref list on our stdin.
+				if "$top/scripts/check" --tier fast </dev/null >&2; then
+					fast=pass
+				else
+					fast=fail
+				fi
+			fi
+			if [ "$local_sha" = "$head" ] && [ "$fast" = fail ]; then
+				echo "pre-push: refusing to push $remote_ref: scripts/check --tier fast failed." >&2
+				status=1
+			fi
 		else
 			echo "pre-push: refusing to push $remote_ref: no valid full-tier attestation for $local_sha." >&2
 			"$top/scripts/attest" --verify "$local_sha" >&2 || true

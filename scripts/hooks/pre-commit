@@ -1,56 +1,168 @@
 #!/bin/sh
-# pre-commit hook for automatic formatting (T760, T761)
-# Installed by `make hooks` (sets core.hooksPath to scripts/hooks).
+# pre-commit hook (T760, T761, T833). Installed by `make hooks` (sets
+# core.hooksPath to scripts/hooks), so it is opt-in like every hook here.
 #
-# Runs cargo fmt on staged Rust files to ensure consistent formatting.
-# This hook is optional and can be skipped with --no-verify or
-# by setting VIX_SKIP_PRECOMMIT_FMT=1.
+# It checks what is staged, in seconds, and never changes the index or the
+# working tree:
 #
-# The gate (scripts/check) already checks formatting, so this hook is a
-# convenience to avoid having to re-format manually.
-
+#   1. format: each staged .rs file, as staged, must come out of rustfmt
+#      (with the edition of its own Cargo.toml) unchanged, as under
+#      `cargo fmt --check`; one rustfmt cannot parse is refused too.
+#      VIX_SKIP_PRECOMMIT_FMT=1 skips it.
+#   2. secrets: each staged text file, as staged, against the rules and the
+#      allowlist in scripts/secret-patterns, the same file
+#      tui/tests/secret_scan.rs reads, so the two cannot drift.
+#   3. size: a newly added file over VIX_MAX_ADD_BYTES bytes (default 1048576,
+#      1 MiB) is refused; set the variable for one commit to add it anyway.
+#   4. lints: when a staged file is under tui/src/ or crates/*/src/, is a pull
+#      request template or is the lint test itself, tui/tests/code_lints.rs is
+#      compiled alone with rustc (it needs no crate) and run, about a second.
+#      It reads the working tree, not the index. VIX_SKIP_PRECOMMIT_LINTS=1
+#      skips it.
+#
+# `git commit --no-verify` skips the hook; scripts/check and CI run the same
+# checks (cargo fmt --check and the two cargo tests) on the whole tree.
+set -u
 top=$(git rev-parse --show-toplevel) || exit 1
+cd "$top" || exit 1
+LC_ALL=C
+export LC_ALL
+tab=$(printf '\t')
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT
+status=0
+fail() {
+	echo "pre-commit: $*" >&2
+	status=1
+}
 
-# Skip if explicitly requested
-if [ "${VIX_SKIP_PRECOMMIT_FMT:-}" = 1 ]; then
-    exit 0
+# Staged paths without deletions; a rename counts as an addition.
+staged() {
+	git -c core.quotePath=false diff --cached --name-only --no-renames --diff-filter="$1"
+}
+staged ACM >"$work/staged" || exit 1
+staged A >"$work/added" || exit 1
+git -c core.quotePath=false diff --cached --numstat --no-renames --diff-filter=ACM |
+	awk -F "$tab" '$1 == "-" { print $3 }' >"$work/binary"
+
+# The edition of the nearest Cargo.toml that names one (a crate inheriting
+# edition.workspace finds the workspace's), else 2024.
+edition_of() {
+	d=$(dirname "$1")
+	while :; do
+		if [ -f "$d/Cargo.toml" ]; then
+			e=$(sed -n 's/^edition *= *"\([0-9]*\)".*/\1/p' "$d/Cargo.toml" | head -n 1)
+			if [ -n "$e" ]; then
+				echo "$e"
+				return
+			fi
+		fi
+		[ "$d" != . ] && [ "$d" != / ] || break
+		d=$(dirname "$d")
+	done
+	echo 2024
+}
+
+# 1. format
+if [ "${VIX_SKIP_PRECOMMIT_FMT:-}" != 1 ] && grep -q '\.rs$' "$work/staged"; then
+	if command -v rustfmt >/dev/null 2>&1; then
+		: >"$work/unformatted"
+		while IFS= read -r f; do
+			case "$f" in *.rs) ;; *) continue ;; esac
+			# rustfmt --check exits 0 on stdin even when it prints a diff, so
+			# compare its output with the staged text instead.
+			git show ":$f" >"$work/rs" 2>/dev/null || continue
+			if ! rustfmt --edition "$(edition_of "$f")" <"$work/rs" >"$work/rs.fmt" 2>/dev/null ||
+				! cmp -s "$work/rs" "$work/rs.fmt"; then
+				echo "  $f" >>"$work/unformatted"
+			fi
+		done <"$work/staged"
+		if [ -s "$work/unformatted" ]; then
+			fail "these staged Rust files are not formatted (as staged):"
+			cat "$work/unformatted" >&2
+			echo "pre-commit: run cargo fmt and stage the result (VIX_SKIP_PRECOMMIT_FMT=1 skips this check)." >&2
+		fi
+	else
+		echo "pre-commit: rustfmt not found, format not checked." >&2
+	fi
 fi
 
-# Get staged Rust files
-staged_rust_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.rs$')
-
-# If there are staged Rust files, run cargo fmt
-if [ -n "$staged_rust_files" ]; then
-    echo "pre-commit: running cargo fmt on staged Rust files..." >&2
-    
-    # Format all files (not just staged ones) for consistency
-    if ! cargo fmt --; then
-        echo "pre-commit: cargo fmt failed. Run 'cargo fmt' manually." >&2
-        exit 1
-    fi
-    
-    # Add formatted files back to staging
-    git add -u
-    
-    echo "pre-commit: formatted $(echo "$staged_rust_files" | wc -l) Rust file(s)." >&2
+# 2. secrets
+patterns="$top/scripts/secret-patterns"
+if [ -f "$patterns" ]; then
+	: >"$work/rules"
+	: >"$work/eres"
+	: >"$work/allowed"
+	while IFS="$tab" read -r kind name accept before secret after; do
+		case "$kind" in
+		rule)
+			ere="($secret)"
+			[ "$before" = - ] || ere="(^|$before)$ere"
+			[ "$after" = - ] || ere="$ere($|$after)"
+			printf '%s\t%s\t%s\n' "$name" "$accept" "$ere" >>"$work/rules"
+			printf '%s\n' "$ere" >>"$work/eres"
+			;;
+		allow) printf '%s\n' "$name" >>"$work/allowed" ;;
+		esac
+	done <"$patterns"
+	: >"$work/hits"
+	while IFS= read -r f; do
+		grep -qxF -e "$f" "$work/binary" "$work/allowed" && continue
+		size=$(git cat-file -s ":$f" 2>/dev/null) || continue
+		[ "$size" -le 16777216 ] || continue
+		git show ":$f" >"$work/blob" 2>/dev/null || continue
+		grep -qE -f "$work/eres" "$work/blob" || continue
+		while IFS="$tab" read -r name accept ere; do
+			grep -noE -e "$ere" "$work/blob" >"$work/matches" || continue
+			while IFS=: read -r line match; do
+				if [ "$accept" = random ]; then
+					body=${match#*-}
+					case "$body" in *[0-9]*) ;; *) continue ;; esac
+					case "$body" in *[A-Za-z]*) ;; *) continue ;; esac
+				fi
+				printf '%s:%s: %s\n' "$f" "$line" "$name" >>"$work/hits"
+			done <"$work/matches"
+		done <"$work/rules"
+	done <"$work/staged"
+	if [ -s "$work/hits" ]; then
+		fail "staged files hold what looks like a real secret:"
+		# One report per line (an Anthropic key is not reported again as an
+		# OpenAI-style one); the secret itself is never printed.
+		awk '{ key = $0; sub(/: [^:]*$/, "", key); if (!(key in seen)) { seen[key] = 1; print "  " $0 } }' "$work/hits" >&2
+		echo "pre-commit: remove it (and revoke it if it is real); a deliberate fake goes on an allow line in scripts/secret-patterns, with its reason." >&2
+	fi
 fi
 
-# Also check for markdown files that might need formatting
-staged_md_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.md$')
-if [ -n "$staged_md_files" ]; then
-    # For now, just check if there are any markdown formatting tools
-    # In the future, we could add prettier or other formatters
-    if command -v prettier >/dev/null 2>&1; then
-        echo "pre-commit: running prettier on staged Markdown files..." >&2
-        for file in $staged_md_files; do
-            prettier --write "$file" || {
-                echo "pre-commit: prettier failed on $file" >&2
-                exit 1
-            }
-        done
-        git add -u
-        echo "pre-commit: formatted Markdown files." >&2
-    fi
+# 3. size
+max=${VIX_MAX_ADD_BYTES:-1048576}
+case "$max" in
+'' | *[!0-9]*)
+	fail "VIX_MAX_ADD_BYTES must be a number of bytes, not '$max'."
+	max=1048576
+	;;
+esac
+while IFS= read -r f; do
+	size=$(git cat-file -s ":$f" 2>/dev/null) || continue
+	if [ "$size" -gt "$max" ]; then
+		fail "$f is $size bytes, over the $max-byte limit for a new file. If it must be in the repository: VIX_MAX_ADD_BYTES=$size git commit ..."
+	fi
+done <"$work/added"
+
+# 4. lints
+lints="$top/tui/tests/code_lints.rs"
+if [ "${VIX_SKIP_PRECOMMIT_LINTS:-}" != 1 ] && [ -f "$lints" ] &&
+	grep -qE '^(tui/src/|crates/[^/]+/src/).*[.]rs$|^[.](github|forgejo)/pull_request_template[.]md$|^tui/tests/code_lints[.]rs$' "$work/staged"; then
+	if command -v rustc >/dev/null 2>&1; then
+		if ! CARGO_MANIFEST_DIR="$top/tui" rustc --edition 2024 --test -o "$work/code_lints" "$lints" >"$work/out" 2>&1; then
+			fail "tui/tests/code_lints.rs does not compile alone with rustc:"
+			sed 's/^/  /' "$work/out" >&2
+		elif ! "$work/code_lints" --quiet >"$work/out" 2>&1; then
+			fail "tui/tests/code_lints.rs failed (it reads the working tree; VIX_SKIP_PRECOMMIT_LINTS=1 skips it):"
+			sed 's/^/  /' "$work/out" >&2
+		fi
+	else
+		echo "pre-commit: rustc not found, code lints not run." >&2
+	fi
 fi
 
-exit 0
+exit $status

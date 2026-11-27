@@ -304,9 +304,48 @@ tag being pushed it runs `scripts/attest --verify <pushed sha>`. A push of
 `refs/heads/main` or of any tag without a valid attestation is refused, and no
 setting overrides that. Another branch is also refused, unless the explicit,
 documented escape `VIX_ALLOW_UNATTESTED=1` is set for that push (it prints a
-warning). Deleting a ref and pushing other refs (such as
-`refs/notes/vix-gate`) are not gated. `git push --no-verify` skips every hook,
-which is why the forge job below also exists.
+warning). An unattested push of a branch whose commit is `HEAD` still runs
+`scripts/check --tier fast` once per push (fmt, clippy and the tests of the
+crates changed since `main`, on the working tree), and a failing fast tier
+refuses it (T833); an unattested push of another commit says the fast tier was
+not run on it, since the working tree does not hold that commit. Deleting a ref
+and pushing other refs (such as `refs/notes/vix-gate`) are not gated.
+`git push --no-verify` skips every hook, which is why the forge job below also
+exists.
+
+**The pre-commit hook (T760, T833).** `make hooks` installs
+`scripts/hooks/pre-commit` too. It checks what is staged, takes seconds, and
+never changes the index or the working tree (it used to run `cargo fmt` on the
+whole tree and `git add -u`, which staged changes the user had left out). It
+refuses the commit, naming each file, when:
+
+1. a staged `.rs` file, as staged, does not come out of `rustfmt` unchanged
+   (with the edition of its nearest `Cargo.toml`, as `cargo fmt --check`
+   would), or `rustfmt` cannot parse it. `VIX_SKIP_PRECOMMIT_FMT=1` skips
+   this check;
+2. a staged text file, as staged, matches a rule of `scripts/secret-patterns`
+   and is not on an `allow` line there. That file is the one
+   `tui/tests/secret_scan.rs` reads ([`spec/security`](../security/index.md)),
+   so the hook and the test cannot drift; the report names the file, line and
+   rule, never the secret. Binary files and files over 16 MiB are skipped, as
+   in the test;
+3. a newly added file (a rename counts) is larger than `VIX_MAX_ADD_BYTES`
+   bytes, 1 MiB by default (the largest tracked file, a locale catalog, is
+   about 1.4 MiB and may keep growing; only new files are limited). Setting
+   the variable for one commit lets a file in;
+4. a staged file is under `tui/src/` or `crates/*/src/`, is a pull-request
+   template or is `tui/tests/code_lints.rs`, and that lint test fails. The
+   hook compiles it alone with `rustc --test` (it uses no crate, so this takes
+   well under a second, against minutes for a cold `cargo test -p vix-tui`)
+   and runs it; it reads the working tree, not the index.
+   `VIX_SKIP_PRECOMMIT_LINTS=1` skips it.
+
+The secret scan runs in the hook as `grep -E` rather than as the cargo test,
+because the test needs `vix-tui`'s test build and the `regex` crate. The hook
+no longer runs `prettier` on Markdown: it rewrote files and staged them, and
+the gate's Markdown checks are `scripts/check-docs`. `git commit --no-verify`
+skips the hook; the gate and CI run every one of these checks on the whole
+tree. `scripts/test-attest` tests the hook in a throwaway repository.
 
 **Sharing the notes.** Notes are not pushed or fetched by default. Push them
 beside `main` with `git push origin refs/notes/vix-gate`, and fetch them with
@@ -332,9 +371,10 @@ and the scheduled cross-OS jobs are for. It is also self-reported: whoever
 holds the signing key can attest without running the gate, so the key is the
 trust root, and it is the same key that signs commits.
 
-`scripts/test-attest` tests all of this against a throwaway repository with a
-generated ed25519 key and a stub gate (it never touches real keys or the real
-repository), and runs in the `push` tier and above.
+`scripts/test-attest` tests all of this, and the pre-commit hook, against
+throwaway repositories with a generated ed25519 key and a stub gate (it never
+touches real keys, the real repository or its hooks), and runs in the `push`
+tier and above.
 
 ## One entrypoint (option 8, T767, implemented)
 

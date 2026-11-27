@@ -67,7 +67,12 @@ contain and how it stays true.
   fixture that needs a full-length fake is allowlisted by path with a reason,
   and an allowlist entry that no longer matches fails. Binary files and
   files over 16 MiB are skipped; without `git` the test is skipped with a
-  note. It runs in under a second.
+  note. It runs in under a second. The rules and the allowlist live in one
+  file, `scripts/secret-patterns`, which the opt-in pre-commit hook
+  (`make hooks`, [`spec/local-ci`](../local-ci/index.md)) also reads to scan
+  each staged file before a commit, so the two cannot drift (T833). Its
+  patterns use only the syntax a POSIX extended regular expression and the
+  `regex` crate read the same way.
 
 ## See also
 

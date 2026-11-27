@@ -59,7 +59,9 @@ the full pass line. Run all of it right before
   clean checkout and records a signed note (`refs/notes/vix-gate`) bound to the
   tree. `make hooks` installs a `pre-push` hook that refuses to push `main` or
   a tag without a valid attestation (`scripts/attest --verify`); a non-main
-  branch may use `VIX_ALLOW_UNATTESTED=1`, `main` and tags never. Push the
+  branch may use `VIX_ALLOW_UNATTESTED=1` (the hook then runs the `fast` tier),
+  `main` and tags never. Its `pre-commit` hook checks staged files only
+  (format, secrets, new files over 1 MiB, code lints; T833). Push the
   notes beside `main` with `git push origin refs/notes/vix-gate`. Commit
   signing is never bypassed. See [`spec/local-ci`](../spec/local-ci/index.md).
 - **Several agents share one checkout.** Work in your own git worktree
