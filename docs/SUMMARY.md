@@ -167,6 +167,7 @@
 
 # Contributing
 
+- [Development Setup](development.md)
 - [AGENTS.md](contributing-agents.md)
 - [Coding Conventions](contributing-conventions.md)
 - [Spec-Driven Workflow](contributing-workflow.md)

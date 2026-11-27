@@ -78,6 +78,43 @@ the full pass line. Run all of it right before
   [`AI_STATEMENT.md`](../AI_STATEMENT.md) for what an agent may do without
   asking (it may run `cargo publish`; it may not tag or cut a release).
 
+## Reviewing a change
+
+Review against the same rules the change had to follow; the pull-request
+template (`.github/pull_request_template.md`, with an identical
+`.forgejo/pull_request_template.md` that `tui/tests/code_lints.rs` keeps in
+step) is the author's half of this list.
+
+1. **Read the spec diff first.** The owning spec should say what the code now
+   does. A behavior change with no spec change, or a spec that describes
+   something the code does not do, is drift: ask for the missing half rather
+   than approving one side.
+2. **Read the whole diff, tests included.** `git diff main...<branch>` (three
+   dots: only what the branch added). A changed snapshot under
+   `tui/tests/snapshots/` is read line by line; an unexplained moved line is a
+   regression until shown otherwise.
+3. **Check what the tools cannot.** clippy, the tests and `scripts/check-docs`
+   catch most mechanical slips. A reviewer looks for what they miss: a
+   user-facing string outside `t!`, or a key missing from a locale its
+   neighbors have; a new action id without exactly one `run_action` arm and a
+   menu leaf, palette entry or `vix-action-catalog` row; an `#[allow]` without
+   a `reason`; `unwrap`/`expect` on a runtime path; unchecked arithmetic in
+   new code (`spec/rust-checked-arithmetic`); a new child process or print
+   that went into an allowlist without a convincing reason
+   (`tui/tests/spawn_sites.rs`, `tui/tests/code_lints.rs`); a public API break
+   in a published crate (`cargo semver-checks`, run by the full gate).
+4. **Check the bookkeeping.** A user-visible change has a `CHANGELOG.md` line
+   under `[Unreleased]`; a task is ticked in `tasks.md` with its `(Done: …)`
+   note; regenerated files (`docs/reference/`) match their generator.
+5. **Check provenance.** `git log --show-signature main..<branch>` shows every
+   commit signed, and an AI-assisted commit ends with its `Co-Authored-By:`
+   trailer. `scripts/attest --verify <rev>` says whether that tree passed the
+   full gate; without an attestation, run `scripts/check` yourself before
+   merging.
+6. **Prefer a question to a guess.** Comment on the line, say what you expected
+   and why (a spec section, a rule, a failing case). Approving means you would
+   be willing to land it yourself; merging is `git merge --no-ff`, as above.
+
 ## Writing a spec
 
 A spec says what the feature *is*, not how the code happens to be arranged

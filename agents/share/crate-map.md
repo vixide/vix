@@ -2,7 +2,7 @@
 
 Vix is a **Cargo workspace** (`[workspace] members = ["crates/*", "tui"]`) on **edition
 2024**. The `vix-tui` package (`tui/`, building the `vix` command; library crate name `vix`) is the thin **App shell** — CLI, event
-loop, `App` state, rendering, and the explorer — and it depends on the 124
+loop, `App` state, rendering, and the explorer — and it depends on the 147
 `vix-*` **member crates** under `crates/` that hold every feature plus the custom
 editor widget (`vix-editor-core`). Shared reference for where things live.
 
