@@ -10879,9 +10879,20 @@ awareness, not capability. Items marked (stale?) may already exist.
   existing `sysinfo` dependency: resident memory start/peak/end in the
   `VIX_PROFILE` report and a *Vix resident memory* System Information row
   (`vix_system_information_panel::resident_memory`); the Messages drawer and
-  server-published LSP diagnostics stay unbounded by design. Remaining: the
-  <100 ms / <50 ms empty-workspace and <50 MB with a 100 MB log targets (not yet measured end to end); incremental
-  workspace search via filesystem watch; Tree-sitter on very large files;
+  server-published LSP diagnostics stay unbounded by design. Fourth slice: workspace search in a
+  100,000-file checkout (`workspace_search/large` bench) went from 3.67 s
+  (first full search) / 3.08 s (a keystroke) to 0.88 s / 0.18 s for a
+  keystroke that extends the query (0.89 s for one that shortens it), same
+  results, order and caps (oracle-tested against the old scan,
+  `app::remote_search` tests): `App::scan_index` reads batches of the T845
+  index on every core and drops files with no candidate line, replaces the
+  per-file `canonicalize` with an `lstat` and a per-directory lookup, and
+  `ScanMemo` skips the last scan's misses whose size and time are
+  unchanged when the new query only extends it (git's 2 s racy rule); no
+  file watcher or trigram index, decided with the numbers in
+  `docs/performance` (§ Workspace search in a large checkout) and the
+  workspace-search spec; remote search unchanged. Remaining: the
+  <100 ms / <50 ms empty-workspace and <50 MB with a 100 MB log targets (not yet measured end to end); Tree-sitter on very large files;
   native file-watching efficiency; incremental rendering.)
 - [ ] **T831 — Test infrastructure.** (Started: wider proptest use — undo/redo and `History::squash_since` (`vix-editor-core/tests/undo_props.rs`), literal `:s` parse/plan/apply against a naive replace (`vix-find-panel/tests/substitute_props.rs`), Vi motions str vs rope vs the pre-T843 oracle over generated Unicode (`vix-modal`), SQL split/round-trip/format (`vix-edit-sql/tests/props.rs`, which found and fixed a `to_text` comment-swallows-`;` bug); second slice: fuzz targets `sql_split`, `edit_value`, `settings_toml` and `substitute` (the `.http` parser and JSON/YAML/TOML converters already had `http_request`/`structured_convert`) with committed `fuzz/corpus/<target>/seed-*` inputs, in the weekly `fuzz.yml` matrix; `sql_split` found and fixed a `;`-per-save bug for unclosed strings/comments, `edit_value` found YAML key collisions on save (spec'd as a known limitation); third slice: `cargo mutants` weekly on the five core crates in `mutants.yml` (`core-plan` counts each crate's mutants in the last 7 days' diff, `core` runs `--in-diff` shards of ≤200 mutants, ≤16 per crate, per-crate `--timeout`; dispatch `since` ref or `full`; report-only until a full pass is triaged, then fail on missed mutants in the diff; all mutants ≈5,900, one week ≈1,800; spec/ci, spec/test); fourth slice: flaky-test detection and quarantine — `scripts/flaky-hunt` runs a test target or filter N times, optionally under busy-loop or second-build load, and lists each failed test with its runs (tested by `scripts/test-flaky-hunt` with a stub `cargo`, in the `push` tier); quarantine is `#[ignore = "flaky: T<n>, <reason>"]` naming an open task, and `tui/tests/code_lints.rs` now fails on a bare `#[ignore]` or a malformed or stale quarantine; no automatic no automatic retries anywhere: nextest's `retries` went from 1 locally and 2 in CI to 0, approved by the maintainer 2026-11-27 (spec/test "Flaky tests", spec/local-ci). Left: coverage ≥90% on the five crates, the integration suites, sorting out a first full core mutants pass and making the diff run fail, visual regression, e2e framework, platform matrix, performance baselines, data generators, test-impact analysis, chaos/stress; proptest for more buffer ops and parsers.) Coverage ≥90% on `vix-editor-core`,
   `vix-fileops`, `vix-git`, `vix-lsp`, `vix-db` (tarpaulin; see the coverage

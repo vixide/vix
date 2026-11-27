@@ -913,6 +913,45 @@ safety cap `FILE_INDEX_CAP` is 150,000 files (about 15 ms, inside the
 cannot match is rejected before it is scored in full. See
 `crates/vix-palette/spec/index.md`, § File index.
 
+## Workspace search in a large checkout (T830, measured 2026-11-27)
+
+`workspace_search/large` (`tui/benches/search_and_palette.rs`, a timed
+report, not a Criterion loop) builds a checkout of 100,000 small source
+files (four lines each, `src/pkg<n>/mod<n>/item<n>.rs`, 100 to a
+directory) in which five files hold `marmalade`, opens **Find in
+Workspace** on a real `App`, waits for the background file index and types
+the query. *Cold* is the first search over the whole index with nothing
+remembered (the query less its last character: every file read; the files were just written, so
+the OS cache is warm); *narrowing* is typing the last character, *widening*
+the backspace before it (medians of 7). Measured on a heavily loaded machine
+(load average about 30 on 16 cores), so read the ratios.
+`workspace_search/rescan` is the existing Criterion bench (one character
+typed and deleted after `need`, so two scans per iteration; it does not wait
+for the background index, so the 10,000-file case scans the first 5,000
+files).
+
+| Benchmark | Before | Parallel reads | … and no `canonicalize` | After (… and the memo) |
+| --------- | ------ | -------------- | ------------------------ | ---------------------- |
+| 100,000 files, first full search (cold) | 3.67 s | 1.53 s | 0.84 s | 0.88 s |
+| 100,000 files, a narrowing keystroke | 3.08 s | 1.20 s | 0.86 s | 0.18 s |
+| 100,000 files, a widening keystroke | 3.08 s | 1.20 s | 0.86 s | 0.89 s |
+| `workspace_search/rescan`, 1,000 files | 50.3 ms | | | 12.2 ms |
+| `workspace_search/rescan`, 10,000 files | 306 ms | | | 63.5 ms |
+
+(Before the memo, narrowing and widening keystrokes cost the same: each
+read every file.)
+
+Where the time went (a probe over the same 100,000 files, same load):
+`canonicalize` 0.71 s on one thread and 0.62–0.65 s on 4, 8 or 16 (it
+does not scale), `metadata` 0.16 s on one thread and 0.09–0.12 s on 8–16,
+reading every file 1.8 s on one thread and 0.62 s on 8. The old scan did all
+of that on one thread, plus a regex call per line. The new one reads on
+every core, replaces `canonicalize` with one `lstat` and a per-directory
+lookup, and skips, with one `lstat` each, the files the last scan found no
+candidate in when the query only got longer. A file watcher could save the
+remaining `lstat`s (about 0.1 s), not the reads, so none was added; see
+`crates/vix-workspace-search/spec/index.md`, § The in-process scan.
+
 ## Reading the numbers
 
 Benchmark what the user waits for — a keystroke, a frame, a file open — not

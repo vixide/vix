@@ -2728,6 +2728,9 @@ pub struct App {
     file_index_folders: Vec<PathBuf>,
     /// The background walk finishing `file_index`, while one runs (T845).
     file_index_job: Option<file_index::FileIndexJob>,
+    /// Files the last in-process scan read and found no candidate line in,
+    /// so a narrower scan can skip them while unchanged (T830).
+    scan_memo: std::sync::Mutex<remote_search::ScanMemo>,
     /// The first git refresh, running in the background (T830).
     git_refresh_job: Option<git_refresh::GitRefreshJob>,
     /// The file sizes past which opening warns or goes to the Large File
@@ -3224,6 +3227,7 @@ impl App {
             file_index_state: file_index::FileIndexState::Complete,
             file_index_folders: Vec::new(),
             file_index_job: None,
+            scan_memo: std::sync::Mutex::default(),
             git_refresh_job: None,
             open_thresholds: crate::large_file::Thresholds::default(),
             palette_origin: None,
@@ -13153,6 +13157,15 @@ impl App {
             }
         });
         hits
+    }
+
+    /// The workspace search panel's current hits; empty when the panel is
+    /// closed. For benches and integration tests (T830).
+    #[must_use]
+    pub fn workspace_search_hits(&self) -> &[Hit] {
+        self.workspace_search
+            .as_ref()
+            .map_or(&[], |p| p.hits.as_slice())
     }
 
     /// Open the project-wide search panel (in replace mode when `replacing`), refreshing the

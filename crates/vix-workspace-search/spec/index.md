@@ -97,6 +97,61 @@ workspace folder: they are authority paths, never looked up locally. Files
 an open buffer shows are scanned from the buffer (unsaved text, as
 locally). A tool may report at most 50,000 lines before it is stopped.
 
+## The in-process scan (T830)
+
+Under the local authority (and as the fallback for a remote one without a
+usable tool), `App::scan_index` reads the file index in batches of 2,048
+files, in index order. For each batch, worker threads (as many as
+`available_parallelism`, each taking 32 neighboring files at a time) read
+the files and drop each one in which no line matches the query's regex —
+the same prefilter contract as the remote tool: every caller's own check
+(this panel's pattern, the dock search's, the TODO scan's tags, the
+definition keywords) can only accept a line that regex matches. The
+scanning thread then visits the kept files' lines in index order, so
+results, their order, the file count and every cap (5,000 hits here and in
+the dock search, 2,000 TODOs, 200 definitions) are what the
+one-file-at-a-time walk produced; a cap still stops the scan after the
+batch it is reached in. Open buffers are read on the scanning thread, from
+their unsaved text. A remote authority's fallback reads one file at a time,
+as before, so it never sees concurrent requests.
+
+Two savings, both exact:
+
+- **No `canonicalize` per file.** Deciding whether an open buffer shows a
+  file needs its canonical path. A file that is not itself a symlink (one
+  `lstat`, which also gives the size the 2 MB limit needs) has its
+  directory's canonical path joined with its name, the directory resolved
+  once per worker per directory; a symlink, or any error, takes the old
+  `canonicalize` + `metadata` path. `canonicalize` cost about four
+  stats per file and did not get faster on more threads (macOS, 100,000
+  files: 0.65 s on 1–16 threads).
+- **A narrower query skips remembered misses (`ScanMemo`).** Each local
+  scan remembers the files it read and found no candidate line in, with
+  their size and modification time. The next scan uses that memory when
+  its regex can only match lines the remembered one matched: the same
+  regex, or a literal query (`ToolQuery::fixed` with one word) that
+  contains the remembered literal with the same case rule — what typing a
+  query further produces, since case folding is per character. A
+  remembered file whose `lstat` shows the same size and time is not read.
+  A file modified less than 2 s before the scan is never remembered (git's
+  "racy" rule: it may change again without its time changing), and a file
+  an open buffer shows is always read from the buffer. A shorter or
+  unrelated query reads every file again. Like `make` and git, a rewrite
+  that keeps both the size and the modification time is not noticed.
+
+Design decision (T830, "incremental workspace search via filesystem
+watch"): no file watcher and no on-disk or trigram index. The repository has
+no watcher dependency, and the measurements (`docs/performance`,
+§ Workspace search in a large checkout) show the scan above meets "100,000
+files in under 1 s" without one: a full read of 100,000 small files takes
+about 0.9 s on a heavily loaded 16-core machine (3.7 s before) and a
+narrowing keystroke about 0.18 s, most of it the `lstat`s a watcher could
+save. The file list is the T845 file index, so a search never re-walks the
+tree; opening the panel refreshes the index in the background as before.
+The remote path is unchanged (`rg`/`grep` on the remote host). The memory
+is one map of the missed files' paths and stamps (about 10 MB for 100,000
+files), replaced by each scan.
+
 ## Editable search results ("wgrep"-style, T211)
 
 **Alt+E** (or the `search.edit_results` command) turns the current hit list
