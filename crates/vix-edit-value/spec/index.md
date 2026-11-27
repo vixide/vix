@@ -17,13 +17,45 @@ or the command palette. The logic lives in the `edit_value` module; the host
   descendants. A cursor selects one visible row. Numbers keep their textual form
   so they round-trip unchanged.
 - Saving serializes back to the chosen [`Format`]: a key-order-preserving JSON
-  pretty-printer, or `serde_norway` for YAML. Scalar edits are undoable.
-- **Known limitation:** object keys are kept as strings, so YAML keys that are
-  distinct values but render alike (`1` and `"1"`; a tagged or complex key,
-  shown as `?`) collide on save: YAML keeps one of them, and JSON writes the
-  key twice, which does not parse again. Any other document saves to text that
-  reopens as the same tree and saves to the same text again; the `edit_value`
-  fuzz target (`fuzz/fuzz_targets/edit_value.rs`) checks both.
+  pretty-printer, or `serde_norway` for YAML, writing each key as it was read
+  (see Object keys). Scalar edits are undoable.
+
+## Object keys (T850)
+
+A key is kept in the form it was read: its type (number, string, boolean,
+null), any tag, or a whole sequence or mapping used as a key. The row shows a
+one-line label (`1`, `true`, `!k x` for a tagged key, `?` for a sequence or
+mapping key), but labels are only for display: rows locate their entry by
+position, and saving writes the key as read, never the label. So YAML keys
+that look alike, such as `1` and `"1"`, `true` and `'true'`, `!!str 1` and `1`,
+or two complex keys both shown as `?`, are each saved back as they were, and
+editing one changes only its own value.
+
+- **Scalar style.** The parser keeps what makes a key a different key (type and
+  tag), not its quoting: `'1'` may be written back as `"1"` or `'1'`, which is
+  the same key. Core-schema tags (`!!str`, `!!int`) are resolved into the key's
+  type when read, so `!!str 1` is written back as the string `'1'`; other tags
+  (`!k`) are written back as they were.
+- **JSON names.** In JSON every key is a string. A number, boolean or null key
+  is written as its text and a tagged key as its value. Per RFC 8259 names
+  compare after unescaping, so `"a"` and the same letter written as the
+  escape for U+0061 are one name: a JSON document naming it twice does not open
+  (the parser reports the duplicate entry), and nothing can be half-saved.
+- **Refusing to save.** `Tree::save_text` returns `SaveError` and the editor
+  saves nothing when two keys of one object would be written as the same key
+  (`DuplicateKey { key }`, translated as `msg.edit_value_duplicate_key`; in
+  JSON this happens for YAML keys `1` and `"1"`), when a sequence or mapping
+  key would have to be written as JSON (`ComplexKey`,
+  `msg.edit_value_complex_key`), or when the YAML writer fails (`Yaml`,
+  `msg.edit_value_serialize`). YAML keys are compared as parsed values; the
+  parser already rejects a document with a repeated key, so this guards the
+  writer, which would otherwise keep only one entry. `Tree::to_text` keeps its
+  signature and returns the same refusals as a `serde_norway::Error` carrying
+  the English message. `SaveError` is `#[non_exhaustive]`.
+- **Writer limit.** `serde_norway` cannot write a one-entry mapping whose only
+  key is tagged (`!k x: 0`); saving such a file reports
+  `msg.edit_value_serialize` and leaves it unchanged.
+- Values (not keys) still drop their tag when read.
 
 ## Keys
 

@@ -218,6 +218,32 @@ fn edit_surfaces_save_into_the_buffer_and_close() {
     a.edit_value_key(k(KeyCode::Esc));
     assert!(a.edit.edit_value().is_none());
 
+    // Keys that JSON would write alike: warns, the file is left as it was (T850).
+    let alike = "1: a\n\"1\": b\n";
+    std::fs::write(&json, alike).unwrap();
+    a.editor.active_tab_mut().unwrap().editor.set_content(alike);
+    a.run_action("tools.edit_json");
+    a.edit_value_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    assert_eq!(
+        a.messages.items.last().map(|m| m.text.clone()),
+        Some(t!("msg.edit_value_duplicate_key", key = "\"1\"").to_string())
+    );
+    assert_eq!(std::fs::read_to_string(&json).unwrap(), alike);
+    a.edit_value_key(k(KeyCode::Esc));
+    let complex = "? [a]\n: x\n";
+    a.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_content(complex);
+    a.run_action("tools.edit_json");
+    a.edit_value_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    assert_eq!(
+        a.messages.items.last().map(|m| m.text.clone()),
+        Some(t!("msg.edit_value_complex_key").to_string())
+    );
+    a.edit_value_key(k(KeyCode::Esc));
+
     // Not valid JSON: warns, nothing opens.
     std::fs::write(&json, "{nope").unwrap();
     a.editor
