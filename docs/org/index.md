@@ -255,7 +255,7 @@ tui/src/app/org/tests.rs (the_agenda_scope_follows_lock_file_list_and_default). 
 | **Task…** | `t` | A review buffer prefilled with `* TODO `. |
 | **Babel…** | `b` | A `#+begin_src <language>` / `#+end_src` block, after a language prompt. |
 | **Note…** | `n` | `* <note>` and a creation timestamp. |
-| **Contact…** | `c` | An org-contacts entry: name, then Email, Phone, Address and Birthday properties. |
+| **Contact…** | `c` | An org-contacts entry: name, then Email, Phone, Address, Birthday, Nickname and Note properties. |
 
 **Choose Template…** opens every configured template in a chooser.
 
