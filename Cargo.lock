@@ -6684,7 +6684,7 @@ dependencies = [
  "vix-conflict-tool",
  "vix-lsp-core",
  "vix-org",
- "vix-palette",
+ "vix-textops",
 ]
 
 [[package]]
@@ -6784,9 +6784,9 @@ name = "vix-palette"
 version = "3.0.0"
 dependencies = [
  "proptest",
- "regex",
  "rust-i18n",
  "vix-i18n",
+ "vix-textops",
 ]
 
 [[package]]
@@ -6972,6 +6972,7 @@ name = "vix-textops"
 version = "3.0.0"
 dependencies = [
  "proptest",
+ "regex",
 ]
 
 [[package]]

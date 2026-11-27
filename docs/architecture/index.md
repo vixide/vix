@@ -148,7 +148,8 @@ and its failure message names each offending edge (`from -> to`):
    `vix --mcp`) reaches no `*-panel`, `*-picker`, `*-preview` or `*-view`
    crate, directly or through other crates (T860: it parses Markdown
    headings itself instead of borrowing `vix-markdown-preview`'s table of
-   contents).
+   contents), nor `vix-palette` (T861: its symbol scan lives in
+   `vix-textops`).
 
 A rule is added here only when the current graph already keeps it. The full
 graph, every crate with its layer, direct workspace dependencies and number

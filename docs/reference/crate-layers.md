@@ -65,7 +65,7 @@ enforced by `tui/tests/crate_layering.rs`.
 | `vix-column-view` | 2 | `vix-input`, `vix-org` | 1 |
 | `vix-macros` | 2 | `vix-fileops`, `vix-input` | 2 |
 | `vix-markdown-preview` | 2 | `vix-outline-panel` | 1 |
-| `vix-mcp-server` | 2 | `vix-conflict-tool`, `vix-lsp-core`, `vix-org`, `vix-palette` | 1 |
+| `vix-mcp-server` | 2 | `vix-conflict-tool`, `vix-lsp-core`, `vix-org`, `vix-textops` | 1 |
 | `vix-oci-panel` | 2 | `vix-input`, `vix-list-state`, `vix-oci` | 1 |
 | `vix-session` | 2 | `vix-fileops` | 1 |
 | `vix-settings` | 2 | `vix-fileops` | 9 |
@@ -115,7 +115,7 @@ enforced by `tui/tests/crate_layering.rs`.
 | `vix-oci` | 1 | `vix-civil-date` | 2 |
 | `vix-org` | 1 | `vix-civil-date` | 3 |
 | `vix-outline-panel` | 1 | `vix-list-state` | 2 |
-| `vix-palette` | 1 | `vix-i18n` | 3 |
+| `vix-palette` | 1 | `vix-i18n`, `vix-textops` | 2 |
 | `vix-review` | 1 | `vix-diff-view` | 1 |
 | `vix-system-information-panel` | 1 | `vix-byte-size`, `vix-i18n`, `vix-list-state` | 1 |
 | `vix-terminal` | 1 | `vix-input`, `vix-project-env` | 1 |
@@ -187,7 +187,7 @@ enforced by `tui/tests/crate_layering.rs`.
 | `vix-structural-replace` | 0 | none | 1 |
 | `vix-tags` | 0 | none | 1 |
 | `vix-test-runner` | 0 | none | 1 |
-| `vix-textops` | 0 | none | 4 |
+| `vix-textops` | 0 | none | 6 |
 | `vix-theme-model` | 0 | none | 5 |
 | `vix-time-zone-model` | 0 | none | 3 |
 | `vix-tutor` | 0 | none | 1 |

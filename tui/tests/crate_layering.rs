@@ -14,7 +14,8 @@
 //!    another GUI crate.
 //! 5. **The headless MCP server knows no UI surface.** `vix-mcp-server`
 //!    reaches no `*-panel`, `*-picker`, `*-preview` or `*-view` crate,
-//!    directly or through other crates (T860).
+//!    directly or through other crates (T860), and no crate it reaches is
+//!    in [`HEADLESS_FORBIDDEN`] (`vix-palette`, the command palette; T861).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -37,6 +38,10 @@ const CROSSTERM_USERS: [&str; 2] = ["vix-input", "vix-tui"];
 
 /// Crates that run without any UI, so must reach no UI surface (rule 5).
 const HEADLESS: [&str; 1] = ["vix-mcp-server"];
+
+/// UI crates without a UI-surface suffix that a [`HEADLESS`] crate must not
+/// reach either (rule 5): the command palette (T861).
+const HEADLESS_FORBIDDEN: [&str; 1] = ["vix-palette"];
 
 /// Whether `name` is a model or core crate (rule 3's subjects).
 fn is_model_or_core(name: &str) -> bool {
@@ -86,18 +91,28 @@ fn crossterm_outside_shell(all_normal: &Deps) -> Vec<String> {
 /// Rule 3: for each model/core crate, the first UI-surface crate it reaches
 /// (breadth first), as the chain of edges leading there.
 fn model_core_reaching_ui(graph: &Deps) -> Vec<String> {
-    reaching_ui(graph, is_model_or_core, "model/core crate")
+    reaching_ui(graph, is_model_or_core, is_ui_surface, "model/core crate")
 }
 
 /// Rule 5: the same search from each [`HEADLESS`] crate.
 fn headless_reaching_ui(graph: &Deps) -> Vec<String> {
-    reaching_ui(graph, |n| HEADLESS.contains(&n), "headless crate")
+    reaching_ui(
+        graph,
+        |n| HEADLESS.contains(&n),
+        |n| is_ui_surface(n) || HEADLESS_FORBIDDEN.contains(&n),
+        "headless crate",
+    )
 }
 
-/// For each crate `is_subject` picks, the first UI-surface crate it reaches
-/// (breadth first), as the chain of edges leading there; `what` names the
-/// subject in the message.
-fn reaching_ui(graph: &Deps, is_subject: impl Fn(&str) -> bool, what: &str) -> Vec<String> {
+/// For each crate `is_subject` picks, the first crate `is_forbidden` picks
+/// that it reaches (breadth first), as the chain of edges leading there;
+/// `what` names the subject in the message.
+fn reaching_ui(
+    graph: &Deps,
+    is_subject: impl Fn(&str) -> bool,
+    is_forbidden: impl Fn(&str) -> bool,
+    what: &str,
+) -> Vec<String> {
     let mut out = Vec::new();
     for start in graph.keys().filter(|n| is_subject(n)) {
         let mut parent: BTreeMap<&str, &str> = BTreeMap::new();
@@ -109,7 +124,7 @@ fn reaching_ui(graph: &Deps, is_subject: impl Fn(&str) -> bool, what: &str) -> V
                     continue;
                 }
                 parent.insert(dep.as_str(), at);
-                if is_ui_surface(dep) {
+                if is_forbidden(dep) {
                     let mut chain = vec![dep.as_str()];
                     let mut node = dep.as_str();
                     while let Some(&p) = parent.get(node) {
@@ -118,7 +133,7 @@ fn reaching_ui(graph: &Deps, is_subject: impl Fn(&str) -> bool, what: &str) -> V
                     }
                     chain.reverse();
                     out.push(format!(
-                        "{} -> {dep}: {what} {start} reaches UI-surface crate {dep} ({})",
+                        "{} -> {dep}: {what} {start} reaches UI crate {dep} ({})",
                         chain[chain.len().saturating_sub(2)],
                         chain.join(" -> ")
                     ));
@@ -231,6 +246,19 @@ fn each_rule_names_the_offending_edge() {
         hl[0]
     );
     assert_eq!(headless_reaching_ui(&graph), Vec::<String>::new());
+    let palette = deps(&[
+        ("vix-mcp-server", &["vix-palette"]),
+        ("vix-palette", &[]),
+        ("vix-ok-core", &["vix-palette"]),
+    ]);
+    let pl = headless_reaching_ui(&palette);
+    assert_eq!(pl.len(), 1, "{pl:?}");
+    assert!(
+        pl[0].starts_with("vix-mcp-server -> vix-palette: headless crate vix-mcp-server"),
+        "{}",
+        pl[0]
+    );
+    assert_eq!(model_core_reaching_ui(&palette), Vec::<String>::new());
 
     let all = deps(&[
         ("vix-input", &["crossterm"]),

@@ -13,7 +13,7 @@ serde_json = { workspace = true }
 vix-conflict-tool = { workspace = true }
 vix-lsp-core = { workspace = true }
 vix-org = { workspace = true }
-vix-palette = { workspace = true }
+vix-textops = { workspace = true }
 
 [lints]
 workspace = true

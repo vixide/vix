@@ -222,7 +222,7 @@ pub fn call<H: Host>(root: &Path, host: &H, name: &str, args: &Value) -> Result<
         }
         DOCUMENT_SYMBOLS => {
             let (path, text) = read_text(root, required_path(args)?)?;
-            let symbols: Vec<Value> = vix_palette::symbols(&text)
+            let symbols: Vec<Value> = vix_textops::symbols(&text)
                 .into_iter()
                 .map(|s| json!({"kind": s.kind, "name": s.name, "line": s.line}))
                 .collect();
@@ -420,7 +420,7 @@ fn outline(path: &str, text: &str) -> (&'static str, Vec<Value>) {
             ("org", entries)
         }
         _ => {
-            let entries = vix_palette::symbols(text)
+            let entries = vix_textops::symbols(text)
                 .into_iter()
                 .map(|s| {
                     let title = if s.kind.is_empty() {
