@@ -232,8 +232,10 @@ that is on no branch; this is why 1.8.0 and every `2.0.1` rc failed there
 `CARGO_ENCODED_RUSTFLAGS` from `.github/dist/build-setup.yml`, because dist
 ignores `.cargo/config.toml`'s `rustflags` (T771). `release.yml` is **generated**: edit
 `dist-workspace.toml` and re-run `dist init` (or the narrower `dist
-generate --mode ci`), never the workflow by hand — `dist generate --mode
-ci --check` fails if the committed file has drifted from the config, the
+generate --mode ci`), never the workflow by hand — `dist generate --check`
+(every mode: the workflow and the MSI definitions in `tui/wix/` and
+`gui/*/wix/`, which embed package metadata such as the homepage) fails if a
+committed file has drifted from the config, the
 same check-then-write shape `docs/reference/*.md`/`tui/man/vix.1`'s own
 regenerate-and-diff gate uses. The GitHub-only **dist-workflow** job in
 `ci.yml` runs it on every push and pull request, with the `dist` version
