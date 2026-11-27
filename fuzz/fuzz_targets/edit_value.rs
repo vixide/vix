@@ -8,26 +8,8 @@
 
 #![no_main]
 
-use std::collections::HashSet;
-
 use libfuzzer_sys::fuzz_target;
 use vix_edit_value::{Format, Tree};
-
-/// Whether two keys of one object in `tree` render as the same label.
-fn has_colliding_keys(tree: &Tree) -> bool {
-    // `siblings[d]` holds the labels seen so far among the current
-    // container's children at depth `d`.
-    let mut siblings: Vec<HashSet<&str>> = Vec::new();
-    for i in 0..tree.row_count() {
-        let depth = tree.depth(i);
-        siblings.truncate(depth + 1);
-        siblings.resize_with(depth + 1, HashSet::new);
-        if !siblings[depth].insert(tree.label(i)) {
-            return true;
-        }
-    }
-    false
-}
 
 fuzz_target!(|data: &[u8]| {
     let Some((&selector, rest)) = data.split_first() else {
@@ -60,18 +42,13 @@ fuzz_target!(|data: &[u8]| {
     assert!(!tree.is_dirty(), "a freshly parsed tree is dirty");
 
     // Writing is a fixed point: what the tree saves reads back to a tree
-    // that saves the same text. The tree labels every key as a string, so
-    // two YAML keys that are distinct values but render alike (`1` and
-    // `"1"`, or two complex keys, both shown as `?`) collide on save and
-    // one is lost (YAML) or written twice (JSON, which then does not reopen):
-    // a known limitation recorded in the crate spec, so those inputs are
-    // only checked for not panicking.
+    // that saves the same text. Keys keep their original form (T850), so
+    // keys that render alike (`1` and `"1"`, tagged or complex keys) are
+    // each written back as read; a save that would make two collide, or that
+    // the YAML writer cannot express, is refused and writes nothing.
     let Ok(saved) = tree.to_text() else {
         return; // the caller refuses to save; nothing is written
     };
-    if has_colliding_keys(&tree) {
-        return;
-    }
     let reread = Tree::from_text(&saved, format)
         .unwrap_or_else(|e| panic!("the tree's own output does not parse: {e}\n{saved}"));
     let again = reread.to_text().expect("the reread tree writes");
