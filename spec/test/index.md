@@ -393,14 +393,12 @@ by handling what it had assumed could not happen (resending `C-q` until Vix
 exits, dropping `cat`'s copy before comparing, changing the file until the
 change is seen, accepting one rebind in five tries), not by rerunning it.
 
-**No retries added by Vix's own tooling.** `scripts/check`, `scripts/ci` and the
-forge workflows add no retry loop of their own, and `scripts/flaky-hunt` never
-retries. nextest's profiles (`.config/nextest.toml`) still retry a failing test
-once locally and twice in CI and mark it `FLAKY` in the log; removing those
-retries is an open decision, since it would fail CI on today's known flakes until
-they are fixed. A retry turns a race into a pass, so a test nextest reports as
-FLAKY is treated as a bug: hunt it with `scripts/flaky-hunt`, fix it, or
-quarantine it.
+**No automatic retries.** `scripts/check`, `scripts/ci` and the forge CI run
+each test once, and `.config/nextest.toml` sets `retries = 0` in both of its
+profiles (it used to retry once locally and twice in CI, which passed the run
+and only marked the test `FLAKY` in the log). A retry turns a race into a
+green run that nobody reads, and the race still ships: hunt a suspected flake
+with `scripts/flaky-hunt`, fix it, or quarantine it.
 
 **Hunting.** `scripts/flaky-hunt` confirms or rules out a suspected flake:
 
