@@ -305,12 +305,32 @@ prerelease tag). It never runs on a branch push; a manual `workflow_dispatch`
 run builds both architectures and pushes nothing. It has not run yet. See
 [`packaging/index.md`](../../packaging/index.md).
 
-### Mutation testing (T606)
+### Mutation testing (T606, T831)
 
-`.github/workflows/mutants.yml` (GitHub only) runs `cargo mutants` weekly and on demand over
-the small pure crates (the workflow's `-p` list is the one record of which: 34 crates, from
-`vix-textops` and `vix-tags` to parsers like `vix-vcard-parser` and `vix-convert-tabular`) and uploads `mutants.out/`. It is advisory (`continue-on-error`): a missed mutant
-points at an unasserted behavior. `.cargo/mutants.toml` lists only mutants proven equivalent.
+`.github/workflows/mutants.yml` (GitHub only) runs `cargo mutants` weekly (Sunday 04:15 UTC) and on demand:
+
+- **`mutants`**: every mutant of the small pure crates (the workflow's `-p` list is the one
+  record of which: 34 crates, from `vix-textops` and `vix-tags` to parsers like
+  `vix-vcard-parser` and `vix-convert-tabular`), one 60-minute job.
+- **`core-plan`** then **`core`**: the core crates `vix-editor-core`, `vix-fileops`,
+  `vix-git`, `vix-lsp` and `vix-db`. All their mutants (about 5,900) would take days, so
+  `core-plan` diffs the last commit older than seven days against `HEAD` (a dispatch's
+  `since` input names another ref, or `full` for no diff), counts each crate's mutants in
+  that diff with `cargo mutants --list --in-diff`, and emits a matrix of one job per
+  shard: `ceil(n / 200)` shards per crate, at most 16 (`--shard k/n`), each with that
+  crate's `--timeout` (60 s for `vix-fileops`, 120 s for `vix-editor-core` and
+  `vix-lsp`, 180 s for `vix-git` and `vix-db`, which start processes and databases). A
+  crate with nothing changed gets no job. The `cargo mutants` step stops at 330 minutes and
+  the job at 350, under the runner's 360, so the report still uploads. Each job writes its
+  counts of caught, missed and timed-out mutants and of those that do not build and the first 100 missed mutants to the job summary
+  and uploads `mutants.out/` as `mutants-out-<crate>-<k>-of-<n>`.
+
+Both are advisory (`continue-on-error`): a missed mutant points at an unasserted behavior,
+and is reported, not failed. The core crates start report-only because they have never had
+a full pass, so their survivors and equivalent mutants are unknown; once a `since: full`
+dispatch has been triaged, the `core` jobs are to fail on a missed mutant, which then can
+only be in code changed that week. `.cargo/mutants.toml` lists only mutants proven
+equivalent. See [`spec/test`](../test/index.md).
 
 ### Fuzzing
 
