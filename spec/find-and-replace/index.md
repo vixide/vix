@@ -169,6 +169,10 @@ no edit, no dirty flag, no undo step.
 | Replacement | literal text; `&` is the matched text, `\&` `\~` `\\` `\{delim}` are literal, `\r` splits the line, `\t` is a tab; missing means empty (delete) | `~` (previous replacement) and every other backslash sequence (`\1`, `\u`, …): `status.ex_sub_replacement` |
 | Flags | `g` (every match on a line; a repeated `g` toggles, as in Vim), `c` (confirm), trailing blanks | anything else, counts included: `status.ex_sub_flag` |
 
+The command line drops leading blanks and colons, as Vim does, but not
+trailing blanks (T847): in an unterminated `:s/a/b  ` they are part of the
+replacement. Every other Ex command ignores trailing blanks (`:w `, `:q `).
+
 Matching is case-sensitive and non-overlapping, line by line: without `g` only
 the first match on each covered line is replaced. No match reports
 `status.ex_sub_not_found`; a read-only buffer reports

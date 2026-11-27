@@ -6943,6 +6943,24 @@ impl App {
         crate::tasks::subproject::find_subprojects(&refs)
     }
 
+    /// `path` relative to the workspace root, or `None` outside it (unlike
+    /// [`Self::root_relative`], which is for display). Tabs hold canonical paths while
+    /// the root may be given through a symlink (macOS's `/var` is one), so
+    /// when the plain prefix does not match, both sides are compared
+    /// canonicalized (through the workspace's authority); a path that cannot
+    /// be canonicalized is compared as it is (T847).
+    fn path_under_root(&self, path: &Path) -> Option<PathBuf> {
+        if let Ok(rel) = path.strip_prefix(&self.root) {
+            return Some(rel.to_path_buf());
+        }
+        let auth = crate::authority::current();
+        let canon = |p: &Path| auth.canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        canon(path)
+            .strip_prefix(canon(&self.root))
+            .ok()
+            .map(Path::to_path_buf)
+    }
+
     /// The nearest enclosing subproject for the active tab's file, or `None`
     /// if it has none (no path, or no subproject manifest between it and the
     /// workspace root).
@@ -6951,9 +6969,8 @@ impl App {
     ) -> Option<crate::tasks::subproject::Subproject> {
         self.build_file_index();
         let path = self.editor.active_tab().and_then(|t| t.path.clone())?;
-        let rel = path
-            .strip_prefix(&self.root)
-            .ok()?
+        let rel = self
+            .path_under_root(&path)?
             .to_string_lossy()
             .replace('\\', "/");
         let subs = self.subprojects();

@@ -215,7 +215,8 @@ re-reads it with `Settings::try_load_from`. **Vix → Reload Settings**
   `theme_light`/`theme_dark` pair), the keymap (an unknown id falls back to
   Apple with the same error as at startup, and a changed keymap resets
   per-keymap modal state), the UI locale (an unknown code is ignored), the
-  time zone, and the clipboard provider (T625); then it rebuilds the
+  time zone, the clipboard provider (T625), and the editor's own copies of
+  `large_file_mb` (its open-size limit) and `read_only_paths` (T847); then it rebuilds the
   menus (the View → Theme list is re-scanned, so a newly added custom theme
   appears). Each piece is re-applied only when its setting changed, because
   theme, locale and clipboard provider are process-global.

@@ -574,8 +574,11 @@ flipped the rows to Vim's result (each checked against `vim -u NONE`):
 - **`D` `C` `X` `s`** are `d$` `c$` `dh` `cl`, through the operator path
   (registers, counts and `.` included). **`r{char}`** replaces `count`
   characters, leaving the cursor on the last; with fewer than `count` left on
-  the line it does nothing, as in Vim. `r<CR>` (split the line) is not
-  implemented: any non-character key cancels `r`. **`J`** joins `count`
+  the line it does nothing, as in Vim. **`r<CR>`** (T847) splits the line:
+  the `count` characters become one line break (Vim's rule, not `count`
+  breaks), with no indent (an unconfigured Vim has `noautoindent`), and the
+  cursor goes to the start of the new line; any other non-character key
+  cancels `r`. **`J`** joins `count`
   lines (at least two), Vim's way: leading white space of each joined line
   goes, and one space separates it unless the text so far is empty or ends
   in a space or tab, or the joined line is empty or starts with `)`; the

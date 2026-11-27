@@ -10976,6 +10976,16 @@ Fix boundaries of everyday edits before adding Vi features.
   start; `}` lands on the next paragraph's first line, not the blank line;
   `da"` keeps the white space after the closing quote; after `/pattern<CR>`
   the find bar keeps the keyboard until `<Esc>`.
+- [x] **T847 — Small fixes found during Run Z.** (Done: each reproduced by a failing test first; `msg.crash_report_saved` in all 15 locales, warmed when the hook is installed; `apply_settings` also refreshes `read_only_paths`; `r<CR>` rows checked against `vim -u NONE`.) Five small
+  bugs earlier agents found: (1) `tui/src/crash.rs` printed an untranslated
+  English line after a crash; (2) changing `large_file_mb` while Vix runs had
+  no effect until a restart (`apply_settings` never updated
+  `Editor::max_text_bytes`); (3) **Project → Subproject** reported "no
+  subproject" when the workspace root was given through a symlink (tabs hold
+  canonical paths); (4) the Vi/Ex command line trimmed its text, so the
+  trailing blanks of an unterminated `:s/a/b  ` were lost; (5) Vi `r<CR>`
+  did nothing (Vim splits the line, and `{count}r<CR>` replaces the
+  characters with one line break).
 
 ## Ideas backlog (unscoped)
 

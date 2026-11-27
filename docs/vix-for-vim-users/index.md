@@ -138,6 +138,9 @@ fails if Vim stops agreeing with a row.
 | `rX` | `¦abc` | `¦Xbc` | Normal | stock Vim | yes |
 | `2rX` | `¦abc` | `X¦Xc` | Normal | stock Vim | yes |
 | `4rX` | `¦abc` | `¦abc` | Normal | stock Vim | yes: too few characters left: nothing happens |
+| `r<CR>` | `a¦bcd` | `a⏎¦cd` | Normal | stock Vim | yes |
+| `2r<CR>` | `a¦bcd` | `a⏎¦d` | Normal | stock Vim | yes: `{count}r<CR>` replaces the characters with one line break |
+| `r<CR>j.` | `a¦bc⏎def` | `a⏎c⏎⏎¦ef` | Normal | stock Vim | yes |
 | `~` | `¦abc` | `¦abc` | Normal | stock Vim | no: Vim gives `A¦bc`. `~` is not implemented |
 | `J` | `¦one⏎two` | `one¦ two` | Normal | stock Vim | yes |
 | `3J` | `¦one⏎  two⏎)three` | `one two¦)three` | Normal | stock Vim | yes: leading white space goes; no space before `)` |
@@ -206,7 +209,7 @@ From the table, the places where Vix's Vi keymap does not yet do what Vim
 does:
 
 - **Search.** `*` and `#` are not implemented.
-- **Keys not bound yet**: `W` `B` `E`, `;` `,`, `~`, `>` `<`, `r<CR>`, and the
+- **Keys not bound yet**: `W` `B` `E`, `;` `,`, `~`, `>` `<`, and the
   `ip`/`ap`/`is`/`as` objects.
 - **Visual mode** moves with `h` `j` `k` `l` and the arrows only, its operators
   are not dot-repeatable, and a register typed before `v` applies to the

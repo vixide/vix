@@ -227,6 +227,9 @@ const ROWS: &[Row] = &[
     stock("rX", "|abc\n", "|Xbc\n"),
     stock("2rX", "|abc\n", "X|Xc\n"),
     stock("4rX", "|abc\n", "|abc\n").note("too few characters left: nothing happens"),
+    stock("r<CR>", "a|bcd\n", "a\n|cd\n"),
+    stock("2r<CR>", "a|bcd\n", "a\n|d\n").note("`{count}r<CR>` replaces the characters with one line break"),
+    stock("r<CR>j.", "a|bc\ndef\n", "a\nc\n\n|ef\n"),
     stock("~", "|abc\n", "|abc\n").vim_differs("A|bc\n", "`~` is not implemented"),
     stock("J", "|one\ntwo\n", "one| two\n"),
     stock("3J", "|one\n  two\n)three\n", "one two|)three\n")
