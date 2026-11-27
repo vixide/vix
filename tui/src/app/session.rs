@@ -600,7 +600,7 @@ impl App {
     pub(super) fn apply_settings(&mut self, old: &Settings, new: Settings) {
         self.settings = new;
         // The editor keeps its own copies of these two (T847).
-        self.editor.max_text_bytes = Self::max_text_bytes(&self.settings);
+        self.editor.max_text_bytes = Self::max_text_bytes(&self.settings, self.open_thresholds);
         if old.editor_behavior.read_only_paths != self.settings.editor_behavior.read_only_paths {
             self.editor.read_only_paths =
                 vix_fileops::PathPatterns::new(&self.settings.editor_behavior.read_only_paths);
