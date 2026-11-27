@@ -298,6 +298,33 @@ at 8 MiB instead of 20; Go → Word / Sentence → Number to a far target, and
 a matching tag far away or missing, still read up to it, but over the rope
 without a copy.
 
+## Highlight Word marks the occurrences on screen (T852, measured 2026-11-27)
+
+After T851 Highlight Word still marked the first 500 occurrences in the
+buffer: in a large file with a common word, every mark could sit above the
+viewport, and a word found once read to the end of the buffer (about 1 ms
+per cursor move at 8 MiB). Now `word_marks_near` in `tui/src/app.rs`
+searches the visible rows first, then the cursor's neighborhood when it is
+off screen, then outward from the view in 256-line steps, alternately above
+and below, stopping at 500 marks or 3,000 lines past the view each way
+(nothing shows a total count; the rule is in
+`crates/vix-find-panel/spec/highlight-word/index.md`). The rebuild key gains
+the view's top line and height, so scrolling moves the marks and an idle
+frame recomputes nothing.
+
+Same bench (`editor/word_highlight`, two cursor moves; the view stays at the
+top, so the cursor's neighborhood is what gets searched), default criterion
+settings:
+
+| Bench | 4 KiB before | 4 KiB after | 512 KiB before | 512 KiB after | 8 MiB before | 8 MiB after |
+| ----- | ------------ | ----------- | -------------- | ------------- | ------------ | ----------- |
+| `word_highlight/rare` (2 moves) | 2.90 µs | 3.66 µs | 142 µs | 70.4 µs | 2.26 ms | 67.5 µs |
+| `word_highlight/common` (2 moves) | 16.5 µs | 17.4 µs | 57.9 µs | 69.5 µs | 78.2 µs | 74.4 µs |
+
+The rare word now costs the same at 512 KiB and 8 MiB (the window, not the
+buffer); the common word's cost is the 500 marks either way. At 4 KiB the
+stepwise search adds under a microsecond.
+
 ## Opening a large checkout (T823)
 
 How long a user waits after opening a big project: for the file named on

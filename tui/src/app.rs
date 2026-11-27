@@ -2549,8 +2549,10 @@ pub struct App {
     format_save_pending: Option<PathBuf>,
     /// Throttle anchor for interval auto-save; `None` until the first tick.
     last_auto_save: Option<std::time::Instant>,
-    /// `(tab, revision, cursor)` the word-occurrence highlight was last built for.
-    word_highlight_key: Option<(usize, u64, usize)>,
+    /// `(tab, revision, cursor, top line, rows)` the word-occurrence
+    /// highlight was last built for: the marks depend on the viewport too
+    /// (T852), so scrolling rebuilds them.
+    word_highlight_key: Option<(usize, u64, usize, usize, usize)>,
     /// `(active tab, revision)` the backlinks dock was last built for.
     backlinks_follow_key: Option<(usize, u64)>,
     /// `(active tab, revision)` the misspelling underlines were last built for
@@ -6041,18 +6043,22 @@ impl App {
         }
     }
 
-    /// When "Highlight Word" is on, mark every occurrence of the identifier under
-    /// the cursor in the active buffer (recomputed only when the buffer or cursor
-    /// changes). Clears the marks when the cursor is not on a word.
+    /// When "Highlight Word" is on, mark the occurrences of the identifier
+    /// under the cursor on and around the visible rows of the active buffer
+    /// (recomputed only when the buffer, cursor or viewport changes). Clears
+    /// the marks when the cursor is not on a word.
     pub fn refresh_word_highlight(&mut self) {
         if !self.settings.editor_visual.highlight_word {
             return;
         }
+        let rows = usize::from(self.layout.editor.height);
         let key = self.editor.active_tab().filter(|t| !t.is_image()).map(|t| {
             (
                 self.editor.active,
                 t.editor.revision(),
                 t.editor.get_cursor(),
+                t.editor.top_line(),
+                rows,
             )
         });
         if key == self.word_highlight_key {
@@ -6066,13 +6072,13 @@ impl App {
         let Some(tab) = self.editor.active_tab() else {
             return;
         };
-        // Whole-word occurrences of `word`, capped to keep the pass cheap,
-        // searched over the rope's chunks without copying the buffer (T851).
+        // Whole-word occurrences of `word` on screen first, then outward
+        // from it, capped and bounded to keep the pass cheap, searched over
+        // the rope's chunks without copying the buffer (T851, T852).
         let rope = tab.editor.code_ref().rope();
-        let marks: Vec<(usize, usize)> = vix_textops::whole_word_matches(rope.chunks(), &word, 500)
-            .into_iter()
-            .map(|(s, e)| (rope.byte_to_char(s), rope.byte_to_char(e)))
-            .collect();
+        let top = tab.editor.top_line();
+        let cursor_line = rope.char_to_line(tab.editor.get_cursor().min(rope.len_chars()));
+        let marks = word_marks_near(rope, &word, top..top.plus(rows), cursor_line);
         // A single occurrence (the word itself) isn't worth highlighting.
         self.editor
             .set_word_marks(if marks.len() > 1 { marks } else { Vec::new() });
@@ -15337,6 +15343,101 @@ mod app_tests_r3a;
 #[path = "app_tests_r4a.rs"]
 mod app_tests_r4a;
 
+/// Most occurrences Highlight Word marks (T852).
+const WORD_HIGHLIGHT_CAP: usize = 500;
+/// How many lines past the visible rows, each way, Highlight Word looks for
+/// occurrences (T852): nothing shows a total count, so a word found once
+/// on screen does not read the rest of the buffer.
+const WORD_HIGHLIGHT_REACH: usize = 3000;
+/// Lines searched per step outward from the visible rows (T852).
+const WORD_HIGHLIGHT_STEP: usize = 256;
+
+/// Char ranges of the whole-word occurrences of `word` Highlight Word marks
+/// (T852), sorted by position: those on the lines of `view` (the visible
+/// rows) first; then, when `cursor_line` is outside them, those within as
+/// many lines of the cursor (where the next frame scrolls to); then outward
+/// from the view, alternately above (nearest first) and below, in steps of
+/// [`WORD_HIGHLIGHT_STEP`] lines, at most [`WORD_HIGHLIGHT_REACH`] lines
+/// each way. Stops at [`WORD_HIGHLIGHT_CAP`] occurrences. Each search
+/// covers whole lines, so a match is whole-word exactly as it is over the
+/// whole text (`word` holds no line break).
+fn word_marks_near(
+    rope: &ropey::Rope,
+    word: &str,
+    view: std::ops::Range<usize>,
+    cursor_line: usize,
+) -> Vec<(usize, usize)> {
+    let lines = rope.len_lines();
+    let top = view.start.min(lines);
+    let bottom = view.end.clamp(top, lines);
+    // Byte ranges of every occurrence on lines `a..b`, at most `cap`.
+    let in_lines = |a: usize, b: usize, cap: usize| -> Vec<(usize, usize)> {
+        if a >= b {
+            return Vec::new();
+        }
+        let base = rope.line_to_byte(a);
+        let slice = rope.slice(rope.line_to_char(a)..rope.line_to_char(b));
+        vix_textops::whole_word_matches(slice.chunks(), word, cap)
+            .into_iter()
+            .map(|(s, e)| (base.plus(s), base.plus(e)))
+            .collect()
+    };
+    let mut marks = in_lines(top, bottom, WORD_HIGHLIGHT_CAP);
+    // The cursor's band, when the cursor is off the visible rows: the lines
+    // the view is about to scroll to, less those already searched.
+    let rows = bottom.minus(top);
+    let band = (!(top..bottom).contains(&cursor_line)).then(|| {
+        (
+            cursor_line.minus(rows).min(lines),
+            cursor_line.plus(rows).plus(1).min(lines),
+        )
+    });
+    // Lines `a..b` less the cursor's band: up to two pieces, in order.
+    let pieces = |a: usize, b: usize| -> [(usize, usize); 2] {
+        match band {
+            Some((ba, bb)) if ba < b && a < bb => [(a, b.min(ba)), (a.max(bb), b)],
+            _ => [(a, b), (b, b)],
+        }
+    };
+    if let Some((ba, bb)) = band {
+        let room = WORD_HIGHLIGHT_CAP.minus(marks.len());
+        let (left, right) = (bb.min(top), ba.max(bottom));
+        let mut found = in_lines(ba, left, room);
+        found.extend(in_lines(right, bb, room));
+        marks.extend(found.into_iter().take(room));
+    }
+    let floor = top.minus(WORD_HIGHLIGHT_REACH);
+    let ceil = bottom.plus(WORD_HIGHLIGHT_REACH).min(lines);
+    let (mut up, mut down) = (top, bottom);
+    while marks.len() < WORD_HIGHLIGHT_CAP && (up > floor || down < ceil) {
+        if up > floor {
+            let from = up.minus(WORD_HIGHLIGHT_STEP).max(floor);
+            // A step is a bounded number of lines, so take them all and
+            // keep the ones nearest the view.
+            let found: Vec<_> = pieces(from, up)
+                .into_iter()
+                .flat_map(|(a, b)| in_lines(a, b, usize::MAX))
+                .collect();
+            let room = WORD_HIGHLIGHT_CAP.minus(marks.len());
+            marks.extend(found.into_iter().rev().take(room));
+            up = from;
+        }
+        if down < ceil {
+            let to = down.plus(WORD_HIGHLIGHT_STEP).min(ceil);
+            for (a, b) in pieces(down, to) {
+                let room = WORD_HIGHLIGHT_CAP.minus(marks.len());
+                marks.extend(in_lines(a, b, room));
+            }
+            down = to;
+        }
+    }
+    marks.sort_unstable();
+    marks
+        .into_iter()
+        .map(|(s, e)| (rope.byte_to_char(s), rope.byte_to_char(e)))
+        .collect()
+}
+
 /// The identifier around char offset `cursor` in `rope` (clamped to its
 /// end): the run of word chars (alphanumeric or `_`) touching it, when that
 /// run starts with a letter or `_`. Reads the rope out from the cursor only
@@ -16060,6 +16161,68 @@ mod tests {
                     old(text, cursor),
                     "{cursor}"
                 );
+            }
+        }
+    }
+
+    /// T852: when every occurrence is within reach of the view and under
+    /// the cap, `word_marks_near` finds exactly what a whole-buffer search
+    /// finds, in order, whatever the view and cursor lines (step and band
+    /// edges included); past the cap it keeps the ones nearest the view.
+    #[test]
+    fn word_marks_near_match_a_whole_buffer_search_within_reach() {
+        let line = |i: usize| match i % 7 {
+            0 => "ab cd ab\n",
+            3 => "xab ab_ (ab)\n",
+            5 => "é ab\n",
+            _ => "zz\n",
+        };
+        let text: String = (0..900).map(line).collect();
+        let rope = ropey::Rope::from_str(&text);
+        let all: Vec<(usize, usize)> = vix_textops::whole_word_matches(rope.chunks(), "ab", 10_000)
+            .into_iter()
+            .map(|(s, e)| (rope.byte_to_char(s), rope.byte_to_char(e)))
+            .collect();
+        assert!(all.len() > super::WORD_HIGHLIGHT_CAP);
+        let few: String = (0..900)
+            .map(|i| if i % 97 == 0 { "ab\n" } else { "zz ab_\n" })
+            .collect();
+        let few_rope = ropey::Rope::from_str(&few);
+        let few_all: Vec<(usize, usize)> =
+            vix_textops::whole_word_matches(few_rope.chunks(), "ab", 10_000)
+                .into_iter()
+                .map(|(s, e)| (few_rope.byte_to_char(s), few_rope.byte_to_char(e)))
+                .collect();
+        for (top, rows, cursor) in [
+            (0, 24, 0),
+            (0, 0, 0),
+            (100, 24, 110),
+            (255, 2, 899),
+            (600, 40, 3),
+            (880, 24, 899),
+            (900, 24, 0),
+            (5_000, 24, 450),
+        ] {
+            assert_eq!(
+                super::word_marks_near(&few_rope, "ab", top..top + rows, cursor),
+                few_all,
+                "{top} {rows} {cursor}"
+            );
+            let near = super::word_marks_near(&rope, "ab", top..top + rows, cursor);
+            assert_eq!(
+                near.len(),
+                super::WORD_HIGHLIGHT_CAP,
+                "{top} {rows} {cursor}"
+            );
+            assert!(near.windows(2).all(|w| w[0] < w[1]));
+            assert!(near.iter().all(|m| all.contains(m)));
+            // Every occurrence on the visible rows is there.
+            let (a, b) = (
+                rope.line_to_char(top.min(900)),
+                rope.line_to_char((top + rows).min(900)),
+            );
+            for m in all.iter().filter(|m| m.0 >= a && m.1 <= b) {
+                assert!(near.contains(m), "{m:?} on screen at {top}");
             }
         }
     }

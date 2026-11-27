@@ -1261,6 +1261,103 @@ fn word_highlight_marks_repeats_and_clears_elsewhere() {
     assert_eq!(word_marks(&a).len(), 500);
 }
 
+/// Point the active tab's viewport at `top` without moving the cursor.
+fn scroll_to(a: &mut App, top: usize) {
+    a.editor.active_tab_mut().unwrap().editor.set_offset_y(top);
+}
+
+/// Whether `marks` is sorted by position, as the renderer gets it.
+fn sorted(marks: &[(usize, usize)]) -> bool {
+    marks.windows(2).all(|w| w[0] < w[1])
+}
+
+/// T852: a word repeated 10,000 times, cursor on the last one: the 500
+/// marks are on and around the visible rows at the end of the file, not
+/// the first 500 in the buffer, both once the view has scrolled there and
+/// on the tick before (the cursor's band).
+#[test]
+fn word_highlight_marks_the_occurrences_on_screen() {
+    let mut a = with_text("t852-screen", &"foo\n".repeat(10_000));
+    a.settings.editor_visual.highlight_word = true;
+    let last = 4 * 9_999;
+    a.editor.active_tab_mut().unwrap().editor.set_cursor(last);
+    // Before the draw scrolls to the cursor: the view is still at the top.
+    a.refresh_word_highlight();
+    let marks = word_marks(&a);
+    assert_eq!(marks.len(), 500);
+    assert!(sorted(&marks));
+    assert!(marks.contains(&(last, last + 3)), "the cursor's own word");
+    // The view at the bottom (24 rows): every visible occurrence is marked.
+    scroll_to(&mut a, 10_001 - 24);
+    a.refresh_word_highlight();
+    let marks = word_marks(&a);
+    assert_eq!(marks.len(), 500, "the cap holds");
+    assert!(sorted(&marks));
+    for line in (10_001 - 24)..10_000 {
+        assert!(marks.contains(&(4 * line, 4 * line + 3)), "line {line}");
+    }
+    assert!(
+        marks[0].0 > 4 * 9_000,
+        "nothing from the top: {:?}",
+        marks[0]
+    );
+}
+
+/// T852: scrolling without moving the cursor moves the marks onto the new
+/// view; an unchanged view and cursor rebuild nothing.
+#[test]
+fn word_highlight_follows_the_view_when_scrolling() {
+    let mut a = with_text("t852-scroll", &"foo\n".repeat(10_000));
+    a.settings.editor_visual.highlight_word = true;
+    a.editor.active_tab_mut().unwrap().editor.set_cursor(0);
+    a.refresh_word_highlight();
+    let marks = word_marks(&a);
+    assert_eq!(marks.len(), 500);
+    assert_eq!(marks[0], (0, 3));
+    assert!(!marks.contains(&(4 * 5_000, 4 * 5_000 + 3)));
+    let key = a.word_highlight_key;
+    a.refresh_word_highlight();
+    assert_eq!(a.word_highlight_key, key, "nothing changed: no rebuild");
+    scroll_to(&mut a, 5_000);
+    a.refresh_word_highlight();
+    assert_ne!(a.word_highlight_key, key);
+    let marks = word_marks(&a);
+    assert_eq!(marks.len(), 500);
+    assert!(sorted(&marks));
+    for line in 5_000..5_024 {
+        assert!(marks.contains(&(4 * line, 4 * line + 3)), "line {line}");
+    }
+    assert!(
+        marks.contains(&(0, 3)),
+        "the cursor's band is still searched"
+    );
+}
+
+/// T852: Highlight Word looks a bounded number of lines past the view: a
+/// word whose other occurrence is farther away than that is marked
+/// nowhere (it shows as found once), one within reach is marked.
+#[test]
+fn word_highlight_looks_a_bounded_distance_from_the_view() {
+    let filler = "x\n".repeat(10_000);
+    let text = format!("needle\n{filler}needle\npin\n{}pin\n", "x\n".repeat(100));
+    let mut a = with_text("t852-reach", &text);
+    a.settings.editor_visual.highlight_word = true;
+    let second = text.rfind("needle").unwrap();
+    a.editor.active_tab_mut().unwrap().editor.set_cursor(second);
+    scroll_to(&mut a, 10_001 - 10);
+    a.refresh_word_highlight();
+    assert_eq!(
+        word_marks(&a),
+        Vec::new(),
+        "the first needle is out of reach"
+    );
+    let pin = text.find("pin").unwrap();
+    a.editor.active_tab_mut().unwrap().editor.set_cursor(pin);
+    a.refresh_word_highlight();
+    let far = text.rfind("pin").unwrap();
+    assert_eq!(word_marks(&a), vec![(pin, pin + 3), (far, far + 3)]);
+}
+
 /// An outside edit reloads a clean buffer; an unsaved one only warns; a file
 /// that vanished is skipped; polls are throttled.
 #[test]

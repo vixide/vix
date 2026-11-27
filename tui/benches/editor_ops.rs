@@ -385,7 +385,9 @@ fn bench_go_sentences(c: &mut Criterion) {
 /// runs it after a cursor move: the cursor steps between `compute_something`
 /// and `alpha` (each once in the buffer, so the search reads to the end)
 /// and, for `common`, between two `the`s in the filler (500 marks, the cap,
-/// are found early).
+/// are found early). Since T852 both read only the lines on and around the
+/// view and the cursor (at most 3,000 lines past the view each way), so
+/// `rare` no longer reads to the end of the buffer.
 fn bench_word_highlight(c: &mut Criterion) {
     let mut group = c.benchmark_group("editor/word_highlight");
     group.sample_size(20);
