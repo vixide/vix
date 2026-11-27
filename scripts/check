@@ -418,6 +418,10 @@ if in_tier full; then
 	cargo clippy -p vix-tui --features matrix --all-targets -- -D warnings
 	cargo test -p vix-tui --features matrix --lib matrix
 	cargo test -p vix-matrix-protocol --features net
+	# The whole lib suite once with every opt-in feature on: the lines above
+	# run only each feature's own tests, so a test elsewhere that assumed the
+	# feature was off failed unseen (the IM /follow test under cowork).
+	cargo test -p vix-tui --features cowork,jupyter,matrix --lib
 	if command -v cargo-hack >/dev/null 2>&1; then
 		# --all-targets: the tests too, so a test of one feature's code is
 		# gated on that feature (a lib-only check let such tests rot).
