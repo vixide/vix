@@ -252,15 +252,23 @@ fn paragraph_and_sentence_motions_move_by_block() {
     app.on_key(key('}'));
     assert_eq!(
         cursor(&mut app),
-        9,
-        "'}}' moves to the start of the next paragraph"
+        8,
+        "'}}' moves to the empty line after the paragraph (Vim, T846)"
+    );
+    app.on_key(key('}'));
+    assert_eq!(
+        cursor(&mut app),
+        18,
+        "then to the last line's last character, with no empty line left"
     );
     app.on_key(key('{'));
     assert_eq!(
         cursor(&mut app),
-        0,
-        "'{{' moves back to the first paragraph's start"
+        8,
+        "'{{' moves back to the empty line before the paragraph"
     );
+    app.on_key(key('{'));
+    assert_eq!(cursor(&mut app), 0, "then to the buffer's start");
 
     let mut app2 = vi_app("modal-sentence", "One. Two. Three.\n", true);
     app2.on_key(key(')'));
@@ -461,10 +469,10 @@ fn di_paren_deletes_inside_the_pair_delimiters_excluded() {
 }
 
 #[test]
-fn da_quote_deletes_the_quoted_text_and_the_quotes() {
+fn da_quote_deletes_the_quoted_text_the_quotes_and_the_space_after() {
     let mut app = vi_app("modal-da-quote", "say \"hi\" now\n", true);
     type_str(&mut app, "\"bda\"");
-    assert_eq!(buffer_text(&app), "say  now\n");
+    assert_eq!(buffer_text(&app), "say now\n");
 }
 
 #[test]
@@ -921,4 +929,91 @@ fn a_visual_delete_invalidates_dot() {
         "wo three\n",
         ". does not replay the older dw"
     );
+}
+
+/// A Vi- or Spacemacs-keymap app (modal engine on) over `text`.
+fn keymap_app(tag: &str, keymap: &str, text: &str) -> App {
+    let mut app = app_with({
+        let mut s = Settings::default();
+        s.keymap = keymap.to_string();
+        s
+    });
+    let dir = unique_dir(tag);
+    let file = dir.join("a.txt");
+    fs::write(&file, text).unwrap();
+    app.open_initial(&file);
+    app
+}
+
+#[test]
+fn no_modified_letter_types_itself_in_vi_or_spacemacs_normal_mode() {
+    // T846: `Ctrl-R` used to type an `r`. Every Ctrl-, Alt- and
+    // Ctrl+Shift-held letter, in both keymaps that share Vi's Normal mode,
+    // must leave the letter out of the buffer. Paste, copy and cut are
+    // skipped: they touch the process-wide clipboard other tests share.
+    for keymap in ["vi", "spacemacs"] {
+        for mods in [
+            KeyModifiers::CONTROL,
+            KeyModifiers::ALT,
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        ] {
+            let tag = format!("t846-mod-{keymap}-{}", mods.bits());
+            let mut app = keymap_app(&tag, keymap, "123\n");
+            for c in 'a'..='z' {
+                if mods.contains(KeyModifiers::CONTROL) && matches!(c, 'c' | 'v' | 'x') {
+                    continue;
+                }
+                app.on_key(KeyEvent::new(KeyCode::Char(c), mods));
+                app.on_key(esc());
+                let text = buffer_text(&app);
+                assert!(
+                    !text.chars().any(char::is_alphabetic),
+                    "{keymap}: {mods:?}+{c} typed into the buffer: {text:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn spacemacs_shares_the_t846_vi_normal_mode_keys() {
+    let mut app = keymap_app("t846-spacemacs", "spacemacs", "one\n  two\n");
+    type_keys(&mut app, "J");
+    assert_eq!(buffer_text(&app), "one two\n");
+    assert_eq!(cursor(&mut app), 3, "on the joining space");
+    type_keys(&mut app, "u");
+    assert_eq!(buffer_text(&app), "one\n  two\n");
+    app.on_key(ctrl('r'));
+    assert_eq!(buffer_text(&app), "one two\n", "Ctrl-R redoes");
+    type_keys(&mut app, "0rXAy");
+    app.on_key(esc());
+    assert_eq!(buffer_text(&app), "Xne twoy\n");
+    assert_eq!(cursor(&mut app), 7, "Esc steps back onto the typed y");
+}
+
+#[test]
+fn visual_line_keeps_the_cursor_and_grows_both_ways() {
+    let mut app = vi_app("t846-visual-line", "one\ntwo\nthree\n", true);
+    app.editor.active_tab_mut().unwrap().editor.set_cursor(5);
+    type_keys(&mut app, "V");
+    assert_eq!(cursor(&mut app), 5, "the cursor stays on its column");
+    assert_eq!(selection(&mut app), Some((4, 8)));
+    type_keys(&mut app, "k");
+    assert_eq!(selection(&mut app), Some((0, 8)), "up from the anchor line");
+    type_keys(&mut app, "jj");
+    assert_eq!(selection(&mut app), Some((4, 14)), "down past it");
+    assert_eq!(cursor(&mut app), 9);
+    type_keys(&mut app, "j");
+    assert_eq!(cursor(&mut app), 9, "no line below the last to move to");
+}
+
+#[test]
+fn slash_search_returns_to_normal_mode_on_the_first_match_after_the_cursor() {
+    let mut app = vi_app("t846-search", "xo o o\n", true);
+    type_keys(&mut app, "/o");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.search.is_none(), "the find bar closed");
+    assert_eq!(cursor(&mut app), 1);
+    type_keys(&mut app, "n");
+    assert_eq!(cursor(&mut app), 3, "n repeats the search");
 }

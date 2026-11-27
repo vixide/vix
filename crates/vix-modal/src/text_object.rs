@@ -246,12 +246,32 @@ pub fn inner_quote(text: &str, pos: usize, quote: char) -> Option<(usize, usize)
     Some((a + 1, b))
 }
 
-/// `a"`/`a'`/`` a` ``: like [`inner_quote`], quotes included.
+/// `a"`/`a'`/`` a` ``: like [`inner_quote`], quotes included, plus Vim's
+/// white space rule (`:help a"`, T846): the spaces and tabs after the
+/// closing quote, or — when there are none — those before the opening one.
 #[must_use]
 pub fn around_quote(text: &str, pos: usize, quote: char) -> Option<(usize, usize)> {
     let chars = chars_of(text);
     let (a, b) = find_quote_pair(&chars, pos, quote)?;
-    Some((a, b + 1))
+    let blank = |c: &char| *c == ' ' || *c == '\t';
+    let end = b.checked_add(1)?;
+    let trailing = chars
+        .get(end..)
+        .unwrap_or_default()
+        .iter()
+        .take_while(|c| blank(c))
+        .count();
+    if trailing > 0 {
+        return Some((a, end.checked_add(trailing)?));
+    }
+    let leading = chars
+        .get(..a)
+        .unwrap_or_default()
+        .iter()
+        .rev()
+        .take_while(|c| blank(c))
+        .count();
+    Some((a.checked_sub(leading)?, end))
 }
 
 #[cfg(test)]
@@ -331,8 +351,14 @@ mod tests {
     }
 
     #[test]
-    fn around_quote_includes_the_quotes() {
-        assert_eq!(around_quote("a \"hi\" b", 3, '"'), Some((2, 6)));
+    fn around_quote_includes_the_quotes_and_the_white_space_after_them() {
+        assert_eq!(around_quote("a \"hi\" b", 3, '"'), Some((2, 7)));
+    }
+
+    #[test]
+    fn around_quote_takes_the_white_space_before_when_none_follows() {
+        assert_eq!(around_quote("a  \"hi\"\n", 4, '"'), Some((1, 7)));
+        assert_eq!(around_quote("\"hi\"", 1, '"'), Some((0, 4)));
     }
 
     #[test]

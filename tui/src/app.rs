@@ -2787,6 +2787,10 @@ pub struct App {
     /// `f`/`t`/`F`/`T` (T113), holding that key itself so the handler knows
     /// which of the four to run once the target arrives.
     modal_pending_find: Option<char>,
+    /// Vi/Spacemacs (T846): where the cursor was when `/` opened the find
+    /// bar, so `<CR>` lands on the first match after it, as Vim's search
+    /// does, whatever the bar's live preview moved through while typing.
+    vi_search_origin: Option<usize>,
     /// An operator (`d`/`c`/`y`, T114) waiting for its motion, text object,
     /// or a doubled repeat of itself (`dd`/`cc`/`yy` — the whole current
     /// line). Any of `modal_pending`/`modal_pending_find` above can still
@@ -3200,6 +3204,7 @@ impl App {
             modal_count: vix_modal::Count::default(),
             modal_pending: ModalPending::None,
             modal_pending_find: None,
+            vi_search_origin: None,
             modal_pending_operator: None,
             modal_operator_count: 1,
             modal_active_register: None,
@@ -7301,6 +7306,11 @@ impl App {
             }
         }
 
+        // Vi/Spacemacs Normal mode (T846): a Ctrl- or Alt-held letter the
+        // keymap did not bind must not type itself into the buffer.
+        if self.vi_normal_mode() && Self::modified_char_types_itself(&key) {
+            return;
+        }
         let editing = Self::is_edit_key(&key);
         if let Some(t) = self.editor.active_tab_mut() {
             let _ = t.editor.input(key, &area);
@@ -10716,6 +10726,7 @@ impl App {
         self.modal_count.reset();
         self.modal_pending = ModalPending::None;
         self.modal_pending_find = None;
+        self.vi_search_origin = None;
         self.modal_pending_operator = None;
         self.modal_operator_count = 1;
         self.modal_active_register = None;
@@ -11913,6 +11924,11 @@ impl App {
     /// Open the Find box, in Find-and-Replace mode when `replacing`.
     fn start_search(&mut self, replacing: bool) {
         self.search = Some(SearchBar::new(replacing));
+        self.vi_search_origin = if replacing || !self.vi_normal_mode() {
+            None
+        } else {
+            self.editor.active_tab().map(|t| t.editor.get_cursor())
+        };
     }
 
     /// Move the find box to its next scope (buffer → files → workspace → buffer)
@@ -12181,6 +12197,21 @@ impl App {
                     self.begin_query_replace();
                 } else if replacing && (Self::alt(&key) || on_replace_field) {
                     self.replace_all();
+                } else if let Some(origin) = self.vi_search_origin.take()
+                    && !replacing
+                {
+                    // Vi/Spacemacs (T846): `/pattern<CR>` ends the search, as
+                    // in Vim — the first match after where `/` was typed, the
+                    // keyboard back on the buffer in Normal mode, the cursor on
+                    // the match; `n`/`N` repeat it.
+                    if let Some(t) = self.editor.active_tab_mut() {
+                        t.editor.set_cursor(origin);
+                    }
+                    self.find_step(true);
+                    self.end_search();
+                    if let Some(t) = self.editor.active_tab_mut() {
+                        t.editor.clear_selection();
+                    }
                 } else {
                     self.find_step(true);
                 }

@@ -141,6 +141,9 @@ impl App {
         if let Some(op) = self.modal_pending_operator {
             return self.modal_operator_key(op, key);
         }
+        if self.modal_redo_key(key) {
+            return true;
+        }
         if Self::ctrl(&key) || Self::alt(&key) {
             return false;
         }
@@ -172,23 +175,13 @@ impl App {
             self.modal_pending_operator = Some(c);
             return true;
         }
-        if key.code == KeyCode::Char('x') {
-            // Real Vim: x IS d + one-char-forward motion (dl), not its own
-            // code path -- reusing the very same operator machinery is the
-            // point, not just matching its visible behavior.
-            let count = self.modal_effective_count();
-            // `x` is `dl`, and `dl` takes `count` displayed characters up to
-            // the line's end, so `$x` and `9x` reach the last one (T838).
-            self.modal_pending_operator = Some('d');
-            self.apply_modal_motion(Exclusive, |t, p| {
-                vix_modal::motion::vi_chars_end(t, p, count)
-            });
-            return true;
-        }
         if let KeyCode::Char(c @ ('p' | 'P')) = key.code {
             let count = self.modal_effective_count();
             self.modal_paste(c == 'P', count);
             self.modal_reset_counts();
+            return true;
+        }
+        if self.modal_shorthand_key(key) {
             return true;
         }
         let count = self.modal_effective_count();
@@ -202,11 +195,14 @@ impl App {
                 self.modal_reset_counts();
                 true
             }
+            // Visual Line selects the cursor's line and leaves the cursor
+            // where it is, as Vim does (T846).
             KeyCode::Char('V') => {
                 self.modal_mode = vix_modal::Mode::VisualLine;
                 self.modal_visual_exact = None;
-                let area = self.editor_view();
-                self.editor.select_line(area);
+                if let Some(cursor) = self.editor.active_tab().map(|t| t.editor.get_cursor()) {
+                    self.select_visual_lines(cursor, cursor);
+                }
                 self.modal_reset_counts();
                 true
             }
@@ -215,6 +211,78 @@ impl App {
                 false
             }
         }
+    }
+
+    /// `Ctrl-R`: redo (T846), with a count as `3<C-r>`. Returns `true` if
+    /// `key` was it.
+    fn modal_redo_key(&mut self, key: KeyEvent) -> bool {
+        if !Self::ctrl(&key) || Self::alt(&key) || key.code != KeyCode::Char('r') {
+            return false;
+        }
+        let count = self.modal_effective_count();
+        self.modal_reset_counts();
+        self.vi_undo_redo(false, count);
+        true
+    }
+
+    /// `x`, and the Normal-mode keys Vim has that the T113-T115 vocabulary
+    /// lacked (T846): `D`, `C`, `X`, `s`, `u`, `r{char}` and `J`.
+    /// Returns `true` if `key` was one of them. Callers have already
+    /// handled `Ctrl-R` and turned away other modified keys.
+    fn modal_shorthand_key(&mut self, key: KeyEvent) -> bool {
+        if key.code == KeyCode::Char('x') {
+            // Real Vim: x IS d + one-char-forward motion (dl), not its own
+            // code path -- reusing the very same operator machinery is the
+            // point, not just matching its visible behavior.
+            let count = self.modal_effective_count();
+            // `x` is `dl`, and `dl` takes `count` displayed characters up to
+            // the line's end, so `$x` and `9x` reach the last one (T838).
+            self.modal_pending_operator = Some('d');
+            self.apply_modal_motion(Exclusive, |t, p| {
+                vix_modal::motion::vi_chars_end(t, p, count)
+            });
+            return true;
+        }
+        // Vim's one-key shorthands (T846): `D` is `d$`, `C` is `c$`, `X`
+        // is `dh` and `s` is `cl`, run through the same operator path.
+        if let KeyCode::Char(c @ ('D' | 'C' | 'X' | 's')) = key.code {
+            let count = self.modal_effective_count();
+            self.modal_pending_operator = Some(if matches!(c, 'D' | 'X') { 'd' } else { 'c' });
+            match c {
+                'D' | 'C' => {
+                    self.apply_modal_motion(Inclusive, |t, p| {
+                        vix_modal::motion::line_end(t, p, count)
+                    });
+                }
+                'X' => self.apply_modal_motion(Exclusive, |t, p| {
+                    vix_modal::motion::vi_char_left(t, p, count)
+                }),
+                _ => self.apply_modal_motion(Exclusive, |t, p| {
+                    vix_modal::motion::vi_chars_end(t, p, count)
+                }),
+            }
+            return true;
+        }
+        // `u` undoes (T846): the cursor goes to the start of what changed.
+        if key.code == KeyCode::Char('u') {
+            let count = self.modal_effective_count();
+            self.modal_reset_counts();
+            self.vi_undo_redo(true, count);
+            return true;
+        }
+        // `r{char}`: the replacement character arrives with the next key,
+        // through the same pending slot as `f`'s target.
+        if key.code == KeyCode::Char('r') {
+            self.modal_pending_find = Some('r');
+            return true;
+        }
+        if key.code == KeyCode::Char('J') {
+            let count = self.modal_effective_count();
+            self.modal_reset_counts();
+            self.modal_join_lines(count);
+            return true;
+        }
+        false
     }
 
     /// Keys while an operator (`d`/`c`/`y`, T114) is pending its motion. A
@@ -832,6 +900,16 @@ impl App {
                 self.modal_goto_line(Some(count));
                 return;
             }
+            // `g-`/`g+` (T846): back and forward in time through the undo
+            // tree, an operator pending or not (it is not a motion).
+            if unmodified
+                && self.modal_pending_operator.is_none()
+                && let KeyCode::Char(c @ ('-' | '+')) = key.code
+            {
+                self.modal_reset_counts();
+                self.vi_undo_chronological(c == '+', count);
+                return;
+            }
         } else if matches!(
             self.modal_pending,
             ModalPending::BracketNext | ModalPending::BracketPrev
@@ -853,7 +931,12 @@ impl App {
             && unmodified
             && let KeyCode::Char(target) = key.code
         {
-            self.modal_find_char(find_key, target, count);
+            if find_key == 'r' {
+                self.modal_reset_counts();
+                self.modal_replace_chars(target, count);
+            } else {
+                self.modal_find_char(find_key, target, count);
+            }
             return;
         }
         self.modal_reset_counts();
@@ -935,10 +1018,8 @@ impl App {
         let Some(step) = step else {
             return false;
         };
-        if self.modal_mode == vix_modal::Mode::VisualLine
-            && step == KeyCode::Down
-            && self.extend_visual_line_onto_final_line()
-        {
+        if self.modal_mode == vix_modal::Mode::VisualLine {
+            self.modal_visual_line_step(step);
             return true;
         }
         // The real shift-extend mechanism: the editor's own selection model
@@ -947,9 +1028,6 @@ impl App {
         // `spec/index.md`'s audit confirms it's end-to-end already), so
         // there's no need for the modal engine to track its own anchor.
         self.editor_key(KeyEvent::new(step, KeyModifiers::SHIFT));
-        if self.modal_mode == vix_modal::Mode::VisualLine {
-            self.snap_visual_selection_to_whole_lines();
-        }
         true
     }
 
@@ -1049,73 +1127,281 @@ impl App {
         }
     }
 
-    /// `j` in Visual Line mode when the selection ends just above the buffer's
-    /// final line: select that line too, and report whether it did.
-    /// A whole-line selection's end is exclusive, so the cursor already sits at
-    /// the start of the next line; when that line is the last one the native
-    /// shift-down has no line below to move to and would leave it out. (With
-    /// a line after it, the cursor moves onto that line and the snap includes
-    /// this one.) The final line, with no line break after it, ends at the end
-    /// of the buffer. An empty final line (the buffer ends in a newline) is
-    /// left to the native motion, which reaches it.
-    fn extend_visual_line_onto_final_line(&mut self) -> bool {
-        let Some(tab) = self.editor.active_tab_mut() else {
-            return false;
-        };
-        let Some(sel) = tab.editor.get_selection() else {
-            return false;
-        };
-        let cursor = tab.editor.get_cursor();
-        let code = tab.editor.code_ref();
-        let final_start = code.line_to_char(code.len_lines().minus(1));
-        let end = code.len_chars();
-        if sel.end != final_start || final_start >= end || cursor != sel.end {
-            return false;
-        }
-        tab.editor.set_selection_range(sel.start, end);
-        true
-    }
-
-    /// Re-snap the active tab's selection to whole lines, keeping the
-    /// cursor on whichever end the selection is currently growing toward.
-    /// `Editor::select_line` can't do this itself — it always selects just
-    /// the cursor's current line fresh, with no memory of how far a
-    /// multi-line Visual Line selection has already grown.
-    fn snap_visual_selection_to_whole_lines(&mut self) {
+    /// Select the whole lines from `anchor`'s line to `cursor`'s (either
+    /// order) for Visual Line mode, leaving the cursor at `cursor`: Vim's
+    /// cursor stays where it is, not on an end of the selection (T846). The
+    /// buffer's final line, with no line break after it, ends at the
+    /// buffer's end.
+    fn select_visual_lines(&mut self, anchor: usize, cursor: usize) {
         let Some(tab) = self.editor.active_tab_mut() else {
             return;
         };
-        let cursor = tab.editor.get_cursor();
-        let Some(sel) = tab.editor.get_selection() else {
-            return;
-        };
         let code = tab.editor.code_ref();
-        let start_row = code.char_to_line(sel.start);
-        // `sel.end` is exclusive, so back it up one character before asking
-        // which line it's on -- otherwise a selection ending right at a
-        // line break would misreport itself as reaching into the next line.
-        let end_row = code.char_to_line(sel.end.minus(1).max(sel.start));
-        let line_start = code.line_to_char(start_row);
-        // The end of the last selected line: the start of the next line, or --
-        // when the selection reaches the buffer's final line, which has no line
-        // break after it -- the end of the buffer. (Summing the lines' lengths
-        // instead left out the line breaks between them, so a selection of two
-        // or more lines ending on the last line fell short.)
-        let line_end = if end_row.plus(1) < code.len_lines() {
-            code.line_to_char(end_row.plus(1))
+        let (a, c) = (code.char_to_line(anchor), code.char_to_line(cursor));
+        let (lo, hi) = (a.min(c), a.max(c));
+        let start = code.line_to_char(lo);
+        let end = if hi.plus(1) < code.len_lines() {
+            code.line_to_char(hi.plus(1))
         } else {
             code.len_chars()
         };
-        // Keep the cursor on the same end the native shift-motion just left
-        // it on, so growing the selection downward keeps the caret visually
-        // at the bottom (and upward, at the top) instead of snapping it to
-        // a fixed end regardless of direction.
-        if code.char_to_line(cursor) <= start_row {
-            tab.editor.set_selection_range(line_end, line_start);
-        } else {
-            tab.editor.set_selection_range(line_start, line_end);
-        }
+        tab.editor.set_selection_range(start, end);
+        tab.editor.set_cursor(cursor);
     }
+
+    /// One `h`/`j`/`k`/`l` step in Visual Line mode (T846): move the
+    /// cursor as a Normal-mode motion would, then select whole lines from
+    /// the selection's other end (its anchor: the line the cursor is not
+    /// on) to the cursor's new line.
+    fn modal_visual_line_step(&mut self, step: KeyCode) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let rope = tab.editor.code_ref().rope().clone();
+        let cursor = tab.editor.get_cursor();
+        let anchor = match tab.editor.get_selection() {
+            Some(sel) if sel.start < sel.end => {
+                if rope.char_to_line(cursor) == rope.char_to_line(sel.start) {
+                    // `sel.end` is exclusive: its line is the one before it.
+                    rope.line_to_char(rope.char_to_line(sel.end.minus(1)))
+                } else {
+                    sel.start
+                }
+            }
+            _ => cursor,
+        };
+        let column = vix_modal::motion::display_column(&rope, cursor, VI_TAB_CELLS);
+        let to = match step {
+            KeyCode::Left => vix_modal::motion::vi_char_left(&rope, cursor, 1),
+            KeyCode::Right => vix_modal::motion::vi_char_right(&rope, cursor, 1),
+            KeyCode::Down => {
+                vix_modal::motion::line_down_to_column(&rope, cursor, 1, column, VI_TAB_CELLS)
+            }
+            _ => vix_modal::motion::line_up_to_column(&rope, cursor, 1, column, VI_TAB_CELLS),
+        };
+        self.select_visual_lines(anchor, to);
+    }
+
+    /// `u` / `Ctrl-R` (`undo` picks which), `count` times (T846): Edit →
+    /// Undo / Redo, except that the cursor lands where Vim puts it, on the
+    /// start of the text the last step changed ([`change_start`]), not
+    /// where it was before the change.
+    pub(super) fn vi_undo_redo(&mut self, undo: bool, count: usize) {
+        if self.active_read_only() {
+            self.status = t!("status.read_only_blocked").to_string();
+            return;
+        }
+        // A shared (Cowork) buffer undoes through its own per-participant
+        // stack, as Edit → Undo does.
+        if self.cowork_undo(undo) {
+            return;
+        }
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let mut start = None;
+        for _ in 0..count.max(1) {
+            let code = tab.editor.code_mut();
+            let batch = if undo { code.undo() } else { code.redo() };
+            let Some(batch) = batch else {
+                break;
+            };
+            start = change_start(&batch).or(start);
+        }
+        self.vi_land_after_history(start);
+    }
+
+    /// `g-` / `g+` (`later` picks which), `count` times (T846): Vim's
+    /// chronological undo — to the undo-tree state made just before (or
+    /// after) the current one, crossing branches, where `u`/`Ctrl-R` walk
+    /// only the current branch. States are numbered in creation order
+    /// ([`History::nodes`](crate::editor_core::history::History::nodes)'s
+    /// `seq`), so "just before" is the next lower live `seq`. The cursor
+    /// lands as `u` leaves it.
+    fn vi_undo_chronological(&mut self, later: bool, count: usize) {
+        if self.active_read_only() {
+            self.status = t!("status.read_only_blocked").to_string();
+            return;
+        }
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let mut start = None;
+        for _ in 0..count.max(1) {
+            let history = tab.editor.code_ref().history();
+            let current = history.current();
+            let seqs = history.nodes().into_iter().map(|n| n.seq);
+            let target = if later {
+                seqs.filter(|&s| s > current).min()
+            } else {
+                seqs.filter(|&s| s < current).max()
+            };
+            let Some(target) = target else {
+                break;
+            };
+            if !walk_undo_tree(tab.editor.code_mut(), target, &mut start) {
+                break;
+            }
+        }
+        self.vi_land_after_history(start);
+    }
+
+    /// After a Vi undo-tree step that changed the text at `start` (`None`:
+    /// it changed nothing): put the cursor there, on a character as Normal
+    /// mode wants, with no selection or extra carets left from before.
+    fn vi_land_after_history(&mut self, start: Option<usize>) {
+        let Some(at) = start else {
+            return;
+        };
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        tab.dirty = true;
+        tab.editor.reset_highlight_cache();
+        tab.editor.clear_carets();
+        tab.editor.clear_selection();
+        let rope = tab.editor.code_ref().rope().clone();
+        let at = at.min(rope.len_chars());
+        tab.editor
+            .set_cursor(vix_modal::motion::vi_normal_cursor(&rope, at));
+    }
+
+    /// `r{char}` (T846): replace `count` characters from the cursor with
+    /// `c`, the cursor ending on the last of them, as one undo step and a
+    /// change `.` repeats. With fewer than `count` characters left on the
+    /// line nothing happens, as in Vim.
+    fn modal_replace_chars(&mut self, c: char, count: usize) {
+        let count = count.max(1);
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let rope = tab.editor.code_ref().rope().clone();
+        let pos = tab.editor.get_cursor();
+        let line_end = pos.plus(rope.chars_from(pos).take_while(|&ch| ch != '\n').count());
+        let end = vix_modal::motion::vi_chars_end(&rope, pos, count);
+        // `vi_chars_end` stops at the line's end: `count` characters are
+        // there when it stopped short of it, or when `count - 1` did.
+        let enough = end > pos
+            && (end < line_end
+                || count == 1
+                || vix_modal::motion::vi_chars_end(&rope, pos, count.minus(1)) < line_end);
+        if !enough {
+            return;
+        }
+        tab.editor.set_selection_range(pos, end);
+        tab.editor.apply(InsertText {
+            text: std::iter::repeat_n(c, count).collect(),
+        });
+        tab.editor.set_cursor(pos.plus(count).minus(1));
+        self.modal_last_change = self.modal_recording.clone();
+        self.modal_last_change_insert.clear();
+    }
+
+    /// `J` (T846): join `count` lines (at least two) into one, as Vim
+    /// does: each joined line loses its leading white space and is separated
+    /// from the text before it by one space — none when that text is empty
+    /// or ends in a space or tab, or the joined line is empty or starts
+    /// with `)`. The cursor lands on the last join (its space, or where one
+    /// would be). One undo step and a change `.` repeats; on the last line
+    /// nothing happens, and a count past the last line joins up to it.
+    fn modal_join_lines(&mut self, count: usize) {
+        let Some(tab) = self.editor.active_tab_mut() else {
+            return;
+        };
+        let rope = tab.editor.code_ref().rope().clone();
+        let row = rope.char_to_line(tab.editor.get_cursor());
+        // Ropey counts an empty line after a final line break; Vim has none.
+        let phantom = rope.char_at(rope.len_chars().minus(1)) == Some('\n');
+        let lines = rope.len_lines().minus(usize::from(phantom));
+        let last = row.plus(count.max(2).minus(1)).min(lines.minus(1));
+        if last <= row {
+            return;
+        }
+        let content = |l: usize| -> String {
+            let line: String = rope.get_line(l).map_or_default(String::from);
+            let line = line.strip_suffix('\n').unwrap_or(&line);
+            line.strip_suffix('\r').unwrap_or(line).to_string()
+        };
+        let first = content(row);
+        let start = rope.line_to_char(row).plus(first.chars().count());
+        let end = rope.line_to_char(last).plus(content(last).chars().count());
+        let mut joined = String::new();
+        let mut size = first.chars().count();
+        let mut tail = first.chars().last();
+        let mut cursor = start;
+        for l in row.plus(1)..=last {
+            let text = content(l);
+            let rest = text.trim_start_matches([' ', '\t']);
+            cursor = start.plus(joined.chars().count());
+            if !rest.is_empty()
+                && !rest.starts_with(')')
+                && size > 0
+                && !matches!(tail, Some(' ' | '\t'))
+            {
+                joined.push(' ');
+                size = size.plus(1);
+            }
+            joined.push_str(rest);
+            size = size.plus(rest.chars().count());
+            tail = rest.chars().last();
+        }
+        tab.editor.set_selection_range(start, end);
+        tab.editor.apply(InsertText { text: joined });
+        let rope = tab.editor.code_ref().rope().clone();
+        tab.editor
+            .set_cursor(vix_modal::motion::vi_normal_cursor(&rope, cursor));
+        self.modal_last_change = self.modal_recording.clone();
+        self.modal_last_change_insert.clear();
+    }
+}
+
+/// Where an undo-tree step changed the text: the lowest offset any of its
+/// edits touched (T846's `u`/`Ctrl-R`/`g-`/`g+` cursor). `None` for a
+/// batch with no edits.
+fn change_start(batch: &crate::editor_core::code::EditBatch) -> Option<usize> {
+    use crate::editor_core::code::EditKind;
+    batch
+        .edits
+        .iter()
+        .map(|e| match &e.kind {
+            EditKind::Insert { offset, .. } | EditKind::Remove { offset, .. } => *offset,
+        })
+        .min()
+}
+
+/// Move `code` to undo-tree state `target`: undo up to the common
+/// ancestor, then redo down `target`'s branch (as
+/// `Editor::goto_undo_state` does), noting in `start` where each step that
+/// had edits changed the text. Returns `false` when a step failed
+/// (`target` not live, or a shared buffer, whose local undo is off).
+fn walk_undo_tree(
+    code: &mut crate::editor_core::code::Code,
+    target: usize,
+    start: &mut Option<usize>,
+) -> bool {
+    let Some(path) = code.history().path_to(target) else {
+        return false;
+    };
+    while !path.contains(&code.history().current()) {
+        let Some(batch) = code.undo() else {
+            return false;
+        };
+        *start = change_start(&batch).or(*start);
+    }
+    let here = code.history().current();
+    let Some(at) = path.iter().position(|&n| n == here) else {
+        return false;
+    };
+    for &next in path.get(at.plus(1)..).unwrap_or_default() {
+        if !code.select_redo_branch(next) {
+            return false;
+        }
+        let Some(batch) = code.redo() else {
+            return false;
+        };
+        *start = change_start(&batch).or(*start);
+    }
+    true
 }
 
 /// An Insert-mode session being recorded as part of a Vi change (T837): the
@@ -1177,6 +1463,13 @@ impl App {
             self.flags.remove(AppFlags::MODAL_INSERT);
             self.modal_mode = vix_modal::Mode::Normal;
             self.modal_finish_insert_record();
+            // Vim steps the cursor back onto the last typed character,
+            // never past the line's start (T846).
+            if let Some(tab) = self.editor.active_tab_mut() {
+                let rope = tab.editor.code_ref().rope().clone();
+                let at = vix_modal::motion::vi_char_left(&rope, tab.editor.get_cursor(), 1);
+                tab.editor.set_cursor(at);
+            }
             return true;
         }
         let plain = !Self::ctrl(&key) && !Self::alt(&key);

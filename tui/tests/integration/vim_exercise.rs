@@ -90,9 +90,8 @@ fn the_migration_exercise_runs_as_the_guide_says() {
     app.refresh_git();
     app.open_initial(&lib);
 
-    // 1. Run the test at point: it fails. (After a search, `<Esc>` leaves
-    //    Vix's find bar; in Vim it is a harmless no-op.)
-    keys(&mut app, "/a_quarter<CR><Esc>");
+    // 1. Run the test at point: it fails.
+    keys(&mut app, "/a_quarter<CR>");
     assert_eq!(app.editor.cursor_line(), 22, "on the test's fn line");
     test_at_point(&mut app);
     assert!(dock_has(&app, "1 failed"), "{:?}", app.bottom_dock.lines);
@@ -107,7 +106,7 @@ fn the_migration_exercise_runs_as_the_guide_says() {
     );
 
     // 3. Edit the argument, 4. repeat the edit on the second copy.
-    keys(&mut app, "gg/10<CR><Esc>ciw100<Esc>");
+    keys(&mut app, "gg/10<CR>ciw100<Esc>");
     assert_eq!(text(&app).matches("ratio(part, whole, 100)").count(), 1);
     keys(&mut app, "n.");
     assert_eq!(text(&app).matches("ratio(part, whole, 100)").count(), 2);
@@ -131,7 +130,7 @@ fn the_migration_exercise_runs_as_the_guide_says() {
     // 6. Save and rerun the test at point: it passes.
     keys(&mut app, ":w<CR>");
     assert_eq!(fs::read_to_string(&lib).unwrap(), fixed);
-    keys(&mut app, "gg/a_quarter<CR><Esc>");
+    keys(&mut app, "gg/a_quarter<CR>");
     test_at_point(&mut app);
     assert!(dock_has(&app, "1 passed"), "{:?}", app.bottom_dock.lines);
     assert!(app.task_problems.is_empty(), "{:?}", app.task_problems);

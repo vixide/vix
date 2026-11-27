@@ -1272,6 +1272,9 @@ impl App {
             // through to the editor, recorded for `.` (T837).
             return self.modal_insert_key(key);
         }
+        if self.vi_redo_key(key) {
+            return true;
+        }
         // Normal mode. Defer modifier combos and function keys to the shared
         // handler (menu mnemonics, F10, …).
         if Self::ctrl(&key) || Self::alt(&key) || matches!(key.code, KeyCode::F(_)) {
@@ -1328,6 +1331,51 @@ impl App {
         if let Some(action) = vix_keybindings::lookup("vi", "", &token) {
             self.run_action(action);
         }
+    }
+
+    /// `Ctrl-R` over the editor in Vi/Spacemacs Normal (or Visual) mode is
+    /// redo (T846) — the modal engine's, which moves the cursor as Vim does,
+    /// or Edit → Redo with the engine off. Before this it fell through to
+    /// the editor widget, which typed an `r`. Returns `true` if consumed.
+    fn vi_redo_key(&mut self, key: KeyEvent) -> bool {
+        if self.focus != Focus::Editor
+            || !Self::ctrl(&key)
+            || Self::alt(&key)
+            || key.code != KeyCode::Char('r')
+        {
+            return false;
+        }
+        if !self.modal_key(key) {
+            self.run_action("edit.redo");
+        }
+        true
+    }
+
+    /// Whether the Vi or Spacemacs keymap is active and out of Insert mode
+    /// (Normal, Visual or Visual Line).
+    pub(super) fn vi_normal_mode(&self) -> bool {
+        matches!(self.active_keymap(), Keymap::Vi | Keymap::Spacemacs)
+            && !self.flags.contains(AppFlags::MODAL_INSERT)
+    }
+
+    /// Whether `key` is a Ctrl- or Alt-held character the editor widget
+    /// would type as plain text: every one but the widget's own Ctrl chords
+    /// (`vix-editor-core`'s `editor_input.rs`: undo/redo, copy, paste, cut,
+    /// delete line, duplicate/add occurrence, select all). In Vi Normal mode
+    /// such a key must not edit the buffer (T846).
+    pub(super) fn modified_char_types_itself(key: &KeyEvent) -> bool {
+        let KeyCode::Char(c) = key.code else {
+            return false;
+        };
+        if !Self::ctrl(key) && !Self::alt(key) {
+            return false;
+        }
+        let widget_chord = Self::ctrl(key)
+            && matches!(
+                c.to_ascii_lowercase(),
+                'z' | 'c' | 'v' | 'x' | 'k' | 'd' | 'a'
+            );
+        !widget_chord
     }
 
     /// Enter Insert mode from Vim/Spacemacs Normal mode — `i`/`a`/`o`/…
@@ -1477,6 +1525,9 @@ impl App {
         }
         if self.flags.contains(AppFlags::MODAL_INSERT) {
             return self.modal_insert_key(key);
+        }
+        if self.vi_redo_key(key) {
+            return true;
         }
         if Self::ctrl(&key) || Self::alt(&key) || matches!(key.code, KeyCode::F(_)) {
             return false;

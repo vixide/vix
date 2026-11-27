@@ -169,7 +169,7 @@ h j k l          — char/line stepping
 w b e            — word motions (lowercase only — see cut line)
 0 ^ $            — line start / first non-blank / line end
 gg G             — document start / end
-{ }              — paragraph start / end
+{ }              — the empty line before / after a paragraph (Vim's rule, T846)
 ( )              — sentence start / end
 f t F T + char   — find/till a character, forward/backward
 %                — matching bracket
@@ -553,14 +553,53 @@ whose table is generated from it (the test fails when the guide is stale;
   clipboard, which parallel tests would race on. The unnamed register is
   therefore not compared.
 
-Parity bugs the table found (T844), recorded as rows and left for follow-on
-tasks: `<Esc>` out of Insert mode does not step the cursor back onto the last
-typed character; `u` does not move the cursor to the undone change; `V` puts
-the cursor on the next line's start; `}` stops on the next paragraph's first
-line instead of the blank line; `a"` drops Vim's trailing white space; after
-`/pattern<CR>` the find bar keeps the keyboard until `<Esc>`; `Ctrl-R` in
-Normal mode types `r` into the buffer instead of redoing. Unbound keys the
-table shows beyond the cut list: `D`, `X`, `C`, `s`, `r`, `J`, `g-`/`g+`.
+Parity bugs the table found (T844) were recorded as rows; T846 fixed them and
+flipped the rows to Vim's result (each checked against `vim -u NONE`):
+
+- **Modified keys never type.** In Vi/Spacemacs Normal (and Visual) mode a
+  Ctrl- or Alt-held character the keymap does not bind is dropped before the
+  editor widget, which would type it as text (`Ctrl-R` typed an `r`). The
+  widget's own Ctrl chords (undo/redo, copy, paste, cut, delete line,
+  duplicate/add occurrence, select all) still run.
+- **`u`, `Ctrl-R`, `g-`, `g+`.** `u` undoes and `Ctrl-R` redoes along the
+  current branch of the undo tree, each with a count. `g-`/`g+` step back and
+  forward in time: to the live undo-tree state with the next lower (higher)
+  `seq` — creation order — crossing branches, as Vim's chronological undo
+  does. After any of them the cursor goes to the start of the text the last
+  step changed (the lowest offset its edits touched), on a character as
+  Normal mode wants. Decision: Vim restores the cursor saved with the undo
+  entry when it is on the changed line; Vix's entries save the cursor after
+  the operator set up its selection, so "the change's start" is the rule
+  instead (the same result for `x`, `dw`, `ciw`, …).
+- **`D` `C` `X` `s`** are `d$` `c$` `dh` `cl`, through the operator path
+  (registers, counts and `.` included). **`r{char}`** replaces `count`
+  characters, leaving the cursor on the last; with fewer than `count` left on
+  the line it does nothing, as in Vim. `r<CR>` (split the line) is not
+  implemented: any non-character key cancels `r`. **`J`** joins `count`
+  lines (at least two), Vim's way: leading white space of each joined line
+  goes, and one space separates it unless the text so far is empty or ends
+  in a space or tab, or the joined line is empty or starts with `)`; the
+  cursor lands on the last join. Both are one undo step and repeat with `.`.
+- **`<Esc>` from Insert mode** steps the cursor back one character, never past
+  the line's start (also when `.` replays an Insert session).
+- **`V`** selects the cursor's line and leaves the cursor where it is; `h j k
+  l` move the cursor as Normal mode does (`j`/`k` keep the display column)
+  and the selection is every line from the anchor line (the selection's other
+  end) to the cursor's.
+- **`}` / `{`** use Vim's paragraph search: from the cursor's
+  line, past any empty lines, past at least one non-empty line, to the next
+  empty line. An empty line is the boundary; a line of only white space is
+  not (Vim's rule; Vix's Go → Paragraph keeps its own blank-line rule).
+  Reaching the buffer's first or last line stops there (`}` then lands on the
+  last line's last character, through it for an operator); a count that
+  runs out of buffer before its last run fails and nothing moves.
+- **`a"` `a'` `` a` ``** take the spaces and tabs after the closing quote, or,
+  when there are none, those before the opening one (`:help a"`).
+- **`/pattern<CR>`** lands on the first match after where `/` was typed
+  (whatever the find bar's live preview moved through), closes the find bar
+  and returns the keyboard to the buffer in Normal mode; `n`/`N` repeat it.
+  Other keymaps' find bar is unchanged (`<CR>` finds the next match and the
+  bar stays open).
 
 The runnable migration exercise in the same guide (`tui/examples/vim-exercise`,
 a tiny Rust crate) is walked step by step, with the real `cargo` and `git`,
@@ -580,7 +619,8 @@ macros") plus the per-section cuts above, gathered in one place:
 - **No WORD motions** (`W`/`B`/`E`) in the Vi keymap, no `;`/`,`, no
   `*`/`#`. (The Helix keymap's `W`/`B`/`E` use `helix::long_word_*`, § Helix
   selections; Vi doesn't bind them.)
-- **No operators beyond `d c y (x) p P`** (no `>`/`<`/`~`/`gu`/`gU`).
+- **No operators beyond `d c y (x) p P`** and the T846 shorthands `D C X s r
+  J` (no `>`/`<`/`~`/`gu`/`gU`).
 - **No register persistence, no uppercase/numbered/special registers.**
 - **No sentence/paragraph/tag text objects** — delimiter and word objects
   only.
