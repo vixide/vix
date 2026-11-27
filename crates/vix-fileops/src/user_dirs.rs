@@ -18,6 +18,12 @@ use std::path::PathBuf;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+// With `isolated-user-dirs` (tests only) the real directories are never looked
+// up, so `etcetera` is unused in that build; name it so Cargo's
+// unused-dependency check does not flag the normal dependency.
+#[cfg(feature = "isolated-user-dirs")]
+use etcetera as _;
+
 /// Whether the user directories are isolated from the real home (the
 /// `isolated-user-dirs` feature). Tests that write configuration check this
 /// before they do.
