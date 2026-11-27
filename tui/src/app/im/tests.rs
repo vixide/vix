@@ -595,12 +595,16 @@ fn slash_commands_dispatch() {
     assert_eq!(messages(&app, &notes()).len(), 1);
     type_line(&mut app, "/clear");
     assert_eq!(messages(&app, &notes()).len(), 0);
-    // /follow needs a Cowork session this build lacks.
+    // /follow needs a Cowork session: without the feature the build lacks
+    // Cowork altogether; with it there is simply no session yet.
     type_line(&mut app, "/follow bob");
+    #[cfg(not(feature = "cowork"))]
     assert_eq!(
         app.status,
         t!("msg.capability_missing", name = "cowork").to_string()
     );
+    #[cfg(feature = "cowork")]
+    assert_eq!(app.status, t!("status.cowork_inactive").to_string());
 
     // Network commands with no connection.
     room(&mut app);
