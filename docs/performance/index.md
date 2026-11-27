@@ -251,6 +251,53 @@ average around 15–23:
 | 512 KiB | 895 µs | 2.0 µs |
 | 8 MiB | 14.2 ms | 2.0 µs |
 
+## Word and sentence navigation, Matching Tag, Highlight Word (T851, measured 2026-11-27)
+
+T830 left four paths that copied the whole buffer out of the rope. Highlight
+Word (`App::refresh_word_highlight`) is the one that runs without being
+asked: when the setting is on, the event loop calls it every tick, and it
+does its work whenever the cursor or the buffer changed since the last
+call, so on every cursor move and every keystroke that edits. Measured
+first, before changing anything (`editor/word_highlight` in
+`tui/benches/editor_ops.rs`: two cursor moves, each followed by the
+refresh, around the same line; `rare` is an identifier found once, so the
+search reads to the end; `common` is a word of the filler, where the
+500-mark cap is reached early): **about 20 ms per cursor move at 8 MiB**
+(39.3 ms per two). It copied the buffer twice (once to find the word under
+the cursor, once to search) and decoded each copy into a `Vec<char>`.
+
+Now the word under the cursor is read from the rope out from the cursor,
+and the occurrences are found by `vix_textops::whole_word_matches`, a byte
+search over the rope's chunks (no copy), with the marks' char offsets from
+`Rope::byte_to_char`. Go → Matching Tag reads the rope through
+`vix_tags::matching_tag_in` from the cursor to the partner; Go → Word
+(Start, End, Next, Previous) and Go → Sentence (Start, End) read from the
+cursor to where they land; Go → Word / Sentence → Number count from the
+top to the target. Each gives the old answer: unit tests compare them with
+the old whole-text code at every offset of tables and generated texts, and
+`go_word_sentence_tag_and_highlight_word_make_no_whole_buffer_pass` in
+`tui/tests/integration/big_buffer.rs` checks that none of them makes a
+whole-buffer pass in ~1.7 MB of text.
+
+`--warm-up-time 1 --measurement-time 3`, load average around 15–20 before
+and 6–10 after:
+
+| Bench | 4 KiB before | 4 KiB after | 512 KiB before | 512 KiB after | 8 MiB before | 8 MiB after |
+| ----- | ------------ | ----------- | -------------- | ------------- | ------------ | ----------- |
+| `word_highlight/rare` (2 moves) | 36.4 µs | 2.2 µs | 1.98 ms | 134 µs | 39.3 ms | 2.13 ms |
+| `word_highlight/common` (2 moves) | 17.5 µs | 15.6 µs | 1.10 ms | 55.7 µs | 27.4 ms | 58.6 µs |
+| `go_words/word_next_prev` | 11.2 µs | 0.99 µs | 1.08 ms | 1.23 µs | 25.9 ms | 1.39 µs |
+| `go_words/word_start_end` | 9.4 µs | 0.97 µs | 802 µs | 1.23 µs | 14.9 ms | 1.22 µs |
+| `go_words/sentence_start_end` | 9.7 µs | 1.55 µs | 902 µs | 1.85 µs | 16.3 ms | 1.80 µs |
+| `go_words/goto_word_and_sentence_10` | 8.7 µs | 2.2 µs | 861 µs | 2.3 µs | 15.4 ms | 2.4 µs |
+| `matching_tag/there_and_back` | 37.0 µs | 3.7 µs | 4.58 ms | 2.97 µs | 83.0 ms | 2.95 µs |
+
+Highlight Word with a rare identifier still searches the whole buffer (it
+marks the first 500 occurrences anywhere), now about 1 ms per cursor move
+at 8 MiB instead of 20; Go → Word / Sentence → Number to a far target, and
+a matching tag far away or missing, still read up to it, but over the rope
+without a copy.
+
 ## Opening a large checkout (T823)
 
 How long a user waits after opening a big project: for the file named on

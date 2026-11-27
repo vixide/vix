@@ -6926,6 +6926,9 @@ dependencies = [
 [[package]]
 name = "vix-tags"
 version = "3.0.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "vix-tasks"

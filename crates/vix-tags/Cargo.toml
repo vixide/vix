@@ -9,5 +9,8 @@ description = "Matching HTML/XML tag navigation."
 
 [dependencies]
 
+[dev-dependencies]
+proptest = { workspace = true }
+
 [lints]
 workspace = true

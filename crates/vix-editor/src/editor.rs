@@ -29,7 +29,7 @@ pub use vix_editor_core::editor::Editor as CodeEditor;
 use vix_editor_core::utils::get_lang_for;
 // Sentence boundaries are shared with the Edit → Transpose → Sentences command,
 // so navigation and transposition split text the same way.
-use vix_textops::{sentence_start_before, sentence_start_from, sentence_starts};
+use vix_textops::{sentence_start_before, sentence_start_from};
 
 use vix_theme as theme;
 
@@ -55,7 +55,10 @@ fn is_section_break(code: &Code, row: usize, n: usize) -> bool {
 }
 
 /// Char offsets where each word begins: a word char whose predecessor is not a
-/// word char. Used by the Go → Word navigation.
+/// word char. The Go → Word navigation's definition of a word start, as it
+/// was computed before T851 (on a copy of the whole text); kept as the
+/// tests' oracle.
+#[cfg(test)]
 fn word_starts(text: &str) -> Vec<usize> {
     let mut starts = Vec::new();
     let mut prev_word = false;
@@ -1502,34 +1505,21 @@ impl Editor {
         }
     }
 
-    /// Move to the start of the current sentence (Go → Sentence → Start).
+    /// Move to the start of the current sentence (Go → Sentence → Start):
+    /// the last sentence start at or before the cursor, read back from it
+    /// on the rope (T851).
     pub fn cursor_sentence_start(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
-        let cur = t.editor.get_cursor();
-        let off = sentence_starts(&t.editor.get_content())
-            .into_iter()
-            .rev()
-            .find(|&s| s <= cur)
-            .unwrap_or(0);
+        let off = sentence_start_at_or_before(t.editor.code_ref().rope(), t.editor.get_cursor());
         self.goto_offset(off, area);
     }
 
     /// Move to the end of the current sentence — its last non-blank char (Go →
-    /// Sentence → End).
+    /// Sentence → End). Reads the rope forward to the next sentence start,
+    /// then back over the whitespace before it (T851).
     pub fn cursor_sentence_end(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
-        let cur = t.editor.get_cursor();
-        let text = t.editor.get_content();
-        let chars: Vec<char> = text.chars().collect();
-        let off = match sentence_starts(&text).into_iter().find(|&s| s > cur) {
-            Some(mut e) => {
-                while e > 0 && chars.get(e - 1).is_some_and(|c| c.is_whitespace()) {
-                    e -= 1;
-                }
-                e
-            }
-            None => chars.len(),
-        };
+        let off = sentence_end_after(t.editor.code_ref().rope(), t.editor.get_cursor());
         self.goto_offset(off, area);
     }
 
@@ -1555,74 +1545,60 @@ impl Editor {
         }
     }
 
-    /// Jump to the 1-based `n`th sentence (Go → Sentence → Number).
+    /// Jump to the 1-based `n`th sentence (Go → Sentence → Number). Counts
+    /// sentence starts on the rope from the top, reading only up to the
+    /// one it lands on (T851).
     pub fn goto_sentence(&mut self, n: usize, area: Rect) {
         let Some(t) = self.active_tab() else { return };
-        let starts = sentence_starts(&t.editor.get_content());
-        if let Some(&off) = starts.get(n.saturating_sub(1)) {
+        if let Some(off) = nth_sentence_start(t.editor.code_ref().rope(), n.saturating_sub(1)) {
             self.goto_offset(off, area);
         }
     }
 
     /// Move to the start of the current word — or the previous word's start if the
-    /// cursor is not on a word (Go → Word → Start).
+    /// cursor is not on a word (Go → Word → Start). Reads the rope back from
+    /// the cursor (T851).
     pub fn cursor_word_start(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        let off = word_starts(&t.editor.get_content())
-            .into_iter()
-            .rev()
-            .find(|&s| s <= cur)
-            .unwrap_or(0);
+        let off = word_start_at_or_before(t.editor.code_ref().rope(), cur);
         self.goto_offset(off, area);
     }
 
-    /// Move to the end of the current word (Go → Word → End).
+    /// Move to the end of the current word (Go → Word → End). Reads the rope
+    /// forward from the cursor (T851).
     pub fn cursor_word_end(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
-        let cur = t.editor.get_cursor();
-        let chars: Vec<char> = t.editor.get_content().chars().collect();
-        // Skip any non-word chars under the cursor, then run to the word's end.
-        let mut e = cur;
-        while e < chars.len() && !is_word_char(chars[e]) {
-            e += 1;
-        }
-        while e < chars.len() && is_word_char(chars[e]) {
-            e += 1;
-        }
-        self.goto_offset(e, area);
+        let off = word_end_from(t.editor.code_ref().rope(), t.editor.get_cursor());
+        self.goto_offset(off, area);
     }
 
-    /// Move to the start of the next word (Go → Word → Next).
+    /// Move to the start of the next word (Go → Word → Next). Reads the rope
+    /// forward from the cursor to the start it lands on (T851).
     pub fn cursor_word_next(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        if let Some(next) = word_starts(&t.editor.get_content())
-            .into_iter()
-            .find(|&s| s > cur)
-        {
+        if let Some(next) = next_word_start(t.editor.code_ref().rope(), cur) {
             self.goto_offset(next, area);
         }
     }
 
-    /// Move to the start of the previous word (Go → Word → Previous).
+    /// Move to the start of the previous word (Go → Word → Previous). Reads
+    /// the rope back from the cursor to the start it lands on (T851).
     pub fn cursor_word_prev(&mut self, area: Rect) {
         let Some(t) = self.active_tab() else { return };
         let cur = t.editor.get_cursor();
-        if let Some(prev) = word_starts(&t.editor.get_content())
-            .into_iter()
-            .rev()
-            .find(|&s| s < cur)
-        {
+        if let Some(prev) = prev_word_start(t.editor.code_ref().rope(), cur) {
             self.goto_offset(prev, area);
         }
     }
 
-    /// Jump to the 1-based `n`th word (Go → Word → Number).
+    /// Jump to the 1-based `n`th word (Go → Word → Number). Counts word
+    /// starts on the rope from the top, reading only up to the one it lands
+    /// on (T851).
     pub fn goto_word(&mut self, n: usize, area: Rect) {
         let Some(t) = self.active_tab() else { return };
-        let starts = word_starts(&t.editor.get_content());
-        if let Some(&off) = starts.get(n.saturating_sub(1)) {
+        if let Some(off) = nth_word_start(t.editor.code_ref().rope(), n.saturating_sub(1)) {
             self.goto_offset(off, area);
         }
     }
@@ -1966,7 +1942,7 @@ fn rope_chars_before(rope: &ropey::Rope, at: usize) -> impl Iterator<Item = char
     std::iter::from_fn(move || chars.prev())
 }
 
-/// The first sentence start ([`sentence_starts`]'s definition) after char
+/// The first sentence start ([`vix_textops::sentence_starts`]'s definition) after char
 /// offset `cur` in `rope`, read from just behind `cur + 1` onward
 /// (T830). `None` when no sentence starts after `cur`.
 fn next_sentence_start(rope: &ropey::Rope, cur: usize) -> Option<usize> {
@@ -1977,7 +1953,7 @@ fn next_sentence_start(rope: &ropey::Rope, cur: usize) -> Option<usize> {
     sentence_start_from(rope_chars_before(rope, at), rope.chars_at(at), at)
 }
 
-/// The last sentence start ([`sentence_starts`]'s definition) before char
+/// The last sentence start ([`vix_textops::sentence_starts`]'s definition) before char
 /// offset `cur` (clamped to the end) in `rope`, read backward from `cur`
 /// (T830). `None` when no sentence starts before it.
 fn prev_sentence_start(rope: &ropey::Rope, cur: usize) -> Option<usize> {
@@ -1985,10 +1961,138 @@ fn prev_sentence_start(rope: &ropey::Rope, cur: usize) -> Option<usize> {
     sentence_start_before(rope_chars_before(rope, at), at)
 }
 
+/// The last sentence start at or before char offset `cur` in `rope` (0
+/// when there is none): Go → Sentence → Start, read back from `cur` (T851).
+fn sentence_start_at_or_before(rope: &ropey::Rope, cur: usize) -> usize {
+    // "At or before cur" is "before cur + 1"; past the end, both clamp.
+    prev_sentence_start(rope, cur.checked_add(1).unwrap_or(cur)).unwrap_or(0)
+}
+
+/// Go → Sentence → End from char offset `cur` in `rope`: the next sentence
+/// start after `cur`, moved back over the whitespace before it, or the end
+/// of the text when no sentence starts after `cur` (T851).
+fn sentence_end_after(rope: &ropey::Rope, cur: usize) -> usize {
+    match next_sentence_start(rope, cur) {
+        Some(e) => {
+            let blank = rope_chars_before(rope, e)
+                .take_while(|c| c.is_whitespace())
+                .count();
+            // `blank` counts chars before `e`, so it is at most `e`.
+            e.checked_sub(blank).unwrap_or(e)
+        }
+        None => rope.len_chars(),
+    }
+}
+
+/// The `index`th (0-based) sentence start in `rope`, counted from the top
+/// and read only up to it (T851). `None` when there are fewer.
+fn nth_sentence_start(rope: &ropey::Rope, index: usize) -> Option<usize> {
+    let mut start = sentence_start_from(std::iter::empty(), rope.chars(), 0)?;
+    for _ in 0..index {
+        start = next_sentence_start(rope, start)?;
+    }
+    Some(start)
+}
+
+/// The last word start (a word char whose predecessor is not one) before char offset
+/// `cur` (clamped to the end) in `rope`, read back from `cur` (T851):
+/// past any non-word chars, then to the start of the word before them.
+fn prev_word_start(rope: &ropey::Rope, cur: usize) -> Option<usize> {
+    let at = cur.min(rope.len_chars());
+    let mut start = None;
+    for (k, c) in rope_chars_before(rope, at).enumerate() {
+        let word = is_word_char(c);
+        if !word && start.is_some() {
+            break;
+        }
+        if word {
+            // `k` counts chars before `at`, so `k < at`.
+            start = at.checked_sub(k).and_then(|i| i.checked_sub(1));
+        }
+    }
+    start
+}
+
+/// The last word start at or before char offset `cur` in `rope` (0 when
+/// there is none): Go → Word → Start (T851).
+fn word_start_at_or_before(rope: &ropey::Rope, cur: usize) -> usize {
+    prev_word_start(rope, cur.checked_add(1).unwrap_or(cur)).unwrap_or(0)
+}
+
+/// The first word start (a word char whose predecessor is not one) after char offset
+/// `cur` in `rope`, read forward from `cur` (T851). `None` when no word
+/// starts after it.
+fn next_word_start(rope: &ropey::Rope, cur: usize) -> Option<usize> {
+    if cur >= rope.len_chars() {
+        return None;
+    }
+    let mut chars = rope.chars_at(cur);
+    let mut prev_word = chars.next().is_some_and(is_word_char);
+    for (k, c) in chars.enumerate() {
+        let word = is_word_char(c);
+        if word && !prev_word {
+            return cur.checked_add(k)?.checked_add(1);
+        }
+        prev_word = word;
+    }
+    None
+}
+
+/// Go → Word → End from char offset `cur` in `rope`: past any non-word
+/// chars under the cursor, then to the end of the word after them (T851).
+fn word_end_from(rope: &ropey::Rope, cur: usize) -> usize {
+    if cur > rope.len_chars() {
+        return cur;
+    }
+    let mut chars = rope.chars_at(cur).peekable();
+    let gap = count_while(&mut chars, |c| !is_word_char(c));
+    let word = count_while(&mut chars, is_word_char);
+    // Both count chars after `cur` within the text, so the sum fits.
+    cur.checked_add(gap)
+        .and_then(|e| e.checked_add(word))
+        .unwrap_or(cur)
+}
+
+/// The `index`th (0-based) word start in `rope`, counted from the top and
+/// read only up to it (T851). `None` when there are fewer.
+fn nth_word_start(rope: &ropey::Rope, index: usize) -> Option<usize> {
+    let mut seen = 0usize;
+    let mut prev_word = false;
+    for (i, c) in rope.chars().enumerate() {
+        let word = is_word_char(c);
+        if word && !prev_word {
+            if seen == index {
+                return Some(i);
+            }
+            seen = seen.checked_add(1)?;
+        }
+        prev_word = word;
+    }
+    None
+}
+
+/// Take chars from `chars` while `keep` holds, leaving the first that does
+/// not in place, and return how many were taken.
+fn count_while(
+    chars: &mut std::iter::Peekable<impl Iterator<Item = char>>,
+    keep: impl Fn(char) -> bool,
+) -> usize {
+    let mut n = 0usize;
+    while chars.next_if(|&c| keep(c)).is_some() {
+        n = n.checked_add(1).unwrap_or(n);
+    }
+    n
+}
+
 #[cfg(test)]
 mod nav_tests {
-    use super::{next_sentence_start, prev_sentence_start, sentence_starts, word_starts};
+    use super::{
+        is_word_char, next_sentence_start, next_word_start, nth_sentence_start, nth_word_start,
+        prev_sentence_start, prev_word_start, sentence_end_after, sentence_start_at_or_before,
+        word_end_from, word_start_at_or_before, word_starts,
+    };
     use proptest::prelude::*;
+    use vix_textops::sentence_starts;
 
     /// Go → Sentence → Next/Previous as they were before T830: copy the
     /// buffer, list every start, pick the nearest one.
@@ -2056,6 +2160,125 @@ mod nav_tests {
         ) {
             let text: String = chars.into_iter().collect();
             assert_matches_old(&text);
+        }
+    }
+
+    /// Go → Sentence → Start/End/Number and Go → Word → Start/End/Next/
+    /// Previous/Number as they were before T851: copy the buffer, list
+    /// every start, pick one. Returns, for cursor `cur`, each answer in
+    /// that order (Number uses `cur` as the 0-based index).
+    fn old_nav(text: &str, cur: usize) -> [Option<usize>; 8] {
+        let chars: Vec<char> = text.chars().collect();
+        let sentences = sentence_starts(text);
+        let words = word_starts(text);
+        let sentence_start = sentences
+            .iter()
+            .copied()
+            .rev()
+            .find(|&s| s <= cur)
+            .unwrap_or(0);
+        let sentence_end = match sentences.iter().copied().find(|&s| s > cur) {
+            Some(mut e) => {
+                while e > 0 && chars.get(e - 1).is_some_and(|c| c.is_whitespace()) {
+                    e -= 1;
+                }
+                e
+            }
+            None => chars.len(),
+        };
+        let word_start = words.iter().copied().rev().find(|&s| s <= cur).unwrap_or(0);
+        let mut word_end = cur;
+        while word_end < chars.len() && !is_word_char(chars[word_end]) {
+            word_end += 1;
+        }
+        while word_end < chars.len() && is_word_char(chars[word_end]) {
+            word_end += 1;
+        }
+        [
+            Some(sentence_start),
+            Some(sentence_end),
+            sentences.get(cur).copied(),
+            Some(word_start),
+            Some(word_end),
+            words.iter().copied().find(|&s| s > cur),
+            words.iter().copied().rev().find(|&s| s < cur),
+            words.get(cur).copied(),
+        ]
+    }
+
+    /// The T851 rope scans give the old answers at every cursor position of
+    /// `text`, and one past its end.
+    fn assert_nav_matches_old(text: &str) {
+        let rope = ropey::Rope::from_str(text);
+        for cur in 0..=rope.len_chars().saturating_add(1) {
+            let new = [
+                Some(sentence_start_at_or_before(&rope, cur)),
+                Some(sentence_end_after(&rope, cur)),
+                nth_sentence_start(&rope, cur),
+                Some(word_start_at_or_before(&rope, cur)),
+                Some(word_end_from(&rope, cur)),
+                next_word_start(&rope, cur),
+                prev_word_start(&rope, cur),
+                nth_word_start(&rope, cur),
+            ];
+            assert_eq!(new, old_nav(text, cur), "at {cur} in {text:?}");
+        }
+    }
+
+    #[test]
+    fn rope_word_and_sentence_navigation_matches_the_old_whole_text_scan_on_a_table() {
+        for text in [
+            "",
+            " ",
+            "word",
+            "foo  bar_baz qux",
+            "   leading",
+            "...",
+            "One. Two! Three?  Four.",
+            "He said \"Hi.\" Then.\n\nNext para. ",
+            "日本語 x2 Ünïcode_9, ok!\n\t(a.) [b]",
+            "trailing   \n\n",
+        ] {
+            assert_nav_matches_old(text);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 256, ..ProptestConfig::default() })]
+        #[test]
+        fn rope_word_and_sentence_navigation_matches_the_old_whole_text_scan(
+            chars in proptest::collection::vec(
+                proptest::sample::select(vec![
+                    'a', 'B', '_', '7', 'é', '日', ' ', ' ', '\n', '\t', '.', '!', '?', '"',
+                    ')', '(', '-',
+                ]),
+                0..60,
+            )
+        ) {
+            let text: String = chars.into_iter().collect();
+            assert_nav_matches_old(&text);
+        }
+    }
+
+    /// The rope scans give the same answers on a rope of many chunks (a
+    /// large generated text), spot-checked across it.
+    #[test]
+    fn rope_word_and_sentence_navigation_matches_across_rope_chunks() {
+        let text = "Alpha beta_1, gamma. Délta?  Epsilon (zeta)!\n\n".repeat(400);
+        let rope = ropey::Rope::from_str(&text);
+        assert!(rope.chunks().count() > 10);
+        for cur in (0..=rope.len_chars()).step_by(37) {
+            let new = [
+                Some(sentence_start_at_or_before(&rope, cur)),
+                Some(sentence_end_after(&rope, cur)),
+                nth_sentence_start(&rope, cur),
+                Some(word_start_at_or_before(&rope, cur)),
+                Some(word_end_from(&rope, cur)),
+                next_word_start(&rope, cur),
+                prev_word_start(&rope, cur),
+                nth_word_start(&rope, cur),
+            ];
+            assert_eq!(new, old_nav(&text, cur), "at {cur}");
         }
     }
 

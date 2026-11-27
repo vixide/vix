@@ -166,7 +166,18 @@ Additional cursor keys handled directly by the editor (not in the menu):
   `sentence_start_before`, only as far as the start they land on, never a
   copy of the whole buffer (T830); a unit test compares them with the old
   whole-text scan at every offset of a table of texts and of generated ones.
-  Sentence Start, End and Number still scan the whole text.
+- **Go → Sentence → Start / End / Number** and **Go → Word → Start / End /
+  Next / Previous / Number** (`nav.sentence_start`, `nav.sentence_end`,
+  `nav.goto_sentence`, `nav.word_*`, `nav.goto_word`) read the rope too
+  (T851): Start and Previous back from the cursor, End and Next forward from
+  it, each only to the start (or end) it lands on; Number counts starts from
+  the top of the buffer and stops at the one it lands on. A word start is a
+  word char (alphanumeric or `_`) not preceded by one; Word → End skips any
+  non-word chars under the cursor, then the word after them; Sentence → End
+  is the next sentence start moved back over the whitespace before it, or
+  the buffer's end. A unit test compares every one with the pre-T851
+  whole-text scan at every offset of a table of texts, of generated ones and
+  of a rope of many chunks.
 
 For position history (`Alt+Left` / `Alt+Right`), go to definition (`F12`), go to
 symbol, and the `path:line[:col]` open syntax, see
