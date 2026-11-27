@@ -24,7 +24,7 @@
 //! `(`/`)` still read the whole text.
 
 use crate::text::Text;
-use vix_textops::sentence_units;
+use vix_textops::{sentence_start_before, sentence_start_from};
 
 mod vi;
 pub(crate) use vi::grapheme_end;
@@ -433,50 +433,31 @@ pub fn paragraph_backward(text: &(impl Text + ?Sized), pos: usize, count: usize)
     find_paragraph(text, pos, count, false)
 }
 
-/// Walk forward `count` times (at least once) to the next unit start strictly
-/// after the running position; falls back to `end` when no unit remains.
-fn nth_start_after(units: &[(usize, usize)], pos: usize, count: usize, end: usize) -> usize {
+/// `)`: the start of the `count`-th next sentence
+/// ([`vix_textops::sentence_starts`]'s definition), or the buffer end when
+/// there is none. Reads only from just before the cursor up to the start it
+/// lands on ([`vix_textops::sentence_start_from`], T830), never the whole
+/// text.
+#[must_use]
+pub fn sentence_forward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
+    let end = text.len_chars();
     repeat_step(pos, count, |p| {
-        units
-            .iter()
-            .map(|&(s, _)| s)
-            .find(|&s| s > p)
+        p.checked_add(1)
+            .and_then(|at| sentence_start_from(text.chars_before(at), text.chars_from(at), at))
             .unwrap_or(end)
     })
 }
 
-/// Walk backward `count` times (at least once) to the previous unit start
-/// strictly before the running position; falls back to `0`.
-fn nth_start_before(units: &[(usize, usize)], pos: usize, count: usize) -> usize {
-    repeat_step(pos, count, |p| {
-        units
-            .iter()
-            .rev()
-            .map(|&(s, _)| s)
-            .find(|&s| s < p)
-            .unwrap_or(0)
-    })
-}
-
-/// `)`: the start of the `count`-th next sentence
-/// ([`vix_textops::sentence_units`]'s definition). Still reads the whole
-/// text: a sentence boundary depends on rules (abbreviations, closing
-/// quotes) only that whole-text scan applies.
-#[must_use]
-pub fn sentence_forward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
-    let text = text.whole_string();
-    let chars: Vec<char> = text.chars().collect();
-    let units = sentence_units(&text, &chars);
-    nth_start_after(&units, pos, count, chars.len())
-}
-
-/// `(`: the start of the `count`-th previous sentence.
+/// `(`: the start of the `count`-th previous sentence, or the buffer
+/// start. Reads back from the cursor only to the start it lands on
+/// ([`vix_textops::sentence_start_before`], T830).
 #[must_use]
 pub fn sentence_backward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
-    let text = text.whole_string();
-    let chars: Vec<char> = text.chars().collect();
-    let units = sentence_units(&text, &chars);
-    nth_start_before(&units, pos, count)
+    let len = text.len_chars();
+    repeat_step(pos, count, |p| {
+        let at = p.min(len);
+        sentence_start_before(text.chars_before(at), at).unwrap_or(0)
+    })
 }
 
 // ----- f t F T ---------------------------------------------------------

@@ -103,6 +103,7 @@ fn list_row(app: &App, index: usize) -> String {
 
 /// The IM dock: a bordered column beside the editor.
 pub(super) fn draw_im_dock(app: &mut App, frame: &mut Frame, area: Rect) {
+    app.im.ensure_notes_history();
     let focused = app.focus == Focus::Im;
     let block = Block::default()
         .style(theme::region_base(theme::Region::RightDock))

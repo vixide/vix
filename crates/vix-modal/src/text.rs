@@ -49,8 +49,8 @@ pub trait Text {
             .collect()
     }
 
-    /// The whole text as a `String`, for the few motions that still need it
-    /// all (`(`/`)`, whose sentence rules look at the whole text).
+    /// The whole text as a `String`, for a caller that needs all of it. No
+    /// motion uses it since T830 (`(`/`)` scan from the cursor too).
     fn whole_string(&self) -> String {
         self.range_string(0, self.len_chars())
     }

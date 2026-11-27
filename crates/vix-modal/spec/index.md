@@ -193,10 +193,14 @@ line, `w b e` read up to the next word boundary, `j k {count}gg { }` read
 the lines they cross, `G` reads the last line, and a linewise operator reads
 the two lines at its ends. A same-line motion therefore costs the same in an
 8 MiB buffer as in a one-line one (`docs/performance/index.md`, *Vi motions
-in a large file*). Only `(`/`)` still read the whole text, because the
-sentence rules (`vix_textops::sentence_starts`) are a whole-text scan; text
-objects, `p`/`P` and Visual operators also still take a copy of the
-buffer — follow-ons, not part of T843. Results are exactly those of the
+in a large file*). `(`/`)` (since T830) read back from the cursor over the
+whitespace and closing marks just before it, then on to the sentence start
+they land on (`vix_textops::sentence_start_from` /
+`sentence_start_before`), so a sentence motion reads the sentences it
+crosses, not the buffer; in text with no sentence end (code, say) that can
+still be up to a buffer end, but without a copy. Text objects, `p`/`P`
+and Visual operators still take a copy of the buffer — follow-ons, not part
+of T843. Results are exactly those of the
 original whole-text implementation, which the crate's tests keep as an
 oracle and compare on every offset of thousands of generated texts, and on
 proptest-generated texts over a wider alphabet (upper case, digits, wide,

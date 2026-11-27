@@ -235,10 +235,19 @@ fn bench_line_transforms(c: &mut Criterion) {
 /// filler, so the cost of a motion on that line should not depend on
 /// `bytes` at all: a same-line step reads the line, not the buffer.
 fn vi_app(tag: &str, bytes: usize) -> (vix::app::App, usize) {
+    vi_app_filled(
+        tag,
+        bytes,
+        "the quick brown fox jumps over the lazy dog, again and again\n",
+    )
+}
+
+/// [`vi_app`] with `filler` as the unrelated text (T830 uses prose, so
+/// `(`/`)` have sentences to stop at).
+fn vi_app_filled(tag: &str, bytes: usize, filler: &str) -> (vix::app::App, usize) {
     use vix::settings::Settings;
     const TEST_LINE: &str =
         "    let value = compute_something(alpha, beta, gamma, delta); // note\n";
-    let filler = "the quick brown fox jumps over the lazy dog, again and again\n";
     let half = bytes / 2 / filler.len();
     let mut text = filler.repeat(half);
     let line_start = text.chars().count();
@@ -316,6 +325,34 @@ fn bench_vi_motions(c: &mut Criterion) {
     group.finish();
 }
 
+/// `)` + `(` through the real `App` key path (T830), in a buffer of
+/// prose (sentences every few words) around the same line: each sentence
+/// motion should read the sentences it crosses, not the whole buffer.
+fn bench_vi_sentences(c: &mut Criterion) {
+    let mut group = c.benchmark_group("editor/vi_sentences");
+    group.sample_size(20);
+    for (label, bytes) in [("4KiB", 4 << 10), ("512KiB", 512 << 10), ("8MiB", 8 << 20)] {
+        let (mut app, cursor) = vi_app_filled(
+            &format!("sentences-{label}"),
+            bytes,
+            "The quick brown fox jumps. Over the lazy dog! Again and again?\n",
+        );
+        group.bench_function(BenchmarkId::new("rparen_lparen", label), |b| {
+            b.iter(|| {
+                for k in [')', '('] {
+                    app.on_key(vi_key(k));
+                }
+                app.editor
+                    .active_tab_mut()
+                    .unwrap()
+                    .editor
+                    .set_cursor(cursor);
+            });
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_open,
@@ -324,6 +361,7 @@ criterion_group!(
     bench_random_edits,
     bench_paste_and_undo,
     bench_line_transforms,
-    bench_vi_motions
+    bench_vi_motions,
+    bench_vi_sentences
 );
 criterion_main!(benches);

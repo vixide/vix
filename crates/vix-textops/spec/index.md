@@ -22,6 +22,20 @@ for paragraphs and sections. `sentence_starts` is public because the editor's
 Go -> Sentence navigation uses it too, so navigation, transposition, and
 deletion agree on where a sentence begins.
 
+**Streaming sentence scan (T830).** Whether a char starts a sentence depends
+only on the chars before it: a small state (leading whitespace, inside plain
+text, inside a run of closers `.`/`!`/`?`/`"`/`'`/`)`/`]`/`}` with or
+without a sentence end, in whitespace after a sentence end or not) carried
+forward over `text.chars()`. `sentence_starts` runs that scan without
+decoding the text into a `Vec<char>`. `sentence_start_from(before, from,
+at)` returns the first start at or after `at` and
+`sentence_start_before(before, at)` the last one before it, both over char
+iterators (`before` nearest first), so a caller holding a rope (Vi `(`/`)`
+in `vix-modal`) reads only from the whitespace and closers just behind `at`
+to the start it finds. All three give exactly the starts of the pre-T830
+whole-text scan, which the tests keep as an oracle and compare at every
+offset of a table of texts and of proptest-generated ones.
+
 `wrap` refills text at a given width, treating blank lines and list bullets as
 chunk boundaries and keeping each chunk's indentation, shared comment/quote
 marker, and hanging bullet indent (see `crates/vix-editor/spec/wrap/index.md`).

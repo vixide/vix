@@ -292,7 +292,8 @@ fn vi_motions_and_operators_make_no_whole_buffer_pass() {
     set_vi_cursor(&mut app, off + 50);
     let before = full_text_scans();
     for seq in [
-        "l", "h", "3l", "w", "b", "e", "j", "k", "$", "0", "^", "fa", "G", "gg", "}", "{",
+        "l", "h", "3l", "w", "b", "e", "j", "k", "$", "0", "^", "fa", "G", "gg", "}", "{", ")",
+        "(", "3)", "2(",
     ] {
         for c in seq.chars() {
             app.on_key(key(c));
@@ -305,5 +306,39 @@ fn vi_motions_and_operators_make_no_whole_buffer_pass() {
             app.on_key(key(c));
         }
         assert_eq!(full_text_scans(), before, "{seq} read the whole buffer");
+    }
+}
+
+/// T830: `(` and `)` land on the same sentence, relative to it, whether
+/// four sentences are the whole buffer or sit inside ~1.7 MB of other
+/// sentences: the scan reads from the cursor outward, so the filler (which
+/// ends in a sentence end and a blank line) changes nothing.
+#[test]
+fn vi_sentence_motions_on_a_large_buffer_match_the_same_text_alone() {
+    const SENTENCES: &str = "Alpha one. Beta two! Gamma (three)? Delta.\n";
+    let filler = vi_filler();
+    let big_text = format!("{filler}{SENTENCES}{filler}");
+    let off = filler.chars().count();
+    let beta = SENTENCES.find("Beta").unwrap() + 2;
+    let mut small = vi_app_with("t830-sentence-small", SENTENCES);
+    let mut big = vi_app_with("t830-sentence-big", &big_text);
+    for (seq, want) in [
+        (")", "Gamma"),
+        ("(", "Beta"),
+        ("2)", "Delta"),
+        ("2(", "Alpha"),
+    ] {
+        set_vi_cursor(&mut small, beta);
+        set_vi_cursor(&mut big, off + beta);
+        for c in seq.chars() {
+            small.on_key(key(c));
+            big.on_key(key(c));
+        }
+        assert_eq!(vi_cursor(&small), SENTENCES.find(want).unwrap(), "{seq}");
+        assert_eq!(
+            vi_cursor(&big).checked_sub(off),
+            Some(vi_cursor(&small)),
+            "{seq}: same cursor"
+        );
     }
 }
