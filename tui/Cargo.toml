@@ -647,5 +647,9 @@ name = "docs_crate_graph"
 path = "tests/docs_crate_graph.rs"
 
 [[test]]
+name = "crate_layering"
+path = "tests/crate_layering.rs"
+
+[[test]]
 name = "secret_scan"
 path = "tests/secret_scan.rs"

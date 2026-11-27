@@ -126,6 +126,31 @@ and follow each package's `dependencies` whose `kind` is not `"dev"`. For
 *which crate owns what*, read the [crate map](../crate-map.md); it is the
 maintained crate-by-crate reference, and this page only sketches the shape.
 
+### Layering rules
+
+Beyond "each layer depends only on layers below it" (which the definition of
+a layer guarantees), the graph keeps four rules. `tui/tests/crate_layering.rs`
+enforces them, reading `cargo metadata` and the `gui/*/Cargo.toml` manifests,
+and its failure message names each offending edge (`from -> to`):
+
+1. **Nothing depends on the App shell.** No workspace member depends on
+   `vix-tui`, as a normal, build or dev-dependency; the desktop GUIs in `gui/`
+   are the only crates above it.
+2. **Only `vix-input` and `vix-tui` use `crossterm`.** Terminal I/O stays in
+   the App shell and key-event conversion, so every other crate works under a
+   desktop GUI with no terminal.
+3. **Model and core crates know no UI surface.** A crate named `*-core` or
+   `*-model` reaches no crate named `*-panel`, `*-picker`, `*-preview` or
+   `*-view`, directly or through other crates.
+4. **The GUIs never depend on each other.** No `gui/vix-*/Cargo.toml` names
+   another GUI crate; what two GUIs share lives in `vix-tui` or under `crates/`.
+
+A rule is added here only when the current graph already keeps it. The full
+graph, every crate with its layer, direct workspace dependencies and number
+of dependents, is the generated [Crate Layers](../reference/crate-layers.md)
+reference (`cargo run --example list_commands -- --write`; `scripts/check`
+fails when it is stale).
+
 ## Workspace Structure
 
 ```

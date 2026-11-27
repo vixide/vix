@@ -78,6 +78,17 @@ on top.
   (selection-or-whole-buffer), `App::rewrite_at_cursor` (cursor-relative), or
   `insert_str`; all are read-only-aware.
 
+## Crate layering
+
+- A new dependency keeps the four layering rules in
+  [`docs/architecture`](../docs/architecture/index.md#layering-rules): nothing
+  depends on `vix-tui`; only `vix-input` and `vix-tui` use `crossterm`; a
+  `*-core`/`*-model` crate reaches no `*-panel`/`*-picker`/`*-preview`/`*-view`
+  crate; no GUI depends on another. `tui/tests/crate_layering.rs` fails on the
+  offending edge. After changing a crate's dependencies, regenerate
+  `docs/reference/crate-layers.md` with
+  `cargo run --example list_commands -- --write`.
+
 ## Rendering
 
 - All of the *app's* drawing is in `tui/src/ui.rs`; no editing/state logic there. The

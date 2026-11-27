@@ -163,6 +163,7 @@
 - [Glossary](glossary.md)
 - [Action Reference](reference/actions.md)
 - [Settings Reference](reference/settings.md)
+- [Crate Layers](reference/crate-layers.md)
 - [Shared Keybindings](reference/keybindings-shared.md)
 - [Apple Keybindings](reference/keybindings-apple.md)
 - [VSCode macOS Keybindings](reference/keybindings-vscode-macos.md)
