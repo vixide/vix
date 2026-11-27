@@ -75,6 +75,20 @@ missing or unreadable file is an empty session. The read-only `vix --mcp`
 server ([`spec/mcp-server`](../../../spec/mcp-server/index.md)) uses it to
 list the files Vix last had open in a workspace.
 
+## Release notes seen (T826)
+
+The top-level key `last_seen_version` (a string, e.g. `"3.0.0"`) records the
+Vix version whose **Help → What's New** notes were last shown (see
+`crates/vix-welcome-panel/spec/index.md`, § What's New). It is not a field of
+`Session`, whose fields are fixed by the published 3.x API, but a key beside
+them (`LAST_SEEN_VERSION_KEY`): `Session::last_seen_version` /
+`last_seen_version_from(path)` read it without ever creating the file,
+`Session::record_seen_version` / `record_seen_version_to(path, version)`
+write it while keeping every saved workspace, and `Session::save` /
+`save_to` keep the key the file already holds. A file without it (any file
+written before T826, or by an older Vix that dropped it on save) reads as
+`None`, which shows What's New once.
+
 ## Project task-runner state
 
 `WorkspaceSession` also carries the private, per-user half of the `project.*`

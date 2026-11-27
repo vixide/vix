@@ -10799,7 +10799,7 @@ awareness, not capability. Items marked (stale?) may already exist.
   social preview (OpenGraph) cards generated like `scripts/render-theme-gallery.py`;
   public community-metrics dashboard (stars, downloads from crates.io/npm/Homebrew,
   CI, contributors) updated daily. Outward-facing: maintainer approval first.
-- [ ] **T826 — Onboarding in the editor.** "First 5 minutes" interactive
+- [x] **T826 — Onboarding in the editor.** (Done: `vix --tutor`/**Help → Tutorial** and the first-launch welcome overlay already existed; added **Help → What's New…** bundled from `CHANGELOG.md`, shown once per new version via `last_seen_version` in `session.toml`; no `vix-tips` crate, so no Tips of the Day; the site's install one-liners are left to the site repo.) "First 5 minutes" interactive
   tutorial and `vix --tutor` (check `vix-tutor` first — stale?); a dismissible
   first-launch Quick Tour overlay (dismissal stored in `session.toml`); a
   "What's New" panel; optional Tips of the Day from a curated list (check

@@ -32,6 +32,8 @@
     )
 )]
 
+pub mod whats_new;
+
 /// Scroll state for the welcome overlay.
 ///
 /// The text is stored as source *paragraphs* (one entry per source line — each a

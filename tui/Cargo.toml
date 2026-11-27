@@ -476,6 +476,10 @@ ropey = { workspace = true }
 # Display width of characters, for wrapping IM messages in the dock (T752).
 unicode-width = { workspace = true }
 
+# `build.rs` cuts CHANGELOG.md to the What's New excerpt (T826).
+[build-dependencies]
+vix-welcome-panel = { workspace = true }
+
 [dev-dependencies]
 # Tests never read or write the real ~/.config/vix (crates/vix-fileops user_dirs).
 vix-fileops = { workspace = true, features = ["isolated-user-dirs"] }

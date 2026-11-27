@@ -62,6 +62,32 @@ pub struct Session {
 /// How many remote names [`Session::recent_remotes`] keeps.
 pub const MAX_RECENT_REMOTES: usize = 10;
 
+/// The top-level `session.toml` key holding the Vix version whose release
+/// notes the user last saw (T826, **Help → What's New**). It sits outside
+/// [`Session`]'s fields, which are fixed by the published 3.x API; read it
+/// with [`Session::last_seen_version_from`], write it with
+/// [`Session::record_seen_version_to`], and [`Session::save_to`] keeps it.
+pub const LAST_SEEN_VERSION_KEY: &str = "last_seen_version";
+
+/// The keys of `session.toml` that live beside [`Session`]'s own fields.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct Extras {
+    /// See [`LAST_SEEN_VERSION_KEY`].
+    last_seen_version: Option<String>,
+}
+
+/// What [`Session::save_to`] writes: the session plus the extra keys.
+#[derive(Serialize)]
+struct Stored<'a> {
+    /// See [`LAST_SEEN_VERSION_KEY`]; left out when unknown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_seen_version: Option<String>,
+    /// The session's own fields, at the top level of the file.
+    #[serde(flatten)]
+    session: &'a Session,
+}
+
 /// One workspace's restorable editor state.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -308,11 +334,15 @@ impl Session {
     /// # Errors
     /// Returns a [`confy::ConfyError`] if the file cannot be written/serialized.
     pub fn save(&self) -> Result<(), confy::ConfyError> {
-        vix_fileops::user_dirs::store(APP_NAME, SESSION_NAME, self)?;
-        if let Some(path) = vix_fileops::user_dirs::config_file(APP_NAME, SESSION_NAME) {
-            vix_fileops::restrict_to_owner(&path);
-        }
-        Ok(())
+        self.save_to(&Self::user_file()?)
+    }
+
+    /// The user's `session.toml`, or the error [`Session::save`] reports
+    /// when there is no configuration directory.
+    fn user_file() -> Result<std::path::PathBuf, confy::ConfyError> {
+        vix_fileops::user_dirs::config_file(APP_NAME, SESSION_NAME).ok_or_else(|| {
+            confy::ConfyError::BadConfigDirectory("no configuration directory".to_string())
+        })
     }
 
     /// Persist sessions to an explicit file (the counterpart of
@@ -323,7 +353,59 @@ impl Session {
     /// Returns a [`confy::ConfyError`] if the file cannot be written or
     /// serialized.
     pub fn save_to(&self, path: &std::path::Path) -> Result<(), confy::ConfyError> {
-        confy::store_path(path, self)?;
+        // The extra keys (T826) are kept from the file being replaced.
+        let stored = Stored {
+            last_seen_version: Self::last_seen_version_from(path),
+            session: self,
+        };
+        confy::store_path(path, stored)?;
+        vix_fileops::restrict_to_owner(path);
+        Ok(())
+    }
+
+    /// The version whose release notes were last seen, from the user's
+    /// `session.toml` ([`LAST_SEEN_VERSION_KEY`]); `None` when the file or
+    /// the key is missing. Never creates the file.
+    #[must_use]
+    pub fn last_seen_version() -> Option<String> {
+        Self::user_file()
+            .ok()
+            .and_then(|path| Self::last_seen_version_from(&path))
+    }
+
+    /// [`Session::last_seen_version`] for an explicit file.
+    #[must_use]
+    pub fn last_seen_version_from(path: &std::path::Path) -> Option<String> {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| toml::from_str::<Extras>(&text).ok())
+            .and_then(|extras| extras.last_seen_version)
+    }
+
+    /// Record `version` as the last one whose release notes were seen, in
+    /// the user's `session.toml`, leaving the saved sessions as they are.
+    ///
+    /// # Errors
+    /// Returns a [`confy::ConfyError`] if the file cannot be written.
+    pub fn record_seen_version(version: &str) -> Result<(), confy::ConfyError> {
+        Self::record_seen_version_to(&Self::user_file()?, version)
+    }
+
+    /// [`Session::record_seen_version`] for an explicit file; the file is
+    /// created when missing and narrowed to owner-only on Unix.
+    ///
+    /// # Errors
+    /// Returns a [`confy::ConfyError`] if the file cannot be written.
+    pub fn record_seen_version_to(
+        path: &std::path::Path,
+        version: &str,
+    ) -> Result<(), confy::ConfyError> {
+        let session = Self::load_existing_from(path);
+        let stored = Stored {
+            last_seen_version: Some(version.to_string()),
+            session: &session,
+        };
+        confy::store_path(path, stored)?;
         vix_fileops::restrict_to_owner(path);
         Ok(())
     }
@@ -498,6 +580,52 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fresh `session.toml` path in its own temporary directory.
+    fn temp_session(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("vix-session-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("session.toml")
+    }
+
+    #[test]
+    fn the_last_seen_version_is_recorded_and_survives_a_session_save() {
+        let path = temp_session("seen-version");
+        assert_eq!(Session::last_seen_version_from(&path), None);
+        let mut s = Session::default();
+        s.set_workspace(ws("/tmp/a"));
+        s.save_to(&path).unwrap();
+        Session::record_seen_version_to(&path, "3.0.0").unwrap();
+        assert_eq!(
+            Session::last_seen_version_from(&path).as_deref(),
+            Some("3.0.0")
+        );
+        // Recording the version kept the workspaces ...
+        assert!(Session::load_from(&path).workspace("/tmp/a").is_some());
+        // ... and a later session save keeps the version.
+        let mut s = Session::load_from(&path);
+        s.set_workspace(ws("/tmp/b"));
+        s.save_to(&path).unwrap();
+        assert_eq!(
+            Session::last_seen_version_from(&path).as_deref(),
+            Some("3.0.0")
+        );
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("last_seen_version = \"3.0.0\""), "{text}");
+        assert_eq!(Session::load_from(&path).workspaces.len(), 2);
+        Session::record_seen_version_to(&path, "3.1.0").unwrap();
+        assert_eq!(
+            Session::last_seen_version_from(&path).as_deref(),
+            Some("3.1.0")
+        );
+    }
+
+    #[test]
+    fn the_user_file_version_round_trips_in_the_isolated_config_dir() {
+        Session::record_seen_version("9.9.9").unwrap();
+        assert_eq!(Session::last_seen_version().as_deref(), Some("9.9.9"));
+    }
 
     fn ws(root: &str) -> WorkspaceSession {
         WorkspaceSession {

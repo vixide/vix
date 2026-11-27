@@ -2601,12 +2601,13 @@ const PROJECT: &[Item] = &[
     ),
 ];
 
-/// The Help menu: welcome, shortcuts, tutorial, license, issue reporting,
+/// The Help menu: welcome, shortcuts, tutorial, what's new, license, issue reporting,
 /// privacy, and the environment doctor.
 const HELP: &[Item] = &[
     Item::leaf("menu.item.help.welcome", "help.welcome", ""),
     Item::leaf("menu.item.help.shortcuts", "help.shortcuts", "F1"),
     Item::leaf("menu.item.help.tutorial", "help.tutorial", ""),
+    Item::leaf("menu.item.help.whats_new", "help.whats_new", ""),
     SEP,
     Item::leaf("menu.item.help.license", "help.license", ""),
     Item::leaf("menu.item.help.report_issue", "help.report_issue", ""),

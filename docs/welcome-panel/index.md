@@ -33,11 +33,20 @@ and forwards scroll keys to it.
 | Mouse wheel                | Scroll (the overlay is modal — the wheel only scrolls it) |
 | `Esc`                     | Close the overlay                               |
 
+## What's New
+
+**Help → What's New…** opens the same overlay with the release notes for
+the version you are running: the changelog's not-yet-released section and
+this version's section, bundled into Vix when it was built. Vix also opens
+it by itself once, on the first start after the version changes (it
+remembers the last version shown in `session.toml`); on the very first
+launch you see the welcome screen instead.
+
 ## Notes
 
 The same overlay type is also reused for a few other read-only text screens
 reachable from **Help** — License, Report Issue, and Privacy — each just
-hands it different lines. See the specification at
+hands it different lines. So does **Help → What's New…**. See the specification at
 `crates/vix-welcome-panel/spec/index.md`.
 
 ---
