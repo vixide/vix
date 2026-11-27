@@ -298,7 +298,8 @@ pub struct Tree {
 
 impl Tree {
     /// Parse `text` as JSON or YAML into a value tree. YAML's parser also
-    /// accepts JSON.
+    /// accepts JSON; valid JSON it refuses (a name over 1024 characters) is
+    /// read with `serde_json` instead (T855).
     ///
     /// # Errors
     ///
@@ -322,10 +323,10 @@ impl Tree {
         } else {
             text
         };
-        let parsed: serde_norway::Value =
-            serde_norway::from_str(source).map_err(|e| ParseError::Syntax {
-                message: e.to_string(),
-            })?;
+        let parsed: serde_norway::Value = match serde_norway::from_str(source) {
+            Ok(parsed) => parsed,
+            Err(yaml) => strict_json(text, &yaml)?,
+        };
         let mut tree = Tree {
             root: from_yaml(&parsed),
             format,
@@ -774,6 +775,29 @@ fn parse_scalar(s: &str) -> Val {
         _ if s.parse::<f64>().is_ok() => Val::Num(s.to_string()),
         _ => Val::Str(s.to_string()),
     }
+}
+
+/// Read `text` with `serde_json` after the YAML parser refused it (T855).
+///
+/// The YAML parser refuses some valid JSON, such as a name longer than its
+/// 1024-character limit for an implicit key. `serde_json` deserializes straight
+/// into a `serde_norway::Value`, whose mapping keeps entries in file order
+/// (whatever `serde_json`'s own `preserve_order` feature says) and refuses a
+/// repeated name, so the tree is the one the YAML parser would have built.
+///
+/// # Errors
+///
+/// When `text` is not JSON either, the YAML parser's error (it reads both, so
+/// its message is the one to show); when it is JSON that cannot become a tree
+/// (a repeated name), `serde_json`'s message.
+fn strict_json(text: &str, yaml: &serde_norway::Error) -> Result<serde_norway::Value, ParseError> {
+    serde_json::from_str(text).map_err(|json| ParseError::Syntax {
+        message: if json.is_data() {
+            json.to_string()
+        } else {
+            yaml.to_string()
+        },
+    })
 }
 
 /// Convert a parsed `serde_norway` value into [`Val`] (preserving map order).
@@ -1689,6 +1713,63 @@ mod tests {
     }
 
     #[test]
+    fn json_with_a_name_longer_than_the_yaml_limit_opens() {
+        // T855: the YAML parser refuses an implicit key over 1024 characters,
+        // valid JSON; serde_json reads it, keeping key order and key forms.
+        let long = "k".repeat(2000);
+        let text = format!(
+            "{{\"z\": 1, \"{long}\": {{\"b\": [1.5, true, null], \"a\": \"x\u{2028}y\u{85}\"}}, \"m\": -3}}"
+        );
+        assert!(serde_norway::from_str::<serde_norway::Value>(&text).is_err());
+        for format in [Format::Json, Format::Yaml] {
+            let t = Tree::from_text(&text, format).unwrap();
+            let labels: Vec<&str> = (0..t.row_count()).map(|i| t.label(i)).collect();
+            assert_eq!(
+                labels,
+                ["", "z", long.as_str(), "b", "[0]", "[1]", "[2]", "a", "m"],
+                "file order"
+            );
+            assert_eq!(t.value(row_of(&t, "a")), "x\u{2028}y\u{85}");
+            assert_eq!(t.value(row_of(&t, "[0]")), "1.5");
+            assert_eq!(t.value(row_of(&t, "m")), "-3");
+        }
+        let t = Tree::from_text(&text, Format::Json).unwrap();
+        let out = t.save_text().unwrap();
+        // T854 holds on this path too: the saved JSON escapes the breaks.
+        assert!(!out.contains(['\u{2028}', '\u{85}']), "{out}");
+        let want: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let got: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(got, want);
+        let again = Tree::from_text(&out, Format::Json).unwrap();
+        assert_eq!(again.save_text().unwrap(), out);
+        // Saved as YAML, the long key is written so the YAML parser reads it.
+        let yaml = Tree::from_text(&text, Format::Yaml).unwrap();
+        let saved = yaml.save_text().unwrap();
+        let back = Tree::from_text(&saved, Format::Yaml).unwrap();
+        assert_eq!(back.save_text().unwrap(), saved);
+        assert_eq!(back.label(2), long);
+    }
+
+    #[test]
+    fn json_fallback_keeps_the_right_errors() {
+        let long = "k".repeat(1100);
+        // A repeated long name is refused with serde_json's duplicate message.
+        let twice = format!("{{\"{long}\": 1, \"{long}\": 2}}");
+        let Err(err) = Tree::from_text(&twice, Format::Json) else {
+            panic!("a repeated JSON name must not open");
+        };
+        assert!(err.to_string().contains("duplicate"), "{err}");
+        // Text that is neither keeps the YAML parser's message.
+        let Err(err) = Tree::from_text(&format!("{{\"{long}\": 1,"), Format::Json) else {
+            panic!("broken JSON must not open");
+        };
+        let yaml = serde_norway::from_str::<serde_norway::Value>(&format!("{{\"{long}\": 1,"))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(err.to_string(), yaml);
+    }
+
+    #[test]
     fn yaml_value_tags_are_kept_on_save() {
         // T853: value tags used to be dropped when the tree was saved.
         let text = "a: !custom x\nb: !t [1, 2]\nc: !m {d: 1}\ne: !n 5\n";
@@ -1800,6 +1881,37 @@ mod tests {
             let saved = yaml.save_text().unwrap();
             let back: serde_norway::Value = serde_norway::from_str(&saved).unwrap();
             proptest::prop_assert_eq!(back, serde_norway::to_value(&want).unwrap());
+        }
+    }
+
+    proptest::proptest! {
+        // T855: JSON with names past the YAML key-length limit opens, in
+        // file order, and saves to JSON that reopens to the same document.
+        #[test]
+        fn long_json_names_open_in_order(
+            lens in proptest::collection::vec(0usize..1500, 1..4),
+            c in proptest::char::any(),
+        ) {
+            let names: Vec<String> = lens
+                .iter()
+                .enumerate()
+                .map(|(i, n)| format!("{i}{}", c.to_string().repeat(*n)))
+                .collect();
+            let body: Vec<String> = names
+                .iter()
+                .enumerate()
+                .map(|(i, n)| format!("{}: {i}", serde_json::to_string(n).unwrap()))
+                .collect();
+            let text = format!("{{{}}}", body.join(", "));
+            let t = Tree::from_text(&text, Format::Json).unwrap();
+            for (i, n) in names.iter().enumerate() {
+                proptest::prop_assert_eq!(t.label(i + 1), n.as_str());
+            }
+            let out = t.save_text().unwrap();
+            let want: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let got: serde_json::Value = serde_json::from_str(&out).unwrap();
+            proptest::prop_assert_eq!(got, want);
+            proptest::prop_assert_eq!(Tree::from_text(&out, Format::Json).unwrap().save_text().unwrap(), out);
         }
     }
 

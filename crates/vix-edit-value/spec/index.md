@@ -12,7 +12,8 @@ or the command palette. The logic lives in the `edit_value` module; the host
 
 - Both JSON and YAML parse into one model ([`Val`]): scalars (null, bool, number,
   string), arrays, and objects (object key order is preserved). Parsing uses
-  `serde_norway`, which also reads JSON.
+  `serde_norway`, which also reads JSON; valid JSON it refuses is read with
+  `serde_json` (see Long JSON names).
 - A flattened view of the tree drives display; collapsed containers omit their
   descendants. A cursor selects one visible row. Numbers keep their textual form
   so they round-trip unchanged.
@@ -99,6 +100,27 @@ holding one did not open.
   opened as JSON) is parsed as written.
 - **Writing YAML.** `serde_norway`'s emitter already writes these characters
   so they read back unchanged (it was not the cause); nothing is changed.
+
+## Long JSON names (T855)
+
+The YAML parser refuses an implicit key longer than 1024 characters, so valid
+JSON with a longer name did not open. When the YAML parser refuses the text,
+it is read again with `serde_json`; when that accepts it, the tree is built
+from it, in either format.
+
+- **Same tree.** `serde_json` deserializes straight into the YAML parser's
+  value type, whose mapping keeps entries in file order (independent of
+  `serde_json`'s `preserve_order` feature) and refuses a repeated name. Every
+  JSON name is a string key (T850), and numbers keep the text of the number
+  read.
+- **Characters.** The T854 rules hold: `serde_json` reads raw U+0085, U+2028,
+  U+2029 and the C1 controls inside strings as themselves, and a JSON save
+  writes them as `\uXXXX` escapes.
+- **Errors.** Text that is not JSON either reports the YAML parser's message
+  (it reads both formats). JSON that `serde_json` reads but that cannot become
+  a tree (a repeated name) reports `serde_json`'s message.
+- **Saving YAML.** `serde_norway` writes a key that long in the explicit
+  `? key` form, which the parser reads back.
 
 ## Keys
 
