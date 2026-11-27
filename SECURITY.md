@@ -271,7 +271,11 @@ it.
 
 ## Checklist for contributors
 
-The [Security Checklist](docs/security-checklist.md) covers what to think
-about when a change adds input handling, process spawning, network access or
-stored secrets. A change that adds or moves a trust boundary updates the
+The [threat model](docs/threat-model.md) takes each trust boundary in turn
+(assets, entry points, mitigations with the code that enforces them, open
+risks) and ends with a short checklist for a new feature, which the pull
+request template links. The longer [Security
+Checklist](docs/security-checklist.md) covers what to think about when a
+change adds input handling, process spawning, network access or stored
+secrets. A change that adds or moves a trust boundary updates the
 [Threat model](#threat-model) above in the same change.

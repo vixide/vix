@@ -13,7 +13,7 @@ no sleeps, no screen scraping.
 | **Property** | Same, with `proptest` | Invariants over generated input — "the cursor a rewrite returns is always inside the text it returns" | `cargo test` |
 | **Integration** | `tui/tests/integration/main.rs` | A real `App`: keys in, state out. Menus, actions, keymaps, overlays, files | `cargo test` |
 | **Snapshot** | `tui/tests/snapshots.rs` | Golden text screens — the actual rendered frame, not just state, for scenarios where the layout itself is the thing being tested | `cargo test` |
-| **Repo invariants** | `tui/tests/i18n_keys.rs`, `tui/tests/code_lints.rs`, `tui/tests/spawn_sites.rs` | Facts about the repository itself — every `t!` key exists, every call fills exactly the `%{name}` placeholders its string declares, every catalog entry has an `en` fallback | `cargo test` |
+| **Repo invariants** | `tui/tests/i18n_keys.rs`, `tui/tests/code_lints.rs`, `tui/tests/spawn_sites.rs`, `tui/tests/secret_scan.rs` | Facts about the repository itself — every `t!` key exists, every call fills exactly the `%{name}` placeholders its string declares, every catalog entry has an `en` fallback | `cargo test` |
 | **Action sweep** | `tui/tests/action_sweep.rs` | Every action id the dispatch scan finds (`vix_action_catalog::dispatch_scan`) runs once on a fresh `App`, its frame drawn wide and narrow, then any prompt it opened answered (`sweep`, Enter), then poked (hover, click and scroll over a grid of points, the navigation keys), then Enter on whatever is highlighted and Esc pressed twice — no panic, no hang. Runs in a sandbox like the chaos monkey (a `PATH` holding only a link to `git` and a fake `docker` that prints canned JSON listings with shell built-ins, a throwaway `HOME` and git config, no `SHELL`) over a workspace that is a throwaway repository with history, a branch, a stash and a change but no remote, re-executing its own test binary, killed after 10 minutes with the action it was on named. It is the cheapest way to draw every overlay under test and coverage | `cargo test` |
 | **Keymap sweep** | `tui/tests/action_sweep.rs` | Every keymap (`vix_keymap_model::KEYMAPS`) fed `C-x` and `C-c` with each letter (plain and Ctrl), the Space leader with each letter, plain letters in normal mode and a few Vim `:` commands, drawing after each; same sandbox, a fresh `App` after a quit | `cargo test` |
 | **End to end** | `tui/tests/e2e_tmux.rs` | The real `vix` binary in a real terminal: a detached tmux session on a private server socket (`tmux -L`, never a person's own sessions), a throwaway `HOME`, keys sent with `send-keys` and the screen read with `capture-pane`. Covers what in-process tests cannot: terminal setup, the event loop, input decoding, teardown and the command line. Skipped without tmux; Unix only | `cargo test` |
@@ -322,6 +322,15 @@ checks what the contributor docs say about the workspace against it:
 
 Adding or removing a crate therefore fails this test until the counts are
 updated, which is the moment to place the crate in the crate map.
+### Secret scanning (T832)
+
+`tui/tests/secret_scan.rs` fails `cargo test` when a tracked file holds what
+looks like a real credential (see [`spec/security`](../security/index.md) for
+the patterns and the allowlist rule). It reads the working tree of every file
+`git ls-files` lists, so it needs no history, no network and no extra tool, and
+it is skipped with a note where `git` or the checkout is missing. Its patterns
+are spelled in pieces and its self-tests build their fake secrets at run time,
+so the file never matches itself.
 
 ## Manual scenarios
 

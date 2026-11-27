@@ -641,3 +641,7 @@ path = "tests/code_lints.rs"
 [[test]]
 name = "docs_crate_graph"
 path = "tests/docs_crate_graph.rs"
+
+[[test]]
+name = "secret_scan"
+path = "tests/secret_scan.rs"
