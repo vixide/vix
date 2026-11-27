@@ -23,11 +23,18 @@ From the overlay you can:
   every statement. Keywords inside strings/comments are left alone.
 - **Undo / redo** — `u` / `Ctrl+R`.
 - **Save** — `Ctrl+S` serializes the statements back into the buffer (one per
-  block, `;`-terminated) and saves via the normal flow. **Esc** / `q` closes.
+  block, `;`-terminated) and saves via the normal flow. A statement that ends
+  in a `--` line comment gets its `;` on the next line, so the comment cannot
+  swallow it. Saving then reopening gives the same statements. **Esc** / `q`
+  closes.
 
 This is a pragmatic helper for organizing and tidying SQL files, not a full SQL
 parser or query engine. The `edit_sql` module is unit-tested
 (`split_statements`, `format_sql`, kind detection, reorder/delete/undo).
+Property tests (`crates/vix-edit-sql/tests/props.rs`, T831) check that the splitter never panics
+and returns trimmed pieces of its input in order, that `to_text` splits back
+to the same statements for any mix of strings and comments holding `;`, and
+that `format_sql` changes only letter case and is idempotent.
 
 ## Checked arithmetic
 

@@ -195,6 +195,12 @@ far, as Vim does.
 
 The parser and planner are pure (`vix_find_panel::substitute`: `parse`, `plan`,
 `apply`); `tui/src/app/ex_substitute.rs` applies them to the active buffer.
+Property tests (`crates/vix-find-panel/tests/substitute_props.rs`, T831)
+check that `parse` never panics, that any pattern and replacement escaped as
+the table above says parse back unchanged, that `plan`'s ranges are
+ascending, non-overlapping, inside the text and each hold the pattern, and
+that `apply(plan)` over arbitrary Unicode text equals a per-line
+`str::replace` (only the first match per line without `g`).
 
 ## Find In Workspace → Dock
 

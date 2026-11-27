@@ -10844,7 +10844,7 @@ awareness, not capability. Items marked (stale?) may already exist.
   workspace search via filesystem watch; Tree-sitter on very large files;
   LRU eviction for caches; native file-watching efficiency; incremental
   rendering; memory-usage tracking.)
-- [ ] **T831 — Test infrastructure.** Coverage ≥90% on `vix-editor-core`,
+- [ ] **T831 — Test infrastructure.** (Started: wider proptest use — undo/redo and `History::squash_since` (`vix-editor-core/tests/undo_props.rs`), literal `:s` parse/plan/apply against a naive replace (`vix-find-panel/tests/substitute_props.rs`), Vi motions str vs rope vs the pre-T843 oracle over generated Unicode (`vix-modal`), SQL split/round-trip/format (`vix-edit-sql/tests/props.rs`, which found and fixed a `to_text` comment-swallows-`;` bug). Left: coverage ≥90% on the five crates, the integration suites, fuzz targets in CI, `cargo-mutants`, visual regression, e2e framework, platform matrix, performance baselines, flaky-test quarantine, data generators, test-impact analysis, chaos/stress; proptest for more buffer ops and parsers.) Coverage ≥90% on `vix-editor-core`,
   `vix-fileops`, `vix-git`, `vix-lsp`, `vix-db` (tarpaulin; see the coverage
   push); more integration tests for editor+LSP, editor+Git, DB+SQLite/Postgres,
   remote+SSH; wider proptest use (parsers, search/replace, undo/redo, buffer

@@ -445,6 +445,14 @@ or a folded state other than the last has another branch (folding would
 lose it). `Code::squash_history_since` wraps it and is refused while the
 edit log is on, as Undo is.
 
+Property tests (`crates/vix-editor-core/tests/undo_props.rs`, T831) drive `Code` with arbitrary
+batches of Unicode inserts and removes: undoing everything visits every
+committed state in reverse and ends on the original text, redoing
+everything visits them forward and ends on the final text, a branch made
+after undoing a few steps still undoes to the original, and squashing the states
+after any point skips exactly the folded intermediate states — every other
+undo and redo step lands on the same text as without the squash.
+
 ## End-of-line virtual text (T614)
 
 The widget can draw **virtual text** after a line's content: text that is shown

@@ -11,5 +11,8 @@ description = "Find / find-and-replace for the editor."
 bitflags = { workspace = true }
 regex = { workspace = true }
 
+[dev-dependencies]
+proptest = { workspace = true }
+
 [lints]
 workspace = true

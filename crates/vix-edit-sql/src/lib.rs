@@ -247,7 +247,13 @@ impl Editor {
     pub fn to_text(&self) -> String {
         let mut out = String::new();
         for s in &self.statements {
-            out.push_str(s.trim());
+            let s = s.trim();
+            out.push_str(s);
+            // A statement ending in a `--` comment gets its `;` on the
+            // next line, or the comment would swallow it (T831).
+            if scan(s).1 {
+                out.push('\n');
+            }
             out.push_str(";\n\n");
         }
         // Trim the trailing blank line, keeping a single newline.
@@ -460,6 +466,12 @@ fn kind_of(stmt: &str) -> &'static str {
 /// ```
 #[must_use]
 pub fn split_statements(sql: &str) -> Vec<String> {
+    scan(sql).0
+}
+
+/// [`split_statements`], plus whether `sql` ends inside a `--` line
+/// comment (so a `;` appended to it would be commented out).
+fn scan(sql: &str) -> (Vec<String>, bool) {
     let mut out = Vec::new();
     let mut cur = String::new();
     let mut chars = sql.chars().peekable();
@@ -527,7 +539,7 @@ pub fn split_statements(sql: &str) -> Vec<String> {
     if !cur.trim().is_empty() {
         out.push(cur.trim().to_string());
     }
-    out
+    (out, line_c)
 }
 
 /// Uppercase SQL keywords in `stmt`, leaving string/comment spans untouched.
@@ -987,5 +999,17 @@ mod tests {
         );
         assert_eq!(format_sql(""), "");
         assert_eq!(format_sql("a1 In (1)"), "a1 IN (1)");
+    }
+
+    /// T831: a statement ending in a `--` comment keeps its terminator out
+    /// of the comment, so saving does not merge it with the next statement.
+    #[test]
+    fn to_text_keeps_the_terminator_out_of_a_trailing_line_comment() {
+        let e = Editor::from_text("select 1 -- one\n; select 2;");
+        assert_eq!(e.to_text(), "select 1 -- one\n;\n\nselect 2;\n");
+        assert_eq!(
+            split_statements(&e.to_text()),
+            ["select 1 -- one", "select 2"]
+        );
     }
 }

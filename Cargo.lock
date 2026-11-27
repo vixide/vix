@@ -6263,6 +6263,7 @@ dependencies = [
 name = "vix-edit-sql"
 version = "3.0.0"
 dependencies = [
+ "proptest",
  "vix-capped-stack",
  "vix-input",
  "vix-list-state",
@@ -6315,6 +6316,7 @@ dependencies = [
  "anyhow",
  "bitflags 2.13.2",
  "getrandom 0.4.3",
+ "proptest",
  "ratatui-core",
  "ropey",
  "rust-embed",
@@ -6418,6 +6420,7 @@ name = "vix-find-panel"
 version = "3.0.0"
 dependencies = [
  "bitflags 2.13.2",
+ "proptest",
  "regex",
 ]
 
@@ -6705,6 +6708,7 @@ dependencies = [
 name = "vix-modal"
 version = "3.0.0"
 dependencies = [
+ "proptest",
  "ropey",
  "unicode-segmentation",
  "unicode-width",

@@ -13,5 +13,8 @@ unicode-segmentation = { workspace = true }
 unicode-width = { workspace = true }
 vix-textops = { workspace = true }
 
+[dev-dependencies]
+proptest = { workspace = true }
+
 [lints]
 workspace = true

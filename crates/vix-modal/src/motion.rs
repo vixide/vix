@@ -1125,6 +1125,30 @@ mod tests {
         }
     }
 
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(64))]
+
+        /// T831: the same agreement over a wider alphabet than [`texts`]
+        /// (upper case, digits, wide and zero-width characters, a combining
+        /// accent, a ZWJ emoji, non-breaking and Unicode line/paragraph
+        /// separators, brackets and sentence ends) and longer texts, with
+        /// proptest shrinking a disagreement to its smallest text.
+        #[test]
+        fn motions_agree_on_generated_unicode_text(
+            chars in proptest::collection::vec(
+                proptest::sample::select(vec![
+                    'a', 'Z', '7', '_', ' ', '\t', '\n', '\r', '.', '!', '?', '(', ')',
+                    ',', 'é', '\u{301}', '日', '\u{a0}', '\u{2028}', '\u{2029}',
+                    '\u{200d}', '😀', '\u{c}',
+                ]),
+                0..24,
+            )
+        ) {
+            let s: String = chars.into_iter().collect();
+            agree_on(&s);
+        }
+    }
+
     /// T843: a motion on one line gives the same answer, relative to the
     /// line, whether the line is the whole buffer or sits in the middle of
     /// a megabyte of unrelated text.
