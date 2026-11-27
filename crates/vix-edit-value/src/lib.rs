@@ -117,15 +117,27 @@ enum Val {
         /// Whether the children are hidden in the flattened view.
         collapsed: bool,
         /// Key/value pairs in source order.
-        entries: Vec<(String, Val)>,
+        entries: Vec<(Key, Val)>,
     },
+}
+
+/// An object key: the parsed key exactly as read (its type and any tag), and
+/// the one-line label shown for it. Two keys can share a label (`1` and
+/// `"1"`, or two complex keys both shown as `?`); saving writes `raw`, never
+/// the label, so they stay distinct (T850).
+#[derive(Clone, PartialEq)]
+struct Key {
+    /// The row label.
+    label: String,
+    /// The key as parsed, written back unchanged.
+    raw: serde_norway::Value,
 }
 
 /// One step of a path locating a node within the tree.
 #[derive(Clone, PartialEq)]
 enum Seg {
-    /// An object key.
-    Key(String),
+    /// An object entry, by its position (labels can repeat, positions cannot).
+    Entry(usize),
     /// An array position.
     Index(usize),
 }
@@ -187,6 +199,46 @@ impl std::fmt::Display for ParseError {
 }
 
 impl std::error::Error for ParseError {}
+
+/// Why [`Tree::save_text`] refused to write the tree back as text.
+///
+/// Nothing should be saved in any of these cases; the editor reports the
+/// error instead.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum SaveError {
+    /// Two keys of one object would be written as the same key, so the
+    /// saved file would lose one entry (YAML) or repeat a key (JSON).
+    DuplicateKey {
+        /// The key as it would be written.
+        key: String,
+    },
+    /// A sequence or mapping used as a key (YAML `? [a, b]`) has no JSON form.
+    ComplexKey,
+    /// The YAML serializer failed.
+    Yaml(serde_norway::Error),
+}
+
+impl std::fmt::Display for SaveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DuplicateKey { key } => {
+                write!(f, "two entries would be saved with the key {key}")
+            }
+            Self::ComplexKey => f.write_str("a sequence or mapping key cannot be written as JSON"),
+            Self::Yaml(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for SaveError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Yaml(e) => Some(e),
+            _ => None,
+        }
+    }
+}
 
 /// A foldable, editable JSON/YAML value tree with a cursor and undo history.
 pub struct Tree {
@@ -326,15 +378,42 @@ impl Tree {
     ///
     /// The YAML serializer's error when the tree cannot be written as YAML;
     /// the caller must not save in that case (an empty text would erase the file).
+    /// A tree [`Tree::save_text`] refuses (two keys that would be written
+    /// alike) is an error here too, carrying the same English message.
     pub fn to_text(&self) -> Result<String, serde_norway::Error> {
+        self.save_text().map_err(|e| match e {
+            SaveError::Yaml(e) => e,
+            other => <serde_norway::Error as serde::ser::Error>::custom(other),
+        })
+    }
+
+    /// Serialize the tree back to text in its format, refusing a tree that
+    /// would not read back as the same data.
+    ///
+    /// Each object key is written in the form it was read (a number stays a
+    /// number, a string a string, a tag stays on the key), so keys that share
+    /// a label stay distinct.
+    ///
+    /// # Errors
+    ///
+    /// [`SaveError::DuplicateKey`] when two keys of one object would be
+    /// written as the same key (in JSON every key is a string, so YAML keys
+    /// `1` and `"1"` collide there); [`SaveError::ComplexKey`] for a
+    /// sequence or mapping key in JSON; [`SaveError::Yaml`] when the YAML
+    /// serializer fails. The caller must not save in any of these cases.
+    pub fn save_text(&self) -> Result<String, SaveError> {
         match self.format {
             Format::Json => {
+                check_json_keys(&self.root)?;
                 let mut out = String::new();
                 json_push(&self.root, 0, &mut out);
                 out.push('\n');
                 Ok(out)
             }
-            Format::Yaml => serde_norway::to_string(&to_yaml(&self.root)),
+            Format::Yaml => {
+                check_yaml_keys(&self.root)?;
+                serde_norway::to_string(&to_yaml(&self.root)).map_err(SaveError::Yaml)
+            }
         }
     }
 
@@ -547,9 +626,7 @@ fn at_mut<'a>(mut node: &'a mut Val, path: &[Seg]) -> Option<&'a mut Val> {
     for seg in path {
         node = match (node, seg) {
             (Val::Arr { items, .. }, Seg::Index(i)) => items.get_mut(*i)?,
-            (Val::Obj { entries, .. }, Seg::Key(k)) => {
-                entries.iter_mut().find(|(ek, _)| ek == k).map(|(_, v)| v)?
-            }
+            (Val::Obj { entries, .. }, Seg::Entry(i)) => entries.get_mut(*i).map(|(_, v)| v)?,
             _ => return None,
         };
     }
@@ -595,10 +672,10 @@ fn flatten(val: &Val, depth: usize, label: String, path: Vec<Seg>, out: &mut Vec
                 path: path.clone(),
             });
             if !collapsed {
-                for (k, v) in entries {
+                for (i, (k, v)) in entries.iter().enumerate() {
                     let mut p = path.clone();
-                    p.push(Seg::Key(k.clone()));
-                    flatten(v, deeper(depth), k.clone(), p, out);
+                    p.push(Seg::Entry(i));
+                    flatten(v, deeper(depth), k.label.clone(), p, out);
                 }
             }
         }
@@ -640,7 +717,16 @@ fn from_yaml(v: &serde_norway::Value) -> Val {
         },
         Y::Mapping(m) => Val::Obj {
             collapsed: false,
-            entries: m.iter().map(|(k, v)| (yaml_key(k), from_yaml(v))).collect(),
+            entries: m
+                .iter()
+                .map(|(k, v)| {
+                    let key = Key {
+                        label: yaml_key(k),
+                        raw: k.clone(),
+                    };
+                    (key, from_yaml(v))
+                })
+                .collect(),
         },
         // YAML tags (`!!str`, custom) are dropped; only the value is kept,
         // so saving a YAML file loses explicit tags.
@@ -656,8 +742,70 @@ fn yaml_key(k: &serde_norway::Value) -> String {
         Y::Bool(b) => b.to_string(),
         Y::Number(n) => n.to_string(),
         Y::Null => "null".to_string(),
+        // A tagged key shows its tag, as YAML writes it: `!k x`.
+        Y::Tagged(t) => format!("{} {}", t.tag, yaml_key(&t.value)),
         // Complex (sequence/mapping) keys have no sensible one-line label.
-        _ => "?".to_string(),
+        Y::Sequence(_) | Y::Mapping(_) => "?".to_string(),
+    }
+}
+
+/// The JSON name a key is written as: a string as itself, a number, boolean
+/// or null as its text, a tagged key as its value (JSON has no tags). `None`
+/// for a sequence or mapping key, which has no JSON form.
+fn json_key(k: &serde_norway::Value) -> Option<String> {
+    use serde_norway::Value as Y;
+    match k {
+        Y::String(s) => Some(s.clone()),
+        Y::Bool(b) => Some(b.to_string()),
+        Y::Number(n) => Some(n.to_string()),
+        Y::Null => Some("null".to_string()),
+        Y::Tagged(t) => json_key(&t.value),
+        Y::Sequence(_) | Y::Mapping(_) => None,
+    }
+}
+
+/// Refuse a tree whose objects would be written with a repeated or
+/// unrepresentable JSON name. Names compare as decoded strings (RFC 8259
+/// §7/§8.3), the form the writer escapes them back from.
+fn check_json_keys(val: &Val) -> Result<(), SaveError> {
+    match val {
+        Val::Arr { items, .. } => items.iter().try_for_each(check_json_keys),
+        Val::Obj { entries, .. } => {
+            let mut seen = std::collections::HashSet::new();
+            for (k, v) in entries {
+                let name = json_key(&k.raw).ok_or(SaveError::ComplexKey)?;
+                if !seen.insert(name.clone()) {
+                    return Err(SaveError::DuplicateKey {
+                        key: json_quote(&name),
+                    });
+                }
+                check_json_keys(v)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Refuse a tree whose objects hold the same YAML key twice. The parser
+/// rejects duplicate keys, so this guards the writer, which would keep only
+/// one of them.
+fn check_yaml_keys(val: &Val) -> Result<(), SaveError> {
+    match val {
+        Val::Arr { items, .. } => items.iter().try_for_each(check_yaml_keys),
+        Val::Obj { entries, .. } => {
+            let mut seen = std::collections::HashSet::new();
+            for (k, v) in entries {
+                if !seen.insert(&k.raw) {
+                    return Err(SaveError::DuplicateKey {
+                        key: k.label.clone(),
+                    });
+                }
+                check_yaml_keys(v)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
     }
 }
 
@@ -679,7 +827,7 @@ fn to_yaml(val: &Val) -> serde_norway::Value {
         Val::Obj { entries, .. } => {
             let mut m = serde_norway::Mapping::new();
             for (k, v) in entries {
-                m.insert(Y::String(k.clone()), to_yaml(v));
+                m.insert(k.raw.clone(), to_yaml(v));
             }
             Y::Mapping(m)
         }
@@ -730,7 +878,8 @@ fn json_push(val: &Val, depth: usize, out: &mut String) {
             out.push_str("{\n");
             for (i, (k, v)) in entries.iter().enumerate() {
                 indent(out, deeper(depth));
-                out.push_str(&json_quote(k));
+                // `save_text` checked every key has a JSON name first.
+                out.push_str(&json_quote(&json_key(&k.raw).unwrap_or_default()));
                 out.push_str(": ");
                 json_push(v, deeper(depth), out);
                 if has_next(i, entries.len()) {
@@ -1210,5 +1359,178 @@ mod tests {
         assert_eq!(t.sel(), 0, "no parent to step to");
         type_value(&mut t, "43");
         assert_eq!(t.to_text().unwrap(), "43\n");
+    }
+
+    /// Assert \`out\` reads back as the same YAML data as \`text\`.
+    fn same_yaml(text: &str, out: &str) {
+        let a: serde_norway::Value = serde_norway::from_str(text).unwrap();
+        let b: serde_norway::Value = serde_norway::from_str(out).unwrap();
+        assert_eq!(a, b, "saved:\n{out}");
+    }
+
+    fn yaml_round_trip(text: &str) {
+        let t = Tree::from_text(text, Format::Yaml).unwrap();
+        same_yaml(text, &t.to_text().unwrap());
+    }
+
+    #[test]
+    fn yaml_int_and_string_keys_that_look_alike_both_save() {
+        // T850: both rows read \`1\`; the save used to keep only one.
+        yaml_round_trip("1: a\n\"1\": b\n");
+    }
+
+    #[test]
+    fn yaml_bool_and_string_true_keys_both_save() {
+        yaml_round_trip("true: a\n'true': b\nnull: c\n'null': d\n");
+    }
+
+    #[test]
+    fn yaml_tagged_keys_keep_their_type_and_tag() {
+        let text = "!!str 1: a\n1: b\n!k x: c\nx: d\n";
+        yaml_round_trip(text);
+        let t = Tree::from_text(text, Format::Yaml).unwrap();
+        let labels: Vec<&str> = (0..t.row_count()).map(|i| t.label(i)).collect();
+        assert!(
+            labels.contains(&"!k x"),
+            "a tagged key shows its tag: {labels:?}"
+        );
+    }
+
+    #[test]
+    fn yaml_complex_keys_both_save() {
+        // Both keys are labelled \`?\`; they used to be saved as one string key "?".
+        yaml_round_trip("? [a, b]\n: one\n? {c: d}\n: two\n");
+    }
+
+    #[test]
+    fn editing_one_of_two_alike_keys_changes_only_that_entry() {
+        let mut t = Tree::from_text("1: a\n\"1\": b\n", Format::Yaml).unwrap();
+        assert_eq!((t.label(1), t.label(2)), ("1", "1"));
+        t.handle_key(code(KeyCode::End), 8);
+        type_value(&mut t, "z");
+        assert_eq!((t.value(1), t.value(2)), ("a", "z"));
+        same_yaml("1: a\n'1': z\n", &t.to_text().unwrap());
+    }
+
+    #[test]
+    fn json_escaped_and_plain_names_are_the_same_key() {
+        // RFC 8259 compares names after unescaping, so the escape for U+0061
+        // is \`a\`: a document naming it twice is refused on open, never
+        // half-saved.
+        let bs = char::from(92u8);
+        let twice = format!("{{\"a\": 1, \"{bs}u0061\": 2}}");
+        let Err(err) = Tree::from_text(&twice, Format::Json) else {
+            panic!("a repeated JSON name must not open");
+        };
+        assert!(err.to_string().contains("duplicate"), "{err}");
+        let once = format!("{{\"{bs}u0061\": 2}}");
+        let t = Tree::from_text(&once, Format::Json).unwrap();
+        assert_eq!(t.label(1), "a");
+        assert_eq!(t.save_text().unwrap(), "{\n  \"a\": 2\n}\n");
+    }
+
+    #[test]
+    fn json_refuses_keys_that_would_be_written_alike() {
+        for (text, key) in [
+            ("1: a\n\"1\": b\n", "\"1\""),
+            ("true: a\n'true': b\n", "\"true\""),
+            ("!!str 1: a\n1: b\n", "\"1\""),
+            ("!k x: a\nx: b\n", "\"x\""),
+            ("o:\n  null: a\n  'null': b\n", "\"null\""),
+        ] {
+            let t = Tree::from_text(text, Format::Json).unwrap();
+            match t.save_text() {
+                Err(SaveError::DuplicateKey { key: k }) => assert_eq!(k, key, "{text}"),
+                other => panic!("{text}: expected a duplicate key, got {other:?}"),
+            }
+            assert!(t.to_text().is_err(), "to_text refuses too: {text}");
+        }
+    }
+
+    #[test]
+    fn json_refuses_a_complex_key() {
+        let t = Tree::from_text("? [a]\n: x\n", Format::Json).unwrap();
+        assert!(matches!(t.save_text(), Err(SaveError::ComplexKey)));
+    }
+
+    #[test]
+    fn json_writes_non_string_keys_as_names() {
+        let t = Tree::from_text("1: a\ntrue: b\nnull: c\n!k x: d\n", Format::Json).unwrap();
+        let out = t.save_text().unwrap();
+        let back: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(
+            back,
+            serde_json::json!({"1": "a", "true": "b", "null": "c", "x": "d"}),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn save_errors_display_in_english() {
+        let dup = SaveError::DuplicateKey {
+            key: "\"1\"".into(),
+        };
+        assert_eq!(
+            dup.to_string(),
+            "two entries would be saved with the key \"1\""
+        );
+        assert!(std::error::Error::source(&dup).is_none());
+        assert!(SaveError::ComplexKey.to_string().contains("JSON"));
+        let yaml_err = <serde_norway::Error as serde::ser::Error>::custom("boom");
+        let wrapped = SaveError::Yaml(yaml_err);
+        assert_eq!(wrapped.to_string(), "boom");
+        assert!(std::error::Error::source(&wrapped).is_some());
+    }
+
+    /// Keys that render alike in a row label but are different YAML keys.
+    fn tricky_key(i: u8) -> serde_norway::Value {
+        use serde_norway::Value as Y;
+        match i % 9 {
+            0 => Y::from(1),
+            1 => Y::String("1".into()),
+            2 => Y::Bool(true),
+            3 => Y::String("true".into()),
+            4 => Y::Null,
+            5 => Y::String("null".into()),
+            6 => Y::Tagged(Box::new(serde_norway::value::TaggedValue {
+                tag: serde_norway::value::Tag::new("k"),
+                value: Y::String("x".into()),
+            })),
+            7 => Y::String("x".into()),
+            _ => Y::Sequence(vec![Y::from(i)]),
+        }
+    }
+
+    proptest::proptest! {
+        // T850: any mix of look-alike keys survives a YAML save, and a JSON
+        // save either writes every key once or refuses.
+        #[test]
+        fn look_alike_keys_round_trip(keys in proptest::collection::vec(0u8..40, 0..12)) {
+            let mut m = serde_norway::Mapping::new();
+            for (n, k) in keys.iter().enumerate() {
+                m.insert(tricky_key(*k), serde_norway::Value::from(n));
+            }
+            let len = m.len();
+            let doc = serde_norway::Value::Mapping(m);
+            // serde_norway cannot write a one-entry mapping whose key is
+            // tagged (an emitter error, which the editor reports and saves
+            // nothing); such documents are not generated here.
+            let text = serde_norway::to_string(&doc);
+            proptest::prop_assume!(text.is_ok());
+            let text = text.unwrap();
+            let yaml = Tree::from_text(&text, Format::Yaml).unwrap();
+            let back: serde_norway::Value = serde_norway::from_str(&yaml.to_text().unwrap()).unwrap();
+            proptest::prop_assert_eq!(&back, &doc);
+            let json = Tree::from_text(&text, Format::Json).unwrap();
+            match json.save_text() {
+                Ok(out) => {
+                    let back: serde_json::Map<String, serde_json::Value> =
+                        serde_json::from_str(&out).unwrap();
+                    proptest::prop_assert_eq!(back.len(), len);
+                }
+                Err(SaveError::DuplicateKey { .. } | SaveError::ComplexKey) => {}
+                Err(e) => proptest::prop_assert!(false, "unexpected {e}"),
+            }
+        }
     }
 }

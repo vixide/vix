@@ -11440,13 +11440,28 @@ impl App {
 
     /// Serialize the structured-value editor back into the active buffer and save.
     fn save_edit_value(&mut self) {
-        let Some(result) = self.edit.edit_value().map(crate::edit_value::Tree::to_text) else {
+        let Some(result) = self
+            .edit
+            .edit_value()
+            .map(crate::edit_value::Tree::save_text)
+        else {
             return;
         };
         let text = match result {
             Ok(text) => text,
+            // Never save an empty file, or one that lost or repeats a key,
+            // over the user's data (T850).
+            Err(crate::edit_value::SaveError::DuplicateKey { key }) => {
+                self.messages
+                    .warn(t!("msg.edit_value_duplicate_key", key = key).to_string());
+                return;
+            }
+            Err(crate::edit_value::SaveError::ComplexKey) => {
+                self.messages
+                    .warn(t!("msg.edit_value_complex_key").to_string());
+                return;
+            }
             Err(e) => {
-                // Never save an empty file over the user's data.
                 self.messages
                     .warn(t!("msg.edit_value_serialize", error = e.to_string()).to_string());
                 return;
