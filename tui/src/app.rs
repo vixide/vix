@@ -8355,7 +8355,9 @@ impl App {
                     )]);
                 }
             }
-            Err(e) => self.messages.error(format!("Paste failed: {e}")),
+            Err(e) => self
+                .messages
+                .error(t!("msg.paste_failed", error = e).to_string()),
         }
     }
 

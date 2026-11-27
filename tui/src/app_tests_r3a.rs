@@ -797,14 +797,18 @@ fn paste_into_the_same_directory_and_failures() {
     let gone = dir.join("gone.txt");
     let sub = dir.join("sub");
     std::fs::create_dir_all(&sub).unwrap();
-    a.paste = Some(paste_op(&sub, false, std::slice::from_ref(&gone)));
-    a.process_paste();
-    assert!(
+    let errors = |a: &App| {
         a.messages
             .items
             .iter()
-            .any(|m| m.text.starts_with("Paste failed"))
-    );
+            .filter(|m| matches!(m.level, Level::Error))
+            .count()
+    };
+    let before = errors(&a);
+    a.paste = Some(paste_op(&sub, false, std::slice::from_ref(&gone)));
+    a.process_paste();
+    // Not the translated text: the locale is process-global.
+    assert!(errors(&a) > before);
     // Moving re-points an open buffer at the new path.
     a.open_path(&f, false);
     a.paste = Some(paste_op(&sub, true, std::slice::from_ref(&f)));

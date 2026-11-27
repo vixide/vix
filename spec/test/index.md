@@ -13,7 +13,7 @@ no sleeps, no screen scraping.
 | **Property** | Same, with `proptest` | Invariants over generated input — "the cursor a rewrite returns is always inside the text it returns" | `cargo test` |
 | **Integration** | `tui/tests/integration/main.rs` | A real `App`: keys in, state out. Menus, actions, keymaps, overlays, files | `cargo test` |
 | **Snapshot** | `tui/tests/snapshots.rs` | Golden text screens — the actual rendered frame, not just state, for scenarios where the layout itself is the thing being tested | `cargo test` |
-| **Repo invariants** | `tui/tests/i18n_keys.rs` | Facts about the repository itself — every `t!` key exists, every call fills exactly the `%{name}` placeholders its string declares, every catalog entry has an `en` fallback | `cargo test` |
+| **Repo invariants** | `tui/tests/i18n_keys.rs`, `tui/tests/code_lints.rs`, `tui/tests/spawn_sites.rs` | Facts about the repository itself — every `t!` key exists, every call fills exactly the `%{name}` placeholders its string declares, every catalog entry has an `en` fallback | `cargo test` |
 | **Action sweep** | `tui/tests/action_sweep.rs` | Every action id the dispatch scan finds (`vix_action_catalog::dispatch_scan`) runs once on a fresh `App`, its frame drawn wide and narrow, then any prompt it opened answered (`sweep`, Enter), then poked (hover, click and scroll over a grid of points, the navigation keys), then Enter on whatever is highlighted and Esc pressed twice — no panic, no hang. Runs in a sandbox like the chaos monkey (a `PATH` holding only a link to `git` and a fake `docker` that prints canned JSON listings with shell built-ins, a throwaway `HOME` and git config, no `SHELL`) over a workspace that is a throwaway repository with history, a branch, a stash and a change but no remote, re-executing its own test binary, killed after 10 minutes with the action it was on named. It is the cheapest way to draw every overlay under test and coverage | `cargo test` |
 | **Keymap sweep** | `tui/tests/action_sweep.rs` | Every keymap (`vix_keymap_model::KEYMAPS`) fed `C-x` and `C-c` with each letter (plain and Ctrl), the Space leader with each letter, plain letters in normal mode and a few Vim `:` commands, drawing after each; same sandbox, a fresh `App` after a quit | `cargo test` |
 | **End to end** | `tui/tests/e2e_tmux.rs` | The real `vix` binary in a real terminal: a detached tmux session on a private server socket (`tmux -L`, never a person's own sessions), a throwaway `HOME`, keys sent with `send-keys` and the screen read with `capture-pane`. Covers what in-process tests cannot: terminal setup, the event loop, input decoding, teardown and the command line. Skipped without tmux; Unix only | `cargo test` |
@@ -253,6 +253,49 @@ tested like anything else:
 The scanner reads `t!` calls with a paren-balanced walk of the argument list, so
 `path.display()` does not end it early; a call whose arguments continue on the
 next line is skipped rather than reported with half of them.
+
+### Project-specific lints (T833)
+
+`tui/tests/code_lints.rs` holds the rules clippy cannot express. It scans
+`tui/src/` and every `crates/*/src/` as text, so it runs under `cargo test`
+(and so in `scripts/check` and CI) with no extra tool:
+
+- **No `println!`, `eprintln!`, `print!`, `eprint!` or `dbg!` in library
+  code.** The TUI owns the terminal: a stray print scribbles over the frame, and
+  a diagnostic belongs in the message drawer. The allowlist names each file that
+  may print, with the exact number of print macros it holds and why, so a new
+  print in an allowlisted file fails too: `tui/src/main.rs` (the command line:
+  `--version`, `--json`, usage and start-up errors), `tui/src/app.rs`
+  (`App::on_exit` runs after the terminal is restored, so stderr is the only
+  channel left), `tui/src/crash.rs` (the panic hook) and `tui/src/mcp.rs`
+  (`vix --mcp`: stdout is the protocol). An allowlisted file that no longer
+  exists fails as well.
+- **A literal given to a user-message sink goes through `t!`.** The sinks are
+  the App's `messages.info`, `messages.warn`, `messages.error` and
+  `messages.push`, `status = …` and `status.push_str(…)`, on `self` or
+  `app`, in `tui/src/`. The expression handed to one (up to its `;` or `,`,
+  or the bracket that closes around it) fails when it holds a string literal
+  with a letter outside `{…}` placeholders and no `t!(` call. A literal of
+  only placeholders and punctuation (`format!("{e}: {}", …)`) passes. Its
+  allowlist is empty; an entry needs a reason (and a `TODO(T833)` for a real
+  violation). The first run found one real violation, `Paste failed: {e}`,
+  now `msg.paste_failed`.
+- **Not checked: blocking I/O in async code.** The workspace has two async
+  call paths, `vix-db` (`session`, `table_export`, `conn`) and the
+  `vix-jupyter` worker, and each runs `block_on` on its own
+  current-thread Tokio runtime on a thread of its own, one task at a time. A
+  blocking call there (the table export's `std::fs` writes) stalls only that
+  job, which is waiting for it anyway, so the rule would forbid nothing that
+  matters. Revisit it if a shared multi-task runtime appears.
+
+Test code is exempt from both rules: an item under a `cfg` that names `test`
+(not `not(test)`), and every file of a module declared inside one, including
+through `#[path]`. Comments and the contents of string and character literals
+are never read as code, so a snippet body such as `"println!($0);"` is not a
+print. Examples, benches, build scripts and `tests/` live outside `src/` and
+are not scanned. The same file keeps `.github/pull_request_template.md` and
+`.forgejo/pull_request_template.md` (GitHub's and Codeberg's copy of the
+contributor checklist) identical.
 
 ## Manual scenarios
 

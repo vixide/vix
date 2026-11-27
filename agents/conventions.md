@@ -40,6 +40,11 @@ on top.
   has been converted to a `bitflags`-based `Flags` field instead — prefer that
   over a new allow for a struct whose bools are independent, freely-combinable
   toggles.
+- **Project lints** (`tui/tests/code_lints.rs`, T833): no `println!`,
+  `eprintln!`, `print!`, `eprint!` or `dbg!` in library code outside its
+  allowlist (each entry with a count and a reason), and no untranslated
+  literal handed to `self.messages.*` or `self.status`. See
+  [`spec/test`](../spec/test/index.md), "Project-specific lints".
 
 ## Internationalization
 
