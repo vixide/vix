@@ -172,6 +172,11 @@ impl App {
         if self.palette.is_some() {
             self.recompute_palette();
         }
+        // An open project search ran over the first pass only: search again
+        // now that every file is listed, or its hits stay silently partial.
+        if self.workspace_search.is_some() {
+            self.run_workspace_search();
+        }
     }
 
     /// How many files Quick Open can find right now.
@@ -222,6 +227,7 @@ mod tests {
     use crate::app::App;
     use crate::authority::WalkCancel;
     use crate::settings::Settings;
+    use crate::workspace_search::WorkspaceSearch;
     use std::path::{Path, PathBuf};
     use std::sync::mpsc;
 
@@ -328,6 +334,34 @@ mod tests {
         assert_eq!(app.file_index_notice(), None);
         wait(&mut app);
         assert_eq!(app.file_index_len(), total);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_open_project_search_runs_again_when_the_full_index_lands() {
+        let dir = tree("search-refresh", 3);
+        std::fs::write(dir.join("first.txt"), "a needle here\n").unwrap();
+        std::fs::write(dir.join("later.txt"), "another needle\n").unwrap();
+        let mut app = App::new(dir.clone(), Settings::default());
+        // As if the first pass had listed only `first.txt` and the walk
+        // were still running.
+        app.file_index = vec![dir.join("first.txt")];
+        app.file_index_folders.clone_from(&app.workspace_folders);
+        let mut panel = WorkspaceSearch::new(false);
+        panel.query = "needle".to_string();
+        app.workspace_search = Some(panel);
+        app.run_workspace_search();
+        assert_eq!(app.workspace_search_hits().len(), 1, "first pass only");
+        let all = vec![dir.join("first.txt"), dir.join("later.txt")];
+        app.file_index_job = Some(job_with(Some(all), app.workspace_folders.clone()));
+        app.poll_file_index();
+        let hits: Vec<&str> = app
+            .workspace_search_hits()
+            .iter()
+            .map(|h| h.rel.as_str())
+            .collect();
+        assert_eq!(hits.len(), 2, "{hits:?}");
+        assert!(hits.iter().any(|r| r.ends_with("later.txt")), "{hits:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
