@@ -25,6 +25,7 @@
 mod index;
 mod read;
 mod search;
+mod size;
 mod source;
 mod viewer;
 
@@ -33,6 +34,7 @@ mod testutil;
 
 pub use index::{DEFAULT_STRIDE, LineIndex, Lookup, scan_chunk};
 pub use search::{Direction, Found, Search, find};
+pub use size::{OpenPlan, Thresholds, VIEWER_BYTES, WARN_BYTES};
 pub use source::{LineSpan, Source};
 pub use viewer::{
     COPY_LIMIT, InputKind, Notice, Outcome, Status, Target, ViewLine, Viewer, parse_target,

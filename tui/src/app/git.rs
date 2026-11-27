@@ -25,12 +25,33 @@ use std::path::{Path, PathBuf};
 use crate::app::picker_panels::list_panel_full_nav_key;
 use vix_input::{KeyCode, KeyEvent, MouseEvent};
 
+use super::git_refresh::GitSnapshot;
 #[cfg(feature = "ai")]
 use super::{AiDest, AiReplace};
 use super::{
     App, AppFlags, BranchChooser, Confirm, ConfirmKind, GitPanel, Prompt, PromptKind, gutter_hex,
 };
 use crate::editor::Tab;
+
+impl GitSnapshot {
+    /// Read the git state of `root`: three `git` runs (repo?, branch,
+    /// status) inside a working tree, one outside it.
+    pub(super) fn take(root: &Path) -> Self {
+        if crate::git::is_repo(root) {
+            Self {
+                repo: true,
+                branch: crate::git::branch(root),
+                status: crate::git::status(root),
+            }
+        } else {
+            Self {
+                repo: false,
+                branch: None,
+                status: Vec::new(),
+            }
+        }
+    }
+}
 
 impl App {
     /// Bail (with the standard "not a repository" status message) unless
@@ -142,21 +163,26 @@ impl App {
 
     /// Refresh the cached git state (repo?, branch, changed files) for the workspace
     /// root. Cheap enough to call after saves and git actions; not per-frame.
+    ///
+    /// Synchronous: it supersedes a background refresh in flight
+    /// ([`App::start_git_refresh`], T830), whose older answer is dropped.
     pub fn refresh_git(&mut self) {
-        self.flags
-            .set(AppFlags::GIT_REPO, crate::git::is_repo(&self.root));
+        self.git_refresh_job = None;
+        let snapshot = GitSnapshot::take(&self.root);
+        self.apply_git_snapshot(snapshot);
+    }
+
+    /// Install a git snapshot: from [`App::refresh_git`], or one a background
+    /// refresh posted (T830).
+    pub(super) fn apply_git_snapshot(&mut self, snapshot: GitSnapshot) {
+        self.flags.set(AppFlags::GIT_REPO, snapshot.repo);
         // HEAD may have moved (commit/checkout) or the working tree changed; drop
         // the cached HEAD blobs so the diff gutter refetches.
         self.git_head_cache.clear();
         self.git_gutter_base_cache.clear();
         self.git_gutter_cache_key = None;
-        if self.flags.contains(AppFlags::GIT_REPO) {
-            self.git_branch = crate::git::branch(&self.root);
-            self.git_status = crate::git::status(&self.root);
-        } else {
-            self.git_branch = None;
-            self.git_status.clear();
-        }
+        self.git_branch = snapshot.branch;
+        self.git_status = snapshot.status;
     }
 
     /// Recompute the editor diff gutter for the active tab: a colored bar on each

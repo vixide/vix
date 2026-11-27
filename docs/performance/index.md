@@ -143,6 +143,38 @@ custom-themes directory (real filesystem I/O) **twice** — once inside
 `apply_saved_theme`, once again immediately after for the View → Theme
 submenu's name list — now scanned once and reused for both.
 
+## The startup git refresh, in the background (T830)
+
+T122 moved `refresh_git` (three `git` runs: repo?, branch, status) after
+the first frame; a later change (`e3063798`) dropped the startup call
+altogether, which saved its cost but left the status-bar branch, the
+changed-file state and the change gutter empty until the first save or git
+action. Since T830, `App::start` (both front ends) starts the same refresh on
+a worker thread (`tui/src/app/git_refresh.rs`) and `App::tick` installs its
+answer; the event loop ticks every 50 ms while it runs, so the branch and
+gutter appear within a frame or two of the answer landing. A synchronous
+`refresh_git` (opening the Git panel, a save, any git action) supersedes a
+refresh still in flight.
+
+Measured with `cargo bench --bench startup -- startup/` on 2026-11-27
+(on `6875a21c`, a busy machine: load average around 45, so the absolute times
+are high; the ratios are the point). `VIX_BENCH_GIT_DIR` points the git
+benchmarks at a real repository, here this checkout (147 crates):
+
+| Benchmark | What it times | Empty fixture repo | This checkout |
+| --- | --- | --- | --- |
+| `startup/app_new` | `App::new`, no git (before: 235 µs) | 302 µs | 678 µs |
+| `startup/refresh_git` | the synchronous refresh, as before T830 (before: 27.4 ms) | 30.7 ms | 87.1 ms |
+| `startup/start_git_refresh` | what the UI thread pays now: spawning the worker | 60 µs | 17 µs |
+| `startup/git_refresh_landed` | spawn through `tick` installing the answer (wall time, off the UI thread) | 31.3 ms | 86.3 ms |
+
+So startup's git cost on the UI thread fell from a blocking 27–87 ms (before
+`e3063798`) to tens of microseconds, and the branch shows again: it lands
+once git answers, without holding up the first frame or the first keystroke.
+The open-time exercise below (`open/`) runs `App::start` and so now
+includes that spawn; its first editable frame (6.7 ms warm median for 20,000
+files on the same busy machine) is dominated by everything else.
+
 ## Opening a large checkout (T823)
 
 How long a user waits after opening a big project: for the file named on

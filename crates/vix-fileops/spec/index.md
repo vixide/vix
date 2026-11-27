@@ -249,7 +249,10 @@ spans directories, `*` doesn't cross `/`, invalid patterns are skipped) and
 `ephemeral_paths` settings (T662).
 
 The host turns `TooLarge` and `Binary` into confirmations (`large_file_mb`; binary files
-open in the byte editor, which saves the bytes back exactly) rather than errors.
+open in the byte editor, which saves the bytes back exactly) rather than errors. Past
+500 MiB the size confirmation carries a memory warning, and past the 1 GiB ceiling the
+file opens in the Large File Viewer instead (T830, `crates/vix-large-file/spec`, "Size
+thresholds").
 
 
 ## Checked arithmetic

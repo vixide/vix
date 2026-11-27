@@ -14,9 +14,35 @@ gigabytes.
 - Opening a file above the `large_file_mb` setting (`editor_behavior.large_file_mb` in code) asks first (T571); that
   confirmation now also offers **v** — view it read-only in the Large File
   Viewer — beside **y** (load it into a buffer anyway) and **n**.
-- A file above the 1 GiB hard ceiling, which no buffer may hold, used to be
-  refused outright; it now asks whether to view it in the Large File Viewer
-  instead (`ConfirmKind::OpenLargeViewer`).
+- Opening a file above 500 MiB asks the same question with a memory warning
+  added, whatever `large_file_mb` is, `0` included (T830).
+- A file above 1 GiB, the ceiling no buffer may hold, opens read-only in the
+  Large File Viewer straight away, with a message saying so (T830; before, it
+  was first refused outright, then asked about). On a remote workspace it is
+  refused with a message, as the viewer reads local files only.
+- An arrow-key preview (the explorer) never asks or opens the viewer; it only
+  reports the file as too large.
+
+### Size thresholds (T830)
+
+The decision is the pure `Thresholds::plan(size, ask)` (`size` module), so
+it is tested without large files; `ask` is `large_file_mb` in bytes, `0` for
+none. Sizes are binary (a MiB is 1,048,576 bytes), as for `large_file_mb`.
+
+| Constant | Value | Above it, opening a file… |
+| --- | --- | --- |
+| (`large_file_mb`, a setting) | 50 MiB by default; `0` none | asks first (`OpenPlan::Ask`) |
+| `WARN_BYTES` | 500 MiB (524,288,000 bytes) | asks first, with a memory warning (`OpenPlan::Warn`) |
+| `VIEWER_BYTES` | 1 GiB (1,073,741,824 bytes), equal to `vix_fileops::HARD_MAX_TEXT_BYTES` | opens in the viewer without asking (`OpenPlan::Viewer`) |
+
+Otherwise it loads (`OpenPlan::Load`). The editor's own read limit is
+`Thresholds::load_limit(ask)`, the smaller of `ask` and `WARN_BYTES`, so the
+guarded read refuses every file the plan does not simply load and the host
+asks or degrades from there. The thresholds are not settings: the warning
+is about memory the machine has, not a preference, and the viewer threshold
+is where a buffer can no longer hold the file at all. Vim, which has no such
+limits, loads anything it can allocate; Vix keeps `large_file_mb` as the
+user's own, lower limit.
 - Only regular files open (a FIFO or device is refused: it could block or
   never end).
 
@@ -129,6 +155,7 @@ opens it, routes keys, puts copies on the clipboard, and polls it each tick
 | `source` | `Source` (`open`, `len`, `is_empty`, `read`, `line_start_containing`, `last_line_start`, `forward`, `forward_exact`, `back`, `lines_from`, `count_newlines`) and `LineSpan` (one line's byte range, CR kept) |
 | `index` | `LineIndex` (`build`, `build_with`, `wait`, `scanned`, `percent`, `is_done`, `failed`, `total_lines`, `checkpoints`, `stride`, `line_start`, `line_of`), `Lookup`, the pure `scan_chunk`, `DEFAULT_STRIDE` (1,024) |
 | `search` | `Search` (`start`, `percent`, `needle_len`, `direction`, `cancel`, `poll`, `wait`), `Direction`, `Found` (incl. `Cancelled`), the pure `find` |
+| `size` | `Thresholds` (`warn`, `viewer`, `load_limit`, `plan`), `OpenPlan` (`Load`, `Ask`, `Warn`, `Viewer`), `WARN_BYTES` (500 MiB), `VIEWER_BYTES` (1 GiB) |
 | `viewer` | `Viewer` (`open`, `path`, `index`, `index_mut`, `cursor`, `top`, `input`, `notice`, `busy`, `status`, `view`, `goto`, `search`, `handle_key`), `Outcome`, `InputKind`, `Notice` (translated by the host), `Target` and `parse_target` (line, percent, byte offset), `ViewLine`, `Status`, `COPY_LIMIT` |
 
 Measured numbers (time to first screen, goto-end, full index, search, peak

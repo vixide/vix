@@ -316,8 +316,9 @@ fn main() -> io::Result<()> {
     // Draw once before the (comparatively expensive, git-subprocess-based)
     // initial refresh, so the terminal shows real content immediately
     // rather than sitting on whatever was on screen before Vix started for
-    // however long that refresh takes (T122). Git state is refreshed when
-    // the Git panel is first opened, saving ~12.2 ms on startup.
+    // however long that refresh takes (T122). `App::start` began that
+    // refresh on a worker thread; `App::tick` installs it, so the branch
+    // and change gutter appear a frame or two later (T830).
     let _ = draw(&mut terminal, &mut app);
     let mut profiler = Profiler::from_env();
     let result = run(&mut terminal, &mut app, profiler.as_mut());

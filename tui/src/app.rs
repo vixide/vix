@@ -45,6 +45,7 @@ mod fhir_http_off;
 mod file_index;
 mod focus;
 mod ghost;
+mod git_refresh;
 use crate::geo::{Geo, later};
 #[cfg(feature = "cowork")]
 use cowork as cowork_state;
@@ -895,8 +896,10 @@ pub enum ConfirmKind {
     OpenLarge,
     /// Open [`Confirm::paths`] (one file) in the byte editor: it is binary (T571).
     OpenBinary,
-    /// Open [`Confirm::paths`] (one file) in the Large File Viewer: it is
-    /// past the 1 GiB ceiling a text buffer may hold (T733).
+    /// Open [`Confirm::paths`] (one file) in the Large File Viewer. Since T830
+    /// a file past the 1 GiB ceiling opens there without asking, so Vix no
+    /// longer raises this prompt; the variant stays (and still works if raised)
+    /// so the published enum keeps its variants and order.
     OpenLargeViewer,
     /// Discard the unstaged changes to [`Confirm::paths`] (one root-relative
     /// file) from the Git panel (T657).
@@ -2682,6 +2685,11 @@ pub struct App {
     file_index_folders: Vec<PathBuf>,
     /// The background walk finishing `file_index`, while one runs (T845).
     file_index_job: Option<file_index::FileIndexJob>,
+    /// The first git refresh, running in the background (T830).
+    git_refresh_job: Option<git_refresh::GitRefreshJob>,
+    /// The file sizes past which opening warns or goes to the Large File
+    /// Viewer (T830); only tests change them.
+    open_thresholds: crate::large_file::Thresholds,
     /// Cursor offset captured when the palette opened, so the `:` go-to-line
     /// preview can revert on cancel and the jump records the true origin.
     palette_origin: Option<usize>,
@@ -2942,7 +2950,8 @@ impl App {
         // Seed the in-memory palette recents from the persisted list.
         let command_recents = settings.command_recents.clone();
         let (mut editor, messages, lsp) = Self::build_core(&root, &settings);
-        editor.max_text_bytes = Self::max_text_bytes(&settings);
+        editor.max_text_bytes =
+            Self::max_text_bytes(&settings, crate::large_file::Thresholds::default());
         editor.read_only_paths =
             vix_fileops::PathPatterns::new(&settings.editor_behavior.read_only_paths);
 
@@ -3166,6 +3175,8 @@ impl App {
             file_index_state: file_index::FileIndexState::Complete,
             file_index_folders: Vec::new(),
             file_index_job: None,
+            git_refresh_job: None,
+            open_thresholds: crate::large_file::Thresholds::default(),
             palette_origin: None,
             palette_file_scope: None,
             palette_files_override: None,
@@ -8824,15 +8835,27 @@ impl App {
         self.open_path_with(path, preview, false);
     }
 
-    /// The size above which opening a file asks first: `large_file_mb` megabytes,
-    /// or only the hard ceiling when that is `0` (T571).
-    fn max_text_bytes(settings: &Settings) -> u64 {
-        match settings.editor_behavior.large_file_mb {
-            0 => crate::fileops::HARD_MAX_TEXT_BYTES,
-            mb => mb
-                .times(1024 * 1024)
-                .min(crate::fileops::HARD_MAX_TEXT_BYTES),
-        }
+    /// The size above which opening a file asks first: `large_file_mb` megabytes
+    /// (T571), never more than the warning threshold (T830, 500 MiB), so a
+    /// file past that always asks with a memory warning, even when
+    /// `large_file_mb` is `0`.
+    fn max_text_bytes(settings: &Settings, thresholds: crate::large_file::Thresholds) -> u64 {
+        thresholds
+            .load_limit(Self::ask_bytes(settings))
+            .min(crate::fileops::HARD_MAX_TEXT_BYTES)
+    }
+
+    /// The user's `large_file_mb` limit in bytes; `0` for none.
+    fn ask_bytes(settings: &Settings) -> u64 {
+        settings.editor_behavior.large_file_mb.times(1024 * 1024)
+    }
+
+    /// Replace the warning and viewer thresholds (T830), for tests that
+    /// cannot write a 500 MB file.
+    #[cfg(test)]
+    pub(crate) fn set_open_thresholds(&mut self, thresholds: crate::large_file::Thresholds) {
+        self.open_thresholds = thresholds;
+        self.editor.max_text_bytes = Self::max_text_bytes(&self.settings, thresholds);
     }
 
     /// [`App::open_path`]; `past_size_limit` is set once the user confirmed
@@ -8929,41 +8952,39 @@ impl App {
                 .metadata(path)
                 .map_or(0, |m| m.len)
         };
-        let over_hard_cap = size > crate::fileops::HARD_MAX_TEXT_BYTES;
+        let plan = self
+            .open_thresholds
+            .plan(size, Self::ask_bytes(&self.settings));
+        let to_viewer = plan == crate::large_file::OpenPlan::Viewer;
         // The Large File Viewer reads local files only (T733).
         let viewer = !lost && crate::authority::current().is_local();
-        if !preview && (!over_hard_cap || viewer) {
+        let mb = size.div_ceil(1024 * 1024);
+        // Past the viewer threshold no buffer is offered: the file opens
+        // read-only in the Large File Viewer straight away (T830).
+        if !preview && to_viewer && viewer && matches!(why, Some(TextReadError::TooLarge)) {
+            self.open_large_file_viewer(path);
+            if self.large_file.is_some() {
+                self.messages.info(
+                    t!("msg.large_file_degraded", path = path.display(), mb = mb).to_string(),
+                );
+            }
+            return;
+        }
+        if !preview && !to_viewer {
             let ask = match why {
-                Some(TextReadError::TooLarge) if over_hard_cap => Some((
-                    ConfirmKind::OpenLargeViewer,
-                    t!(
-                        "confirm.open_large_viewer",
-                        path = path.display(),
-                        mb = size.div_ceil(1024 * 1024)
-                    )
-                    .to_string(),
-                )),
-                Some(TextReadError::TooLarge) => Some((
-                    ConfirmKind::OpenLarge,
+                Some(TextReadError::TooLarge) => {
+                    let mut message =
+                        t!("confirm.open_large", path = path.display(), mb = mb).to_string();
+                    if plan == crate::large_file::OpenPlan::Warn {
+                        message.push(' ');
+                        message.push_str(&t!("confirm.open_large_warning"));
+                    }
                     if viewer {
-                        format!(
-                            "{} {}",
-                            t!(
-                                "confirm.open_large",
-                                path = path.display(),
-                                mb = size.div_ceil(1024 * 1024)
-                            ),
-                            t!("confirm.open_large_view_hint")
-                        )
-                    } else {
-                        t!(
-                            "confirm.open_large",
-                            path = path.display(),
-                            mb = size.div_ceil(1024 * 1024)
-                        )
-                        .to_string()
-                    },
-                )),
+                        message.push(' ');
+                        message.push_str(&t!("confirm.open_large_view_hint"));
+                    }
+                    Some((ConfirmKind::OpenLarge, message))
+                }
                 Some(TextReadError::Binary) => Some((
                     ConfirmKind::OpenBinary,
                     t!("confirm.open_binary", path = path.display()).to_string(),

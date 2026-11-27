@@ -100,7 +100,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `auto_save`     | string | `"off"`  | Save dirty file-backed buffers on their own: `"off"`, `"interval"` (the active buffer every few seconds) or `"focus_lost"` (every buffer Save All could write, when the terminal window loses focus). An old `true`/`false` still loads as `"interval"`/`"off"`. |
 | `persistent_undo` | bool | `true`   | Persist each file's undo tree across sessions, restored when the content still matches. |
 | `hot_exit` | bool | `true` | Back up unsaved buffers while idle and on quit, and offer them back (with a diff) when the file is next opened. A clean save deletes the backup. See [Hot exit](../undo-store/index.md#hot-exit). |
-| `large_file_mb` | int | `50` | Ask before opening a file larger than this many megabytes (`0` never asks; a 1 GiB ceiling always applies). |
+| `large_file_mb` | int | `50` | Ask before opening a file larger than this many megabytes (`0`: no limit of your own; a file over 500 MiB always asks, with a memory warning, and one over 1 GiB opens in the Large File Viewer). |
 | `read_only_paths` | list of strings | Cargo registry/git, `~/.rustup`, `/nix/store`, Homebrew Cellar, `node_modules`, `site-packages` | Path globs that open read-only (`~/` is home, `**` spans directories). **View → Editor → Read-Only** unlocks a tab. |
 | `ephemeral_paths` | list of strings | `["**/.git/**"]` | Path globs the session never records, such as `COMMIT_EDITMSG`. |
 | `restore_session` | bool | `true`   | Reopen the previous session (files, focus, cursors) when launched in a workspace with no file argument. |

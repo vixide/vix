@@ -33,10 +33,11 @@ impl App {
     /// (the tutor, file arguments, `-` for stdin, `--diff`) — or, with no file
     /// given, the previous session for this workspace.
     ///
-    /// Git state is deliberately *not* refreshed here: `refresh_git` shells
-    /// out to `git` (T122: ~82ms of a ~96ms cold start), so callers draw a
-    /// first frame and only then call [`App::refresh_git`]. `App`'s git fields
-    /// default to "no repo", which renders correctly in the meantime.
+    /// Git state is read in the background, not here: `refresh_git` shells
+    /// out to `git` (T122: ~82ms of a ~96ms cold start), so this only starts
+    /// [`App::start_git_refresh`] and [`App::tick`] installs its answer when
+    /// it lands (T830). `App`'s git fields default to "no repo", which renders
+    /// correctly in the meantime.
     ///
     /// # Errors
     /// Returns an error only when `-` was given and stdin could not be read.
@@ -89,6 +90,8 @@ impl App {
         self.offer_untitled_recovery();
         // A crash report the last run saved (`spec/crash-reports`).
         self.notice_crash_report();
+        // Branch, changed files and the change gutter, off the UI thread (T830).
+        self.start_git_refresh();
         Ok(())
     }
 
@@ -153,6 +156,8 @@ impl App {
         self.poll_large_file();
         // Install a finished background file index (T845).
         self.poll_file_index();
+        // Install the background git refresh `start` began (T830).
+        self.poll_git_refresh();
     }
 
     /// How long the loop may wait for input before ticking again: short
@@ -179,6 +184,7 @@ impl App {
             || self.jupyter_busy()
             || self.large_file_busy()
             || self.file_index_busy()
+            || self.git_refresh_busy()
         {
             Duration::from_millis(50)
         } else {
