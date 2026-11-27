@@ -398,24 +398,9 @@ fn outline(path: &str, text: &str) -> (&'static str, Vec<Value>) {
         .map_or_default(str::to_ascii_lowercase);
     match extension.as_str() {
         "md" | "markdown" => {
-            let rendered = vix_markdown_preview::render_full(text);
-            let entries = rendered
-                .toc
-                .iter()
-                .map(|e| {
-                    // `line` is the heading's row in the rendered preview;
-                    // map it back to its source line.
-                    // A heading with no source line is unknown (`null`), never the
-                    // preview row passed off as a source line.
-                    let line = e
-                        .line
-                        .checked_sub(1)
-                        .and_then(|row| rendered.source_lines.get(row))
-                        .copied();
-                    // `kind` holds the heading marker (`#`, `##`, ...), so
-                    // its length is the heading level.
-                    json!({"level": e.kind.len(), "title": e.name, "line": line})
-                })
+            let entries = crate::markdown::headings(text)
+                .into_iter()
+                .map(|h| json!({"level": h.level, "title": h.title, "line": h.line}))
                 .collect();
             ("markdown", entries)
         }

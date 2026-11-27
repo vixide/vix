@@ -15,8 +15,8 @@ enforced by `tui/tests/crate_layering.rs`.
 |---|---|
 | 5 | 1 |
 | 4 | 2 |
-| 3 | 20 |
-| 2 | 7 |
+| 3 | 19 |
+| 2 | 8 |
 | 1 | 54 |
 | 0 | 64 |
 
@@ -33,7 +33,7 @@ enforced by `tui/tests/crate_layering.rs`.
 | `vix-fhir` | 4 | `vix-http-client`, `vix-list-state` | 1 |
 | `vix-script` | 4 | `vix-git`, `vix-macros` | 1 |
 
-## Layer 3 (20 crates)
+## Layer 3 (19 crates)
 
 | Crate | Layer | Direct workspace dependencies | Dependents |
 |---|---|---|---|
@@ -50,7 +50,6 @@ enforced by `tui/tests/crate_layering.rs`.
 | `vix-http-client` | 3 | `vix-authority` | 2 |
 | `vix-left-dock` | 3 | `vix-authority`, `vix-list-state` | 1 |
 | `vix-lsp` | 3 | `vix-authority`, `vix-lsp-core`, `vix-project-env`, `vix-settings` | 1 |
-| `vix-mcp-server` | 3 | `vix-conflict-tool`, `vix-lsp-core`, `vix-markdown-preview`, `vix-org`, `vix-palette` | 1 |
 | `vix-org-capture` | 3 | `vix-settings` | 1 |
 | `vix-settings-bundle` | 3 | `vix-settings`, `vix-theme-model` | 1 |
 | `vix-snippets` | 3 | `vix-list-state`, `vix-settings`, `vix-snippet-tool` | 1 |
@@ -58,14 +57,15 @@ enforced by `tui/tests/crate_layering.rs`.
 | `vix-undo-store` | 3 | `vix-editor-core`, `vix-fileops`, `vix-settings` | 1 |
 | `vix-workspace` | 3 | `vix-authority` | 1 |
 
-## Layer 2 (7 crates)
+## Layer 2 (8 crates)
 
 | Crate | Layer | Direct workspace dependencies | Dependents |
 |---|---|---|---|
 | `vix-authority` | 2 | `vix-fileops` | 14 |
 | `vix-column-view` | 2 | `vix-input`, `vix-org` | 1 |
 | `vix-macros` | 2 | `vix-fileops`, `vix-input` | 2 |
-| `vix-markdown-preview` | 2 | `vix-outline-panel` | 2 |
+| `vix-markdown-preview` | 2 | `vix-outline-panel` | 1 |
+| `vix-mcp-server` | 2 | `vix-conflict-tool`, `vix-lsp-core`, `vix-org`, `vix-palette` | 1 |
 | `vix-oci-panel` | 2 | `vix-input`, `vix-list-state`, `vix-oci` | 1 |
 | `vix-session` | 2 | `vix-fileops` | 1 |
 | `vix-settings` | 2 | `vix-fileops` | 9 |

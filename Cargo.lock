@@ -6678,10 +6678,10 @@ dependencies = [
 name = "vix-mcp-server"
 version = "3.0.0"
 dependencies = [
+ "pulldown-cmark",
  "serde_json",
  "vix-conflict-tool",
  "vix-lsp-core",
- "vix-markdown-preview",
  "vix-org",
  "vix-palette",
 ]

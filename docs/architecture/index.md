@@ -42,7 +42,7 @@ flowchart TD
         script["vix-script"]
         fhir["vix-fhir"]
     end
-    subgraph L3["Layer 3: feature hosts (20 crates)"]
+    subgraph L3["Layer 3: feature hosts (19 crates)"]
         editor["vix-editor"]
         lsp["vix-lsp"]
         dap["vix-dap"]
@@ -51,7 +51,7 @@ flowchart TD
         undo["vix-undo-store"]
         http["vix-http-client"]
     end
-    subgraph L2["Layer 2 (7 crates)"]
+    subgraph L2["Layer 2 (8 crates)"]
         settings["vix-settings"]
         authority["vix-authority"]
         session["vix-session"]
@@ -129,7 +129,7 @@ maintained crate-by-crate reference, and this page only sketches the shape.
 ### Layering rules
 
 Beyond "each layer depends only on layers below it" (which the definition of
-a layer guarantees), the graph keeps four rules. `tui/tests/crate_layering.rs`
+a layer guarantees), the graph keeps five rules. `tui/tests/crate_layering.rs`
 enforces them, reading `cargo metadata` and the `gui/*/Cargo.toml` manifests,
 and its failure message names each offending edge (`from -> to`):
 
@@ -144,6 +144,11 @@ and its failure message names each offending edge (`from -> to`):
    `*-view`, directly or through other crates.
 4. **The GUIs never depend on each other.** No `gui/vix-*/Cargo.toml` names
    another GUI crate; what two GUIs share lives in `vix-tui` or under `crates/`.
+5. **The headless MCP server knows no UI surface.** `vix-mcp-server` (behind
+   `vix --mcp`) reaches no `*-panel`, `*-picker`, `*-preview` or `*-view`
+   crate, directly or through other crates (T860: it parses Markdown
+   headings itself instead of borrowing `vix-markdown-preview`'s table of
+   contents).
 
 A rule is added here only when the current graph already keeps it. The full
 graph, every crate with its layer, direct workspace dependencies and number

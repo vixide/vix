@@ -12,6 +12,9 @@
 //!    `*-view`, directly or through other crates.
 //! 4. **GUIs never depend on each other.** No `gui/vix-*/Cargo.toml` names
 //!    another GUI crate.
+//! 5. **The headless MCP server knows no UI surface.** `vix-mcp-server`
+//!    reaches no `*-panel`, `*-picker`, `*-preview` or `*-view` crate,
+//!    directly or through other crates (T860).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -31,6 +34,9 @@ const APP_SHELL: &str = "vix-tui";
 
 /// The only members that may depend on `crossterm`.
 const CROSSTERM_USERS: [&str; 2] = ["vix-input", "vix-tui"];
+
+/// Crates that run without any UI, so must reach no UI surface (rule 5).
+const HEADLESS: [&str; 1] = ["vix-mcp-server"];
 
 /// Whether `name` is a model or core crate (rule 3's subjects).
 fn is_model_or_core(name: &str) -> bool {
@@ -80,8 +86,20 @@ fn crossterm_outside_shell(all_normal: &Deps) -> Vec<String> {
 /// Rule 3: for each model/core crate, the first UI-surface crate it reaches
 /// (breadth first), as the chain of edges leading there.
 fn model_core_reaching_ui(graph: &Deps) -> Vec<String> {
+    reaching_ui(graph, is_model_or_core, "model/core crate")
+}
+
+/// Rule 5: the same search from each [`HEADLESS`] crate.
+fn headless_reaching_ui(graph: &Deps) -> Vec<String> {
+    reaching_ui(graph, |n| HEADLESS.contains(&n), "headless crate")
+}
+
+/// For each crate `is_subject` picks, the first UI-surface crate it reaches
+/// (breadth first), as the chain of edges leading there; `what` names the
+/// subject in the message.
+fn reaching_ui(graph: &Deps, is_subject: impl Fn(&str) -> bool, what: &str) -> Vec<String> {
     let mut out = Vec::new();
-    for start in graph.keys().filter(|n| is_model_or_core(n)) {
+    for start in graph.keys().filter(|n| is_subject(n)) {
         let mut parent: BTreeMap<&str, &str> = BTreeMap::new();
         let mut queue = VecDeque::from([start.as_str()]);
         let mut seen = BTreeSet::from([start.as_str()]);
@@ -100,7 +118,7 @@ fn model_core_reaching_ui(graph: &Deps) -> Vec<String> {
                     }
                     chain.reverse();
                     out.push(format!(
-                        "{} -> {dep}: model/core crate {start} reaches UI-surface crate {dep} ({})",
+                        "{} -> {dep}: {what} {start} reaches UI-surface crate {dep} ({})",
                         chain[chain.len().saturating_sub(2)],
                         chain.join(" -> ")
                     ));
@@ -143,6 +161,7 @@ fn the_workspace_keeps_its_layering_rules() {
     let mut problems = app_shell_dependents(&ws.graph, &ws.dev);
     problems.extend(crossterm_outside_shell(&ws.all_normal));
     problems.extend(model_core_reaching_ui(&ws.graph));
+    problems.extend(headless_reaching_ui(&ws.graph));
     problems.extend(guis_depending_on_guis(&gui_deps));
     assert!(
         problems.is_empty(),
@@ -196,6 +215,22 @@ fn each_rule_names_the_offending_edge() {
         "{}",
         ui[0]
     );
+
+    let headless = deps(&[
+        ("vix-mcp-server", &["vix-md", "vix-ok-core"]),
+        ("vix-md", &["vix-md-preview"]),
+        ("vix-md-preview", &[]),
+        ("vix-ok-core", &[]),
+    ]);
+    let hl = headless_reaching_ui(&headless);
+    assert_eq!(hl.len(), 1, "{hl:?}");
+    assert!(
+        hl[0].starts_with("vix-md -> vix-md-preview: headless crate vix-mcp-server")
+            && hl[0].ends_with("(vix-mcp-server -> vix-md -> vix-md-preview)"),
+        "{}",
+        hl[0]
+    );
+    assert_eq!(headless_reaching_ui(&graph), Vec::<String>::new());
 
     let all = deps(&[
         ("vix-input", &["crossterm"]),

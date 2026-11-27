@@ -8,10 +8,10 @@ repository.workspace = true
 description = "Read-only Model Context Protocol server core: JSON-RPC over stdio exposing a workspace's open buffers, symbols, outline, offline diagnostics and SQLite schema, and the saved DB connections the user shared"
 
 [dependencies]
+pulldown-cmark = { workspace = true }
 serde_json = { workspace = true }
 vix-conflict-tool = { workspace = true }
 vix-lsp-core = { workspace = true }
-vix-markdown-preview = { workspace = true }
 vix-org = { workspace = true }
 vix-palette = { workspace = true }
 

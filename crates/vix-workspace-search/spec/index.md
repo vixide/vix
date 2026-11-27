@@ -66,6 +66,23 @@ open buffers, so it drives the actual scan: reading each candidate file
 disk), matching `pattern()` against each line, and filtering paths through
 `path_filter()`. Rendering lives in `tui/src/ui.rs`.
 
+### Why it depends on `vix-find-panel` (T860)
+
+The crate layering report (T833) flagged `vix-workspace-search ->
+vix-find-panel` as one panel crate depending on another. The edge is kept:
+it uses two items, both part of the find engine rather than any panel
+rendering. `Field` is the one focus vocabulary of the search stages: the
+find box (`SearchBar::field`) and this panel (`WorkspaceSearch::field`)
+share it because widening the find box hands the search over (spec
+`crates/vix-find-panel`, "Scope"), and the App shell's input handling and
+`tui/src/ui/search.rs` read both with the same variants. `PathFilter` is
+part of the pure matching engine (`matches`, `replace_all`, `PathFilter`).
+`vix-find-panel` itself has no workspace dependency (layer 0; only
+`bitflags` and `regex`, which this crate depends on anyway) and no
+rendering, so the edge adds nothing to the build. Moving the two items would
+need a new crate for them alone, which AGENTS.md's "When to add a new crate"
+argues against.
+
 ## Remote search (T715)
 
 The App's scans (this panel, **Search in Workspace (to dock)**, the TODO

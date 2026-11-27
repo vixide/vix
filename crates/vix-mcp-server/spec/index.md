@@ -43,8 +43,8 @@ GUI, a test harness) can serve the same protocol by implementing `Host`.
     `vix_db::mcp_share`).
 - `tools` holds the ten tool definitions (`tools::list`) and their
   implementations (`tools::call`): `list_open_buffers`, `read_buffer`,
-  `document_symbols` (`vix_palette::symbols`), `outline` (Markdown via
-  `vix-markdown-preview`, Org via `vix_org::headlines`, otherwise symbols),
+  `document_symbols` (`vix_palette::symbols`), `outline` (Markdown via the
+  private `markdown::headings`, Org via `vix_org::headlines`, otherwise symbols),
   `diagnostics` (`vix_conflict_tool::find_all`; no language server),
   `db_schema`, and the DB connection tools `db_connections`, `db_tables`,
   `db_describe` and `db_query`, which only check their arguments and shape
@@ -59,6 +59,27 @@ GUI, a test harness) can serve the same protocol by implementing `Host`.
   extension plus SQLite header, no symbolic links followed).
 - `file_uri` / `uri_path` convert between absolute paths and `file://` URIs
   for `resources/list` and `resources/read`.
+
+## Markdown headings and the crate graph (T860)
+
+The `outline` tool's Markdown headings come from `markdown::headings`, one
+pass over `pulldown-cmark`'s events: every ATX and setext heading (not a
+`#` line inside a code block, nor `#tag` with no space), its level, its
+title and the 1-based source line it starts on. The title is the heading's
+text, code spans and link and image text, a line break inside it becoming one
+space, trimmed; markup and link URLs are dropped.
+
+Until T860 the tool borrowed `vix_markdown_preview::render_full`'s table of
+contents and mapped each preview row back to a source line. That made the
+headless server depend on a preview crate and, through it, on
+`vix-outline-panel`, for one heading list; it also gave titles the preview's
+display text (a link as `text (url)`, a quoted heading with its `│ `
+rail, a two-line setext heading cut at the break). The server now depends on
+`pulldown-cmark` directly, which the preview already pulled in, and
+`tui/tests/crate_layering.rs` (rule 5) keeps `vix-mcp-server` from reaching
+any `*-panel`, `*-picker`, `*-preview` or `*-view` crate again. Nothing
+moved out of `vix-markdown-preview`: its public API is unchanged, and its
+table of contents still holds preview rows for the TOC overlay.
 
 ## Errors (T610)
 
@@ -108,4 +129,4 @@ nothing.
 
 ## Checked arithmetic
 
-The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Line numbers and the walk depth are plain additions under `RCA-EXC-2` expectations that state their proofs; the tool schema and the tool-name lookup use `get` and a proven object key. A Markdown heading with no source line is reported as `null` (unknown) in the `outline` tool's `line` field, instead of the preview row number passed off as a source line. A file with no extension has the empty extension (`RCA-IN-3`: absent only).
+The crate follows the `rust-checked-arithmetic` spec and, outside tests, denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Line numbers and the walk depth are plain additions under `RCA-EXC-2` expectations that state their proofs; the tool schema and the tool-name lookup use `get` and a proven object key. The Markdown heading scan counts lines with `checked_add`; **Declared (MCP-F1):** a line count that does not fit (impossible for text in memory) keeps the line it had. A file with no extension has the empty extension (`RCA-IN-3`: absent only).
