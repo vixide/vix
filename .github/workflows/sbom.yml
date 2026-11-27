@@ -1,0 +1,69 @@
+# CycloneDX SBOMs for the desktop GUIs of a release -- see spec/ci/index.md.
+#
+# dist's own SBOM step (`cargo-cyclonedx = true` in dist-workspace.toml, the
+# build-global-artifacts job in release.yml) runs `cargo cyclonedx` in the
+# root workspace only. That writes vix-tui.cdx.xml, but gui/ is its own Cargo
+# workspace, so the four GUI SBOMs dist plans (vix-gpui.cdx.xml,
+# vix-egui.cdx.xml, vix-iced.cdx.xml, vix-slint.cdx.xml) were never written
+# and never reached a release (T832).
+#
+# dist runs this as a custom global-artifacts job (`global-artifacts-jobs` in
+# dist-workspace.toml) after the local builds, passing its plan. It writes the
+# SBOM of every GUI the plan releases and uploads them as an `artifacts-*`
+# workflow artifact, which the host job adds to the GitHub Release with every
+# other artifact.
+
+name: SBOM
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  gui-sbom:
+    runs-on: ubuntu-22.04
+    env:
+      PLAN: ${{ inputs.plan }}
+      # The same cargo-cyclonedx release dist installs for vix-tui's SBOM, so
+      # every SBOM of a release comes from one tool version.
+      CARGO_CYCLONEDX_VERSION: "0.5.5"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install cargo-cyclonedx ${{ env.CARGO_CYCLONEDX_VERSION }}
+        # bash for pipefail, so a failed download fails the step.
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors -LsSf \
+            "https://github.com/CycloneDX/cyclonedx-rust-cargo/releases/download/cargo-cyclonedx-$CARGO_CYCLONEDX_VERSION/cargo-cyclonedx-installer.sh" | sh
+      - name: Write the GUI SBOMs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo cyclonedx -v --manifest-path gui/Cargo.toml
+          planned=$(printf '%s' "$PLAN" | jq -r '.releases[].artifacts[] | select(endswith(".cdx.xml"))')
+          mkdir -p target/distrib
+          cargo metadata --manifest-path gui/Cargo.toml --no-deps --format-version 1 \
+            | jq -r '.packages[] | "\(.name) \(.manifest_path)"' \
+            | while read -r name manifest; do
+                file="$name.cdx.xml"
+                if printf '%s\n' "$planned" | grep -qx -- "$file"; then
+                  # A planned SBOM that was not written fails the job here.
+                  cp -- "$(dirname -- "$manifest")/$file" target/distrib/
+                  echo "SBOM: $file"
+                fi
+              done
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-build-global-sbom
+          path: target/distrib/*.cdx.xml
+          # A release of vix-tui alone plans no GUI SBOM.
+          if-no-files-found: ignore

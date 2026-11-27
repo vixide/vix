@@ -23,7 +23,8 @@ GitHub Release is always the maintainer's decision** ([`AI_STATEMENT.md`](../../
 4. Watch the release run (`gh run watch`). It builds the archives (including a
    static musl build, whose flags come from `.github/dist/build-setup.yml`),
    the shell and PowerShell installers, the MSIs and the GUI archives, creates
-   the GitHub Release, pushes the formulas to the `vixide/homebrew-tap`
+   the GitHub Release (with a CycloneDX SBOM, `<program>.cdx.xml`, for
+   `vix-tui` and each GUI), pushes the formulas to the `vixide/homebrew-tap`
    Homebrew tap and publishes `@vixide/vix` to npm; the `linux-packages`
    workflow then builds and tests the `.deb`, `.rpm` and Arch packages. A
    failed publish job can be re-run on its own once its cause is fixed.
@@ -80,6 +81,10 @@ The templates name the `dist` targets (`*-pc-windows-msvc`,
 `*-unknown-linux-gnu`), so render them from a `dist` release's checksums; the
 local release builds `x86_64-pc-windows-gnu` and `x86_64-unknown-linux-musl`,
 and `render` reports the assets it lacks.
+
+When a release fixes a vulnerability, the
+[incident-response playbook](../incident-response.md) says what comes before
+and after these steps.
 
 See [`spec/ci`](../../spec/ci/index.md) and
 [`spec/local-ci`](../../spec/local-ci/index.md) for the design.
