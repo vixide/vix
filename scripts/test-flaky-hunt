@@ -1,0 +1,194 @@
+#!/bin/sh
+# Tests for scripts/flaky-hunt (T831, spec/test "Flaky tests").
+#
+#     scripts/test-flaky-hunt
+#
+# No network, no build. A stub cargo on PATH stands in for the real suite: it
+# answers cargo test --no-run, then prints libtest-style lines for two fake
+# tests and fails the runs VIX_TEST_FAIL_RUNS names, so the test proves:
+# arguments reach cargo test as given (with --no-fail-fast added once), a
+# clean hunt exits 0, failures are reported per test with their runs, --stop
+# ends the hunt at the first failure, a run that fails without naming a test is
+# reported as such, a build failure exits 3 before any run, usage errors exit
+# 2, and the load (busy loops and --load-cmd) runs during the hunt and is
+# stopped after it. Nothing outside a temp directory is touched.
+set -u
+
+src=$(cd "$(dirname "$0")" && pwd)
+hunt="$src/flaky-hunt"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+unset CARGO_TARGET_DIR
+export TMPDIR="$work/tmp"
+mkdir -p "$work/bin" "$TMPDIR"
+
+fails=0
+ok() { echo "  ok   $1"; }
+bad() {
+	fails=$((fails + 1))
+	echo "  FAIL $1"
+}
+has() { # NAME FILE PATTERN
+	if grep -q -- "$3" "$2"; then ok "$1"; else bad "$1 (no '$3' in $2)"; fi
+}
+hasnt() { # NAME FILE PATTERN
+	if grep -q -- "$3" "$2"; then bad "$1 ('$3' found in $2)"; else ok "$1"; fi
+}
+status() { # NAME WANT GOT
+	if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (exit $3, wanted $2)"; fi
+}
+
+# The stub. "cargo test --no-run ARGS" logs "build ARGS"; "cargo test ARGS"
+# counts the run, logs "run N ARGS" and prints two tests, failing
+# fake::flaky on the runs in VIX_TEST_FAIL_RUNS (and fake::steady too on the
+# runs in VIX_TEST_BOTH_RUNS). VIX_TEST_BUILD_FAIL=1 fails the build,
+# VIX_TEST_CRASH=1 exits 101 naming no test, VIX_TEST_MARK=FILE records
+# whether FILE (the --load-cmd's mark) existed during run 1.
+cat >"$work/bin/cargo" <<'E'
+#!/bin/sh
+[ "$1" = test ] || exit 9
+shift
+if [ "$1" = --no-run ]; then
+	shift
+	echo "build $*" >>"$VIX_TEST_LOG"
+	if [ "${VIX_TEST_BUILD_FAIL:-}" = 1 ]; then
+		echo "error[E0425]: stub build failure"
+		exit 101
+	fi
+	exit 0
+fi
+n=$(($(cat "$VIX_TEST_STATE" 2>/dev/null || echo 0) + 1))
+echo "$n" >"$VIX_TEST_STATE"
+echo "run $n $*" >>"$VIX_TEST_LOG"
+if [ -n "${VIX_TEST_MARK:-}" ] && [ "$n" = 1 ]; then
+	k=0
+	while [ ! -f "$VIX_TEST_MARK" ] && [ "$k" -lt 50 ]; do
+		sleep 0.1
+		k=$((k + 1))
+	done
+	[ -f "$VIX_TEST_MARK" ] && echo "mark seen" >>"$VIX_TEST_LOG"
+fi
+if [ "${VIX_TEST_CRASH:-}" = 1 ]; then
+	echo "error: test failed, to rerun pass --lib"
+	echo "process didn't exit successfully (signal: 6, SIGABRT)"
+	exit 101
+fi
+code=0
+echo "running 2 tests"
+case " ${VIX_TEST_FAIL_RUNS:-} " in
+*" $n "*)
+	echo "test fake::flaky ... FAILED"
+	code=101
+	;;
+*) echo "test fake::flaky ... ok" ;;
+esac
+case " ${VIX_TEST_BOTH_RUNS:-} " in
+*" $n "*)
+	echo "test fake::steady ... FAILED"
+	code=101
+	;;
+*) echo "test fake::steady ... ok" ;;
+esac
+exit $code
+E
+chmod +x "$work/bin/cargo"
+export PATH="$work/bin:$PATH"
+export VIX_TEST_LOG="$work/log" VIX_TEST_STATE="$work/state"
+
+# hunt [args]: run flaky-hunt with a fresh log and counter; output in $work/out.
+hunt() {
+	rm -f "$VIX_TEST_LOG" "$VIX_TEST_STATE"
+	: >"$VIX_TEST_LOG"
+	sh "$hunt" "$@" >"$work/out" 2>&1
+	got=$?
+	# A shell may keep a VAR=value given before a function call after it.
+	unset VIX_TEST_FAIL_RUNS VIX_TEST_BOTH_RUNS VIX_TEST_BUILD_FAIL VIX_TEST_CRASH VIX_TEST_MARK
+}
+
+echo "flaky-hunt: a clean hunt"
+hunt -n 3 -p vix-db --test it -- 'free port' --exact
+status "every run passing exits 0" 0 "$got"
+has "it builds first, with the cargo arguments" "$work/log" "^build -p vix-db --test it --no-fail-fast$"
+has "the runs get the test arguments after --" "$work/log" "^run 3 -p vix-db --test it --no-fail-fast -- free port --exact$"
+hasnt "it runs no more than asked" "$work/log" "^run 4"
+has "it says there were no failures" "$work/out" "no failures in 3 run(s) under no load"
+hunt -n 1 --no-fail-fast -p x
+has "--no-fail-fast is not added twice" "$work/log" "^build --no-fail-fast -p x$"
+
+echo "flaky-hunt: failures are reported per test"
+VIX_TEST_FAIL_RUNS="2 4" VIX_TEST_BOTH_RUNS="4" hunt -n 5 -k "$work/keep" -p fake
+status "a failing run exits 1" 1 "$got"
+has "all five runs ran" "$work/log" "^run 5 "
+has "the flaky test and its runs" "$work/out" "fake::flaky  failed 2 time(s), in run(s) 2 4$"
+has "the other test and its run" "$work/out" "fake::steady  failed 1 time(s), in run(s) 4$"
+has "the count of failing runs" "$work/out" "2 of 5 run(s) failed"
+has "a failing run line" "$work/out" "^run 4/5: FAILED, 2 test(s)"
+has "a passing run line" "$work/out" "^run 1/5: ok"
+if [ -f "$work/keep/run-4.log" ] && grep -q "fake::steady ... FAILED" "$work/keep/run-4.log"; then
+	ok "--keep holds each run's log"
+else
+	bad "--keep holds each run's log"
+fi
+
+echo "flaky-hunt: --stop"
+VIX_TEST_FAIL_RUNS="2" hunt -n 5 -x -p fake
+status "--stop still exits 1" 1 "$got"
+has "it ran up to the failing run" "$work/log" "^run 2 "
+hasnt "and no further" "$work/log" "^run 3 "
+has "it says so" "$work/out" "1 of 2 run(s) failed"
+
+echo "flaky-hunt: a run that names no failing test"
+VIX_TEST_CRASH=1 hunt -n 2 -p fake
+status "a crash exits 1" 1 "$got"
+has "the crash is reported as one" "$work/out" "exit 101 with no failed test named"
+has "and summarized" "$work/out" "(no test named: exit 101)  failed 2 time(s), in run(s) 1 2$"
+
+echo "flaky-hunt: build failures and usage errors"
+VIX_TEST_BUILD_FAIL=1 hunt -n 3 -p fake
+status "a build failure exits 3" 3 "$got"
+hasnt "and runs nothing" "$work/log" "^run "
+has "it shows the build output" "$work/out" "stub build failure"
+for bad_args in "-n 0" "-n many" "-l lots" "-n"; do
+	# shellcheck disable=SC2086 # word splitting is the point
+	hunt $bad_args
+	status "flaky-hunt $bad_args is a usage error" 2 "$got"
+done
+hunt -h
+status "-h exits 0" 0 "$got"
+has "-h prints the usage" "$work/out" "scripts/flaky-hunt \[options\]"
+
+echo "flaky-hunt: load"
+VIX_TEST_MARK="$work/mark" hunt -n 2 -l 2 -c "sleep 60 & echo \$! >'$work/child'; touch '$work/mark'; wait" -p fake
+status "a clean hunt under load exits 0" 0 "$got"
+has "the load command ran during the runs" "$work/log" "^mark seen$"
+has "the load is described" "$work/out" "under 2 busy loop(s) + 'sleep 60 &"
+pids=$(sed -n 's/.*load pids: *\([0-9 ]*\);.*/\1/p' "$work/out")
+count=$(echo "$pids" | wc -w | tr -d ' ')
+if [ "$count" = 3 ]; then ok "two busy loops and the load command were started"; else bad "load pids '$pids' (wanted 3)"; fi
+alive=
+for p in $pids; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done
+if [ -z "$alive" ]; then ok "the load is stopped when the hunt ends"; else bad "load still running:$alive"; fi
+child=$(cat "$work/child" 2>/dev/null)
+if [ -z "$child" ]; then
+	bad "the --load-cmd's own child wrote its pid"
+elif kill -0 "$child" 2>/dev/null; then
+	bad "the --load-cmd's own child is stopped too"
+	kill "$child" 2>/dev/null
+else
+	ok "the --load-cmd's own child is stopped too"
+fi
+VIX_TEST_FAIL_RUNS=1 hunt -n 1 -l 1 -p fake
+pids=$(sed -n 's/.*load pids: *\([0-9 ]*\);.*/\1/p' "$work/out")
+alive=
+for p in $pids; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done
+if [ -n "$pids" ] && [ -z "$alive" ]; then ok "the load is stopped after a failing hunt too"; else bad "load after a failure: pids '$pids' alive '$alive'"; fi
+# Four hunts failed (failures went to --keep, so: stop, crash, build, load
+# failure) and kept their logs; the clean ones removed theirs.
+leftover=$(find "$TMPDIR" -name 'flaky-hunt.*' -type d | wc -l | tr -d ' ')
+if [ "$leftover" = 4 ]; then ok "clean hunts remove their logs, failing ones keep them"; else bad "$leftover log directories left (wanted 4)"; fi
+
+if [ "$fails" -gt 0 ]; then
+	echo "test-flaky-hunt: $fails failure(s)"
+	exit 1
+fi
+echo "test-flaky-hunt: all passed"

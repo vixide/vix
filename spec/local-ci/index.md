@@ -333,8 +333,10 @@ refuses the commit, naming each file, when:
    bytes, 1 MiB by default (the largest tracked file, a locale catalog, is
    about 1.4 MiB and may keep growing; only new files are limited). Setting
    the variable for one commit lets a file in;
-4. a staged file is under `tui/src/` or `crates/*/src/`, is a pull-request
-   template or is `tui/tests/code_lints.rs`, and that lint test fails. The
+4. a staged `.rs` file is under `src/` or `tests/` of `tui/`, `crates/*/`
+   or `gui/*/` (`tests/` because the lint test checks every `#[ignore]`
+   reason, T831), is a pull-request template or is
+   `tui/tests/code_lints.rs`, and that lint test fails. The
    hook compiles it alone with `rustc --test` (it uses no crate, so this takes
    well under a second, against minutes for a cold `cargo test -p vix-tui`)
    and runs it; it reads the working tree, not the index.
@@ -564,6 +566,12 @@ workflow itself adds little.
 ## Non-goals
 
 - Do not weaken the gate, skip steps to save time, or disable commit signing.
+- Do not add retries of their own to `scripts/check`, `scripts/ci` or any forge's
+  workflow: a test that passes on a second try still has a race. nextest's
+  profiles (`.config/nextest.toml`) still retry once locally and twice in CI and
+  mark such a test FLAKY in the log; dropping those retries is an open decision
+  (it would make CI fail on today's known flakes until they are fixed). Hunt a
+  suspected flake with `scripts/flaky-hunt` (spec/test, "Flaky tests").
 - Do not run untrusted pull-request code on a self-hosted runner.
 - Do not cut a release tag automatically; that stays the maintainer's call
   (see `AI_STATEMENT.md`).

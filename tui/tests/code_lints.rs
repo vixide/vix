@@ -13,12 +13,19 @@
 //!    literal with a letter in it (outside `{…}` placeholders) must contain a
 //!    `t!(` call.
 //!
-//! Test code is exempt from both: an item under `#[cfg(test)]` (or any
+//! Test code is exempt from rules 1 and 2: an item under `#[cfg(test)]` (or any
 //! `cfg` naming `test` without `not(test)`) and every file of a module
 //! declared under one. Comments and the contents of string and character
 //! literals are never read as code, so a snippet body such as `"println!($0);"`
 //! is not a print. Examples, benches, build scripts and `tests/` directories
 //! live outside `src/` and are not scanned.
+//!
+//! 3. **Every `#[ignore]` says why** (T831, `spec/test` "Flaky tests"), in
+//!    every Rust file of `tui/`, `crates/*/` and `gui/*/` (`src/` and
+//!    `tests/`, test code included): a bare `#[ignore]` fails, and a
+//!    quarantined flaky test must read `#[ignore = "flaky: T<n>, <reason>"]`
+//!    with `T<n>` an open task in `tasks.md`, so a quarantine cannot outlive
+//!    the work that is meant to end it.
 //!
 //! A last test keeps the GitHub and Forgejo pull-request templates identical.
 //!
@@ -484,6 +491,108 @@ fn untranslated_sinks(src: &Source) -> Vec<(usize, String)> {
     found
 }
 
+/// The directories rule 3 reads under each package directory.
+const IGNORE_DIRS: &[&str] = &["src", "tests"];
+
+/// Every `.rs` file under `src/` and `tests/` of `tui/`, `crates/*/` and
+/// `gui/*/`, test code included: `(repository-relative path, text)`.
+fn all_rust_sources(root: &Path) -> Vec<(String, String)> {
+    let mut packages = vec![root.join("tui")];
+    for group in ["crates", "gui"] {
+        if let Ok(entries) = std::fs::read_dir(root.join(group)) {
+            packages.extend(entries.flatten().map(|e| e.path()));
+        }
+    }
+    let mut files = Vec::new();
+    for package in packages {
+        for dir in IGNORE_DIRS {
+            rust_files(&package.join(dir), &mut files);
+        }
+    }
+    files.sort();
+    files
+        .into_iter()
+        .filter_map(|f| {
+            let text = std::fs::read_to_string(&f).ok()?;
+            let rel = f
+                .strip_prefix(root)
+                .unwrap_or(&f)
+                .to_string_lossy()
+                .replace('\\', "/");
+            Some((rel, text))
+        })
+        .collect()
+}
+
+/// The `#[ignore]` attributes in `text` (comments and literals are not
+/// read): `(offset, reason)`, the reason `None` for a bare `#[ignore]`.
+fn ignores(text: &str) -> Vec<(usize, Option<String>)> {
+    let masked = mask(text);
+    let code = String::from_utf8_lossy(&masked.code);
+    let needle = "#[ignore";
+    let mut found = Vec::new();
+    for (p, _) in code.match_indices(needle) {
+        let after = p.saturating_add(needle.len());
+        let rest = code.get(after..).unwrap_or("").trim_start();
+        if rest.starts_with(']') {
+            found.push((p, None));
+        } else if rest.starts_with('=') {
+            let reason = masked
+                .strings
+                .iter()
+                .find(|r| r.start > after)
+                .and_then(|r| text.get(r.clone()))
+                .map(str::to_string);
+            found.push((p, reason));
+        }
+        // Anything else (`#[ignore_foo]`) is another attribute.
+    }
+    found
+}
+
+/// What is wrong with an `#[ignore]` reason, given the open task ids
+/// (`"T831"`, …): `None` when it is fine.
+fn ignore_problem(reason: Option<&str>, open: &BTreeSet<String>) -> Option<String> {
+    let Some(reason) = reason.map(str::trim) else {
+        return Some("a bare #[ignore]: write #[ignore = \"why\"]".into());
+    };
+    if reason.is_empty() {
+        return Some("an empty #[ignore] reason".into());
+    }
+    if !reason.to_ascii_lowercase().starts_with("flaky") {
+        return None;
+    }
+    let shape = "a flaky quarantine reads #[ignore = \"flaky: T<n>, <reason>\"]";
+    let Some(rest) = reason.strip_prefix("flaky: T") else {
+        return Some(shape.into());
+    };
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    let (number, tail) = rest.split_at(digits);
+    let Some(why) = tail.strip_prefix(", ") else {
+        return Some(shape.into());
+    };
+    if number.is_empty() || why.trim().is_empty() {
+        return Some(shape.into());
+    }
+    let id = format!("T{number}");
+    (!open.contains(&id)).then(|| {
+        format!("{id} is not an open task in tasks.md: a quarantine needs one (`- [ ] **{id} — …`)")
+    })
+}
+
+/// The ids of the open tasks (`- [ ] **T<n>`) in `tasks.md`'s text.
+fn open_tasks(tasks: &str) -> BTreeSet<String> {
+    tasks
+        .lines()
+        .filter_map(|l| l.trim_start().strip_prefix("- [ ] **T"))
+        .map(|rest| {
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            format!("T{digits}")
+        })
+        .filter(|id| id.len() > 1)
+        .collect()
+}
+
 fn line_of(text: &str, at: usize) -> usize {
     text.get(..at).map_or(0, |t| t.matches('\n').count()) + 1
 }
@@ -599,6 +708,71 @@ fn the_scanner_reads_code_not_text() {
     assert!(found.iter().any(|s| s.ends_with("{e}\"))")), "{found:?}");
     assert!(found.iter().any(|s| s.contains("Saved")), "{found:?}");
     assert!(has_words("{n} files") && !has_words("{e}: {}") && !has_words("—"));
+}
+
+#[test]
+fn every_ignored_test_says_why() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
+    let tasks = std::fs::read_to_string(root.join("tasks.md")).unwrap_or_default();
+    let open = open_tasks(&tasks);
+    let sources = all_rust_sources(root);
+    assert!(sources.len() > 400, "only {} files scanned", sources.len());
+    let mut offenders = Vec::new();
+    let mut seen = 0usize;
+    for (rel, text) in &sources {
+        for (at, reason) in ignores(text) {
+            seen = seen.saturating_add(1);
+            if let Some(problem) = ignore_problem(reason.as_deref(), &open) {
+                offenders.push(format!("{rel}:{}: {problem}", line_of(text, at)));
+            }
+        }
+    }
+    // The workspace has ignored tests today; finding none means a broken scan.
+    assert!(seen > 0, "no #[ignore] found at all");
+    assert!(
+        offenders.is_empty(),
+        "#[ignore] without a proper reason: {offenders:#?}. Say what the test needs that CI \
+         cannot provide, or quarantine a known-flaky test with #[ignore = \"flaky: T<n>, \
+         <reason>\"] naming an open task (spec/test \"Flaky tests\")."
+    );
+}
+
+#[test]
+fn the_ignore_rule_reads_attributes_and_reasons() {
+    let text = "#[test]\n#[ignore]\nfn a() {}\n#[ignore = \"needs a real Vim\"]\nfn b() {}\n\
+                // #[ignore]\nconst S: &str = \"#[ignore]\";\n#[ignore_me]\nfn c() {}\n\
+                #[ignore   =   \"flaky: T9, races the watcher\"]\nfn d() {}\n";
+    let found = ignores(text);
+    let reasons: Vec<Option<&str>> = found.iter().map(|(_, r)| r.as_deref()).collect();
+    assert_eq!(
+        reasons,
+        [
+            None,
+            Some("needs a real Vim"),
+            Some("flaky: T9, races the watcher")
+        ]
+    );
+    let open = open_tasks("- [ ] **T9 — Fix it.**\n- [x] **T10 — Done.**\n  - [ ] **T11 x\n");
+    assert_eq!(
+        open,
+        ["T11", "T9"]
+            .into_iter()
+            .map(String::from)
+            .collect::<BTreeSet<_>>()
+    );
+    let problem = |r: Option<&str>| ignore_problem(r, &open);
+    assert!(problem(None).is_some());
+    assert!(problem(Some("  ")).is_some());
+    assert!(problem(Some("needs rust-analyzer")).is_none());
+    assert!(problem(Some("flaky: T9, races the watcher")).is_none());
+    assert!(problem(Some("flaky: T10, the task is done")).is_some());
+    assert!(problem(Some("flaky: T12, no such task")).is_some());
+    assert!(problem(Some("flaky, sometimes")).is_some());
+    assert!(problem(Some("Flaky: T9, wrong case")).is_some());
+    assert!(problem(Some("flaky: T9,")).is_some());
+    assert!(problem(Some("flaky: T, no number")).is_some());
 }
 
 #[test]
