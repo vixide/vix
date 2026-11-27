@@ -361,9 +361,13 @@ updated, which is the moment to place the crate in the crate map.
 looks like a real credential (see [`spec/security`](../security/index.md) for
 the patterns and the allowlist rule). It reads the working tree of every file
 `git ls-files` lists, so it needs no history, no network and no extra tool, and
-it is skipped with a note where `git` or the checkout is missing. Its patterns
-are spelled in pieces and its self-tests build their fake secrets at run time,
-so the file never matches itself.
+it is skipped with a note where `git` or the checkout is missing. Its rules
+and allowlist are read from `scripts/secret-patterns`, shared with the
+pre-commit hook (T833); the patterns there are spelled so the file never
+matches itself, and the self-tests build their fake secrets at run time. A test
+also checks that the hook still names that file. The hook's side is tested by
+`scripts/test-attest`, which also checks that `tui/tests/code_lints.rs` still
+compiles alone with `rustc` (no crate), as the hook runs it that way.
 
 ## Manual scenarios
 

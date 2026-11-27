@@ -254,6 +254,36 @@ Only the default full tier of `scripts/check` counts before landing; the
 faster tiers are for iterating. See
 [Spec-Driven Workflow](contributing-workflow.md) for the whole landing loop.
 
+### Git hooks
+
+The hooks are opt-in: `make hooks` sets `git config core.hooksPath
+scripts/hooks`, and `git config --unset core.hooksPath` removes them. Both are
+POSIX `sh`.
+
+- **pre-commit** checks what is staged, in seconds, and never changes the index
+  or your files. It refuses the commit when a staged `.rs` file is not
+  formatted as `cargo fmt` would format it (fix: `cargo fmt`, then stage the
+  result); when a staged file holds what looks like a real credential (the
+  rules and allowlist are in `scripts/secret-patterns`, shared with
+  `tui/tests/secret_scan.rs`); when it adds a file over 1 MiB; and, when a file
+  under `tui/src/` or `crates/*/src/` is staged, when
+  `tui/tests/code_lints.rs` fails (compiled alone with `rustc`, about a
+  second; it reads the working tree).
+- **pre-push** refuses `main` and tags without a valid gate attestation
+  (`scripts/attest`). Another branch can be pushed unattested with
+  `VIX_ALLOW_UNATTESTED=1`; the hook then runs `scripts/check --tier fast`
+  first when the pushed commit is `HEAD`, and refuses the push if it fails.
+
+| Variable | Effect |
+| -------- | ------ |
+| `VIX_SKIP_PRECOMMIT_FMT=1` | Skip the format check |
+| `VIX_SKIP_PRECOMMIT_LINTS=1` | Skip the code lints |
+| `VIX_MAX_ADD_BYTES=<bytes>` | Raise the size limit for new files (default 1048576) |
+| `VIX_ALLOW_UNATTESTED=1` | Push a non-main branch without an attestation |
+
+`git commit --no-verify` and `git push --no-verify` skip the hooks; the gate
+and CI still run every check. `scripts/test-attest` tests both hooks.
+
 ---
 
 ## Running Benchmarks

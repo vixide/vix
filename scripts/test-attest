@@ -1,5 +1,6 @@
 #!/bin/sh
-# Tests for scripts/attest and scripts/hooks/pre-push (T761).
+# Tests for scripts/attest, scripts/hooks/pre-push (T761, T833) and
+# scripts/hooks/pre-commit (T833).
 #
 #     scripts/test-attest
 #
@@ -13,6 +14,11 @@ set -u
 src=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+# rustup and cargo find their toolchains through HOME unless told: keep the
+# real ones for the pre-commit hook's rustfmt and rustc before HOME moves.
+RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}
+CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}
+export RUSTUP_HOME CARGO_HOME
 export HOME="$work/home"
 export GIT_CONFIG_GLOBAL=/dev/null
 export GIT_CONFIG_SYSTEM=/dev/null
@@ -96,7 +102,7 @@ expect_msg "not clean"
 git checkout -q file
 
 expect_pass "a passing gate is attested" scripts/attest
-grep -qx -- "--tier full --scope all" "$STUB_LOG" && ok "attest ran the full tier and the full scope" || bad "attest ran the full tier and the full scope"
+if grep -qx -- "--tier full --scope all" "$STUB_LOG"; then ok "attest ran the full tier and the full scope"; else bad "attest ran the full tier and the full scope"; fi
 expect_pass "verify passes for HEAD" scripts/attest --verify
 expect_pass "verify passes by revision" scripts/attest --verify main
 
@@ -171,9 +177,31 @@ expect_fail "VIX_ALLOW_UNATTESTED never applies to main" env VIX_ALLOW_UNATTESTE
 x $unatt refs/heads/main $zero
 EOF
 expect_fail "an unattested non-main branch is refused" run_hook "$unatt" x refs/heads/feature
+: >"$STUB_LOG"
 expect_pass "the escape works on a non-main branch" env VIX_ALLOW_UNATTESTED=1 "$hook" origin url <<EOF
 x $unatt refs/heads/feature $zero
 EOF
+if grep -qx -- "--tier fast" "$STUB_LOG"; then ok "an unattested push of HEAD ran the fast tier"; else bad "an unattested push of HEAD ran the fast tier"; fi
+: >"$STUB_LOG"
+expect_pass "two unattested refs run the fast tier once" env VIX_ALLOW_UNATTESTED=1 "$hook" origin url <<EOF
+x $unatt refs/heads/feature $zero
+x $unatt refs/heads/feature2 $zero
+EOF
+if [ "$(grep -c -- "--tier fast" "$STUB_LOG")" = 1 ]; then ok "and only once"; else bad "and only once"; fi
+touch "$STUB_FAIL"
+expect_fail "a failing fast tier refuses the unattested push" env VIX_ALLOW_UNATTESTED=1 "$hook" origin url <<EOF
+x $unatt refs/heads/feature $zero
+EOF
+expect_msg "tier fast failed"
+expect_pass "an attested push does not need the fast tier" run_hook "$tip" x refs/heads/other
+: >"$STUB_LOG"
+side=$(git commit-tree "HEAD^{tree}" -p HEAD -m side)
+expect_pass "an unattested push of another commit skips the fast tier" env VIX_ALLOW_UNATTESTED=1 "$hook" origin url <<EOF
+x $side refs/heads/feature $zero
+EOF
+expect_msg "not HEAD"
+if [ -s "$STUB_LOG" ]; then bad "the fast tier did not run for a commit other than HEAD"; else ok "the fast tier did not run for a commit other than HEAD"; fi
+rm "$STUB_FAIL"
 expect_fail "the escape does not apply to tags" env VIX_ALLOW_UNATTESTED=1 "$hook" origin url <<EOF
 x $unatt refs/tags/v9 $zero
 EOF
@@ -183,6 +211,123 @@ EOF
 expect_pass "an attested tag may be pushed" run_hook "$tip" x refs/tags/v1
 expect_pass "deleting a ref is not gated" run_hook "$zero" x refs/heads/feature
 expect_pass "the notes ref is not gated" run_hook "$unatt" x refs/notes/vix-gate
+
+echo "pre-commit hook"
+pc="$work/pc"
+git init -q -b main "$pc" || exit 1
+cd "$pc" || exit 1
+git config user.email t@example.com
+git config user.name Tester
+git config commit.gpgsign false
+mkdir -p scripts/hooks tui/tests tui/src docs
+cp "$src/hooks/pre-commit" scripts/hooks/pre-commit
+cp "$src/secret-patterns" scripts/secret-patterns
+chmod +x scripts/hooks/pre-commit
+# A stub lint test: fails while a file named LINT_FAIL is in the repository.
+cat >tui/tests/code_lints.rs <<'EOF'
+#[test]
+fn stub() {
+    let flag = concat!(env!("CARGO_MANIFEST_DIR"), "/../LINT_FAIL");
+    assert!(!std::path::Path::new(flag).exists(), "lint failed");
+}
+EOF
+echo base >docs/a.md
+git add -A
+git commit -q --no-verify -m base
+pre="$pc/scripts/hooks/pre-commit"
+# reset_index: drop whatever a case staged and left behind.
+reset_index() {
+	git reset -q --hard
+	git clean -qfd
+}
+expect_pass "a staged text file passes" sh -c 'echo two >>docs/a.md && git add docs/a.md && "$1"' _ "$pre"
+reset_index
+
+if command -v rustfmt >/dev/null 2>&1; then
+	printf 'fn main(){let x=1;}\n' >tui/bad.rs
+	git add tui/bad.rs
+	before=$(git write-tree)
+	expect_fail "an unformatted staged .rs file is refused" "$pre"
+	expect_msg "tui/bad.rs"
+	if [ "$(git write-tree)" = "$before" ] && grep -q 'main(){' tui/bad.rs; then
+		ok "the hook changed neither the index nor the file"
+	else bad "the hook changed neither the index nor the file"; fi
+	expect_pass "VIX_SKIP_PRECOMMIT_FMT=1 skips the format check" env VIX_SKIP_PRECOMMIT_FMT=1 "$pre"
+	printf 'fn main() {\n    let x = 1;\n}\n' >tui/bad.rs
+	expect_fail "the staged content is checked, not the working tree" "$pre"
+	git add tui/bad.rs
+	expect_pass "a formatted staged .rs file passes" "$pre"
+	reset_index
+else
+	echo "  skip format checks: rustfmt not found"
+fi
+
+# Fake secrets are built here at run time so this file never holds one.
+d=-----
+k=sk
+secret_case() { # RULE-NAME TEXT
+	printf 'x = %s\n' "$2" >docs/s.md
+	git add docs/s.md
+	expect_fail "a staged $1 is refused" "$pre"
+	expect_msg "docs/s.md:1: $1"
+	if grep -qF -- "$2" "$work/out"; then bad "the $1 itself is not printed"; else ok "the $1 itself is not printed"; fi
+	reset_index
+}
+secret_case "private key" "${d}BEGIN OPENSSH PRIVATE KEY${d}"
+secret_case "AWS access key id" "AK""IAIOSFODNN7EXAMPLE"
+secret_case "GitHub token" "gh""p_a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2a1B2"
+secret_case "Slack token" "xo""xb-123456789012-1234567890123-AbCdEfGhIjKl"
+secret_case "Anthropic API key" "$k-ant-api03-Ab1-Ab1-Ab1-Ab1-Ab1-Ab1-Ab1-Ab1-Ab1-Ab1-"
+secret_case "OpenAI-style API key" "$k-proj-a1B2c3a1B2c3a1B2c3a1B2c3a1B2c3a1B2c3a1B2c3a1B2c3"
+printf '%s\n' "$k-ant-test" "xo""xb-your-token-here" "TOKEN=secret" "$k-this-is-a-long-kebab-case-name-without-any-numbers-at-all" >docs/s.md
+git add docs/s.md
+expect_pass "mentions and short fakes pass" "$pre"
+reset_index
+printf 'x = %s\n' "AK""IAIOSFODNN7EXAMPLE" >docs/fake.md
+printf 'allow\tdocs/fake.md\ta deliberate fake for a test\n' >>scripts/secret-patterns
+git add docs/fake.md scripts/secret-patterns
+expect_pass "a file on an allow line passes" "$pre"
+reset_index
+
+printf '%0200d' 0 >docs/big.txt
+git add docs/big.txt
+expect_fail "a new file over VIX_MAX_ADD_BYTES is refused" env VIX_MAX_ADD_BYTES=100 "$pre"
+expect_msg "docs/big.txt is 200 bytes"
+expect_pass "a raised VIX_MAX_ADD_BYTES lets it in" env VIX_MAX_ADD_BYTES=200 "$pre"
+expect_pass "the default limit (1 MiB) lets 200 bytes in" "$pre"
+git commit -q --no-verify -m big
+printf '%0300d' 0 >docs/big.txt
+git add docs/big.txt
+expect_pass "a file that already exists may grow past the limit" env VIX_MAX_ADD_BYTES=100 "$pre"
+reset_index
+dd if=/dev/zero of=docs/huge.bin bs=1024 count=1025 2>/dev/null
+git add docs/huge.bin
+expect_fail "a new file over the default 1 MiB is refused" "$pre"
+reset_index
+
+if command -v rustc >/dev/null 2>&1; then
+	touch LINT_FAIL
+	mkdir -p tui/src
+	printf 'fn f() {}\n' >tui/src/lib.rs
+	git add tui/src/lib.rs
+	expect_fail "a failing code lint refuses a commit touching tui/src" "$pre"
+	expect_msg "code_lints.rs failed"
+	expect_pass "VIX_SKIP_PRECOMMIT_LINTS=1 skips it" env VIX_SKIP_PRECOMMIT_LINTS=1 "$pre"
+	git reset -q
+	echo three >>docs/a.md
+	git add docs/a.md
+	expect_pass "the lints do not run when no source file is staged" "$pre"
+	rm -f LINT_FAIL
+	git reset -q --hard
+	printf 'fn f() {}\n' >tui/src/lib.rs
+	git add tui/src/lib.rs
+	expect_pass "a passing code lint lets it in" "$pre"
+	reset_index
+	# The real lint test must keep compiling alone (no crate), as the hook needs.
+	expect_pass "tui/tests/code_lints.rs compiles alone with rustc" sh -c 'cd "$1/.." && CARGO_MANIFEST_DIR="$PWD/tui" rustc --edition 2024 --test -o "$2" tui/tests/code_lints.rs' _ "$src" "$work/code_lints"
+else
+	echo "  skip lint checks: rustc not found"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then
