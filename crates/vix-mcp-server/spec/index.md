@@ -52,7 +52,9 @@ GUI, a test harness) can serve the same protocol by implementing `Host`.
   `describe_json`, `query_json`, `rows_json`, pure and unit-tested).
 - `workspace` is the boundary: `resolve` (lexical normalization, then
   canonicalization, then a prefix check against the canonical root, so
-  neither `..` nor a symbolic link escapes), `is_secret`, `read_text`
+  neither `..` nor a symbolic link escapes), `is_secret` (names compared in
+  ASCII lower case, `.git` and `.ssh` directory names too, since a
+  case-insensitive file system opens `.GIT/config` as `.git/config`; T832), `read_text`
   (2 MiB cap, no binaries, UTF-8 only) and `find_sqlite` (bounded walk,
   extension plus SQLite header, no symbolic links followed).
 - `file_uri` / `uri_path` convert between absolute paths and `file://` URIs

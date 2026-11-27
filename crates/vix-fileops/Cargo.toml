@@ -28,12 +28,15 @@ trash = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))'.dependencies]
 jiff = { workspace = true }
+
+# The user id: the freedesktop trash, and the shared-sticky-directory symlink
+# rule of `write_atomic` (T832).
+[target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["user"] }
 
 # The freedesktop trash's tests also run on macOS.
 [target.'cfg(unix)'.dev-dependencies]
 jiff = { workspace = true }
-nix = { workspace = true, features = ["user"] }
 
 [lints]
 workspace = true

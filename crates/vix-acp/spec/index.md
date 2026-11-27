@@ -79,6 +79,9 @@ Agents can write files and run commands, so:
     and saves. A directory, or a missing parent, is refused.
   - Paths must be absolute and lexically inside the workspace root (no `..`),
     and on disk must also canonicalize inside it, so a symlink cannot lead out.
+    A path not yet on disk is judged by its nearest existing ancestor, and a
+    dangling symlink on the way is refused (T832): it names nothing, so where
+    a save through it would land cannot be checked.
     Reads prefer the open buffer's unsaved text.
   - `fs/read_text_file` refuses a file that may hold secrets, by the MCP
     server's rule (`vix_mcp_server::workspace::is_secret`: `.env` and

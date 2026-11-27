@@ -46,12 +46,20 @@ static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 /// into the destination (data exfiltration when copying an attacker-supplied
 /// tree). Uses `symlink_metadata` so the type check itself doesn't follow links.
 ///
+/// A **destination** that is a symlink (at the top or at any level below) is
+/// removed and replaced, never written through (T832): `fs::copy` and
+/// `create_dir_all` would otherwise follow it, so pasting `notes.txt` over a
+/// tree's `notes.txt -> ~/.bashrc` would overwrite the link's target.
+///
 /// # Errors
 ///
 /// Returns an error if any read, directory creation, or copy fails.
 pub fn copy_recursive(src: &Path, dst: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(src)?;
     let ty = meta.file_type();
+    if fs::symlink_metadata(dst).is_ok_and(|m| m.file_type().is_symlink()) {
+        remove_symlink(dst)?;
+    }
     if ty.is_symlink() {
         if let Some(parent) = dst.parent() {
             fs::create_dir_all(parent)?;
@@ -71,6 +79,16 @@ pub fn copy_recursive(src: &Path, dst: &Path) -> io::Result<()> {
             fs::create_dir_all(parent)?;
         }
         fs::copy(src, dst).map(|_| ())
+    }
+}
+
+/// Remove the symlink `link` itself. On Windows a link to a directory is
+/// removed with `remove_dir`, which (like `remove_file` for a file link)
+/// removes the link and never its target.
+fn remove_symlink(link: &Path) -> io::Result<()> {
+    match fs::remove_file(link) {
+        Err(e) if cfg!(windows) => fs::remove_dir(link).map_err(|_| e),
+        other => other,
     }
 }
 
@@ -244,6 +262,7 @@ pub fn trash_path(path: &Path) -> io::Result<()> {
 /// Returns an error only if both the atomic write and the in-place fallback
 /// fail (e.g. the file itself is not writable, or the disk is full).
 pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
+    refuse_foreign_sticky_symlink(path)?;
     match write_atomic_inner(path, data, false) {
         Ok(()) => Ok(()),
         Err(atomic_err) => {
@@ -255,6 +274,58 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
                 .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))
         }
     }
+}
+
+/// Refuse a save that would follow a symlink another user planted in a
+/// shared sticky directory such as `/tmp` (T832): Linux's
+/// `fs.protected_symlinks` rule, applied here because the save resolves the
+/// path with `canonicalize` (`readlink`, which the kernel rule does not
+/// cover) and then writes the resolved target directly. Without it, another
+/// user who owns `/tmp/notes` could swap it for `/tmp/notes -> ~/.bashrc`
+/// between your open and your save, and the save would replace `~/.bashrc`.
+///
+/// # Errors
+///
+/// `PermissionDenied` naming the link. Always `Ok` off Unix.
+fn refuse_foreign_sticky_symlink(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    if let Some(link) = foreign_sticky_symlink(path, nix::unistd::geteuid().as_raw()) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is another user's symlink in a shared directory; not following it",
+                link.display()
+            ),
+        ));
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
+}
+
+/// The first symlink on `path` (the path itself, then each ancestor) that
+/// user `me` must not follow by the `fs.protected_symlinks` rule: it sits in
+/// a sticky, world-writable directory, and neither `me` nor the directory's
+/// owner owns it. `None` when every link on the path may be followed.
+#[cfg(unix)]
+fn foreign_sticky_symlink(path: &Path, me: u32) -> Option<PathBuf> {
+    use std::os::unix::fs::MetadataExt as _;
+    /// Sticky bit plus write-for-others: a shared directory like `/tmp`.
+    const STICKY_SHARED: u32 = 0o1002;
+    let abs = std::path::absolute(path).ok()?;
+    abs.ancestors()
+        .find(|p| {
+            let (Ok(link), Some(parent)) = (fs::symlink_metadata(p), p.parent()) else {
+                return false;
+            };
+            link.file_type().is_symlink()
+                && fs::metadata(parent).is_ok_and(|dir| {
+                    dir.mode() & STICKY_SHARED == STICKY_SHARED
+                        && link.uid() != me
+                        && link.uid() != dir.uid()
+                })
+        })
+        .map(Path::to_path_buf)
 }
 
 /// Marker error: renaming a temp file over the target would change its
@@ -469,6 +540,7 @@ fn combine_errors(atomic_err: &io::Error, fallback_err: &io::Error) -> io::Error
 /// Returns an error only if both the atomic write and the in-place fallback
 /// fail (e.g. the file itself is not writable, or the disk is full).
 pub fn write_atomic_private(path: &Path, data: &[u8]) -> io::Result<()> {
+    refuse_foreign_sticky_symlink(path)?;
     let existed = path.exists();
     match write_atomic_inner(path, data, true) {
         Ok(()) => Ok(()),
@@ -1380,6 +1452,100 @@ mod tests {
                 .is_symlink(),
             "must copy the link itself, not the secret's contents"
         );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn copy_recursive_replaces_a_destination_symlink_instead_of_writing_through_it() {
+        use std::os::unix::fs::symlink;
+        // T832: a hostile tree ships `notes.txt -> <outside>`; pasting a file
+        // named `notes.txt` over it (the conflict prompt's "overwrite") must
+        // replace the link, never write into what it points at.
+        let base = scratch("copy-dst-sym");
+        let outside = base.join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        let victim = outside.join("victim.txt");
+        fs::write(&victim, b"precious").unwrap();
+        let work = base.join("work");
+        fs::create_dir_all(&work).unwrap();
+        symlink(&victim, work.join("notes.txt")).unwrap();
+        // A dangling link to a file that does not exist yet.
+        symlink(outside.join("planted.txt"), work.join("new.txt")).unwrap();
+        // A link to a directory, and a directory copied onto it.
+        symlink(&outside, work.join("dir")).unwrap();
+        let src = base.join("src");
+        fs::create_dir_all(src.join("dir")).unwrap();
+        fs::write(src.join("notes.txt"), b"pasted").unwrap();
+        fs::write(src.join("dir/inner.txt"), b"pasted").unwrap();
+
+        copy_recursive(&src.join("notes.txt"), &work.join("notes.txt")).unwrap();
+        copy_recursive(&src.join("notes.txt"), &work.join("new.txt")).unwrap();
+        copy_recursive(&src.join("dir"), &work.join("dir")).unwrap();
+
+        assert_eq!(fs::read(&victim).unwrap(), b"precious", "written through");
+        assert!(!outside.join("planted.txt").exists(), "created through");
+        assert!(!outside.join("inner.txt").exists(), "copied into the link");
+        for name in ["notes.txt", "new.txt"] {
+            let meta = fs::symlink_metadata(work.join(name)).unwrap();
+            assert!(meta.is_file(), "{name} is now a regular file");
+        }
+        assert_eq!(fs::read(work.join("dir/inner.txt")).unwrap(), b"pasted");
+        assert!(fs::symlink_metadata(work.join("dir")).unwrap().is_dir());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_symlink_another_user_owns_in_a_sticky_shared_directory_is_not_followed() {
+        use std::os::unix::fs::{MetadataExt as _, symlink};
+        // Needs a shared sticky `/tmp` that this user does not own (not root).
+        let Ok(tmp) = fs::canonicalize("/tmp") else {
+            return;
+        };
+        let me = nix::unistd::geteuid().as_raw();
+        let shared = fs::metadata(&tmp).is_ok_and(|m| m.mode() & 0o1002 == 0o1002 && m.uid() != me);
+        if !shared {
+            return;
+        }
+        let base = scratch("sticky-victim");
+        let victim = base.join("victim.txt");
+        fs::write(&victim, b"precious").unwrap();
+        let link = tmp.join(format!("vix-sticky-{}", std::process::id()));
+        let _ = fs::remove_file(&link);
+        symlink(&victim, &link).unwrap();
+        // Our own link in /tmp may be followed, so saving through it works.
+        assert_eq!(foreign_sticky_symlink(&link, me), None);
+        assert!(refuse_foreign_sticky_symlink(&link).is_ok());
+        // To any other user it is a foreign link in a shared sticky
+        // directory: the save must stop there, for the link and below it.
+        let other = me.checked_add(1).unwrap();
+        assert_eq!(foreign_sticky_symlink(&link, other), Some(link.clone()));
+        assert_eq!(
+            foreign_sticky_symlink(&link.join("below"), other),
+            Some(link.clone())
+        );
+        // A link in a private directory is never refused.
+        let private = base.join("link.txt");
+        symlink(&victim, &private).unwrap();
+        assert_eq!(foreign_sticky_symlink(&private, other), None);
+        let _ = fs::remove_file(&link);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn write_atomic_replaces_a_dangling_symlink_rather_than_creating_its_target() {
+        use std::os::unix::fs::symlink;
+        // T832: a dangling link cannot be canonicalized, so the save renames
+        // over the link itself; nothing appears where it pointed.
+        let base = scratch("atomic-dangling");
+        let link = base.join("link.txt");
+        symlink(base.join("elsewhere.txt"), &link).unwrap();
+        write_atomic(&link, b"saved").unwrap();
+        assert!(!base.join("elsewhere.txt").exists());
+        assert!(fs::symlink_metadata(&link).unwrap().is_file());
+        assert_eq!(fs::read(&link).unwrap(), b"saved");
         let _ = fs::remove_dir_all(&base);
     }
 

@@ -1161,7 +1161,10 @@ impl<T: Transport> Authority for ShellAuthority<T> {
         let script = Sh::new()
             .set("a", from)
             .set("b", to)
+            // T832: a destination symlink is replaced, never written
+            // through (`cp` and `mkdir -p` would follow it).
             .t("[ -e \"$a\" ] || [ -h \"$a\" ] || exit 100\n\
+                 if [ -h \"$b\" ]; then rm -f -- \"$b\" || exit 1; fi\n\
                  if [ -h \"$a\" ]; then\n\
                    mkdir -p -- \"$(dirname -- \"$b\")\" && l=$(readlink -- \"$a\") || exit 1\n\
                    exec ln -s -- \"$l\" \"$b\"\n\
