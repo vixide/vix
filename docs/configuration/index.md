@@ -107,7 +107,7 @@ their defaults, so it is safe to delete or hand-edit.
 | `recent_files_max` | int | `20`     | How many entries to keep in `recent_files`. |
 | `time_zone`     | string | `UTC`    | Active IANA time zone (e.g. `America/New_York`), chosen via **Tools → Time Zone…**. |
 | `org_agenda_files` | list of strings | `[]` | The Org agenda's explicit file list (workspace-relative). Empty means every `.org` file in the project. |
-| `org_capture_templates` | list of tables | `Anything`, `Todo`, `Contact` | Org-capture templates for **Org → Capture**. See `crates/vix-org-capture/spec/index.md`. |
+| `org_capture_templates` | list of tables | `Anything`, `Task`, `Babel`, `Note`, `Contact` | Org-capture templates for **Org → Capture**. See `crates/vix-org-capture/spec/index.md`. |
 | `org_priority_highest` | char | `0`  | Highest `[#X]` priority cookie character (Vix defaults to numeric `0`..`9`, unlike Emacs's `A`..`C`). |
 | `org_priority_lowest` | char | `9`   | Lowest priority cookie character. |
 | `org_priority_default` | char | `0`  | Priority given to a headline that had no cookie yet. |

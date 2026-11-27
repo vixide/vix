@@ -98,7 +98,7 @@ field is absent.
 | `debug_adapters` | array of tables | `[]` | Configured debug adapters (DAP), matched to files by extension: `adapter_id`, `extensions`, `command`, and optional `launch` and `attach` string tables (`attach` is what **Run → Attach** sends, T617). See [`crates/vix-dap/spec/index.md`](../../vix-dap/spec/index.md). |
 | `show_welcome_dialog` | boolean | `true` | Show the welcome dialog on launch. Vix sets it to `false` and saves as soon as the dialog has been shown once, so it appears on the first run only; set it back to `true` to see it again. |
 | `contacts_dir` | string | `""` | Directory of vCard (`.vcf`) files for the contact browser (**Tools → Contacts…**). Empty = use the workspace root. |
-| `org_capture_templates` | array of tables | `Anything`/`Todo`/`Contact` (see below) | Named, placeholder-driven templates for the **Org → Capture** submenu (see below). |
+| `org_capture_templates` | array of tables | `Anything`/`Task`/`Babel`/`Note`/`Contact` (see below) | Named, placeholder-driven templates for the **Org → Capture** submenu (see below). |
 | `org_priority_highest` | char | `'0'` | Highest-priority character for a headline's `[#X]` cookie (**Org → Priority Up/Down**). "Highest" sorts first — Vix's default is numeric (`'0'` highest .. `'9'` lowest), unlike Emacs's default `'A'`..`'C'`. |
 | `org_priority_lowest` | char | `'9'` | Lowest-priority character; see `org_priority_highest`. |
 | `org_priority_default` | char | `'0'` | Priority given to a headline that had no `[#X]` cookie yet, by **Org → Priority Up/Down**. |
@@ -177,8 +177,9 @@ placeholder syntax and target shapes. Each entry is a TOML table:
 | `immediate_finish` | boolean | Skip the review step and file immediately once every prompt is answered. Default `false`. |
 | `clock_in` | boolean | Start a `CLOCK:` entry on the newly captured headline. Default `false`. |
 
-The defaults seed three templates (`a` Anything, `t` Todo, `c` Contact, all
-targeting the cursor) that match Vix's original fixed capture actions. Add
+The defaults seed five templates (`a` Anything, `t` Task, `b` Babel, `n`
+Note, `c` Contact, all targeting the cursor) that back the fixed
+**Org → Capture** items. Add
 more as TOML array-of-tables entries, e.g. a journal captured into a date
 tree:
 

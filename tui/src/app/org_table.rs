@@ -143,7 +143,8 @@ impl App {
                 crate::org_table::next_row(&text, line, byte_col)
             }
             KeyCode::Enter if !ctrl && !alt && shift => {
-                crate::org_table::copy_down(&text, line, byte_col, false)
+                // Increment on, as Emacs's `org-table-copy-increment` default (T856).
+                crate::org_table::copy_down(&text, line, byte_col, true)
             }
             KeyCode::Left if alt && !ctrl && shift => {
                 crate::org_table::delete_column(&text, line, byte_col).map(|(t, c)| (t, line, c))
@@ -600,7 +601,7 @@ impl App {
             "org.table.sort" => self.org_table_sort_prompt(),
             "org.table.sum_column" => self.org_table_sum_column(),
             "org.table.copy_down" => {
-                self.org_table_cell_op(|t, l, c| crate::org_table::copy_down(t, l, c, false));
+                self.org_table_cell_op(|t, l, c| crate::org_table::copy_down(t, l, c, true));
             }
             "org.table.transpose" => self.org_table_line_op(crate::org_table::transpose),
             "org.table.create_from_region" => self.org_table_create_from_region(),

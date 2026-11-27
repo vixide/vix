@@ -13,7 +13,11 @@
 //! earns its own entry in [`vix_action_catalog::dispatch_scan::DISPATCHERS`]
 //! — the list is deliberately explicit (not a blanket source-wide grep) so
 //! an arm added to a `match` that *isn't* part of this chain (a keymap id, a
-//! vim command char, …) never gets mistaken for an action id.
+//! vim command char, …) never gets mistaken for an action id. To keep an
+//! explicit list from missing a dispatcher (T849, T856),
+//! `every_dispatcher_shaped_function_is_scanned_or_excluded` finds every
+//! function in `tui/src` shaped like one and requires it to be listed there
+//! or in `EXCLUDED` with a reason.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -188,4 +192,145 @@ fn every_keymap_binding_runs_a_dispatchable_action() {
         dead.is_empty(),
         "keymap bindings to ids with no run_action arm: {dead:#?}"
     );
+}
+
+/// Functions in `tui/src` shaped like a dispatcher (`fn NAME(&mut self,
+/// action: &str) -> bool` or the same with `id`) that are deliberately
+/// *not* in [`vix_action_catalog::dispatch_scan::DISPATCHERS`], each with
+/// the reason (T856).
+const EXCLUDED: &[(&str, &str, &str)] = &[
+    (
+        "tui/src/app/org/tests.rs",
+        "run_action_known",
+        "test shim that forwards to org_action, which is scanned itself",
+    ),
+    (
+        "tui/src/app/remote_session.rs",
+        "remote_trust_blocks",
+        "predicate: says whether an action is blocked, never dispatches one",
+    ),
+];
+
+/// Every `.rs` file under `dir`, recursively, sorted.
+fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    let read = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut entries: Vec<PathBuf> = read.flatten().map(|e| e.path()).collect();
+    entries.sort();
+    for path in entries {
+        if path.is_dir() {
+            rust_files(&path, out)?;
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// The brace-balanced body of the function whose signature starts at
+/// `start` in `text`.
+fn body_from(text: &str, start: usize) -> Result<&str, String> {
+    let from = &text[start..];
+    let open = from.find('{').ok_or("no body")?;
+    let mut depth = 0usize;
+    for (offset, byte) in from.bytes().enumerate().skip(open) {
+        match byte {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(&from[open..=offset]);
+                }
+            }
+            _ => {}
+        }
+    }
+    Err(format!("unbalanced braces after byte {start}"))
+}
+
+/// `(file relative to the workspace root, function name, is a candidate)`
+/// for every function in `tui/src` with a dispatcher's signature; a
+/// candidate's body also matches on its parameter with string-literal arms.
+fn dispatcher_shaped_functions(root: &Path) -> Result<Vec<(String, String, bool)>, String> {
+    let mut files = Vec::new();
+    rust_files(&root.join("tui/src"), &mut files)?;
+    let mut found = Vec::new();
+    for path in files {
+        let text =
+            std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let rel = path
+            .strip_prefix(root)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let mut pos = 0;
+        while let Some(at) = text[pos..].find("fn ") {
+            let start = pos + at;
+            pos = start + 3;
+            let rest = &text[pos..];
+            let Some(paren) = rest.find('(') else { break };
+            let name = &rest[..paren];
+            if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                continue;
+            }
+            let sig: String = rest[paren..]
+                .split('{')
+                .next()
+                .unwrap_or_default()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            let param = if sig == "(&mut self, action: &str) -> bool" {
+                "action"
+            } else if sig == "(&mut self, id: &str) -> bool" {
+                "id"
+            } else {
+                continue;
+            };
+            let body = body_from(&text, start)?;
+            let matches_param = body.contains(&format!("match {param} {{"));
+            let literal_arms = body.lines().any(|l| {
+                let l = l.trim_start();
+                l.starts_with('"') && l.contains("=>")
+            });
+            found.push((rel.clone(), name.to_string(), matches_param && literal_arms));
+        }
+    }
+    Ok(found)
+}
+
+/// T856: every function in `tui/src` that dispatches string action ids the
+/// way the `run_action` chain does is either scanned (`DISPATCHERS`) or
+/// excluded above with a reason, so a new dispatcher can't silently leave its
+/// ids out of `docs/reference/actions.md` and the keymap check (T849 found
+/// three such misses, T856 a fourth: `run_acp_action`).
+#[test]
+fn every_dispatcher_shaped_function_is_scanned_or_excluded() {
+    use vix_action_catalog::dispatch_scan::DISPATCHERS;
+    let root = workspace_root();
+    let found = dispatcher_shaped_functions(&root).unwrap();
+    let listed = |file: &str, name: &str| {
+        DISPATCHERS.iter().any(|(f, n)| *f == file && *n == name)
+            || EXCLUDED.iter().any(|(f, n, _)| *f == file && *n == name)
+    };
+    let missing: Vec<String> = found
+        .iter()
+        .filter(|(file, name, candidate)| *candidate && !listed(file, name))
+        .map(|(file, name, _)| format!("{file}: {name}"))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "dispatcher-shaped functions in neither DISPATCHERS nor EXCLUDED \
+         (check each is reachable from App::run_action, then add it): {missing:#?}"
+    );
+    for (file, name, reason) in EXCLUDED {
+        assert!(!reason.trim().is_empty(), "{file}: {name} needs a reason");
+        assert!(
+            found.iter().any(|(f, n, _)| f == file && n == name),
+            "EXCLUDED entry {file}: {name} no longer exists"
+        );
+        assert!(
+            !DISPATCHERS.iter().any(|(f, n)| f == file && n == name),
+            "{file}: {name} is both scanned and excluded"
+        );
+    }
 }

@@ -251,7 +251,8 @@ pub struct Settings {
     pub contacts_dir: String,
     /// Org-capture templates for the **Org → Capture** submenu: named,
     /// placeholder-driven templates filed at a cursor/id/file/headline/
-    /// datetree target. Seeded with `Anything`/`Todo`/`Contact` by default;
+    /// datetree target. Seeded with five by default (`Anything`, `Task`,
+    /// `Babel`, `Note`, `Contact`; see `default_capture_templates`);
     /// see the `vix-org-capture` crate and `crates/vix-org-capture/spec/index.md`.
     pub org_capture_templates: Vec<CaptureTemplate>,
     /// Highest-priority character for a headline's `[#X]` priority cookie

@@ -159,6 +159,12 @@ rows/columns if the rectangle does not fit.
   zero-padded width (`"07"` → `"08"`); a bare `H(H):MM` duration has its
   minutes incremented by one, rolling into hours (`"1:59"` → `"2:00"`). Any
   other value shape copies verbatim.
+  The App calls it with `increment: true` for both `S-RET` and
+  `org.table.copy_down` (T856), matching Emacs, where
+  `org-table-copy-increment` is on by default; the empty-field fill copies
+  verbatim, and the step is always one (Emacs's step from the difference with
+  the field above, and its numeric-prefix step, are not modeled; neither is a
+  setting to turn the increment off).
 - `from_delimited`/`from_delimited_with` convert delimited text (CSV/TSV/
   whitespace-aligned columns) into a pipe table, auto-detecting (or, for the
   `_with` form, forcing) the separator: comma if every non-blank line

@@ -303,7 +303,8 @@ fn default_target() -> String {
 }
 
 /// The built-in templates seeded into `org_capture_templates` by default:
-/// `Anything` (a quick `* TODO`), `Todo` (a blank `* TODO` to fill in), and
+/// `Anything` (a quick `* TODO`), `Task` (a blank `* TODO` to fill in),
+/// `Babel` (a `#+begin_src` block), `Note` (a timestamped headline), and
 /// `Contact` (an org-contacts-style entry with a property drawer).
 #[must_use]
 pub fn default_capture_templates() -> Vec<CaptureTemplate> {
