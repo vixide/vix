@@ -47,6 +47,22 @@ const VI_TAB_CELLS: usize = 1;
 use crate::editor_core::textobject::{TextObjectDir, TextObjectKind};
 
 impl App {
+    /// The Vi/Spacemacs modal mode the engine is in (Normal, Insert, Visual
+    /// or Visual Line), read by the Vim-parity table test (T844) without
+    /// going through the translated status-bar text.
+    #[must_use]
+    pub fn vi_mode(&self) -> vix_modal::Mode {
+        self.modal_mode
+    }
+
+    /// The named register `name` (`a`-`z`), if anything was written to it
+    /// this session (`"ayy`, `"adw`, a Visual `"ay`). The unnamed register
+    /// is the clipboard, not this map.
+    #[must_use]
+    pub fn vi_register(&self, name: char) -> Option<&vix_modal::register::RegisterValue> {
+        self.modal_registers.get(name)
+    }
+
     /// The modal engine's own key handling, tried before `vim_normal_key`'s
     /// table. Returns `true` if `key` was consumed. A cheap no-op whenever
     /// `Settings::modal_engine` is off (the default) or the mode is

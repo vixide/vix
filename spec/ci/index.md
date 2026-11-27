@@ -273,6 +273,17 @@ unprivileged user. A test that reaches the real network fails there instead
 of in a downstream packager's sandbox. Test git helpers set
 `GIT_TERMINAL_PROMPT=0`. Audit at introduction: no test used a real remote.
 
+### Vim parity (T844)
+
+GitHub only, *full runs only*: a `vim-parity` job builds Vim from a pinned tag
+(`VIM_TAG`, `--with-features=normal`, no GUI) and runs the ignored test
+`vim_parity::stock_rows_match_an_unconfigured_vim` with `VIX_VIM` pointing at
+it. Every stock-Vim row of the parity table
+(`tui/tests/integration/vim_parity.rs`, `crates/vix-modal/spec/index.md`,
+"Vim-parity table") is typed into `vim -u NONE` and must give the result the
+row records for Vim. The Vix side of the same table runs in every `check`.
+Bump `VIM_TAG` deliberately and fix any row that changes.
+
 ### Minimal release variant (T594)
 
 `.github/workflows/release-minimal.yml` (GitHub only, hand-written — unlike the

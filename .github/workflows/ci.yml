@@ -228,6 +228,36 @@ jobs:
         run: |
           sudo unshare -n -- sh -c "ip link set lo up && exec sudo -u $USER env PATH=$PATH HOME=$HOME GIT_TERMINAL_PROMPT=0 cargo test --workspace --offline"
 
+  # T844: the Vim-parity table's stock-Vim rows, typed into a real,
+  # unconfigured Vim (`vim -u NONE`) built from a pinned tag, must still give
+  # the result each row records (the Vix side runs in `check` on every push).
+  # A Vim change that alters a row fails here, not silently in the guide.
+  vim-parity:
+    name: Vim-parity table against a pinned Vim (T844)
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      VIM_TAG: v9.1.1000
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build the pinned Vim
+        run: |
+          sudo apt-get update && sudo apt-get install -y libncurses-dev
+          git clone --depth 1 --branch "$VIM_TAG" https://github.com/vim/vim.git "$RUNNER_TEMP/vim"
+          cd "$RUNNER_TEMP/vim"
+          ./configure --with-features=normal --disable-gui --without-x --enable-multibyte
+          make -j"$(nproc)"
+          echo "VIX_VIM=$RUNNER_TEMP/vim/src/vim" >> "$GITHUB_ENV"
+      - name: stock rows match the pinned Vim
+        run: |
+          "$VIX_VIM" --version | head -3
+          cargo test -p vix-tui --lib vim_parity::stock_rows_match_an_unconfigured_vim -- --ignored
+
   # T587: a build with every capability off must compile, lint and pass its own
   # tests, and each feature must build on its own. Tests that assume the whole
   # product are gated on `feature = "full"`; see spec/cargo-features/index.md.

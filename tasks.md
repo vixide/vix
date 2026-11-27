@@ -10937,7 +10937,7 @@ Fix boundaries of everyday edits before adding Vi features.
   add Vi `h/l`, `w/b` and counted operators to `tui/benches/editor_ops.rs`
   (a same-line step should cost the same when unrelated text is appended);
   measure key-to-frame latency with the existing profiler.
-- [ ] **T844 — Vim-parity table test and a runnable migration exercise.** A
+- [x] **T844 — Vim-parity table test and a runnable migration exercise.** (Done: `tui/tests/integration/vim_parity.rs` rows run against Vix in every test run and against `vim -u NONE` in the GitHub `vim-parity` job (pinned `VIM_TAG`); the guide's table is generated from it; `tui/examples/vim-exercise` walked by `vim_exercise.rs`; parity bugs found are listed in `crates/vix-modal/spec/index.md`, not fixed.) A
   table of key sequences (initial text/cursor → expected text, cursor, mode,
   register) run unconditionally in CI against Vix, and verified or regenerated
   against a pinned, unconfigured Vim in a separate job with intentional
