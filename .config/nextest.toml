@@ -3,13 +3,15 @@
 # flakes that `cargo test` (one process per binary) is prone to.
 
 [profile.default]
-# One retry absorbs a loaded-runner timeout; a test that only passes on retry
-# is reported as FLAKY, not hidden.
-retries = 1
+# No retries (T831, spec/test "Flaky tests"): a test that passes on a second
+# try still has a race, and a green run would hide it. Hunt a suspected flake
+# with scripts/flaky-hunt (or `cargo nextest run --stress-count N`), fix it,
+# or quarantine it with #[ignore = "flaky: T<n>, <reason>"].
+retries = 0
 # Report anything slower than 30 s, and kill a test stuck for 3 minutes.
 slow-timeout = { period = "30s", terminate-after = 6 }
 fail-fast = false
 
 [profile.ci]
-retries = 2
+retries = 0
 failure-output = "immediate-final"
