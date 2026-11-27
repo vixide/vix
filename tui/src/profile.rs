@@ -40,6 +40,18 @@ const MAX_SAMPLES: usize = 1_000_000;
 /// How many of the slowest inputs the report lists.
 const SLOWEST: usize = 10;
 
+/// How often the profiler samples Vix's resident memory (T830).
+pub const MEMORY_EVERY: Duration = Duration::from_secs(1);
+
+/// Resident-memory samples: the first, the largest and the latest, in bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct Memory {
+    first: u64,
+    peak: u64,
+    last: u64,
+    samples: u64,
+}
+
 /// What a sample timed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -130,6 +142,10 @@ pub struct Profiler {
     slowest: Vec<(u32, f64)>,
     /// When the input waiting for its frame was read.
     pending_input: Option<Instant>,
+    /// Resident memory seen so far (T830).
+    memory: Memory,
+    /// When the next memory sample is due.
+    memory_due: Instant,
 }
 
 impl Profiler {
@@ -152,6 +168,8 @@ impl Profiler {
             counts: [0; 4],
             slowest: Vec::new(),
             pending_input: None,
+            memory: Memory::default(),
+            memory_due: Instant::now(),
         }
     }
 
@@ -191,6 +209,30 @@ impl Profiler {
         }
     }
 
+    /// Sample Vix's resident memory if [`MEMORY_EVERY`] has passed since
+    /// the last sample (the first call always samples). A platform that does
+    /// not report it records nothing, and the report says so.
+    pub fn sample_memory(&mut self, now: Instant) {
+        if now < self.memory_due {
+            return;
+        }
+        self.memory_due = now.checked_add(MEMORY_EVERY).unwrap_or(now);
+        if let Some(bytes) = vix_system_information_panel::resident_memory() {
+            self.record_memory(bytes);
+        }
+    }
+
+    /// Record one resident-memory sample of `bytes`.
+    pub fn record_memory(&mut self, bytes: u64) {
+        let m = &mut self.memory;
+        if m.samples == 0 {
+            m.first = bytes;
+        }
+        m.peak = m.peak.max(bytes);
+        m.last = bytes;
+        m.samples = m.samples.plus(1);
+    }
+
     /// The summary report.
     #[must_use]
     pub fn report(&self) -> String {
@@ -220,6 +262,22 @@ impl Profiler {
                 ms(s.p95),
                 ms(s.p99),
                 ms(s.max)
+            );
+        }
+        let _ = writeln!(out);
+        let human = vix_system_information_panel::human_bytes;
+        let m = self.memory;
+        if m.samples == 0 {
+            let _ = writeln!(out, "resident memory: not reported on this platform");
+        } else {
+            let _ = writeln!(
+                out,
+                "resident memory: start {}, peak {}, end {} ({} samples, every {} s)",
+                human(m.first),
+                human(m.peak),
+                human(m.last),
+                m.samples,
+                MEMORY_EVERY.as_secs()
             );
         }
         let latencies = self
@@ -323,6 +381,42 @@ mod tests {
         let first = slowest.lines().nth(1).unwrap();
         assert!(first.trim_start().starts_with("30.00"), "{r}");
         assert_eq!(p.slowest.len(), 5);
+    }
+
+    #[test]
+    fn report_shows_start_peak_and_end_resident_memory() {
+        let mut p = Profiler::new(PathBuf::from("unused"));
+        assert!(
+            p.report()
+                .contains("resident memory: not reported on this platform")
+        );
+        for mib in [10, 40, 25] {
+            p.record_memory(mib * 1024 * 1024);
+        }
+        let r = p.report();
+        assert!(
+            r.contains("resident memory: start 10.0 MiB, peak 40.0 MiB, end 25.0 MiB (3 samples"),
+            "{r}"
+        );
+    }
+
+    #[test]
+    fn memory_is_sampled_at_most_once_a_second() {
+        let mut p = Profiler::new(PathBuf::from("unused"));
+        let t0 = Instant::now();
+        p.sample_memory(t0);
+        let first = p.memory.samples;
+        p.sample_memory(t0 + Duration::from_millis(500));
+        assert_eq!(p.memory.samples, first, "not due yet");
+        p.sample_memory(t0 + MEMORY_EVERY + Duration::from_millis(1));
+        if cfg!(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "windows"
+        )) {
+            assert_eq!((first, p.memory.samples), (1, 2));
+            assert!(p.memory.peak > 0);
+        }
     }
 
     #[test]

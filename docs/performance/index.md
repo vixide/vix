@@ -205,6 +205,63 @@ to measure against the noise, and are unchanged.
 45). It uses default settings, session-only history, so this change does
 not move it; with `history = "disk"` it saves the ~0.3 ms above.
 
+## Caches over a long session (T830, measured 2026-11-27)
+
+Everything the App and the editor widget keep that could grow over a long
+session, and what bounds it. The exercise is
+`app::memory::tests::opening_and_closing_a_thousand_files_keeps_per_file_state_bounded`
+(`cargo test -p vix-tui --lib memory -- --nocapture` prints the sizes): in a
+committed repository of 1,000 small files, open each one (two in three as a
+Position History jump, one in three as an explorer preview, which the next
+preview replaces), let the language-server sync, the change gutter and the
+once-a-second disk poll see it, then close it (Close Tab for one in three,
+Close All every 30 files). The highlight cache has its own exercise in
+`vix-editor-core` (`highlight_cache_is_bounded_and_rebuilds_what_it_evicted`):
+draw a 2,000-line Rust file at each of its 2,000 scroll positions.
+
+| Cache | Key | Grown by | Evicted before T830 | Size after the exercise, before | After |
+| ----- | --- | -------- | ------------------- | ------------------------------- | ----- |
+| `App::disk_mtimes` | file path | each disk poll, per open file | never | 1,000 entries (about 100 B each) | the open files (3) |
+| `App::lsp_synced` and, in `vix-lsp`, the document's version and full text | file path | the first sync of a file a server handles | Close Tab only; not Close All, a replaced preview or a deleted file's buffer (the server kept the document open too) | 667 entries, each holding the whole file text | the open files (3); the rest get `didClose` |
+| `App::git_head_cache` | file path | the change gutter, per file shown | a git refresh (a save, a git action) | 1,000 entries, each the file's whole HEAD text | the open files |
+| `App::git_gutter_base_cache` (gutter base other than HEAD) | file path | the same | the same | as above, with another base | the open files |
+| `App::nav_history` (Position History) | — | every jump | never | 1,332 locations | 100 (`NAV_HISTORY_CAP`, as Vim's jumplist) |
+| `vix-editor-core` highlight cache, per tab | visible byte range | each new scroll position (each visual row with soft wrap) | an edit or theme change | 2,000 entries for 2,000 positions (a viewport's spans each, a few KB) | 256 (`HIGHLIGHT_CACHE_ENTRIES`), least recently used first |
+| Reopen Closed Tab stack | — | each close | capped | 20 | 20 |
+| Recent files | path | each open | capped | 15 (`recent_files_max`) | 15 |
+| Command palette recents / query history | — | each command / query | capped | 12 / 50 | 12 / 50 |
+| Clipboard history | — | each copy | capped | 30 | 30 |
+| Output dock, terminal scrollback | — | output | capped | `scrollback` (1,000) / at most 50,000 lines | unchanged |
+| IM messages | conversation | each message | capped | 5,000 per conversation | unchanged |
+| Undo history, folds, marks, per-tab caches | — | edits in that tab | dropped with the tab | — | unchanged |
+| LSP diagnostics | file path | the server's publishes | the server's empty publish | as many files as the server reports on | unchanged (the server decides) |
+| Messages drawer | — | notices | the user dismisses each | 2 | unchanged (by design, `vix-right-dock`) |
+| Symbols, picker preview, inline blame | — | — | one entry each | 1 | 1 |
+| File index, Tree-sitter queries, git repository location | workspace / language / workspace folder | — | rebuilt, never per file | the workspace's files / one per language / one per folder | unchanged |
+
+Bounded since T830:
+
+- **Per-file state is dropped once no tab shows the file.**
+  `App::prune_closed_file_state` runs from the once-a-second disk poll and
+  keeps `disk_mtimes`, `git_head_cache` and `git_gutter_base_cache` only for
+  open files, and sends `didClose` for any synced file without a tab, which
+  also drops `vix-lsp`'s copy of its text. Every close path reaches it, so
+  Close All, a replaced preview and a deleted file's buffer no longer leak.
+  A reopened file is re-read: its mtime is recorded afresh (no reload
+  warning), the server gets a new `didOpen` and the gutter fetches HEAD
+  again (`a_reopened_file_rebuilds_what_was_dropped`).
+- **Position History keeps the newest 100 jumps**, as Vim's jumplist does
+  (`position_history_keeps_the_newest_hundred_jumps`).
+- **The highlight cache keeps 256 ranges**, evicting the least recently
+  used; an evicted range is recomputed to the same spans
+  (`highlight_cache_evicts_the_least_recently_used_range`). Each eviction
+  scans the 256 entries once, and only on a miss, which already runs a
+  Tree-sitter query.
+
+The exercise takes about 0.9 s in a debug build (the change gutter is built
+for one file in ten there, since each build runs `git show`; the "before"
+column comes from a run that built it for all 1,000, about 11 s).
+
 ## Vi sentence motions (T830, measured 2026-11-27)
 
 In the T843 profile about half of a Vi `(` or `)` was
@@ -703,6 +760,8 @@ input handling         318       0.09       0.41       1.20       5.33
 draw                   402       1.42       2.31       4.97      11.62
 tick                   402       0.02       0.05       0.11       0.80
 
+resident memory: start 14.2 MiB, peak 61.8 MiB, end 58.3 MiB (42 samples, every 1 s)
+
 inputs slower than 16 ms to reach the screen: 0 of 310
 
 slowest inputs (ms, at s into the session):
@@ -715,6 +774,13 @@ slowest inputs (ms, at s into the session):
   with when they happened, so you can match them to what you were doing.
 - **input handling**, **draw** and **tick** (the background work polled
   before each frame) split that time up.
+- **resident memory** is how much RAM Vix itself holds (its resident set),
+  sampled at most once a second after a frame (T830): at the start, the
+  largest seen and at the end. A steady climb while you open and close the
+  same kind of files points at something that keeps growing. It is read
+  through `sysinfo`, which Vix already uses for **Tools → System
+  Information** (where the same figure is the *Vix resident memory* row);
+  on a platform it does not support the line says so.
 
 Nothing is timed when `VIX_PROFILE` is unset. Only the terminal front end
 records a profile.

@@ -2,6 +2,13 @@
 
 The `vix-tui` package is the thin App shell that builds the `vix` command: it owns the event loop, the `App` state and the ratatui rendering, and delegates every feature to a member crate. Feature behavior is specified in each member crate's own spec; this file records only what is true of the shell itself.
 
+## Memory over a long session (T830)
+
+- **Per-file state lives only as long as a tab shows the file.** What the App keeps per file path beside the tabs — the last-seen disk mtime (`disk_mtimes`), the change gutter's HEAD and base blobs (`git_head_cache`, `git_gutter_base_cache`) and the language-server sync state (`lsp_synced`, plus `vix-lsp`'s copy of the text) — is dropped by `App::prune_closed_file_state` once no tab has that path, at the next once-a-second disk poll (`App::poll_file_changes`). For a synced file that means sending `textDocument/didClose`. The sweep is by open paths rather than in each close path, so every way a tab goes (Close Tab, Close All, a preview tab the next preview replaces, a deleted file's buffer, a rename) is covered. A reopened file starts afresh: its first poll only records the mtime, the server gets a new `didOpen`, and the gutter fetches the blob again.
+- **Position History** keeps at most `NAV_HISTORY_CAP` (100) locations, dropping the oldest, as Vim's jumplist does (`spec/navigation`).
+- **Frame profiler** (`VIX_PROFILE`, `tui/src/profile.rs`): besides frame timings it samples Vix's resident memory at most once every `profile::MEMORY_EVERY` (1 s), after a frame, through `vix_system_information_panel::resident_memory`, and reports the first, largest and last sample. A platform that does not report it gets one line saying so. Nothing is sampled when profiling is off.
+- The inventory of every cache that could grow, with its key, what grows it, what evicts it and its size after opening and closing 1,000 files, is in `docs/performance` (§ Caches over a long session).
+
 ## Checked arithmetic
 
 The package follows the `rust-checked-arithmetic` spec and, outside tests, the whole package (library and binary) denies `arithmetic_side_effects`, `integer_division`, `modulo_arithmetic`, `as_conversions`, `indexing_slicing` and `string_slice` (RCA-ENF-3). Screen and text offsets go through the small `geo` helpers (`plus`, `minus`, `times`, `quot`, `modulo`, `chunk`, `later`); everything else reads through `get`, `first`, `split_at_checked` and `try_from`.

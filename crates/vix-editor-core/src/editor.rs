@@ -52,6 +52,12 @@ fn add_or(a: usize, b: usize, fallback: usize) -> usize {
     a.checked_add(b).unwrap_or(fallback)
 }
 
+/// `a + b`, or the declared `fallback` when the sum does not fit (see
+/// `sub_or` for why the fallback is a parameter).
+fn add_u64_or(a: u64, b: u64, fallback: u64) -> u64 {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
 /// `a + b` for screen columns; a column past the top of `u16` is past the right edge.
 fn add_u16(a: u16, b: u16) -> u16 {
     add_u16_or(a, b, u16::MAX)
@@ -113,9 +119,74 @@ fn with_org_styles(mut theme: Theme) -> Theme {
 /// One highlighted span: start byte, end byte, style. (The identifier's
 /// spelling is historical.)
 type Hightlight = (usize, usize, Style);
+/// Most highlight results [`Editor::highlight_interval`] keeps (T830). One
+/// entry is a whole viewport (one per visual row with soft wrap on), so this
+/// covers every row of any real screen while scrolling through a long file
+/// no longer keeps one entry per scroll position until the next edit.
+pub const HIGHLIGHT_CACHE_ENTRIES: usize = 256;
+
 /// Memo of highlight results keyed by the `(start, end)` range queried, so a
 /// frame that re-asks for the same viewport does not re-run Tree-sitter.
-type HightlightCache = HashMap<(usize, usize), Vec<Hightlight>>;
+/// Bounded at [`HIGHLIGHT_CACHE_ENTRIES`]: inserting past it evicts the entry
+/// used least recently (T830).
+#[derive(Default)]
+pub(crate) struct HightlightCache {
+    /// Each range's highlights and the use stamp it was last read or stored at.
+    entries: HashMap<(usize, usize), (Vec<Hightlight>, u64)>,
+    /// The use stamp of the latest read or store.
+    clock: u64,
+}
+
+impl HightlightCache {
+    /// The next use stamp. At `u64::MAX` (never, in practice) stamps stop
+    /// increasing, which only makes the eviction order arbitrary.
+    fn stamp(&mut self) -> u64 {
+        self.clock = add_u64_or(self.clock, 1, u64::MAX);
+        self.clock
+    }
+
+    /// The cached highlights for `key`, marking them used.
+    fn get(&mut self, key: (usize, usize)) -> Option<Vec<Hightlight>> {
+        let now = self.stamp();
+        let (spans, used) = self.entries.get_mut(&key)?;
+        *used = now;
+        Some(spans.clone())
+    }
+
+    /// Store `spans` for `key`, first evicting the least recently used
+    /// entry when the cache is full.
+    fn insert(&mut self, key: (usize, usize), spans: Vec<Hightlight>) {
+        if self.entries.len() >= HIGHLIGHT_CACHE_ENTRIES
+            && !self.entries.contains_key(&key)
+            && let Some(oldest) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, (_, used))| *used)
+                .map(|(k, _)| *k)
+        {
+            self.entries.remove(&oldest);
+        }
+        let now = self.stamp();
+        self.entries.insert(key, (spans, now));
+    }
+
+    /// Drop every entry (an edit or a theme change invalidates them all).
+    pub(crate) fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    /// How many ranges are cached.
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether nothing is cached.
+    #[cfg(test)]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
 
 bitflags::bitflags! {
     /// [`Editor`]'s independent display/editing toggles (T149): each bit is
@@ -363,7 +434,7 @@ impl Editor {
     /// decoration channels) and the converted theme.
     fn with_code(code: Code, theme: Vec<(&str, &str)>) -> Self {
         let theme = Self::build_theme(theme);
-        let highlights_cache = RefCell::new(HashMap::new());
+        let highlights_cache = RefCell::new(HightlightCache::default());
 
         Self {
             code,
@@ -1526,8 +1597,8 @@ impl Editor {
     ) -> Vec<(usize, usize, Style)> {
         let mut cache = self.highlights_cache.borrow_mut();
         let key = (start, end);
-        if let Some(v) = cache.get(&key) {
-            return v.clone();
+        if let Some(v) = cache.get(key) {
+            return v;
         }
 
         let highlights = self.code.highlight_interval(start, end, theme);
@@ -1790,7 +1861,7 @@ mod state_tests {
     //! Editor state accessors, decoration channels, folds, mouse mapping,
     //! scrolling and batch edits.
 
-    use super::{CommentMark, Editor};
+    use super::{CommentMark, Editor, HIGHLIGHT_CACHE_ENTRIES};
     use crate::code::{Edit, EditBatch, EditKind, EditState};
     use crate::selection::Selection;
     use ratatui_core::layout::Rect;
@@ -1852,6 +1923,53 @@ mod state_tests {
         // More than five digits of line numbers widen the gutter.
         let big = ed(&"x\n".repeat(123_456));
         assert_eq!(big.gutter_width(), 6 + 2);
+    }
+
+    #[test]
+    fn highlight_cache_is_bounded_and_rebuilds_what_it_evicted() {
+        use ratatui_core::buffer::Buffer;
+        use ratatui_core::widgets::Widget;
+        // Scrolling through a long file without editing used to keep one
+        // entry per scroll position until the next edit (T830).
+        let src = "fn f() {}\n".repeat(2_000);
+        let mut e = Editor::new("rust", &src, vec![("keyword", "ff0000")]).unwrap();
+        let area = Rect::new(0, 0, 60, 20);
+        for top in 0..2_000 {
+            e.set_offset_y(top);
+            let mut buf = Buffer::empty(area);
+            (&e).render(area, &mut buf);
+        }
+        let held = e.highlights_cache.borrow().len();
+        eprintln!("highlight cache after scrolling 2,000 positions: {held} entries");
+        assert!(held <= HIGHLIGHT_CACHE_ENTRIES, "{held}");
+        // An entry evicted long ago is recomputed to the same answer.
+        let fresh = Editor::new("rust", &src, vec![("keyword", "ff0000")]).unwrap();
+        let first_line = src.find('\n').unwrap();
+        let want = fresh.highlight_interval(0, first_line, &fresh.theme);
+        assert_eq!(e.highlight_interval(0, first_line, &e.theme), want);
+        assert_ne!(want.len(), 0);
+    }
+
+    #[test]
+    fn highlight_cache_evicts_the_least_recently_used_range() {
+        let e = Editor::new("rust", "fn main() {}\n", vec![("keyword", "ff0000")]).unwrap();
+        let hot = e.highlight_interval(0, 2, &e.theme);
+        for i in 0..HIGHLIGHT_CACHE_ENTRIES * 2 {
+            // Keep the hot range in use while cold ones stream past it.
+            assert_eq!(e.highlight_interval(0, 2, &e.theme), hot);
+            let _ = e.highlight_interval(3, 4 + i, &e.theme);
+            assert!(e.highlights_cache.borrow().len() <= HIGHLIGHT_CACHE_ENTRIES);
+        }
+        let mut cache = e.highlights_cache.borrow_mut();
+        assert_eq!(cache.len(), HIGHLIGHT_CACHE_ENTRIES);
+        assert!(
+            cache.get((0, 2)).is_some(),
+            "the range used every frame stays"
+        );
+        assert!(
+            cache.get((3, 4)).is_none(),
+            "the oldest cold range went first"
+        );
     }
 
     #[test]
