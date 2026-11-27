@@ -119,6 +119,14 @@ enum Val {
         /// Key/value pairs in source order.
         entries: Vec<(Key, Val)>,
     },
+    /// A value with a YAML tag other than a core-schema one (`!custom x`),
+    /// kept so it is written back (T853). Rows and edits see the inner value.
+    Tagged {
+        /// The tag, written back as read.
+        tag: serde_norway::value::Tag,
+        /// The tagged value.
+        value: Box<Val>,
+    },
 }
 
 /// An object key: the parsed key exactly as read (its type and any tag), and
@@ -157,8 +165,11 @@ struct Row {
     depth: usize,
     /// Object key, or `[i]` for array elements; empty for the root.
     label: String,
-    /// Scalar text, or a `[n]` / `{n}` child-count summary for containers.
+    /// Scalar text, or a `[n]` / `{n}` child-count summary for containers,
+    /// after the value's tag if it has one (`!custom x`).
     value: String,
+    /// The scalar text an edit starts from: `value` without the tag.
+    text: String,
     /// Scalar or container (with fold state).
     kind: Kind,
     /// Path from the root; rows are re-found after a rebuild by this path.
@@ -217,6 +228,18 @@ pub enum SaveError {
     ComplexKey,
     /// The YAML serializer failed.
     Yaml(serde_norway::Error),
+    /// A mapping whose only key is tagged (`!k x: 0`): `serde_norway`
+    /// cannot write one, so the YAML save is refused before it is tried.
+    LoneTaggedKey {
+        /// The key's label, tag included.
+        key: String,
+    },
+    /// A tag holding `,`, `[` or `]` (read from `!t%5D`): `serde_norway`
+    /// writes those raw, and the saved file would not parse.
+    UnwritableTag {
+        /// The tag, as shown in the row.
+        tag: String,
+    },
 }
 
 impl std::fmt::Display for SaveError {
@@ -227,6 +250,14 @@ impl std::fmt::Display for SaveError {
             }
             Self::ComplexKey => f.write_str("a sequence or mapping key cannot be written as JSON"),
             Self::Yaml(e) => write!(f, "{e}"),
+            Self::LoneTaggedKey { key } => write!(
+                f,
+                "the YAML writer cannot save a mapping whose only key is tagged ({key})"
+            ),
+            Self::UnwritableTag { tag } => write!(
+                f,
+                "the YAML writer cannot save the tag {tag}, which holds a comma or bracket"
+            ),
         }
     }
 }
@@ -277,8 +308,22 @@ impl Tree {
     /// valid JSON or YAML" with no indication of what was actually wrong or
     /// where).
     pub fn from_text(text: &str, format: Format) -> Result<Self, ParseError> {
+        // The YAML parser reads JSON too, but treats U+0085, U+2028 and
+        // U+2029 as line breaks and refuses non-printable characters, all of
+        // which JSON allows raw inside strings. In text that is strict JSON
+        // they can only be inside strings, where the `\uXXXX` escape means
+        // the same character (T854).
+        let escaped;
+        let source = if text.chars().any(yaml_unsafe)
+            && serde_json::from_str::<serde::de::IgnoredAny>(text).is_ok()
+        {
+            escaped = escape_yaml_unsafe(text);
+            escaped.as_str()
+        } else {
+            text
+        };
         let parsed: serde_norway::Value =
-            serde_norway::from_str(text).map_err(|e| ParseError::Syntax {
+            serde_norway::from_str(source).map_err(|e| ParseError::Syntax {
                 message: e.to_string(),
             })?;
         let mut tree = Tree {
@@ -399,8 +444,11 @@ impl Tree {
     /// [`SaveError::DuplicateKey`] when two keys of one object would be
     /// written as the same key (in JSON every key is a string, so YAML keys
     /// `1` and `"1"` collide there); [`SaveError::ComplexKey`] for a
-    /// sequence or mapping key in JSON; [`SaveError::Yaml`] when the YAML
-    /// serializer fails. The caller must not save in any of these cases.
+    /// sequence or mapping key in JSON; [`SaveError::LoneTaggedKey`] for a
+    /// YAML mapping whose only key is tagged, and [`SaveError::UnwritableTag`]
+    /// for a tag holding `,`, `[` or `]`, which the YAML writer cannot
+    /// write; [`SaveError::Yaml`] when the YAML serializer fails. The caller
+    /// must not save in any of these cases.
     pub fn save_text(&self) -> Result<String, SaveError> {
         match self.format {
             Format::Json => {
@@ -412,7 +460,11 @@ impl Tree {
             }
             Format::Yaml => {
                 check_yaml_keys(&self.root)?;
-                serde_norway::to_string(&to_yaml(&self.root)).map_err(SaveError::Yaml)
+                let doc = to_yaml(&self.root);
+                if let Some(limit) = writer_limit(&doc) {
+                    return Err(limit);
+                }
+                serde_norway::to_string(&doc).map_err(SaveError::Yaml)
             }
         }
     }
@@ -542,7 +594,7 @@ impl Tree {
     fn activate(&mut self) {
         match self.rows.get(self.sel) {
             Some(row) if row.kind == Kind::Scalar => {
-                self.edit_buf = row.value.clone();
+                self.edit_buf = row.text.clone();
                 self.mode = Mode::Edit;
             }
             Some(row) if matches!(row.kind, Kind::Container(_)) => self.toggle(),
@@ -624,13 +676,22 @@ impl Tree {
 /// Locate a mutable node by path.
 fn at_mut<'a>(mut node: &'a mut Val, path: &[Seg]) -> Option<&'a mut Val> {
     for seg in path {
-        node = match (node, seg) {
+        node = match (untag_mut(node), seg) {
             (Val::Arr { items, .. }, Seg::Index(i)) => items.get_mut(*i)?,
             (Val::Obj { entries, .. }, Seg::Entry(i)) => entries.get_mut(*i).map(|(_, v)| v)?,
             _ => return None,
         };
     }
-    Some(node)
+    Some(untag_mut(node))
+}
+
+/// The value under any tag: rows, folds and edits act on it, so editing a
+/// tagged scalar keeps its tag.
+fn untag_mut(node: &mut Val) -> &mut Val {
+    match node {
+        Val::Tagged { value, .. } => untag_mut(value),
+        other => other,
+    }
 }
 
 /// The display text of a scalar (`""` for containers).
@@ -639,6 +700,7 @@ fn scalar_text(val: &Val) -> String {
         Val::Null => "null".to_string(),
         Val::Bool(b) => b.to_string(),
         Val::Num(s) | Val::Str(s) => s.clone(),
+        Val::Tagged { value, .. } => scalar_text(value),
         _ => String::new(),
     }
 }
@@ -652,6 +714,7 @@ fn flatten(val: &Val, depth: usize, label: String, path: Vec<Seg>, out: &mut Vec
                 depth,
                 label,
                 value: format!("[{}]", items.len()),
+                text: String::new(),
                 kind: Kind::Container(*collapsed),
                 path: path.clone(),
             });
@@ -668,6 +731,7 @@ fn flatten(val: &Val, depth: usize, label: String, path: Vec<Seg>, out: &mut Vec
                 depth,
                 label,
                 value: format!("{{{}}}", entries.len()),
+                text: String::new(),
                 kind: Kind::Container(*collapsed),
                 path: path.clone(),
             });
@@ -679,10 +743,19 @@ fn flatten(val: &Val, depth: usize, label: String, path: Vec<Seg>, out: &mut Vec
                 }
             }
         }
+        Val::Tagged { tag, value } => {
+            // The tagged value's own row shows the tag before its value.
+            let first = out.len();
+            flatten(value, depth, label, path, out);
+            if let Some(row) = out.get_mut(first) {
+                row.value = format!("{tag} {}", row.value);
+            }
+        }
         scalar => out.push(Row {
             depth,
             label,
             value: scalar_text(scalar),
+            text: scalar_text(scalar),
             kind: Kind::Scalar,
             path,
         }),
@@ -728,9 +801,12 @@ fn from_yaml(v: &serde_norway::Value) -> Val {
                 })
                 .collect(),
         },
-        // YAML tags (`!!str`, custom) are dropped; only the value is kept,
-        // so saving a YAML file loses explicit tags.
-        Y::Tagged(t) => from_yaml(&t.value),
+        // Core-schema tags (`!!str`) are already resolved by the parser;
+        // any other tag is kept and written back (T853).
+        Y::Tagged(t) => Val::Tagged {
+            tag: t.tag.clone(),
+            value: Box::new(from_yaml(&t.value)),
+        },
     }
 }
 
@@ -770,6 +846,7 @@ fn json_key(k: &serde_norway::Value) -> Option<String> {
 fn check_json_keys(val: &Val) -> Result<(), SaveError> {
     match val {
         Val::Arr { items, .. } => items.iter().try_for_each(check_json_keys),
+        Val::Tagged { value, .. } => check_json_keys(value),
         Val::Obj { entries, .. } => {
             let mut seen = std::collections::HashSet::new();
             for (k, v) in entries {
@@ -793,6 +870,7 @@ fn check_json_keys(val: &Val) -> Result<(), SaveError> {
 fn check_yaml_keys(val: &Val) -> Result<(), SaveError> {
     match val {
         Val::Arr { items, .. } => items.iter().try_for_each(check_yaml_keys),
+        Val::Tagged { value, .. } => check_yaml_keys(value),
         Val::Obj { entries, .. } => {
             let mut seen = std::collections::HashSet::new();
             for (k, v) in entries {
@@ -824,6 +902,10 @@ fn to_yaml(val: &Val) -> serde_norway::Value {
             .unwrap_or_else(|_| Y::String(s.clone())),
         Val::Str(s) => Y::String(s.clone()),
         Val::Arr { items, .. } => Y::Sequence(items.iter().map(to_yaml).collect()),
+        Val::Tagged { tag, value } => Y::Tagged(Box::new(serde_norway::value::TaggedValue {
+            tag: tag.clone(),
+            value: to_yaml(value),
+        })),
         Val::Obj { entries, .. } => {
             let mut m = serde_norway::Mapping::new();
             for (k, v) in entries {
@@ -842,8 +924,74 @@ fn indent(out: &mut String, depth: usize) {
 }
 
 /// A JSON string literal with proper escaping.
+///
+/// `serde_json` writes U+0085, U+2028, U+2029, DEL, C1 controls and
+/// U+FFFE/U+FFFF raw, as JSON allows; they are escaped here too, because the
+/// YAML parser that reads the saved file back would take the first three as
+/// line breaks and refuse the rest (T854).
 fn json_quote(s: &str) -> String {
-    serde_json::to_string(s).unwrap_or_else(|_| format!("\"{s}\""))
+    let quoted = serde_json::to_string(s).unwrap_or_else(|_| format!("\"{s}\""));
+    if quoted.chars().any(yaml_unsafe) {
+        escape_yaml_unsafe(&quoted)
+    } else {
+        quoted
+    }
+}
+
+/// Whether the YAML parser would not read `c` back as itself inside a
+/// quoted string: a YAML 1.1 line break other than LF and CR (U+0085,
+/// U+2028, U+2029), or a character outside YAML's printable set that JSON
+/// allows raw (DEL, the C1 controls, U+FFFE, U+FFFF). Controls below U+0020
+/// are not listed: JSON never has them raw and `serde_json` escapes them.
+fn yaml_unsafe(c: char) -> bool {
+    matches!(
+        c,
+        '\u{7f}'..='\u{9f}' | '\u{2028}' | '\u{2029}' | '\u{fffe}' | '\u{ffff}'
+    )
+}
+
+/// `text` with every [`yaml_unsafe`] character written as a `\uXXXX`
+/// escape. Only sound where those characters are inside JSON strings.
+fn escape_yaml_unsafe(text: &str) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if yaml_unsafe(c) {
+            // Writing to a String cannot fail.
+            let _ = write!(out, "\\u{:04x}", u32::from(c));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The first thing in `doc` that `serde_norway` cannot write so that it
+/// reads back, anywhere (in keys too): a one-entry mapping whose key is
+/// tagged (its emitter fails), or a tag holding `,`, `[` or `]` (its
+/// emitter writes them raw, where the parser reads them as flow indicators).
+fn writer_limit(doc: &serde_norway::Value) -> Option<SaveError> {
+    use serde_norway::Value as Y;
+    match doc {
+        Y::Sequence(items) => items.iter().find_map(writer_limit),
+        Y::Tagged(t) => {
+            let tag = t.tag.to_string();
+            if tag.contains([',', '[', ']']) {
+                return Some(SaveError::UnwritableTag { tag });
+            }
+            writer_limit(&t.value)
+        }
+        Y::Mapping(m) => {
+            if m.len() == 1
+                && let Some((k @ Y::Tagged(_), _)) = m.iter().next()
+            {
+                return Some(SaveError::LoneTaggedKey { key: yaml_key(k) });
+            }
+            m.iter()
+                .find_map(|(k, v)| writer_limit(k).or_else(|| writer_limit(v)))
+        }
+        _ => None,
+    }
 }
 
 /// Pretty-print `val` as JSON into `out`, preserving object key order.
@@ -853,6 +1001,8 @@ fn json_push(val: &Val, depth: usize, out: &mut String) {
         Val::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         Val::Num(s) => out.push_str(s),
         Val::Str(s) => out.push_str(&json_quote(s)),
+        // JSON has no tags: a tagged value is written as its value.
+        Val::Tagged { value, .. } => json_push(value, depth, out),
         Val::Arr { items, .. } => {
             if items.is_empty() {
                 out.push_str("[]");
@@ -1308,7 +1458,7 @@ mod tests {
         assert_eq!(at("num"), "3.5");
         assert_eq!(at("flag"), "false");
         assert_eq!(at("nothing"), "null");
-        assert_eq!(at("tagged"), "value", "the tag is dropped");
+        assert_eq!(at("tagged"), "!custom value", "the tag is shown");
     }
 
     #[test]
@@ -1480,6 +1630,177 @@ mod tests {
         let wrapped = SaveError::Yaml(yaml_err);
         assert_eq!(wrapped.to_string(), "boom");
         assert!(std::error::Error::source(&wrapped).is_some());
+    }
+
+    #[test]
+    fn a_unicode_line_break_in_a_key_saves_to_json_that_reopens() {
+        // T854, found by the fuzz target (selector 0x00, so JSON): the YAML
+        // parser reads the saved JSON back and took the raw U+2029 that
+        // serde_json writes for a line break.
+        let text = "{\": 1\u{2029}a\", 2tr}";
+        let t = Tree::from_text(text, Format::Json).unwrap();
+        let out = t.save_text().unwrap();
+        assert_eq!(out, "{\n  \": 1\\u2029a\": null,\n  \"2tr\": null\n}\n");
+        let back = Tree::from_text(&out, Format::Json).unwrap();
+        assert_eq!(back.label(1), ": 1\u{2029}a");
+        assert_eq!(back.save_text().unwrap(), out);
+        let yaml = Tree::from_text(text, Format::Yaml).unwrap();
+        same_yaml(text, &yaml.to_text().unwrap());
+    }
+
+    #[test]
+    fn json_with_raw_breaks_and_unprintables_opens_and_round_trips() {
+        for c in [
+            '\u{85}', '\u{2028}', '\u{2029}', '\u{7f}', '\u{80}', '\u{9f}', '\u{fffe}', '\u{ffff}',
+        ] {
+            let s = format!("a{c}b");
+            let want = serde_json::json!({ s.as_str(): [s.as_str()] });
+            let text = want.to_string();
+            assert!(text.contains(c), "serde_json writes {c:?} raw");
+            let t = Tree::from_text(&text, Format::Json)
+                .unwrap_or_else(|e| panic!("{c:?}: valid JSON does not open: {e}"));
+            assert_eq!(t.label(1), s);
+            let out = t.save_text().unwrap();
+            assert!(!out.contains(c), "{c:?} is escaped: {out}");
+            let got: serde_json::Value = serde_json::from_str(&out).unwrap();
+            assert_eq!(got, want);
+            let again = Tree::from_text(&out, Format::Json).unwrap();
+            assert_eq!(again.save_text().unwrap(), out);
+            let yaml = Tree::from_text(&text, Format::Yaml).unwrap();
+            let back: serde_norway::Value =
+                serde_norway::from_str(&yaml.save_text().unwrap()).unwrap();
+            assert_eq!(back, serde_norway::to_value(&want).unwrap(), "{c:?}");
+        }
+    }
+
+    #[test]
+    fn a_yaml_backslash_u_text_is_not_unescaped() {
+        // Only strict JSON is pre-escaped; in YAML a plain backslash-u is text.
+        let t = Tree::from_text("a: x\\u2028\n", Format::Yaml).unwrap();
+        assert_eq!(t.value(1), "x\\u2028");
+        // An escaped backslash before a raw U+2028 stays one backslash.
+        let t = Tree::from_text("{\"k\\\\\u{2028}\": 1}", Format::Json).unwrap();
+        assert_eq!(t.label(1), "k\\\u{2028}");
+        let out = t.save_text().unwrap();
+        assert_eq!(
+            Tree::from_text(&out, Format::Json).unwrap().label(1),
+            "k\\\u{2028}"
+        );
+    }
+
+    #[test]
+    fn yaml_value_tags_are_kept_on_save() {
+        // T853: value tags used to be dropped when the tree was saved.
+        let text = "a: !custom x\nb: !t [1, 2]\nc: !m {d: 1}\ne: !n 5\n";
+        let t = Tree::from_text(text, Format::Yaml).unwrap();
+        same_yaml(text, &t.save_text().unwrap());
+        assert_eq!(t.value(row_of(&t, "b")), "!t [2]");
+        assert_eq!(t.value(row_of(&t, "c")), "!m {1}");
+        assert_eq!(t.value(row_of(&t, "d")), "1");
+        let root = Tree::from_text("!top [1]\n", Format::Yaml).unwrap();
+        same_yaml("!top [1]\n", &root.save_text().unwrap());
+    }
+
+    #[test]
+    fn editing_a_tagged_value_keeps_its_tag() {
+        let mut t = Tree::from_text("a: !custom x\nb: !t [1]\n", Format::Yaml).unwrap();
+        goto(&mut t, "a");
+        t.handle_key(code(KeyCode::Enter), 8);
+        assert_eq!(
+            t.edit_buffer(),
+            "x",
+            "the edit starts from the value, not the tag"
+        );
+        t.handle_key(code(KeyCode::Esc), 8);
+        type_value(&mut t, "y");
+        assert_eq!(t.value(row_of(&t, "a")), "!custom y");
+        goto(&mut t, "[0]");
+        type_value(&mut t, "2");
+        same_yaml("a: !custom y\nb: !t [2]\n", &t.save_text().unwrap());
+        goto(&mut t, "b");
+        t.handle_key(code(KeyCode::Left), 8);
+        assert!(t.is_collapsed(row_of(&t, "b")), "a tagged container folds");
+        t.handle_key(key('u'), 8);
+        t.handle_key(key('u'), 8);
+        same_yaml("a: !custom x\nb: !t [1]\n", &t.save_text().unwrap());
+    }
+
+    #[test]
+    fn json_writes_a_tagged_value_as_its_value() {
+        let t = Tree::from_text("a: !custom x\nb: !t [1]\n", Format::Json).unwrap();
+        assert_eq!(
+            t.save_text().unwrap(),
+            "{\n  \"a\": \"x\",\n  \"b\": [\n    1\n  ]\n}\n"
+        );
+    }
+
+    #[test]
+    fn a_mapping_whose_only_key_is_tagged_is_refused_with_its_own_error() {
+        for (text, key) in [
+            ("!k x: 0\n", "!k x"),
+            ("a:\n  !k x: 0\n", "!k x"),
+            ("- !k x: 0\n", "!k x"),
+            ("a: !t {!k y: 0}\n", "!k y"),
+            ("? {!k z: 0}\n: 1\n", "!k z"),
+        ] {
+            let t = Tree::from_text(text, Format::Yaml).unwrap();
+            match t.save_text() {
+                Err(SaveError::LoneTaggedKey { key: k }) => assert_eq!(k, key, "{text}"),
+                other => panic!("{text}: expected a lone tagged key, got {other:?}"),
+            }
+        }
+        // With a second entry, or as JSON, the same key saves.
+        yaml_round_trip("!k x: 0\ny: 1\n");
+        let t = Tree::from_text("!k x: 0\n", Format::Json).unwrap();
+        assert_eq!(t.save_text().unwrap(), "{\n  \"x\": 0\n}\n");
+        let t = Tree::from_text("a: !T%5D0 x\nb: 1\n", Format::Yaml).unwrap();
+        assert_eq!(t.value(1), "!T]0 x");
+        match t.save_text() {
+            Err(SaveError::UnwritableTag { tag }) => assert_eq!(tag, "!T]0"),
+            other => panic!("expected an unwritable tag, got {other:?}"),
+        }
+        let t = Tree::from_text("!a%2Cb k: 1\nc: 2\n", Format::Yaml).unwrap();
+        assert!(
+            matches!(t.save_text(), Err(SaveError::UnwritableTag { .. })),
+            "in a key too"
+        );
+        // Other escaped characters are written back escaped.
+        yaml_round_trip("a: !T%25 x\nb: !%C3%A9 y\n");
+        let e = SaveError::UnwritableTag { tag: "!T]0".into() };
+        assert!(e.to_string().contains("!T]0"), "{e}");
+        let e = SaveError::LoneTaggedKey { key: "!k x".into() };
+        assert!(e.to_string().contains("(!k x)"), "{e}");
+        assert!(std::error::Error::source(&e).is_none());
+    }
+
+    proptest::proptest! {
+        // T854: any characters in keys and string values survive a save in
+        // both formats, and the saved text reopens.
+        #[test]
+        fn any_text_round_trips(
+            pairs in proptest::collection::vec(
+                (proptest::collection::vec(proptest::char::any(), 0..6),
+                 proptest::collection::vec(proptest::char::any(), 0..6)),
+                1..5,
+            )
+        ) {
+            let mut want = serde_json::Map::new();
+            for (k, v) in &pairs {
+                want.insert(k.iter().collect(), serde_json::Value::String(v.iter().collect()));
+            }
+            let want = serde_json::Value::Object(want);
+            let text = want.to_string();
+            let json = Tree::from_text(&text, Format::Json).unwrap();
+            let out = json.save_text().unwrap();
+            let got: serde_json::Value = serde_json::from_str(&out).unwrap();
+            proptest::prop_assert_eq!(&got, &want);
+            let again = Tree::from_text(&out, Format::Json).unwrap();
+            proptest::prop_assert_eq!(again.save_text().unwrap(), out);
+            let yaml = Tree::from_text(&text, Format::Yaml).unwrap();
+            let saved = yaml.save_text().unwrap();
+            let back: serde_norway::Value = serde_norway::from_str(&saved).unwrap();
+            proptest::prop_assert_eq!(back, serde_norway::to_value(&want).unwrap());
+        }
     }
 
     /// Keys that render alike in a row label but are different YAML keys.

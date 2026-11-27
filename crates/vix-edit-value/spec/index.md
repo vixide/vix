@@ -46,16 +46,59 @@ editing one changes only its own value.
   (`DuplicateKey { key }`, translated as `msg.edit_value_duplicate_key`; in
   JSON this happens for YAML keys `1` and `"1"`), when a sequence or mapping
   key would have to be written as JSON (`ComplexKey`,
-  `msg.edit_value_complex_key`), or when the YAML writer fails (`Yaml`,
+  `msg.edit_value_complex_key`), when a YAML mapping's only key is tagged
+  (`LoneTaggedKey { key }`, `msg.edit_value_lone_tagged_key`; see Writer
+  limit), when a tag holds `,`, `[` or `]` (`UnwritableTag { tag }`,
+  `msg.edit_value_unwritable_tag`), or when the YAML writer fails (`Yaml`,
   `msg.edit_value_serialize`). YAML keys are compared as parsed values; the
   parser already rejects a document with a repeated key, so this guards the
   writer, which would otherwise keep only one entry. `Tree::to_text` keeps its
   signature and returns the same refusals as a `serde_norway::Error` carrying
   the English message. `SaveError` is `#[non_exhaustive]`.
 - **Writer limit.** `serde_norway` cannot write a one-entry mapping whose only
-  key is tagged (`!k x: 0`); saving such a file reports
-  `msg.edit_value_serialize` and leaves it unchanged.
-- Values (not keys) still drop their tag when read.
+  key is tagged (`!k x: 0`), wherever it is (a nested value, a sequence item,
+  inside a complex key); its emitter fails. `Tree::save_text` finds such a
+  mapping before writing and returns `SaveError::LoneTaggedKey` with the
+  key's label, so the editor reports `msg.edit_value_lone_tagged_key` and
+  leaves the file unchanged (T853). With a second entry, or saved as JSON,
+  the same key saves.
+- **Tag characters.** A tag is read with its `%XX` escapes decoded
+  (`!T%5D0` is the tag `!T]0`), and `serde_norway`'s emitter escapes them
+  again except `,`, `[` and `]`, which it writes raw; the parser reads those
+  as flow indicators, so the file would not reopen. `Tree::save_text`
+  returns `SaveError::UnwritableTag` (`msg.edit_value_unwritable_tag`) for
+  such a tag, on a key or a value, and saves nothing. Saved as JSON, which
+  has no tags, the same tree saves. Only local tags (`!name`) are kept: the
+  parser drops `!!name`, verbatim `!<…>` and `%TAG`-handle tags.
+
+## Value tags (T853)
+
+A value with a tag other than a core-schema one (`a: !custom x`,
+`b: !t [1, 2]`, a tagged document root) keeps its tag and is written back
+with it. The row shows the tag before the value (`!custom x`, `!t [2]`);
+folding, navigation and editing act on the tagged value, so an edit starts
+from `x` (not `!custom x`) and the new value keeps the tag. Core-schema
+tags (`!!str`, `!!int`, `!!binary`) are resolved by the parser and are not
+kept. JSON has no tags: a tagged value is written as its value.
+
+## Line breaks and unprintable characters (T854)
+
+The YAML parser reads JSON files too, and follows YAML 1.1: U+0085, U+2028
+and U+2029 are line breaks, and DEL, the C1 controls (U+0080–U+009F) and
+U+FFFE/U+FFFF are not allowed raw. JSON allows all of them raw inside strings,
+and `serde_json` writes them raw, so a JSON save holding one did not reopen
+(the parser saw a line break inside a quoted name) and a valid JSON file
+holding one did not open.
+
+- **Writing JSON.** Every such character in a name or string is written as a
+  `\uXXXX` escape (the same character to any JSON reader).
+- **Reading.** When the text is strict JSON (checked with `serde_json`) and
+  holds such a character, each one is replaced by its `\uXXXX` escape before
+  parsing; in strict JSON they can only be inside strings, where the escape is
+  the same character. Text that is not strict JSON (YAML, or YAML flow syntax
+  opened as JSON) is parsed as written.
+- **Writing YAML.** `serde_norway`'s emitter already writes these characters
+  so they read back unchanged (it was not the cause); nothing is changed.
 
 ## Keys
 

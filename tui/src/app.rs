@@ -11451,6 +11451,16 @@ impl App {
                     .warn(t!("msg.edit_value_complex_key").to_string());
                 return;
             }
+            Err(crate::edit_value::SaveError::LoneTaggedKey { key }) => {
+                self.messages
+                    .warn(t!("msg.edit_value_lone_tagged_key", key = key).to_string());
+                return;
+            }
+            Err(crate::edit_value::SaveError::UnwritableTag { tag }) => {
+                self.messages
+                    .warn(t!("msg.edit_value_unwritable_tag", tag = tag).to_string());
+                return;
+            }
             Err(e) => {
                 self.messages
                     .warn(t!("msg.edit_value_serialize", error = e.to_string()).to_string());

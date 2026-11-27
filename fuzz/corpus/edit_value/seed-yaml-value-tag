@@ -1,0 +1,2 @@
+a: !custom x
+b: !t [1]

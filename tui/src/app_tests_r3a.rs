@@ -243,6 +243,17 @@ fn edit_surfaces_save_into_the_buffer_and_close() {
         Some(t!("msg.edit_value_complex_key").to_string())
     );
     a.edit_value_key(k(KeyCode::Esc));
+    // A YAML mapping whose only key is tagged: its own warning (T853).
+    let lone = "!k x: 0\n";
+    a.editor.active_tab_mut().unwrap().editor.set_content(lone);
+    a.run_action("tools.edit_yaml");
+    a.edit_value_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    assert_eq!(
+        a.messages.items.last().map(|m| m.text.clone()),
+        Some(t!("msg.edit_value_lone_tagged_key", key = "!k x").to_string())
+    );
+    assert_eq!(a.editor.active_tab().unwrap().editor.get_content(), lone);
+    a.edit_value_key(k(KeyCode::Esc));
 
     // Not valid JSON: warns, nothing opens.
     std::fs::write(&json, "{nope").unwrap();
