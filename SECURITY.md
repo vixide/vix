@@ -256,8 +256,9 @@ it.
   through the workspace lints.
 - **Supply chain.** Every push and pull request, and a weekly schedule, runs
   `cargo deny check` against [`deny.toml`](deny.toml): RustSec advisories, a
-  license allow-list, bans on wildcard and duplicate dependencies, and
-  allowed registry sources. See [`spec/ci`](spec/ci/index.md).
+  license allow-list, a ban on wildcard version requirements, a warning (not a
+  ban) when two major versions of one dependency are present, and allowed
+  registry sources. See [`spec/ci`](spec/ci/index.md).
 - **Fuzzing.** `fuzz/fuzz_targets/` fuzzes the parsers and text transforms
   that take input Vix did not write, asserting invariants rather than only
   the absence of a panic. Every target runs for two minutes each week in CI

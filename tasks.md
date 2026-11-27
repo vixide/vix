@@ -10834,6 +10834,11 @@ awareness, not capability. Items marked (stale?) may already exist.
   keys, what is sent when, diff review, ACP agents) rewritten as references,
   facts cited per section.
   Left: the rest of the list above.)
+  Third slice: ADRs in `docs/adr/` (index plus five records: Rust, ratatui,
+  no `unsafe`, crate layout, feature flags), written from the commits that
+  made each change, citing files and commit hashes, and saying where the
+  history records no reason. Left: a deeper Org reference and AI page, and
+  the rest of the list above.)
 - [ ] **T829 — Packaging channels.** Prepared in `packaging/` but not
   published: AUR, winget, Scoop, Nix flake, mise; public Docker/ghcr.io image;
   official Homebrew cask (instead of the custom tap); also Chocolatey,

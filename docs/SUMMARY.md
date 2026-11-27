@@ -146,6 +146,12 @@
 # Reference
 
 - [Architecture](architecture/index.md)
+- [Architecture Decision Records](adr/index.md)
+  - [1. Write Vix in Rust](adr/0001-rust.md)
+  - [2. Build on ratatui and crossterm](adr/0002-ratatui.md)
+  - [3. Forbid unsafe code](adr/0003-no-unsafe.md)
+  - [4. A workspace of focused crates](adr/0004-crate-layout.md)
+  - [5. Optional capabilities as Cargo features](adr/0005-feature-flags.md)
 - [Comparison with Other Editors](compare/index.md)
   - [Vix compared with VS Code](compare/vix-vs-visual-studio-code/index.md)
   - [Vix compared with Neovim](compare/vix-vs-neovim/index.md)
