@@ -23,7 +23,7 @@ fuzzy-filter, then Enter to jump. Like go-to-definition, it is a fast, offline,
 language-agnostic heuristic over declaration-style lines (local `let`/`var`
 bindings are excluded to keep the outline structural), not a semantic LSP.
 
-Position History: Navigate back and forward through your edit locations using Alt+Left and Alt+Right.
+Position History: Navigate back and forward through your edit locations using Alt+Left and Alt+Right. It keeps the newest 100 locations (`NAV_HISTORY_CAP`); a jump past that drops the oldest, as Vim's jumplist does (`:help jumplist`, at most 100 entries), so a long session does not grow it without bound (T830).
 
 Recent Locations (jump list): Press Alt+J (or **Go → Recent Locations…**, or the command palette command "Recent Locations") to open a chooser listing the recorded position history, most-recent first with consecutive duplicates removed. Each row shows the file name, line, and directory; ↑/↓ select, Enter (or a click) jumps to the location, Esc cancels. Where Alt+Left/Right step linearly through the history one entry at a time, this lists them all so you can jump straight to any one.
 

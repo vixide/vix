@@ -91,6 +91,7 @@ mod jj;
 mod jupyter;
 #[cfg(not(feature = "jupyter"))]
 mod jupyter_off;
+mod memory;
 mod menu_pointer;
 mod workspace_search_input;
 #[cfg(feature = "jupyter")]
@@ -6095,6 +6096,8 @@ impl App {
             return;
         }
         self.last_disk_poll = Some(std::time::Instant::now());
+        // Drop the state of files whose tabs closed since the last poll (T830).
+        self.prune_closed_file_state();
         // Nothing to poll over a lost connection (each try would wait for
         // `ssh`'s connect timeout); Reconnect resumes it (T713).
         if self.remote_connection_lost() {
@@ -9414,6 +9417,10 @@ impl App {
             && self.nav_history.last() != Some(&d)
         {
             self.nav_history.push(d);
+        }
+        // Keep the newest `NAV_HISTORY_CAP` entries, like Vim's jumplist (T830).
+        if let Some(excess) = self.nav_history.len().checked_sub(NAV_HISTORY_CAP) {
+            self.nav_history.drain(..excess);
         }
         self.nav_idx = self.nav_history.len().minus(1);
     }
@@ -15345,6 +15352,11 @@ mod app_tests_r4a;
 
 /// Most occurrences Highlight Word marks (T852).
 const WORD_HIGHLIGHT_CAP: usize = 500;
+
+/// Most entries Position History (`App::nav_history`) keeps; the oldest go
+/// first. Vim's jumplist keeps 100 the same way (T830).
+pub(crate) const NAV_HISTORY_CAP: usize = 100;
+
 /// How many lines past the visible rows, each way, Highlight Word looks for
 /// occurrences (T852): nothing shows a total count, so a word found once
 /// on screen does not read the rest of the buffer.

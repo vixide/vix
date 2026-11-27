@@ -396,7 +396,9 @@ fn run(
         draw(terminal, app)?;
         timed(&mut profiler, Phase::Draw, start);
         if let Some(p) = profiler.as_deref_mut() {
-            p.frame_drawn(Instant::now());
+            let now = Instant::now();
+            p.frame_drawn(now);
+            p.sample_memory(now);
         }
         if app.flags.contains(AppFlags::SHOULD_QUIT) {
             return Ok(());

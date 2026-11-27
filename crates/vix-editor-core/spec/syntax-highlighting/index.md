@@ -42,6 +42,24 @@ construction — its injection parsers are `Rc<RefCell<Parser>>` — which keeps
 cache lock-free. Background *parsing* (buffers over 50 KB reparse on a worker
 thread) moves trees, not queries, so it is unaffected.
 
+## Highlight results are cached per range, at most 256 (T830)
+
+`Editor::highlight_interval` memoizes the spans of each `(start, end)` byte
+range it is asked for, so a frame that redraws the same viewport does not run
+Tree-sitter again. Without soft wrap the renderer asks for one range per frame
+(the visible rows); with soft wrap, one per visual row. An edit or a theme
+change clears the cache.
+
+The cache holds at most **`HIGHLIGHT_CACHE_ENTRIES` (256)** ranges per editor.
+Storing a new range when it is full evicts the one read or stored least
+recently, so the ranges the current screen uses stay, while scrolling through a
+long file without editing no longer keeps one entry per scroll position (2,000
+positions held 2,000 entries before). 256 is more rows than any real screen
+shows, so soft wrap never evicts a range the same frame needs. An evicted range
+asked for again is recomputed from the current tree, so it gives the same spans
+as before. The eviction scans the entries once, only on a miss, which already
+runs a query.
+
 ## Reparsing
 
 Edits reparse incrementally: the tree is told what changed (`InputEdit`) and

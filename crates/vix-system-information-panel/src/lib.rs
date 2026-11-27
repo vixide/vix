@@ -37,7 +37,7 @@
 extern crate vix_i18n;
 vix_i18n::surface!();
 
-use sysinfo::{Disks, System};
+use sysinfo::{Disks, ProcessRefreshKind, ProcessesToUpdate, System};
 
 /// One row of the table: a `label` and its `value`. Section headings are rows
 /// with an empty `value` (and so insert nothing).
@@ -278,6 +278,9 @@ fn memory_and_storage_rows(sys: Option<&System>) -> Vec<Row> {
             Row::pair(&t!("info.total_swap"), human_bytes(sys.total_swap())),
             Row::pair(&t!("info.used_swap"), human_bytes(sys.used_swap())),
         ]);
+        if let Some(rss) = resident_memory() {
+            rows.push(Row::pair(&t!("info.vix_resident_ram"), human_bytes(rss)));
+        }
     }
 
     // sysinfo 0.40 reports an unsupported platform as an `Err`; treat it the
@@ -328,6 +331,25 @@ fn uptime_and_environment_rows(unknown: &str) -> Vec<Row> {
         Row::pair(&t!("info.working_dir"), cwd),
         Row::pair(&t!("info.shell"), env_or(&["SHELL", "COMSPEC"], unknown)),
     ]
+}
+
+/// The resident set size of this process (Vix itself) in bytes: the memory
+/// it holds in RAM right now (T830). `None` where the platform does not
+/// report it. Reads only this one process (`/proc/self` on Linux, the task
+/// info on macOS, through `sysinfo`), so it is cheap enough to sample once a
+/// second.
+#[must_use]
+pub fn resident_memory() -> Option<u64> {
+    let pid = sysinfo::get_current_pid().ok()?;
+    let mut sys = System::new().ok()?;
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        false,
+        ProcessRefreshKind::nothing().with_memory(),
+    );
+    sys.process(pid)
+        .map(sysinfo::Process::memory)
+        .filter(|&bytes| bytes > 0)
 }
 
 /// Gather a fresh snapshot of host system information into display rows.
@@ -385,6 +407,27 @@ mod tests {
                 .any(|r| r.label == logical_cores_label && !r.value.is_empty()),
             "reports a logical core count"
         );
+    }
+
+    #[test]
+    fn resident_memory_reports_this_process_on_desktop_platforms() {
+        let started = std::time::Instant::now();
+        let rss = resident_memory();
+        let took = started.elapsed();
+        if cfg!(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "windows"
+        )) {
+            // A running test binary holds at least a megabyte, and far less
+            // than a terabyte.
+            let rss = rss.expect("sysinfo reports the resident set here");
+            assert!((1 << 20..1 << 40).contains(&rss), "{rss}");
+            // Cheap enough to sample once a second.
+            assert!(took < std::time::Duration::from_millis(250), "{took:?}");
+            let label = t!("info.vix_resident_ram").to_string();
+            assert!(Panel::open().rows.iter().any(|r| r.label == label));
+        }
     }
 
     #[test]
