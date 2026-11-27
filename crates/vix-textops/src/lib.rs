@@ -10,6 +10,9 @@
 
 /// Whitespace and final-newline cleanup (the text half of Code Cleanup).
 pub mod cleanup;
+pub mod symbol;
+
+pub use symbol::{Symbol, symbol_in_line, symbols};
 
 /// Convert all line endings to LF (`\n`), dropping any `\r`.
 #[must_use]

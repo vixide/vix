@@ -58,3 +58,22 @@ trailing spaces and tabs, drops blank lines at the end of the file and ends a
 non-empty file in exactly one newline, keeping CRLF if the file uses it. It
 returns the new text and a `Report` of what changed. The language-server half
 (organize imports) is the host's.
+
+## Symbol scan (T861)
+
+`symbol::symbols(text)` lists a text's declaration-style lines, in order, as
+`Symbol { kind, name, line, text }`: a structural keyword (`fn`, `func`,
+`function`, `def`, `class`, `struct`, `enum`, `trait`, `impl`,
+`interface`, `type`, `mod`, `namespace`, `package`, `macro_rules!`) or
+`#define`, then an identifier. `line` is 1-based, `text` is the line with
+its leading blanks trimmed and cut to 120 characters, and local bindings
+(`let`/`var`/`const`) are left out. `symbol::symbol_in_line(line, n)` is the
+same test on one line numbered `n`, and `symbols` is built on it. All three
+are re-exported at the crate root. It is an offline, language-agnostic
+heuristic: no language server and no Tree-sitter.
+
+It moved here from `vix-palette` (which keeps its published `Symbol` and
+`symbols` as thin wrappers over it) so the
+headless MCP server's `document_symbols` and code `outline` tools need no
+palette crate; the palette's `@` mode, the outline panel, the sticky-scroll
+header and the breadcrumb use the same scan.

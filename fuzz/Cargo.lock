@@ -1339,6 +1339,9 @@ dependencies = [
 [[package]]
 name = "vix-textops"
 version = "3.0.0"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "vix-vcard-parser"

@@ -43,7 +43,7 @@ GUI, a test harness) can serve the same protocol by implementing `Host`.
     `vix_db::mcp_share`).
 - `tools` holds the ten tool definitions (`tools::list`) and their
   implementations (`tools::call`): `list_open_buffers`, `read_buffer`,
-  `document_symbols` (`vix_palette::symbols`), `outline` (Markdown via the
+  `document_symbols` (`vix_textops::symbols`), `outline` (Markdown via the
   private `markdown::headings`, Org via `vix_org::headlines`, otherwise symbols),
   `diagnostics` (`vix_conflict_tool::find_all`; no language server),
   `db_schema`, and the DB connection tools `db_connections`, `db_tables`,
@@ -80,6 +80,12 @@ rail, a two-line setext heading cut at the break). The server now depends on
 any `*-panel`, `*-picker`, `*-preview` or `*-view` crate again. Nothing
 moved out of `vix-markdown-preview`: its public API is unchanged, and its
 table of contents still holds preview rows for the TOC overlay.
+
+The symbol scan behind `document_symbols` and the code `outline` lived in
+`vix-palette` until T861, the server's last edge to a UI crate. It moved to
+`vix-textops` (`vix_textops::symbol`), which only needs `regex`;
+`vix-palette` keeps its published `Symbol` and `symbols` as thin wrappers. Rule 5 also lists `vix-palette`
+among the crates the server must not reach (`HEADLESS_FORBIDDEN`).
 
 ## Errors (T610)
 

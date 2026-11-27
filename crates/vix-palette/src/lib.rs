@@ -28,7 +28,6 @@ extern crate vix_i18n;
 vix_i18n::surface!();
 
 use std::path::PathBuf;
-use std::sync::LazyLock;
 
 mod history;
 mod preview;
@@ -565,23 +564,15 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("cmd.run_config_edit", "project.run_config_edit"),
 ];
 
-/// The declaration-scanning pattern used by [`symbols`], compiled once. It
-/// never varies with input, so callers on a per-frame path (sticky-scroll
-/// header, breadcrumb) don't each pay to recompile it (T511).
-#[expect(
-    clippy::expect_used,
-    reason = "fixed regex literal, compiled once and covered by tests"
-)]
-static SYMBOL_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
-    let kw = "fn|func|function|def|class|struct|enum|trait|impl|interface|type|mod|\
-              namespace|package|macro_rules!";
-    let pat =
-        format!(r"(?:\b({kw})\s+([A-Za-z_][A-Za-z0-9_]*)|(#define)\s+([A-Za-z_][A-Za-z0-9_]*))");
-    regex::Regex::new(&pat).expect("SYMBOL_RE pattern is a fixed, tested literal")
-});
+// The offline declaration scan lives in `vix_textops::symbol` (T861), so the
+// headless MCP server can use it without this crate. `Symbol`, `symbols` and
+// `symbol_in_line` stay defined here, as thin wrappers, and not as `pub use`
+// re-exports: cargo-semver-checks cannot see an item re-exported from another
+// crate and would report the published `vix_palette::Symbol` and
+// `vix_palette::symbols` as removed.
 
 /// One declaration found in a buffer, for the `@` go-to-symbol mode and the
-/// outline panel.
+/// outline panel: [`vix_textops::Symbol`] under this crate's published name.
 #[derive(Clone)]
 pub struct Symbol {
     /// The structural keyword (`fn`, `struct`, `mod`, `impl`, …), for the outline
@@ -595,7 +586,19 @@ pub struct Symbol {
     pub text: String,
 }
 
-/// Scan `text` for declaration-style lines and return their symbols, in order.
+impl From<vix_textops::Symbol> for Symbol {
+    fn from(s: vix_textops::Symbol) -> Self {
+        Self {
+            kind: s.kind,
+            name: s.name,
+            line: s.line,
+            text: s.text,
+        }
+    }
+}
+
+/// Scan `text` for declaration-style lines and return their symbols, in order:
+/// [`vix_textops::symbols`].
 ///
 /// A fast, offline, language-agnostic heuristic (the same family as
 /// go-to-definition): a structural keyword followed by an identifier. Local
@@ -603,31 +606,19 @@ pub struct Symbol {
 /// to top-level structure.
 #[must_use]
 pub fn symbols(text: &str) -> Vec<Symbol> {
-    text.lines()
-        .enumerate()
-        .filter_map(|(i, line)| symbol_in_line(line, add_or(i, 1, usize::MAX)))
+    vix_textops::symbols(text)
+        .into_iter()
+        .map(Symbol::from)
         .collect()
 }
 
 /// The declaration on one line, as [`symbols`] finds it, numbered `line`
-/// (1-based): what [`symbols`] would return for that line of a buffer, so a
-/// caller can look at only the lines it needs (T858: the sticky-scroll header
-/// and the breadcrumb scan up from one line instead of the whole buffer).
-/// `text` is the line without its line break.
+/// (1-based): [`vix_textops::symbol_in_line`]. The sticky-scroll header and
+/// the breadcrumb scan up from one line with it instead of listing the whole
+/// buffer (T858). `text` is the line without its line break.
 #[must_use]
 pub fn symbol_in_line(text: &str, line: usize) -> Option<Symbol> {
-    let caps = SYMBOL_RE.captures(text)?;
-    let name = caps.get(2).or_else(|| caps.get(4))?;
-    let kind = caps
-        .get(1)
-        .or_else(|| caps.get(3))
-        .map_or_else(String::new, |m| m.as_str().to_string());
-    Some(Symbol {
-        kind,
-        name: name.as_str().to_string(),
-        line,
-        text: text.trim_start().chars().take(120).collect(),
-    })
+    vix_textops::symbol_in_line(text, line).map(Symbol::from)
 }
 
 /// Case-insensitive, space-separated subsequence match. Every whitespace term

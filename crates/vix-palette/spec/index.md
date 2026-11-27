@@ -38,6 +38,15 @@ the same test on one line (without its line break), numbered `n`, and
 `symbol_in_line` to read up from one line to the nearest declaration instead
 of listing the whole buffer's (`crates/vix-editor/spec/sticky-scroll/index.md`).
 
+Since T861 the scan (`Symbol`, `symbols`, `symbol_in_line`) is implemented in
+`vix-textops` (`crates/vix-textops/spec/index.md`, "Symbol scan") so the
+headless MCP server can use it without this crate; `vix_palette::Symbol`,
+`vix_palette::symbols` and `vix_palette::symbol_in_line` stay defined here
+as thin wrappers over it (`Symbol` converts `From<vix_textops::Symbol>`,
+field for field), so the published API is unchanged. They are not `pub use`
+re-exports because cargo-semver-checks cannot see an item re-exported from
+another crate and would report the published items as removed.
+
 ## Preview pane (T630)
 
 When the screen is at least `MIN_PREVIEW_WIDTH` (100) columns wide, the file

@@ -1,6 +1,6 @@
 //! Benchmarks for the two per-*frame* buffer scans found and fixed by T510/
 //! T511: the editor diff gutter (`vix_git::diff_marks`) and the sticky-scroll
-//! header / breadcrumb declaration scan (`vix_palette::symbols`). Both used to
+//! header / breadcrumb declaration scan (`vix_textops::symbols`). Both used to
 //! run, uncached, on every redraw of a git-tracked or scrolled buffer — the
 //! `App`-level fix was to cache each by `(path/tab, buffer revision)`, so
 //! these benchmark only the underlying pure functions (what a cache *miss*
