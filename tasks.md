@@ -10804,7 +10804,7 @@ awareness, not capability. Items marked (stale?) may already exist.
   first-launch Quick Tour overlay (dismissal stored in `session.toml`); a
   "What's New" panel; optional Tips of the Day from a curated list (check
   `vix-tips`); install one-liners per platform with copy buttons on the site.
-- [ ] **T827 — Migration and comparison pages.** Standalone comparison landing
+- [x] **T827 — Migration and comparison pages.** (Done: `docs/compare/vix-vs-{visual-studio-code,neovim,helix}/`, new Atom and Notepad++ guides, Sublime/IntelliJ/Eclipse guides rewritten with cited claims and key tables copied from the generated references, checked by `tui/tests/keymaps_reference.rs`.) Standalone comparison landing
   pages (VS Code, Neovim, Helix) extending `docs/compare/index.md`; guides for
   Sublime Text, Atom, JetBrains, Eclipse, Notepad++ (Vim, Emacs, Helix, VS
   Code, Zed, Fresh, ttt exist); VS Code and Helix guides were reported missing

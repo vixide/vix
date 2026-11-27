@@ -1,101 +1,126 @@
-# Vix™ for Sublime users
+# Vix™ for Sublime Text users
 
-Sublime made a promise the rest of the industry spent a decade catching up
-to: an editor can be *fast*, beautiful, and powerful at the same time. Goto
-Anything changed how everyone navigates. If Sublime is still your daily driver,
-you value speed and minimalism over kitchen sinks — which is exactly the crowd
-Vix was built for. The pitch: Sublime's velocity, in a terminal, with the IDE
-layer (LSP, debugger, git) built in instead of bolted on.
+Sublime Text is a fast, polished desktop editor with Goto Anything, multiple
+selections and a Python plugin API. Vix is a terminal editor with a language
+server client, a debugger and a Git client built in. This page shows which of
+your Sublime keys work in Vix's **Sublime** keymap, what is different, and
+where Sublime Text is still the better tool.
 
-## The one-minute pitch
+Claims about Sublime Text describe its documented defaults; see the
+[Sublime Text documentation](https://www.sublimetext.com/docs/). Every claim
+about Vix cites the test or file that checks it.
 
-Vix is a terminal IDE written in Rust: one native binary, instant startup, no
-Package Control, no license nag. It ships a **Sublime keymap**, and its
-command palette speaks Sublime's dialect — `Ctrl+P` opens Goto Anything-style
-fuzzy finding, and the same palette does `@` symbols, `:` line numbers, and `>`
-commands, just like the editor you know.
+## Turn on the Sublime keymap
 
-```sh
-cargo run                    # open Vix in the current directory
-# then: View -> Keymap -> Sublime
-```
+Pick **View → Keymap… → Sublime**, or set `keymap = "sublime"` in
+`config.toml`.[^keymap-menu] In a terminal, `Ctrl` stands in for `Cmd` on
+macOS (see [Keymaps](../keymaps/index.md)). `F1` lists every key the active
+keymap binds.[^f1]
 
-In the terminal, `Ctrl` stands in for `Cmd` on macOS.
+## Your keys
 
-## Your muscle memory, mapped
+These rows are copied from the generated
+[Sublime keybindings reference](../reference/keybindings-sublime.md); a test
+fails if a row here stops matching it. The keys every keymap shares (`F2`
+rename, `F12` go to definition, `Ctrl+Space` completion and more) are in the
+[shared bindings](../reference/keybindings-shared.md).
 
-| Sublime habit | In Vix (Sublime keymap) |
-| ------------- | ----------------------- |
-| Goto Anything (`Cmd+P`) | `Ctrl+P` — fuzzy file open (`@`, `:`, `>` modes in the palette) |
-| Command Palette (`Cmd+Shift+P`) | `Ctrl+Shift+P` |
-| Goto Symbol (`Cmd+R`) | `Ctrl+R` |
-| Goto Line (`Ctrl+G`) | `Ctrl+G` |
-| Select next occurrence (`Cmd+D`) | `Ctrl+D` — selects **all** occurrences (like `Alt+F3`), a caret on each |
-| Expand selection to line (`Cmd+L`) | `Ctrl+L` |
-| Join lines (`Cmd+J`) | `Ctrl+J` |
-| Jump to matching bracket (`Ctrl+M`) | `Ctrl+M` |
-| Duplicate line (`Cmd+Shift+D`) | `Ctrl+Shift+D` |
-| Delete line (`Ctrl+Shift+K`) | `Ctrl+Shift+K` |
-| Comment (`Cmd+/`) | `Ctrl+/` |
-| Find / Replace (`Cmd+F` / `Cmd+H`) | `Ctrl+F` / `Ctrl+H` |
-| Find in Files (`Cmd+Shift+F`) | `Ctrl+Shift+F` |
-| Build (`Cmd+B`) | `Ctrl+B` — runs the test suite |
-| Console (`` Ctrl+` ``) | `` Ctrl+` `` — a real shell in a panel |
-| Save / Save As / Close / Reopen | `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+W` / `Ctrl+Shift+T` |
+<!-- keys-from: ../reference/keybindings-sublime.md -->
 
-Multiple selections — Sublime's crown jewel — are first-class: `Ctrl+D` puts a
-caret on every occurrence, and `Alt+Shift+Up/Down` grows a rectangular
-(column) selection; every caret types, deletes, and pastes together.
+| Key | Action | Action ID |
+| --- | --- | --- |
+| `C-p` | Open… | `file.open` |
+| `C-S-p` | Command Palette | `tools.palette` |
+| `C-r` | Go to Symbol | `nav.goto_symbol` |
+| `C-g` | Number | `nav.goto_line` |
+| `C-d` | Select All Occurrences | `edit.select_all_occurrences` |
+| `C-l` | Select Line | `edit.select_line` |
+| `C-j` | Join Lines | `edit.join_lines` |
+| `C-m` | Jump to Matching Bracket | `edit.match_bracket` |
+| `C-S-d` | Duplicate Line | `edit.duplicate_line` |
+| `C-S-k` | Cut Line | `cut_line` |
+| `C-/` | Comment | `edit.toggle_comment` |
+| `C-f` | Find… | `edit.find` |
+| `C-h` | Find & Replace | `edit.replace` |
+| `C-S-f` | Search in Workspace | `search.workspace` |
+| `C-b` | Run Tests | `tools.test` |
+| `C-`` | Show/Hide Terminal | `tools.terminal` |
+| `C-s` | Save | `file.save` |
+| `C-S-s` | Save As… | `file.save_as` |
+| `C-w` | Close | `file.close` |
+| `C-S-t` | Reopen Closed Tab | `file.reopen_closed` |
+| `C-S-w` | Close All Tabs | `file.close_all` |
 
-## Where Vix beats Sublime
+## What is different
 
-- **The IDE layer is built in.** LSP (diagnostics, completion, go-to, rename,
-  references, code actions), a DAP debugger, a test runner, and full git
-  tooling with per-hunk staging — no Package Control safari, no LSP plugin to
-  configure per machine.
-- **Terminal-native.** ssh to a server and run the *same* editor there. tmux,
-  containers, low-power boxes: one static binary travels anywhere.
-- **Free and open source.** MIT/Apache-2.0. No license popup, ever.
-- **Modern niceties out of the box**: minimap (yes, in a terminal), sticky
-  scroll, indent guides, bracket colorization, jump labels, clipboard history,
-  a persistent branching undo tree, Org-mode notes with backlinks, an HTTP
-  client, and a CSV table editor.
-- **Actively developed** with a spec-driven, fully-tested codebase in Rust
-  (`unsafe` forbidden).
+- **`Ctrl+P` opens the file finder, and `Ctrl+Shift+P` the command palette.**
+  The palette takes Goto Anything's prefixes: `@` for a symbol in the file,
+  `:` for a line, `>` for a command, plus `#` for an open buffer and `@@`
+  for a symbol anywhere in the workspace.[^palette]
+- **`Ctrl+D` selects every occurrence at once.** Sublime Text's `Ctrl+D`
+  adds the next occurrence one at a time
+  ([multiple selection with the keyboard](https://www.sublimetext.com/docs/multiple_selection_with_the_keyboard.html)).
+  For that behavior, bind the key to `spawn_multi_cursor` (add the next
+  occurrence as a caret) in `keybindings.toml`:[^override]
 
-## Where Sublime still wins
+  ```toml
+  [[binding]]
+  key_token = "C-d"
+  action_id = "spawn_multi_cursor"
+  ```
 
-- **Raw rendering polish.** Sublime's GPU-accelerated, pixel-perfect canvas —
-  smooth scrolling, font ligatures, the pretty minimap — outclasses any
-  character-grid terminal. Vix's minimap is charming; Sublime's is gorgeous.
-- **Package ecosystem.** Thousands of packages and color schemes, plus a
-  Python API for writing your own. Vix has no plugin system.
-- **Sublime-grade micro-optimizations.** Sublime opens multi-gigabyte files
-  with famous grace. Vix handles large files (async parsing over 50 KB), but
-  Sublime remains the benchmark.
-- **Add-next-occurrence granularity.** Vix's `Ctrl+D` selects *all* matches at
-  once rather than one at a time — same destination, less ceremony, but less
-  control mid-flight.
+- **`Ctrl+Shift+K` cuts the line to the clipboard** (`cut_line`) rather than
+  only deleting it.
+- **`Ctrl+B` runs the project's tests** (`tools.test`); there are no Sublime
+  build systems. Vix finds tasks in `Makefile`, `package.json`, a
+  `justfile` and more (see [Tasks](../tasks/index.md)).
+- **Column selection** is **Edit → Select → Column Select Up/Down**
+  (`Alt+Shift+Up` / `Alt+Shift+Down` in the default keymap), and typing
+  then edits every line of the block.[^multi]
 
-## An honest experiment
+## What Vix adds
 
-1. `cargo build --release`; put `vix` on your `PATH`.
-2. In a project: `vix .` — press `Ctrl+P`, type `keymap`, pick **Sublime**.
-3. Navigate like home: `Ctrl+P` to a file, `Ctrl+R` to a symbol, `Ctrl+D` to
-   multi-edit a word, `Ctrl+Shift+D`/`Ctrl+Shift+K` to shuffle lines.
-4. Then try what Sublime needs plugins for: hover an LSP diagnostic, rename a
-   symbol project-wide, stage one git hunk from the Git menu, set a breakpoint
-   from the Run menu — and do it all again over ssh.
+- A language server client (diagnostics, completion, rename, references, code
+  actions) that starts the usual server for a language once you trust the
+  workspace.[^lsp] Sublime Text gets this from the LSP package.
+- A debugger for any Debug Adapter Protocol adapter.[^dap]
+- A Git panel that stages and commits, and blame.[^git]
+- Integrated terminals.[^terminal]
+- Persistent, branching undo with a tree you can browse.[^undo]
+- Search and replace across the workspace, with results you can edit in
+  place.[^search]
+- It runs in a terminal, so it works over SSH and in tmux; remote folders
+  open with **File → Open Remote…**.[^remote]
 
-Sublime taught the world that editors should be fast. Vix agrees — and adds
-that they should also carry their own batteries.
+## Where Sublime Text is the better choice
+
+- **A native desktop window.** Smooth scrolling, font rendering and the
+  minimap of a GPU-drawn window; Vix draws a character grid.
+- **Packages.** Sublime Text's Python API and its package ecosystem are far
+  larger than Vix's Rhai scripts and plugins.[^script]
+- **Maturity.** Vix is young.
 
 ## See also
 
-- [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every binding.
-- [`docs/language-server-protocol/index.md`](../language-server-protocol/index.md)
-  — configuring language servers.
-- [`index.md`](../../index.md) — the full feature tour.
+- [Migrating from another editor](../migrating/index.md): settings, language
+  servers, snippets and themes.
+- [Keymaps](../keymaps/index.md) and the
+  [Sublime keybindings reference](../reference/keybindings-sublime.md).
+- [Comparison with other editors](../compare/index.md).
+
+[^keymap-menu]: **View → Keymap…** sets the `keymap` setting: `tui/tests/integration/keymaps.rs`, `view_keymap_submenu_actions_set_the_keymap`.
+[^f1]: `F1` lists the active keymap's keys: `tui/tests/integration/keymaps.rs`, `help_overlay_includes_the_active_keymap_chords`.
+[^palette]: The prefixes are `Mode::from_input` in `crates/vix-palette/src/lib.rs`.
+[^override]: A `keybindings.toml` entry wins over the active keymap: `tui/tests/integration/keymaps.rs`, `key_override_wins_over_a_builtin_keymap_binding`.
+[^multi]: `tui/tests/integration/editing.rs`, `select_all_occurrences_creates_multi_carets`, `ctrl_d_adds_a_caret_and_edits_all_occurrences` and `column_select_block_edits_multiple_lines`.
+[^lsp]: Every LSP action against a mock server: `tui/tests/integration/lsp.rs`, `every_lsp_action_applies_a_mock_servers_reply`; servers start only in a trusted workspace: `a_builtin_language_server_starts_only_in_a_trusted_workspace`.
+[^dap]: Breakpoints and the debugger actions: `tui/tests/integration/debugger.rs`, `edit_breakpoint_sets_condition_hit_count_and_log_message`.
+[^git]: Stage and commit, blame: `tui/tests/integration/git.rs`, `git_panel_stages_and_commits` and `git_blame_annotates_the_current_line`.
+[^terminal]: `tui/tests/integration/terminals.rs`, `several_terminals_each_get_their_own_keys`.
+[^undo]: `persistent_undo` defaults to `true` in `crates/vix-settings/src/lib.rs`; the tree view: `tui/tests/integration/undo_tree.rs`, `moving_the_selection_previews_and_enter_keeps_the_state`.
+[^search]: `tui/tests/integration/workspace.rs`, `workspace_search_finds_matches_across_files` and `workspace_replace_rewrites_files`.
+[^remote]: Experimental. `tui/tests/remote_ui.rs`, `open_remote_connects_saves_survives_a_lost_connection_and_reconnects`; see [remote editing](../remote-editing/index.md).
+[^script]: Rhai scripts add palette commands and key bindings: `tui/tests/integration/scripting.rs`, `script_command_appears_in_the_command_palette` and `a_scripts_bind_key_request_actually_fires_through_on_key`; plugins are enabled and disabled from a chooser: `plugin_chooser_enables_and_disables_a_plugin`.
 
 ---
 

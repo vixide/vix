@@ -125,8 +125,10 @@ editor? See the pages for
 [VS Code](docs/vix-for-visual-studio-code-users/index.md),
 [IntelliJ](docs/vix-for-intellij-users/index.md),
 [Eclipse](docs/vix-for-eclipse-users/index.md),
-[Sublime](docs/vix-for-sublime-users/index.md) and
-[Zed](docs/vix-for-zed-users/index.md) users.
+[Sublime](docs/vix-for-sublime-users/index.md),
+[Zed](docs/vix-for-zed-users/index.md),
+[Atom](docs/vix-for-atom-users/index.md) and
+[Notepad++](docs/vix-for-notepad-plus-plus-users/index.md) users.
 
 ## Install
 

@@ -2,7 +2,7 @@
 
 How to bring your keys, settings, language servers, snippets, themes and
 tasks to Vix from VS Code, Neovim or Vim, Emacs, Helix, Sublime Text, a
-JetBrains IDE or Zed. Most of it is a keymap choice and a few lines of TOML.
+JetBrains IDE, Eclipse, Zed, Atom or Notepad++. Most of it is a keymap choice and a few lines of TOML.
 Vix does not import other editors' configuration files, so this page shows
 what each setting becomes.
 
@@ -46,6 +46,8 @@ the `keymap` setting.
 | Eclipse | Eclipse | `"eclipse"` |
 | Sublime Text | Sublime | `"sublime"` |
 | Zed | Zed | `"zed"` |
+| Atom (no Atom keymap) | VSCode macOS or VSCode Windows | `"vscode-macos"`, `"vscode-windows"` |
+| Notepad++ (no Notepad++ keymap) | Sublime | `"sublime"` |
 | Anything else | Apple (the default) | `"apple"` |
 
 To change a single key, add an override to `keybindings.toml`, or use
@@ -199,7 +201,13 @@ What is different, and what your old editor still does better:
 - [Eclipse](../vix-for-eclipse-users/index.md)
 - [Sublime Text](../vix-for-sublime-users/index.md)
 - [Zed](../vix-for-zed-users/index.md)
+- [Atom](../vix-for-atom-users/index.md), which is discontinued
+- [Notepad++](../vix-for-notepad-plus-plus-users/index.md)
 - [Fresh](../vix-for-fresh-users/index.md) and [ttt](../vix-for-ttt-users/index.md)
+
+Side-by-side comparisons: [VS Code](../compare/vix-vs-visual-studio-code/index.md),
+[Neovim](../compare/vix-vs-neovim/index.md) and
+[Helix](../compare/vix-vs-helix/index.md).
 
 ---
 

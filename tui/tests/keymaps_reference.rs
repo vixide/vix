@@ -1,6 +1,10 @@
-//! Repository invariant for the reference keymaps in the repo-root
-//! `keymaps/` folder: every `*.json` file there really is a VS Code
-//! keybindings file.
+//! Repository invariants for keymap reference material.
+//!
+//! 1. Every key table a documentation page copies from a generated
+//!    `docs/reference/keybindings-*.md` page (marked with a
+//!    `<!-- keys-from: … -->` comment) still matches it, row for row (T827).
+//! 2. Every `*.json` file in the repo-root `keymaps/` folder really is a VS
+//!    Code keybindings file.
 //!
 //! Those files are reference material (Vix's own keymaps are hand-written
 //! tables in `vix-keybindings`), so nothing else reads them and a broken one
@@ -16,6 +20,97 @@
 )]
 
 use std::path::{Path, PathBuf};
+
+/// The repository root (this test's package lives in `tui/`).
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
+}
+
+/// Every `index.md` under `dir`, recursively, in a stable order. (Each
+/// docs directory's `README.md` is a twin of its `index.md`, so reading only
+/// `index.md` sees every page once.)
+fn index_pages(dir: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("read docs dir") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.file_name().is_some_and(|n| n == "index.md") {
+                out.push(path);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, &mut out);
+    out.sort();
+    out
+}
+
+/// The marker a page puts before a key table it copied from a generated
+/// keybindings reference page.
+const KEYS_FROM: &str = "<!-- keys-from: ";
+
+#[test]
+fn copied_key_tables_match_the_generated_keybindings_references() {
+    let mut tables = 0_usize;
+    for page in index_pages(&repo_root().join("docs")) {
+        let text = std::fs::read_to_string(&page).expect("read page");
+        let lines: Vec<&str> = text.lines().collect();
+        for (at, line) in lines.iter().enumerate() {
+            let Some(rest) = line.trim().strip_prefix(KEYS_FROM) else {
+                continue;
+            };
+            let target = rest.trim_end_matches("-->").trim();
+            let reference_path = page.parent().expect("page dir").join(target);
+            let reference = std::fs::read_to_string(&reference_path).unwrap_or_else(|e| {
+                panic!(
+                    "{}: keys-from names {target}, which does not open: {e}",
+                    page.display()
+                )
+            });
+            let known: std::collections::BTreeSet<&str> =
+                reference.lines().filter(|l| l.starts_with("| `")).collect();
+            let table: Vec<&str> = lines
+                .iter()
+                .skip(at)
+                .skip(1)
+                .skip_while(|l| l.trim().is_empty())
+                .take_while(|l| l.starts_with('|'))
+                .copied()
+                .collect();
+            assert!(
+                table.len() > 2,
+                "{}: no key table after the keys-from marker for {target}",
+                page.display()
+            );
+            assert_eq!(
+                table.first().copied(),
+                Some("| Key | Action | Action ID |"),
+                "{}: the table after keys-from must keep the reference's header",
+                page.display()
+            );
+            for row in table.iter().skip(2) {
+                assert!(
+                    known.contains(row),
+                    "{}: row {row} is not in {target}; copy it again from the \
+                     regenerated reference (cargo run --example list_commands \
+                     -p vix-tui -- --write)",
+                    page.display()
+                );
+            }
+            tables = tables.saturating_add(1);
+        }
+    }
+    // The migration and comparison pages (T827) carry ten such tables; a
+    // lower count means a marker was dropped and its table is no longer checked.
+    assert!(
+        tables >= 10,
+        "expected at least 10 copied key tables, found {tables}"
+    );
+}
 
 /// The repo-root `keymaps/` folder (this test's package lives in `tui/`).
 fn keymaps_dir() -> PathBuf {

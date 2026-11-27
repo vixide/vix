@@ -51,8 +51,11 @@ Highlights:
   [Vim](vix-for-vim-users/index.md), [Emacs](vix-for-emacs-users/index.md),
   [Helix](vix-for-helix-users/index.md),
   [VS Code](vix-for-visual-studio-code-users/index.md),
-  [IntelliJ](vix-for-intellij-users/index.md), [Zed](vix-for-zed-users/index.md) and
-  others.
+  [IntelliJ](vix-for-intellij-users/index.md), [Zed](vix-for-zed-users/index.md),
+  [Atom](vix-for-atom-users/index.md), [Notepad++](vix-for-notepad-plus-plus-users/index.md)
+  and others; side-by-side pages for
+  [VS Code](compare/vix-vs-visual-studio-code/index.md),
+  [Neovim](compare/vix-vs-neovim/index.md) and [Helix](compare/vix-vs-helix/index.md).
 - Generators & editing: [Insert](insert/index.md) (UUID, ZID, Markdown, HTML,
   Lorem ipsum, Date/Time) · [Snippets](snippets/index.md) (with tabstops) ·
   [QR Code](qr-code/index.md) ·
