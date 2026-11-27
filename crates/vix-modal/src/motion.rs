@@ -419,7 +419,7 @@ fn find_paragraph<T: Text + ?Sized>(text: &T, pos: usize, count: usize, forward:
 }
 
 /// `}`: forward to the empty line after the `count`-th paragraph — Vim's
-/// rule, see [`find_paragraph`] (an empty line is the boundary; one of
+/// rule, see `find_paragraph` (an empty line is the boundary; one of
 /// only white space is not).
 #[must_use]
 pub fn paragraph_forward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
@@ -427,7 +427,7 @@ pub fn paragraph_forward(text: &(impl Text + ?Sized), pos: usize, count: usize) 
 }
 
 /// `{`: back to the empty line before the `count`-th paragraph (or the
-/// buffer's start), see [`find_paragraph`].
+/// buffer's start), see `find_paragraph`.
 #[must_use]
 pub fn paragraph_backward(text: &(impl Text + ?Sized), pos: usize, count: usize) -> usize {
     find_paragraph(text, pos, count, false)
