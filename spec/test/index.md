@@ -19,6 +19,7 @@ no sleeps, no screen scraping.
 | **End to end** | `tui/tests/e2e_tmux.rs` | The real `vix` binary in a real terminal: a detached tmux session on a private server socket (`tmux -L`, never a person's own sessions), a throwaway `HOME`, keys sent with `send-keys` and the screen read with `capture-pane`. Covers what in-process tests cannot: terminal setup, the event loop, input decoding, teardown and the command line. Skipped without tmux; Unix only | `cargo test` |
 | **Smoke** | `tui/tests/db_smoke.rs`, `tui/tests/lsp_smoke.rs` | Subsystems with an external dependency, skipped when it is absent | `cargo test` |
 | **Fuzz** | `fuzz/fuzz_targets/` | Parsers and text transforms against input nobody thought of | `cargo +nightly fuzz run <target>` |
+| **Mutation** | `.github/workflows/mutants.yml`, `.cargo/mutants.toml` | Whether the tests notice a change: `cargo mutants` rewrites an operator or a return value and expects some test to fail. Weekly in CI, advisory | `cargo mutants -p <crate>` |
 | **Benchmark** | `tui/benches/` | The per-keystroke and per-frame paths, so latency regressions are visible | `cargo bench` |
 | **Documentation** | `scripts/check-docs` | Links resolve, every crate owns a spec, the crate map is complete, `README.md` twins match, no tracked file keeps a merge-conflict marker (outside markdown code fences), CSpell finds no unknown word in the markdown | `scripts/check` |
 
@@ -193,6 +194,38 @@ code is supposed to do is as much a false alarm as no invariant at all.
 When a target finds something: minimize it (`cargo +nightly fuzz tmin`), then
 write the minimized input as a **unit test in the crate that owns the code**.
 The generated corpus is not committed (only a few hand-written `seed-*` inputs per target); the regression is.
+
+## Mutation testing
+
+`cargo mutants` changes one thing at a time (`<` to `<=`, a function body to
+`Ok(())` or `Default::default()`), rebuilds, and runs the crate's tests; a
+**missed** mutant is a behavior no test asserts. `.github/workflows/mutants.yml`
+runs it every week (see [`spec/ci`](../ci/index.md)) in two parts (T606, T831):
+
+- every mutant of the small pure crates, in one job;
+- the core crates `vix-editor-core`, `vix-fileops`, `vix-git`, `vix-lsp` and
+  `vix-db`, only in code changed in the last seven days (`--in-diff`). All of
+  their mutants together are about 5,900 (2,075 in `vix-editor-core`, 2,854 in
+  `vix-db`), days of runner time; one week of changes was about 1,800. Each crate
+  is split into shards of at most about 200 mutants (`--shard k/n`, at most 16
+  per crate) with its own test timeout, so every job stays under the runner's
+  six hours. A manual run can name another starting ref, or `full` for every
+  mutant.
+
+Both parts are **advisory**: a missed mutant is a report (the job summary lists
+them, `mutants.out/` is uploaded), not a failure. The core crates have never
+had a full pass, so their survivors, and which of them are equivalent, are not
+known yet; failing on them now would fail every week on code nobody touched
+beyond a refactor. Once a full run has been triaged (a test per real gap, an
+entry in `.cargo/mutants.toml` per equivalent mutant), the weekly diff run is
+meant to fail on a missed mutant, since it only sees code changed that week.
+
+`.cargo/mutants.toml` lists only mutants proven **equivalent** (no observable
+difference), each with the reason; a mutant a test could kill gets the test.
+Locally, run one crate at a time (`cargo mutants -p vix-list-state --timeout 60`
+takes about 20 seconds; `cargo mutants --list -p <crate>` shows what would run,
+and `--in-diff <file>` limits it to a diff). Output goes to `mutants.out/`
+(ignored by git; the previous run moves to `mutants.out.old/`).
 
 ## Benchmarking
 

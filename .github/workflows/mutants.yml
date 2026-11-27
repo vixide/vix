@@ -1,10 +1,18 @@
-# Mutation testing of the small pure crates (T606, tasks.md): `cargo mutants`
-# rewrites operators and return values, and every mutant the tests do not catch
-# points at an unasserted behavior. Advisory -- a missed mutant never fails a
-# push, and some are equivalent (no observable difference). The run is scheduled
+# Mutation testing (T606, T831; tasks.md): `cargo mutants` rewrites operators
+# and return values, and every mutant the tests do not catch points at an
+# unasserted behavior. Advisory -- a missed mutant never fails the workflow,
+# and some are equivalent (no observable difference). The run is scheduled
 # rather than per-push because it rebuilds each crate once per mutant.
-# GitHub only; see spec/ci/index.md.
-
+#
+# Two parts:
+# - `mutants`: every mutant of the small pure crates, one job.
+# - `core-plan` + `core`: the core crates (vix-editor-core, vix-fileops,
+#   vix-git, vix-lsp, vix-db; about 5,900 mutants, far beyond one runner's
+#   6 hours), restricted with `--in-diff` to the code changed in the last 7
+#   days (or since a dispatch's `since` ref; `since: full` takes every
+#   mutant), split per crate into shards of at most ~200 mutants so each job
+#   stays well under the runner limit.
+# GitHub only; see spec/ci/index.md and spec/test/index.md.
 name: Mutation testing
 
 on:
@@ -12,6 +20,11 @@ on:
     # Weekly, Sunday 04:15 UTC.
     - cron: "15 4 * * 0"
   workflow_dispatch:
+    inputs:
+      since:
+        description: "Core crates: mutate code changed since this ref (empty: 7 days ago; 'full': every mutant)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -54,4 +67,138 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: mutants-out
+          path: mutants.out/
+
+  core-plan:
+    name: core crates (plan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      head: ${{ steps.plan.outputs.head }}
+      base: ${{ steps.plan.outputs.base }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      any: ${{ steps.plan.outputs.any }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: count the mutants per crate and shard them
+        id: plan
+        env:
+          SINCE: ${{ inputs.since }}
+        run: |
+          set -euo pipefail
+          head=$(git rev-parse HEAD)
+          if [ "${SINCE:-}" = "full" ]; then
+            base=full
+          elif [ -n "${SINCE:-}" ]; then
+            base=$(git rev-parse --verify "${SINCE}^{commit}")
+          else
+            base=$(git rev-list -n1 --before='7 days ago' HEAD)
+            # No commit that old (a shallow or young history): mutate everything.
+            base=${base:-full}
+          fi
+          diff_args=()
+          if [ "$base" != full ]; then
+            git diff "$base" "$head" > core.diff
+            diff_args=(--in-diff core.diff)
+          fi
+          # crate:test-timeout-seconds. A mutant whose tests run past the
+          # timeout counts as "timeout", not "missed".
+          crates="vix-editor-core:120 vix-fileops:60 vix-git:180 vix-lsp:120 vix-db:180"
+          per_shard=200
+          max_shards=16
+          entries=()
+          for spec in $crates; do
+            crate=${spec%%:*}
+            timeout=${spec##*:}
+            n=$(cargo mutants --list -p "$crate" "${diff_args[@]}" | { grep -c . || true; })
+            echo "$crate: $n mutants" | tee -a "$GITHUB_STEP_SUMMARY"
+            [ "$n" -eq 0 ] && continue
+            shards=$(( (n + per_shard - 1) / per_shard ))
+            [ "$shards" -gt "$max_shards" ] && shards=$max_shards
+            for ((k = 0; k < shards; k++)); do
+              entries+=("{\"crate\":\"$crate\",\"timeout\":$timeout,\"shard\":\"$k/$shards\",\"name\":\"$crate-$k-of-$shards\"}")
+            done
+          done
+          if [ ${#entries[@]} -eq 0 ]; then
+            matrix='{"include":[]}'
+            any=false
+          else
+            matrix=$(printf '%s\n' "${entries[@]}" | jq -cs '{include: .}')
+            any=true
+          fi
+          {
+            echo "head=$head"
+            echo "base=$base"
+            echo "matrix=$matrix"
+            echo "any=$any"
+          } >> "$GITHUB_OUTPUT"
+
+  core:
+    name: core ${{ matrix.name }}
+    needs: core-plan
+    if: needs.core-plan.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    # The runner limit is 360; the mutants step stops at 330 so the report
+    # still uploads.
+    timeout-minutes: 350
+    # Advisory until a first full pass is triaged (spec/ci/index.md).
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.core-plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ needs.core-plan.outputs.head }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: mutants-${{ matrix.crate }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: cargo mutants
+        timeout-minutes: 330
+        env:
+          BASE: ${{ needs.core-plan.outputs.base }}
+          HEAD_SHA: ${{ needs.core-plan.outputs.head }}
+        run: |
+          set -euo pipefail
+          diff_args=()
+          if [ "$BASE" != full ]; then
+            git diff "$BASE" "$HEAD_SHA" > "$RUNNER_TEMP/core.diff"
+            diff_args=(--in-diff "$RUNNER_TEMP/core.diff")
+          fi
+          cargo mutants -p "${{ matrix.crate }}" "${diff_args[@]}" \
+            --shard "${{ matrix.shard }}" --timeout "${{ matrix.timeout }}" \
+            --no-shuffle
+      - name: summary
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.name }} (since ${{ needs.core-plan.outputs.base }})"
+            for kind in caught missed timeout unviable; do
+              f="mutants.out/$kind.txt"
+              echo "- $kind: $( [ -f "$f" ] && wc -l < "$f" || echo 0)"
+            done
+            if [ -s mutants.out/missed.txt ]; then
+              echo '```'
+              head -n 100 mutants.out/missed.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: upload the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutants-out-${{ matrix.name }}
           path: mutants.out/
