@@ -92,6 +92,13 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.align.comma` | On , (comma) | Menu |
 | `edit.align.equals` | On = (equals) | Menu |
 | `edit.align.pipe` | On \| (pipe) | Menu |
+| `edit.case_camel` | Camel (fooBar) | Menu |
+| `edit.case_kebab` | Kebab (foo-bar) | Menu |
+| `edit.case_lower` | Lower (foo bar) | Menu |
+| `edit.case_pascal` | Pascal (FooBar) | Menu |
+| `edit.case_snake` | Snake (foo_bar) | Menu |
+| `edit.case_title` | Title (Foo Bar) | Menu |
+| `edit.case_upper` | Upper (FOO BAR) | Menu |
 | `edit.cleanup_code` | Code Cleanup | Menu |
 | `edit.column_select_down` | Column Select Down | Menu |
 | `edit.column_select_up` | Column Select Up | Menu |
@@ -104,7 +111,10 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.delete.section` | Section | Menu |
 | `edit.delete.sentence` | Sentence | Menu |
 | `edit.delete.word` | Word | Menu |
+| `edit.duplicate_line` | Duplicate Line | Menu |
 | `edit.emmet_expand` | Emmet Expand | Menu |
+| `edit.eol_crlf` | To CRLF (Windows) | Menu |
+| `edit.eol_lf` | To LF (Unix) | Menu |
 | `edit.expand_selection` | Expand Selection | Menu |
 | `edit.find` | Find… | Menu |
 | `edit.find_next` | Find Next | Menu |
@@ -112,6 +122,8 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.go_first` | Start | Menu |
 | `edit.go_last` | End | Menu |
 | `edit.increment_number` | Increment Number | Menu |
+| `edit.insert_command_output` | Insert Command Output… | Menu |
+| `edit.join_lines` | Join Lines | Menu |
 | `edit.keyboard_quit` | Keyboard Quit | Catalog |
 | `edit.line_end` | End | Menu |
 | `edit.line_start` | Start | Menu |
@@ -122,11 +134,15 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.para_start` | Start | Menu |
 | `edit.paste` | Paste | Menu |
 | `edit.paste_from_history` | Paste from History… | Menu |
+| `edit.pipe_selection` | Pipe Through Command… | Menu |
 | `edit.query_replace` | Query Replace | Palette |
 | `edit.redo` | Redo | Menu |
+| `edit.remove_duplicate_lines` | Remove Duplicate Lines | Menu |
 | `edit.replace` | Find & Replace | Palette |
+| `edit.reverse_lines` | Reverse Lines | Menu |
 | `edit.section_end` | End | Menu |
 | `edit.section_start` | Start | Menu |
+| `edit.select_all` | Select All | Menu |
 | `edit.select_all_occurrences` | Select All Occurrences | Menu |
 | `edit.select_class_around` | Class (Around) | Menu |
 | `edit.select_class_inside` | Class (Inside) | Menu |
@@ -138,8 +154,14 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.select_paragraph` | Select Paragraph | Menu |
 | `edit.select_parameter_around` | Parameter (Around) | Menu |
 | `edit.select_parameter_inside` | Parameter (Inside) | Menu |
+| `edit.select_regex_in_selection` | Select Regex Matches in Selection | Menu |
 | `edit.select_section` | Select Section | Menu |
 | `edit.shrink_selection` | Shrink Selection | Menu |
+| `edit.shuffle` | Shuffle | Menu |
+| `edit.sort_lines` | Sort | Menu |
+| `edit.sort_unique` | Sort Unique | Menu |
+| `edit.split_selection_into_lines` | Split Selection into Lines | Menu |
+| `edit.squeeze_blank_lines` | Squeeze Blank Lines | Menu |
 | `edit.structural_replace` | Structural Replace… | Menu |
 | `edit.structural_replace_workspace` | Structural Replace in Workspace… | Menu |
 | `edit.toggle_comment` | Comment | Menu |
@@ -150,6 +172,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `edit.transpose_sections` | Sections | Menu |
 | `edit.transpose_sentences` | Sentences | Menu |
 | `edit.transpose_words` | Words | Menu |
+| `edit.trim_trailing_whitespace` | Trim Trailing Whitespace | Menu |
 | `edit.undo` | Undo | Menu |
 | `edit.undo_branch` | Switch Undo Branch | Menu |
 | `edit.undo_tree` | Undo Tree… | Menu |
@@ -597,7 +620,9 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `quit` | Quit | Catalog |
 | `quit_all` | Quit All | Catalog |
 | `redo` | Redo | Catalog |
+| `remove_all_multi_cursors` | Remove All Multi-Cursors | Catalog |
 | `remove_duplicate_lines` | Remove Duplicate Lines | Catalog |
+| `remove_multi_cursor` | Remove Multi-Cursor | Catalog |
 | `reset_search` | Reset Search | Catalog |
 | `reverse_lines` | Reverse Lines | Catalog |
 | `roam.alias_add` | Add Alias… | Menu |
@@ -671,8 +696,13 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `select_word_right` | Select Word Right | Catalog |
 | `shell_mode` | Shell Mode | Catalog |
 | `shuffle` | Shuffle Lines | Catalog |
+| `skip_multi_cursor` | Skip Multi-Cursor | Catalog |
+| `skip_multi_cursor_back` | Skip Multi-Cursor Back | Catalog |
 | `sort_lines` | Sort Lines | Catalog |
 | `sort_unique` | Sort Lines Unique | Catalog |
+| `spawn_multi_cursor` | Add Multi-Cursor | Catalog |
+| `spawn_multi_cursor_down` | Add Multi-Cursor Down | Catalog |
+| `spawn_multi_cursor_up` | Add Multi-Cursor Up | Catalog |
 | `spell.suggest` | Spelling Suggestions | Catalog |
 | `start` | Start | Catalog |
 | `start_of_line` | Start of Line | Catalog |
@@ -723,6 +753,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `tools.convert.number.dec` | Dec | Menu |
 | `tools.convert.number.hex` | Hex | Menu |
 | `tools.convert.number.oct` | Oct | Menu |
+| `tools.convert.rot13` | ROT13 | Menu |
 | `tools.convert.toml.json` | JSON | Menu |
 | `tools.convert.tsv.csv` | CSV | Menu |
 | `tools.convert.tsv.json` | JSON | Menu |
@@ -851,4 +882,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**844 actions.**
+**875 actions.**

@@ -158,3 +158,34 @@ fn every_catalog_title_key_is_in_the_locale_catalog() {
         "these vix_action_catalog title keys are not in locales/: {missing:#?}"
     );
 }
+
+/// Every built-in keymap binding (each keymap's tables and the shared one)
+/// runs an action id `App::run_action` can dispatch: a binding to an id with
+/// no arm does nothing when the key is pressed (`edit.delete_line` in the
+/// Eclipse, `intellij-windows` and `ttt` keymaps did that, found by T827).
+#[test]
+fn every_keymap_binding_runs_a_dispatchable_action() {
+    let root = workspace_root();
+    let dispatchable = every_dispatchable_action_id(&root).unwrap();
+    let mut dead: Vec<String> = Vec::new();
+    let mut check = |keymap: &str, context: &str, b: &vix_keybindings::Binding| {
+        let id = b.action_id;
+        if !dispatchable.contains(id) && !DYNAMIC_PREFIXES.iter().any(|p| id.starts_with(p)) {
+            dead.push(format!("{keymap} [{context}] {} -> {id}", b.key_token));
+        }
+    };
+    for table in vix_keybindings::TABLES {
+        for ctx in table.contexts {
+            for b in ctx.bindings {
+                check(table.keymap_id, ctx.name, b);
+            }
+        }
+    }
+    for b in vix_keybindings::SHARED {
+        check("shared", "", b);
+    }
+    assert!(
+        dead.is_empty(),
+        "keymap bindings to ids with no run_action arm: {dead:#?}"
+    );
+}

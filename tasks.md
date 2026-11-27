@@ -10998,6 +10998,7 @@ Fix boundaries of everyday edits before adding Vi features.
   message: cap the frame size (named constant, measured against real servers'
   largest messages), drop the connection with a translated error past it.
   See `docs/threat-model.md`.
+- [x] **T849 — Every keymap binding runs a real action.** (Done: Eclipse `C-d`, IntelliJ Windows `C-y` and ttt `C-k k` were bound to `edit.delete_line`, which no `run_action` arm handles; now `delete_line`. `tui/tests/action_catalog.rs` checks every built-in binding against the dispatch scan, which gained `run_text_transform_action` and the two multi-cursor dispatchers it had missed.) Found by T827.
 
 ## Ideas backlog (unscoped)
 
