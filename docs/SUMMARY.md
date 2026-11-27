@@ -189,6 +189,7 @@
 - [AI Statement](contributing-ai-statement.md)
 - [Security Policy](contributing-security.md)
 - [Threat Model](threat-model.md)
+- [Incident Response](incident-response.md)
 - [Security Checklist](security-checklist.md)
 - [Changelog](changelog.md)
 - [What's new in 2.0](whats-new-2-0/index.md)

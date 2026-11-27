@@ -232,8 +232,10 @@ that is on no branch; this is why 1.8.0 and every `2.0.1` rc failed there
 `CARGO_ENCODED_RUSTFLAGS` from `.github/dist/build-setup.yml`, because dist
 ignores `.cargo/config.toml`'s `rustflags` (T771). `release.yml` is **generated**: edit
 `dist-workspace.toml` and re-run `dist init` (or the narrower `dist
-generate --mode ci`), never the workflow by hand — `dist generate --mode
-ci --check` fails if the committed file has drifted from the config, the
+generate --mode ci`), never the workflow by hand — `dist generate --check`
+(every mode: the workflow and the MSI definitions in `tui/wix/` and
+`gui/*/wix/`, which embed package metadata such as the homepage) fails if a
+committed file has drifted from the config, the
 same check-then-write shape `docs/reference/*.md`/`tui/man/vix.1`'s own
 regenerate-and-diff gate uses. The GitHub-only **dist-workflow** job in
 `ci.yml` runs it on every push and pull request, with the `dist` version
@@ -242,10 +244,26 @@ on drift only once a tag is pushed, too late to fix that tag (2.0.0 lost its
 installers and packages this way, T770). A dependency bump to an action in
 `release.yml` fails this job: change the pin in `dist` instead, or leave it.
 `dist-workspace.toml`'s `cargo-cyclonedx = true` (T554, tasks.md) makes
-each release also generate and upload a CycloneDX SBOM (`*.cdx.xml`, one
-per target) via `cargo-cyclonedx` — native `dist` support, not a
-hand-rolled job — for downstream consumers doing their own supply-chain
-compliance.
+each release also generate and upload a CycloneDX SBOM for downstream
+consumers doing their own supply-chain compliance: one `<package>.cdx.xml`
+per released program (not per target; it lists the dependencies of every
+target), `vix-tui.cdx.xml` and one per released desktop GUI. `dist` plans all
+five, but its own step (in `build-global-artifacts`) runs `cargo cyclonedx`
+in the root workspace only, and `gui/` is a workspace of its own, so until
+T832 the four GUI SBOMs were planned and never written. They now come from
+`.github/workflows/sbom.yml`, a custom job `dist` runs after the local builds
+(`global-artifacts-jobs = ["./sbom"]`): it installs the same pinned
+`cargo-cyclonedx` release `dist` installs (0.5.5, by its installer, downloads
+retried), writes the `gui/` workspace's SBOMs, keeps the ones the plan names,
+fails when one of them is missing, and uploads them as an `artifacts-*`
+artifact that the `host` job adds to the GitHub Release. A release that
+plans no GUI uploads nothing from it. This is verifiable only by a real
+release: locally, `dist plan` lists the five SBOMs and the job's script, run
+against that plan, writes exactly the four GUI files. `dist`'s
+`cargo-auditable` option (dependency lists embedded in each binary for
+`cargo audit bin`) is deliberately off: it would change every build job,
+including Windows on ARM, in a way only a release can test, and the SBOMs
+already list the same dependencies.
 
 Who's authorized to do what here is governed by
 [`AI_STATEMENT.md`](../../AI_STATEMENT.md), not by this file: an AI agent may

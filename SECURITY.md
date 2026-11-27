@@ -101,6 +101,10 @@ other work.
    `cargo deny` warn downstream users. `CHANGELOG.md` records it under
    **Security**.
 
+The maintainer's side of these steps, with the commands (the private fork,
+the release, the advisory, yanking a crate version), is written down in the
+[incident-response playbook](docs/incident-response.md).
+
 ## Coordinated disclosure
 
 Please keep a report private until a fix is released, or until 90 days after
@@ -267,7 +271,8 @@ it.
 - **Mutation testing.** A weekly `cargo mutants` run checks that the small
   pure crates' tests catch every behavior change.
 - **Release integrity.** Each release publishes a SHA-256 checksum for every
-  artifact (and a combined `sha256.sum`) and a CycloneDX SBOM. Release
+  artifact (and a combined `sha256.sum`) and a CycloneDX SBOM for each
+  program it releases (`vix-tui.cdx.xml` and one per desktop GUI). Release
   artifacts are not yet signed or attested.
 
 ## Checklist for contributors

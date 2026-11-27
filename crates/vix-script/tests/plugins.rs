@@ -64,6 +64,13 @@ fn git(dir: &Path, args: &[&str]) {
             "commit.gpgsign=false",
             "-c",
             "core.symlinks=true",
+            // No background auto-maintenance or auto-gc: a detached
+            // `git maintenance` could hold objects/maintenance.lock while a
+            // later `git clone` of this fixture copies the object store.
+            "-c",
+            "maintenance.auto=false",
+            "-c",
+            "gc.auto=0",
         ])
         .args(args)
         .output()

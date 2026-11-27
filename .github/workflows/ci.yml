@@ -202,7 +202,9 @@ jobs:
           install "$t/dist" "$HOME/.local/bin/dist"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: dist generate --check
-        run: dist generate --mode ci --check
+        # Every mode, not just ci: the MSI definitions (tui/wix, gui/*/wix)
+        # embed package metadata such as the homepage and drift silently.
+        run: dist generate --check
 
   # T573 (tasks.md): the suite must make no network calls -- distro builders
   # run `cargo test` in offline sandboxes. Build with the network, then run

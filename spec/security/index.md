@@ -34,6 +34,16 @@ contain and how it stays true.
 - **Hardening**, including what is *not* done yet (release signing), so
   the policy never claims more than the project does.
 
+"What happens next" links the incident-response playbook,
+[`docs/incident-response.md`](../../docs/incident-response.md) (in the book
+next to the threat model): who decides, triage into a draft GitHub advisory,
+the fix in the advisory's temporary private fork, the patch release as
+[`docs/release/index.md`](../../docs/release/index.md) makes it, telling users
+(the GitHub advisory, RustSec, `CHANGELOG.md`, the release pages on all three
+forges) and `cargo yank`. Every outward-facing step in it is marked
+maintainer-only, as [`AI_STATEMENT.md`](../../AI_STATEMENT.md) requires, and
+it adds no step the release process does not already have.
+
 ## Keeping it true
 
 - Every claim in the threat model is backed by the owning crate's or topic's

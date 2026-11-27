@@ -51,5 +51,9 @@ npm-scope = "@vixide"
 # cargo-dist's own cargo-cyclonedx integration (T554, tasks.md) -- for
 # downstream consumers doing their own supply-chain compliance.
 cargo-cyclonedx = true
+# dist's SBOM step runs `cargo cyclonedx` in the root workspace only, so the
+# GUIs' SBOMs (gui/ is its own workspace) come from this custom job instead:
+# .github/workflows/sbom.yml (T832).
+global-artifacts-jobs = ["./sbom"]
 # The man page (T307) is bundled via `[package.metadata.dist] include` in
 # tui/Cargo.toml, next to the package it documents (T643).
