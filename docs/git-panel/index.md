@@ -162,11 +162,13 @@ then:
 - **Git → Unstage Hunk** (`git.unstage_hunk`) removes just that hunk from the
   index.
 - **Git → Revert Hunk** (`git.revert_hunk`) restores the committed text for it.
-- **Git → Diff Next / Previous** jump between changed hunks.
+- **Git → Next Change / Previous Change** jump between changed hunks.
 
 Hunk staging is safe: it only acts when the index still matches the expected text
 for the hunk's region. See `crates/vix-git/spec/stage-hunk/index.md` and
-`crates/vix-git/spec/unstage-hunk/index.md`.
+`crates/vix-git/spec/unstage-hunk/index.md`, and
+[Hunk Staging and Merge Conflicts](../git-hunks-and-conflicts/index.md) for
+the details and for resolving merge conflicts.
 
 ## Blame
 

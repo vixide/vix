@@ -97,6 +97,7 @@
 - [File Explorer](file-explorer/index.md)
 - [Git Graph](git-graph/index.md)
 - [Git Panel](git-panel/index.md)
+- [Hunk Staging and Merge Conflicts](git-hunks-and-conflicts/index.md)
 - [Change Gutter Base](gutter-base/index.md)
 - [Inline Suggestions (Ghost Text)](ghost-text/index.md)
 - [Interactive Rebase](interactive-rebase/index.md)

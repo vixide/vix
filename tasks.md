@@ -10820,6 +10820,14 @@ awareness, not capability. Items marked (stale?) may already exist.
   cheat-sheet generator by keymap; FAQ/troubleshooting; screenshot and theme
   galleries with a theme-submission guide and Rhai API docs; optional
   self-assessment quizzes. Check `docs/coverage.md` first — much is done.
+  (Started: of the named deep dives, DB workbench (`docs/db`), Cowork
+  (`docs/cowork`), AI panel (`docs/agent-panel`, thin, with tutorial 14), LSP
+  (`docs/language-server-protocol`), Org (`docs/org`, thin, with tutorial 6),
+  remote editing (`docs/remote-editing`) and Git graph (`docs/git-graph`)
+  already had pages; new `docs/git-hunks-and-conflicts` (hunk staging and
+  merge conflicts had none) and `docs/debugger` rewritten as a full reference,
+  facts cited per section; Vim guide's "no embedded script runtime" fixed.
+  Left: a deeper Org reference and AI page, and the rest of the list above.)
 - [ ] **T829 — Packaging channels.** Prepared in `packaging/` but not
   published: AUR, winget, Scoop, Nix flake, mise; public Docker/ghcr.io image;
   official Homebrew cask (instead of the custom tap); also Chocolatey,

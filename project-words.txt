@@ -936,3 +936,6 @@ nocompatible
 makeprg
 errorformat
 undolist
+
+# git merge.conflictStyle value named in the hunk and conflict guide (T828)
+zdiff
