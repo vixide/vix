@@ -10855,7 +10855,7 @@ awareness, not capability. Items marked (stale?) may already exist.
   with baseline comparison reports; flaky-test detection/quarantine; test
   data generators; test-impact analysis for PRs; chaos/stress testing building
   on `chaos.yml`.
-- [ ] **T832 — Security follow-ups.** Quarterly audits with a checklist for new
+- [ ] **T832 — Security follow-ups.** (Started: `docs/threat-model.md` covers each trust boundary with assets, entry points, mitigations by file and open risks, and ends with a new-feature checklist linked from both PR templates and `agents/conventions.md`; `tui/tests/secret_scan.rs` scans tracked files for private key headers and AWS/GitHub/Slack/Anthropic/OpenAI-style keys, empty allowlist, ~0.45 s. Left: quarterly audit schedule, GitHub security advisories, SBOM per release, Dependabot grouping, secret scanning in hooks/history, incident-response playbook, release signing (T813), sandboxing study, input-validation and TOCTOU audits, and the open risks the threat model lists: `.http` `$processEnv`/`$dotenv` with no trust gate, no HTTP client timeouts, unbounded LSP `Content-Length`.) Quarterly audits with a checklist for new
   features and a threat-model document; GitHub security advisories; SBOM per
   release; Dependabot or equivalent grouping; secret scanning (gitleaks) in
   hooks/CI; incident-response playbook from `SECURITY.md`; code signing of
@@ -10986,6 +10986,18 @@ Fix boundaries of everyday edits before adding Vi features.
   trailing blanks of an unterminated `:s/a/b  ` were lost; (5) Vi `r<CR>`
   did nothing (Vim splits the line, and `{count}r<CR>` replaces the
   characters with one line break).
+- [ ] **T848 — Close the three open risks the T832 threat model found.**
+  (1) HTTP client: a `.http` file from a cloned repository can put
+  `{{$processEnv NAME}}`, `$dotenv` or `$aadToken` values into a request to
+  a host the file chooses; gate those variables behind workspace trust and show
+  the resolved request (method, URL, which variables were filled, values
+  masked) before the first send from an untrusted or newly opened file.
+  (2) The HTTP client sets no connect/read timeouts of its own: add bounded
+  defaults, documented, overridable per request. (3) LSP/DAP framing accepts
+  any `Content-Length`, so a server can make Vix buffer an arbitrarily large
+  message: cap the frame size (named constant, measured against real servers'
+  largest messages), drop the connection with a translated error past it.
+  See `docs/threat-model.md`.
 
 ## Ideas backlog (unscoped)
 

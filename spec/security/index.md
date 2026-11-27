@@ -48,6 +48,26 @@ contain and how it stays true.
 - `docs/contributing-security.md` includes `SECURITY.md` into the book, and
   [`docs/security-checklist.md`](../../docs/security-checklist.md) is the
   contributor checklist the policy points to.
+- [`docs/threat-model.md`](../../docs/threat-model.md) is the detailed
+  threat model: for each trust boundary (workspace trust, the authority slot
+  and remote agent, language servers and debug adapters, Rhai scripts, MCP
+  server mode, ACP agents, AI providers, database credentials, Cowork, IM,
+  Jupyter kernels, crash reports, the HTTP client, the repository itself) its
+  assets, entry points, existing mitigations with the files that enforce
+  them, and open risks. It ends with the checklist for a new feature that the
+  pull request templates (`.github/` and `.forgejo/`, kept identical by
+  `tui/tests/code_lints.rs`) link. A change that moves a boundary updates it
+  together with `SECURITY.md`.
+- **No committed secrets.** `tui/tests/secret_scan.rs` reads every file
+  `git ls-files` lists (working tree only: no history, no network, no
+  external scanner) and fails on a high-confidence credential shape: a
+  private key header, an AWS access key id, a GitHub classic or fine-grained
+  token, a Slack token, an Anthropic key or an OpenAI-style key, each at its
+  real length. Mentions and short fakes (`sk-ant-test`) do not match. A
+  fixture that needs a full-length fake is allowlisted by path with a reason,
+  and an allowlist entry that no longer matches fails. Binary files and
+  files over 16 MiB are skipped; without `git` the test is skipped with a
+  note. It runs in under a second.
 
 ## See also
 

@@ -138,6 +138,17 @@ on top.
   (`io::Error`, `ParseIntError`) in a variant so callers can match on it. Private
   helpers may keep `String`.
 
+## Security
+
+- A change that runs a program, reads project configuration, talks to the
+  network, holds a secret, takes a path from outside or parses input Vix did
+  not write answers the "Checklist for a new feature" in
+  [`docs/threat-model.md`](../docs/threat-model.md). A change that adds or
+  moves a trust boundary updates that page and `SECURITY.md` with it.
+- Never commit a credential. `tui/tests/secret_scan.rs` fails on a real-shaped
+  one; a test fixture that needs a full-length fake goes in its `ALLOWED` list
+  with a reason (build fakes at run time where you can, as its own tests do).
+
 ## Tests
 
 - Prefer terminal-independent tests: build an `App`, feed `KeyEvent`s, assert on

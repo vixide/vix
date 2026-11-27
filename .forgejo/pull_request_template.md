@@ -23,6 +23,11 @@ Tick what applies; strike through or say "n/a" with a reason for what does not.
       arithmetic (`spec/rust-checked-arithmetic`); a new child process is
       listed in `tui/tests/spawn_sites.rs` and a new print in
       `tui/tests/code_lints.rs`, each with its reason.
+- [ ] **Security.** If the change runs a program, reads project
+      configuration, talks to the network, holds a secret, takes a path or
+      parses outside input, it answers the "Checklist for a new
+      feature" in `docs/threat-model.md`, and updates that page and
+      `SECURITY.md` when it moves a trust boundary.
 - [ ] **Tested.** Unit or integration tests cover the change; a changed
       snapshot was read line by line.
 - [ ] **CHANGELOG.md** has a line under `[Unreleased]` (user-visible changes
