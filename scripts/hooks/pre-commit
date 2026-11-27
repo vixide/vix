@@ -14,8 +14,9 @@
 #      tui/tests/secret_scan.rs reads, so the two cannot drift.
 #   3. size: a newly added file over VIX_MAX_ADD_BYTES bytes (default 1048576,
 #      1 MiB) is refused; set the variable for one commit to add it anyway.
-#   4. lints: when a staged file is under tui/src/ or crates/*/src/, is a pull
-#      request template or is the lint test itself, tui/tests/code_lints.rs is
+#   4. lints: when a staged .rs file is under src/ or tests/ of tui/, crates/*/
+#      or gui/*/, is a pull request template or is the lint test itself
+#      (it checks every #[ignore] reason too), tui/tests/code_lints.rs is
 #      compiled alone with rustc (it needs no crate) and run, about a second.
 #      It reads the working tree, not the index. VIX_SKIP_PRECOMMIT_LINTS=1
 #      skips it.
@@ -151,7 +152,7 @@ done <"$work/added"
 # 4. lints
 lints="$top/tui/tests/code_lints.rs"
 if [ "${VIX_SKIP_PRECOMMIT_LINTS:-}" != 1 ] && [ -f "$lints" ] &&
-	grep -qE '^(tui/src/|crates/[^/]+/src/).*[.]rs$|^[.](github|forgejo)/pull_request_template[.]md$|^tui/tests/code_lints[.]rs$' "$work/staged"; then
+	grep -qE '^(tui|crates/[^/]+|gui/[^/]+)/(src|tests)/.*[.]rs$|^[.](github|forgejo)/pull_request_template[.]md$|^tui/tests/code_lints[.]rs$' "$work/staged"; then
 	if command -v rustc >/dev/null 2>&1; then
 		if ! CARGO_MANIFEST_DIR="$top/tui" rustc --edition 2024 --test -o "$work/code_lints" "$lints" >"$work/out" 2>&1; then
 			fail "tui/tests/code_lints.rs does not compile alone with rustc:"

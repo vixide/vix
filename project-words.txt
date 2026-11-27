@@ -943,3 +943,6 @@ zdiff
 # Memory over a long session (T830): Vim's jumplist, App::disk_mtimes
 jumplist
 mtimes
+
+# T831 (scripts/flaky-hunt: -l cpus)
+cpus

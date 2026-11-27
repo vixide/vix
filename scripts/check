@@ -591,6 +591,10 @@ if in_tier push; then
 	step_begin "scripts/test-check-groups (faster gate)"
 	sh "$(dirname "$0")/test-check-groups"
 	step_end
+
+	step_begin "scripts/test-flaky-hunt (T831)"
+	sh "$(dirname "$0")/test-flaky-hunt"
+	step_end
 fi
 
 if in_tier full; then

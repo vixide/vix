@@ -1,0 +1,206 @@
+#!/bin/sh
+# Hunt a suspected flaky test (T831): run one test target, or the tests a
+# filter selects, N times in a row, optionally under artificial CPU load, and
+# report which tests failed in which runs. A flake is confirmed in minutes or,
+# after enough clean runs under load, ruled out (spec/test "Flaky tests").
+#
+#     scripts/flaky-hunt [options] [cargo test args] [-- test args]
+#
+#   -n, --runs N      how many runs (default 20)
+#   -l, --load N      keep N busy loops (one CPU each) running for the whole
+#                     hunt; "cpus" means one per CPU (default 0, no load)
+#   -c, --load-cmd C  also run the shell command C in the background for the
+#                     hunt, say a second build in its own target directory;
+#                     it is stopped at the end if it is still running
+#   -x, --stop        stop after the first failing run
+#   -k, --keep DIR    write each run's log to DIR (default: a temporary
+#                     directory, kept only when a run failed)
+#   -h, --help        print this and exit
+#
+# The options come first; everything from the first other argument on goes to
+# cargo test unchanged (with --no-fail-fast added, so every test binary runs
+# each time). Examples:
+#
+#   scripts/flaky-hunt -n 30 -l cpus -p vix-authority --test ssh_agent
+#   scripts/flaky-hunt -n 50 -l 8 -p vix-tui --test e2e_tmux -- esc
+#   scripts/flaky-hunt -n 10 -c 'cargo build -p vix-tui --target-dir /tmp/load' \
+#       -p vix-db --lib
+#
+# It builds once (cargo test --no-run) before any load starts, so the runs time
+# the tests, not the compiler. Failures are read from libtest's
+# "test NAME ... FAILED" lines; a run that fails without naming a test (a crash,
+# a hang killed from outside, a build error) is reported as such.
+#
+# Exit status: 0 when every run passed, 1 when any run failed, 2 on a usage
+# error, 3 when the build failed. It never retries anything: it exists to make
+# a race visible, and scripts/check and CI do not retry either.
+set -u
+
+usage() {
+	sed -n '2,/^$/s/^# \{0,1\}//p' "$0"
+}
+die() {
+	echo "flaky-hunt: $*" >&2
+	exit 2
+}
+is_count() {
+	case $1 in
+	'' | *[!0-9]*) return 1 ;;
+	esac
+	return 0
+}
+
+runs=20
+load=0
+load_cmd=
+stop=0
+keep=
+while [ $# -gt 0 ]; do
+	case $1 in
+	-n | --runs)
+		[ $# -ge 2 ] || die "$1 needs a number"
+		runs=$2
+		shift 2
+		;;
+	-l | --load)
+		[ $# -ge 2 ] || die "$1 needs a number or cpus"
+		load=$2
+		shift 2
+		;;
+	-c | --load-cmd)
+		[ $# -ge 2 ] || die "$1 needs a command"
+		load_cmd=$2
+		shift 2
+		;;
+	-x | --stop)
+		stop=1
+		shift
+		;;
+	-k | --keep)
+		[ $# -ge 2 ] || die "$1 needs a directory"
+		keep=$2
+		shift 2
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--)
+		shift
+		break
+		;;
+	*) break ;;
+	esac
+done
+
+is_count "$runs" && [ "$runs" -ge 1 ] || die "--runs wants a whole number of at least 1, not '$runs'"
+if [ "$load" = cpus ]; then
+	load=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+fi
+is_count "$load" || die "--load wants a whole number or cpus, not '$load'"
+
+# Split the cargo arguments from the test-binary arguments at the first --,
+# each one single-quoted for the eval below.
+cargo_args=
+test_args=
+seen_dd=0
+has_nff=0
+for a in "$@"; do
+	q=$(printf '%s' "$a" | sed "s/'/'\\\\''/g")
+	if [ "$seen_dd" = 1 ]; then
+		test_args="$test_args '$q'"
+	elif [ "$a" = -- ]; then
+		seen_dd=1
+	else
+		[ "$a" = --no-fail-fast ] && has_nff=1
+		cargo_args="$cargo_args '$q'"
+	fi
+done
+[ "$has_nff" = 1 ] || cargo_args="$cargo_args --no-fail-fast"
+
+if [ -n "$keep" ]; then
+	mkdir -p "$keep" || die "cannot create $keep"
+	logs=$keep
+else
+	logs=$(mktemp -d "${TMPDIR:-/tmp}/flaky-hunt.XXXXXX") || die "cannot create a temporary directory"
+fi
+
+pids=
+stop_load() {
+	for p in $pids; do
+		pkill -TERM -P "$p" 2>/dev/null
+		kill "$p" 2>/dev/null
+	done
+	for p in $pids; do
+		wait "$p" 2>/dev/null
+	done
+	pids=
+}
+trap 'stop_load' EXIT
+trap 'stop_load; exit 130' INT TERM
+
+echo "flaky-hunt: building: cargo test --no-run$cargo_args"
+if ! eval "cargo test --no-run $cargo_args" >"$logs/build.log" 2>&1; then
+	tail -n 30 "$logs/build.log" >&2
+	echo "flaky-hunt: the build failed; the full log is $logs/build.log" >&2
+	exit 3
+fi
+
+i=0
+while [ "$i" -lt "$load" ]; do
+	sh -c 'while :; do :; done' &
+	pids="$pids $!"
+	i=$((i + 1))
+done
+if [ -n "$load_cmd" ]; then
+	sh -c "$load_cmd" >"$logs/load-cmd.log" 2>&1 &
+	pids="$pids $!"
+fi
+load_desc="no load"
+[ "$load" -gt 0 ] && load_desc="$load busy loop(s)"
+[ -n "$load_cmd" ] && load_desc="$load_desc + '$load_cmd'"
+echo "flaky-hunt: $runs run(s) under $load_desc; load pids:${pids:- none}; logs in $logs"
+
+failed_runs=0
+done_runs=0
+: >"$logs/failures"
+run=1
+while [ "$run" -le "$runs" ]; do
+	start=$(date +%s)
+	eval "cargo test $cargo_args -- $test_args" >"$logs/run-$run.log" 2>&1
+	code=$?
+	secs=$(($(date +%s) - start))
+	done_runs=$run
+	names=$(sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' "$logs/run-$run.log" | sort -u)
+	if [ "$code" -eq 0 ]; then
+		echo "run $run/$runs: ok (${secs}s)"
+	else
+		failed_runs=$((failed_runs + 1))
+		if [ -n "$names" ]; then
+			n=$(printf '%s\n' "$names" | wc -l | tr -d ' ')
+			echo "run $run/$runs: FAILED, $n test(s) (${secs}s)"
+			printf '%s\n' "$names" | while IFS= read -r t; do
+				printf '%s %s\n' "$t" "$run" >>"$logs/failures"
+			done
+		else
+			echo "run $run/$runs: FAILED, exit $code with no failed test named: a crash, a kill or a build error (${secs}s)"
+			printf '%s %s\n' "(no test named: exit $code)" "$run" >>"$logs/failures"
+		fi
+		[ "$stop" = 1 ] && break
+	fi
+	run=$((run + 1))
+done
+stop_load
+
+echo
+if [ "$failed_runs" -eq 0 ]; then
+	echo "flaky-hunt: no failures in $done_runs run(s) under $load_desc."
+	[ -n "$keep" ] || rm -rf "$logs"
+	exit 0
+fi
+echo "flaky-hunt: $failed_runs of $done_runs run(s) failed under $load_desc:"
+# One line per test: how often it failed and in which runs.
+awk '{ run = $NF; $NF = ""; sub(/ $/, ""); n[$0]++; r[$0] = r[$0] " " run }
+	END { for (t in n) printf "  %s  failed %d time(s), in run(s)%s\n", t, n[t], r[t] }' "$logs/failures" | sort
+echo "flaky-hunt: logs kept in $logs (run-N.log)"
+exit 1

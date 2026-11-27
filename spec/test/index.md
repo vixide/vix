@@ -78,8 +78,10 @@ assert_eq!(app.editor.active_tab().unwrap().text(), "ello");
   what keep a global `commit.gpgsign=true` or a passphrase-protected SSH key
   from signing, failing or hanging a test (T792).
 - **`#[ignore]` is for what CI cannot provide**, with the reason in the
-  attribute: the untracked `./dictionaries` set, a real `rust-analyzer`, and a
-  test that only runs as another test's child process. Run them by hand with
+  attribute: the untracked `./dictionaries` set, a real `rust-analyzer` or
+  Vim, a test that only runs as another test's child process, and a known-flaky
+  test in quarantine (`#[ignore = "flaky: T<n>, <reason>"]`, see "Flaky
+  tests"). `tui/tests/code_lints.rs` fails on a bare `#[ignore]`. Run them by hand with
   `cargo test -p vix-tui --lib -- --ignored` (and `--test lsp_smoke`,
   `-p vix-spellcheck`).
 
@@ -321,7 +323,14 @@ next line is skipped rather than reported with half of them.
   job, which is waiting for it anyway, so the rule would forbid nothing that
   matters. Revisit it if a shared multi-task runtime appears.
 
-Test code is exempt from both rules: an item under a `cfg` that names `test`
+- **Every `#[ignore]` says why** (T831). Every `.rs` file under `src/` or
+  `tests/` of `tui/`, `crates/*/` and `gui/*/`, test code included, is read
+  for `#[ignore]` attributes: a bare one or an empty reason fails, and a
+  reason starting with `flaky` must read `flaky: T<n>, <reason>` with
+  `T<n>` an open (`- [ ]`) task in `tasks.md`, so ticking the task while the
+  quarantine stays fails too. See "Flaky tests".
+
+Test code is exempt from the first two rules: an item under a `cfg` that names `test`
 (not `not(test)`), and every file of a module declared inside one, including
 through `#[path]`. Comments and the contents of string and character literals
 are never read as code, so a snippet body such as `"println!($0);"` is not a
@@ -368,6 +377,58 @@ matches itself, and the self-tests build their fake secrets at run time. A test
 also checks that the hook still names that file. The hook's side is tested by
 `scripts/test-attest`, which also checks that `tui/tests/code_lints.rs` still
 compiles alone with `rustc` (no crate), as the hook runs it that way.
+
+## Flaky tests
+
+A test that fails now and then is a race until shown otherwise, usually in the
+test, sometimes in Vix. Four that broke the gate on 2026-11-26/27 under a load
+average of 50 to 150 show the usual shapes: Esc and `C-q` sent back to back
+reached Vix in one read and decoded as Alt+`C-q`, which does not quit
+(`tui/tests/e2e_tmux.rs`); `cat`'s own late copy of a line landed between two
+echoed pieces a PTY test expected together (`vix-terminal`); a file was changed
+once, before the watcher's first snapshot, so the change was never reported
+(`crates/vix-authority/tests/ssh_agent.rs`); and a freed port was taken by another
+process before the test bound it again (`vix-db`). Each was fixed in the test,
+by handling what it had assumed could not happen (resending `C-q` until Vix
+exits, dropping `cat`'s copy before comparing, changing the file until the
+change is seen, accepting one rebind in five tries), not by rerunning it.
+
+**No automatic retries.** `scripts/check`, `scripts/ci` and the forge CI run
+each test once, and `.config/nextest.toml` sets `retries = 0` in both of its
+profiles (it used to retry once locally and twice in CI, which passed the run
+and only marked the test `FLAKY` in the log). A retry turns a race into a
+green run that nobody reads, and the race still ships.
+
+**Hunting.** `scripts/flaky-hunt` confirms or rules out a suspected flake:
+
+```sh
+scripts/flaky-hunt -n 30 -l cpus -p vix-authority --test ssh_agent
+scripts/flaky-hunt -n 50 -l 8 -p vix-tui --test e2e_tmux -- esc
+scripts/flaky-hunt -n 10 -c 'cargo build -p vix-tui --target-dir /tmp/load' -p vix-db
+```
+
+It builds once (`cargo test --no-run`), then runs `cargo test` with the given
+arguments (`--no-fail-fast` added) `-n` times in a row, optionally while
+`-l N` busy loops (`cpus`: one per CPU) or a `-c` shell command (a second
+build) load the machine, and ends with each failed test, how often it failed
+and in which runs, read from libtest's `test NAME ... FAILED` lines. A run
+that fails naming no test (a crash, a kill) is listed as such. `-x` stops at
+the first failing run; logs of a hunt with failures are kept (`-k DIR` picks
+where). It exits 0 when every run passed, 1 when one failed, 2 on a usage
+error and 3 when the build failed, and stops its load either way. Nothing
+proves a test free of races, but 30 clean runs under `-l cpus` make a
+timing flake unlikely, and a failing one gives the run's log to read. On
+Linux, `cargo nextest run --stress-count N` does the same without the load.
+`scripts/test-flaky-hunt` tests the script with a stub `cargo` (part of the
+`push` tier).
+
+**Quarantine.** A flaky test that cannot be fixed at once is marked
+`#[ignore = "flaky: T<n>, <reason>"]`, with `T<n>` an open task in
+`tasks.md` to fix it and the reason naming the race as far as it is known. The
+lint above enforces the form and that the task is still open; a quarantined
+test still runs with `--ignored` and under `scripts/flaky-hunt`
+(`-- --ignored`). Fixing it removes the attribute in the same change that
+ticks the task. Quarantine is the exception: no test is in it today.
 
 ## Manual scenarios
 

@@ -95,7 +95,7 @@ The landing bar is unchanged; these make the same checks wait less.
   run `--scope all` yourself before publishing a crate.
 - **nextest by default off macOS.** When `cargo-nextest` is installed the gate
   runs the test suite with it on Linux (parallel across binaries, one process
-  per test, one retry reported as FLAKY; documentation tests still run with
+  per test, no retries; documentation tests still run with
   `cargo test --doc`). On macOS it stays opt-in (`VIX_NEXTEST=1`) because every process
   spawn is scanned by the OS and it measured about twice as slow; `VIX_NEXTEST=0`
   forces `cargo test` anywhere. CI and `scripts/ci` already behaved this way.
@@ -333,8 +333,10 @@ refuses the commit, naming each file, when:
    bytes, 1 MiB by default (the largest tracked file, a locale catalog, is
    about 1.4 MiB and may keep growing; only new files are limited). Setting
    the variable for one commit lets a file in;
-4. a staged file is under `tui/src/` or `crates/*/src/`, is a pull-request
-   template or is `tui/tests/code_lints.rs`, and that lint test fails. The
+4. a staged `.rs` file is under `src/` or `tests/` of `tui/`, `crates/*/`
+   or `gui/*/` (`tests/` because the lint test checks every `#[ignore]`
+   reason, T831), is a pull-request template or is
+   `tui/tests/code_lints.rs`, and that lint test fails. The
    hook compiles it alone with `rustc --test` (it uses no crate, so this takes
    well under a second, against minutes for a cold `cargo test -p vix-tui`)
    and runs it; it reads the working tree, not the index.
@@ -564,6 +566,13 @@ workflow itself adds little.
 ## Non-goals
 
 - Do not weaken the gate, skip steps to save time, or disable commit signing.
+- Do not retry failing tests, in `scripts/check`, `scripts/ci`, nextest's
+  profiles (`.config/nextest.toml` sets `retries = 0` in both) or any forge's
+  CI (T831). A test that passes on a second try still has its race, and a green
+  run would hide it; a suspected flake is hunted with `scripts/flaky-hunt` and
+  fixed, or quarantined (see [`spec/test`](../test/index.md), "Flaky tests").
+  `scripts/test-flaky-hunt` (no network, no build; part of the `push` tier)
+  tests the hunt script with a stub `cargo`.
 - Do not run untrusted pull-request code on a self-hosted runner.
 - Do not cut a release tag automatically; that stays the maintainer's call
   (see `AI_STATEMENT.md`).
