@@ -187,13 +187,18 @@ pub fn redact_quoted(message: &str) -> String {
 /// Write `report` as `crash-<stamp>.txt` in `dir`, then delete all but the
 /// newest [`KEEP`] reports. Returns the new report's path.
 ///
+/// The report is written with `vix_fileops::write_atomic_private`, so a new
+/// report is owner-only (`0600` on Unix) whatever the umask, like Vix's other
+/// private files (T857): it is scrubbed, but a backtrace still says what the
+/// user was doing.
+///
 /// # Errors
 ///
 /// Returns the I/O error if the directory or the file cannot be written.
 pub fn save(dir: &Path, report: &str, stamp: &str) -> std::io::Result<PathBuf> {
     fs::create_dir_all(dir)?;
     let path = dir.join(format!("crash-{stamp}.txt"));
-    fs::write(&path, report)?;
+    vix_fileops::write_atomic_private(&path, report.as_bytes())?;
     let reports = reports(dir);
     for old in reports.iter().skip(KEEP) {
         let _ = fs::remove_file(old);
@@ -372,6 +377,20 @@ mod tests {
         let kept = reports(&dir);
         assert_eq!(kept.len(), KEEP);
         assert!(kept[0].ends_with(format!("crash-20260101T0000{:02}Z.txt", KEEP + 2)));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_saved_report_is_private_to_its_owner() {
+        use std::os::unix::fs::PermissionsExt as _;
+        // T857: a report was written with the default mode (0644 under the
+        // usual umask), readable by every account on the machine.
+        let dir = scratch("private");
+        let path = save(&dir, "r", "20260101T000000Z").unwrap();
+        let mode = fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "mode {mode:o}");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "r");
         let _ = fs::remove_dir_all(&dir);
     }
 

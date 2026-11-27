@@ -324,6 +324,142 @@ fn a_copy_replaces_a_destination_symlink_instead_of_writing_through_it() {
 }
 
 #[test]
+fn a_copy_into_an_existing_tree_replaces_the_links_inside_it() {
+    // T857: `cp -R src/. dst` follows a symlink it meets inside an
+    // existing destination tree, so a tree that ships `notes.txt -> victim`
+    // and `sub -> outside` had them written through by a pasted copy.
+    let dir = scratch("copy-inner-link");
+    let auth = authority(&dir, "/bin/sh");
+    let outside = dir.join("outside");
+    std::fs::create_dir_all(&outside).unwrap();
+    let victim = outside.join("victim.txt");
+    std::fs::write(&victim, "precious").unwrap();
+    let tree = dir.join("work/tree");
+    std::fs::create_dir_all(tree.join("deep")).unwrap();
+    std::os::unix::fs::symlink(&victim, tree.join("notes.txt")).unwrap();
+    std::os::unix::fs::symlink(&outside, tree.join("sub")).unwrap();
+    std::os::unix::fs::symlink(&victim, tree.join("deep/odd name\n.txt")).unwrap();
+    // A link the source tree has no entry for is left alone.
+    std::os::unix::fs::symlink(&victim, tree.join("keep")).unwrap();
+    let src = dir.join("src/tree");
+    std::fs::create_dir_all(src.join("sub")).unwrap();
+    std::fs::create_dir_all(src.join("deep")).unwrap();
+    std::fs::write(src.join("notes.txt"), "pasted").unwrap();
+    std::fs::write(src.join("sub/inner.txt"), "pasted").unwrap();
+    std::fs::write(src.join("deep/odd name\n.txt"), "pasted").unwrap();
+    auth.copy_recursive(&src, &tree).unwrap();
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "precious");
+    assert!(!outside.join("inner.txt").exists(), "copied into the link");
+    for name in ["notes.txt", "deep/odd name\n.txt"] {
+        let meta = std::fs::symlink_metadata(tree.join(name)).unwrap();
+        assert!(meta.is_file(), "{name} is now a regular file");
+        assert_eq!(std::fs::read_to_string(tree.join(name)).unwrap(), "pasted");
+    }
+    assert!(
+        std::fs::symlink_metadata(tree.join("sub"))
+            .unwrap()
+            .is_dir()
+    );
+    assert_eq!(
+        std::fs::read_to_string(tree.join("sub/inner.txt")).unwrap(),
+        "pasted"
+    );
+    assert!(
+        std::fs::symlink_metadata(tree.join("keep"))
+            .unwrap()
+            .is_symlink()
+    );
+    cleanup(&dir);
+}
+
+/// This user's id, from the owner of a file it creates.
+fn my_uid(dir: &Path) -> u32 {
+    use std::os::unix::fs::MetadataExt as _;
+    let probe = dir.join("uid-probe");
+    std::fs::write(&probe, "").unwrap();
+    let uid = std::fs::metadata(&probe).unwrap().uid();
+    std::fs::remove_file(&probe).unwrap();
+    uid
+}
+
+#[test]
+fn a_save_does_not_follow_another_users_link_in_a_sticky_shared_directory() {
+    use std::os::unix::fs::MetadataExt as _;
+    // T857: the local writer refuses (T832); the shell save resolved the
+    // link with `readlink` and replaced its target. Needs a shared sticky
+    // `/tmp` this user does not own (so not root).
+    let Ok(tmp) = std::fs::canonicalize("/tmp") else {
+        return;
+    };
+    let dir = scratch("sticky-save");
+    let me = my_uid(&dir);
+    let shared =
+        std::fs::metadata(&tmp).is_ok_and(|m| m.mode() & 0o1002 == 0o1002 && m.uid() != me);
+    if !shared {
+        cleanup(&dir);
+        return;
+    }
+    let victim = dir.join("victim.txt");
+    std::fs::write(&victim, "precious").unwrap();
+    let tag = dir.file_name().unwrap().to_string_lossy().into_owned();
+    let link = tmp.join(format!("{tag}-file"));
+    let link_dir = tmp.join(format!("{tag}-dir"));
+    let _ = std::fs::remove_file(&link);
+    let _ = std::fs::remove_file(&link_dir);
+    std::os::unix::fs::symlink(&victim, &link).unwrap();
+    std::os::unix::fs::symlink(&dir, &link_dir).unwrap();
+    // To the user who made it the link may be followed.
+    let auth = authority(&dir, "/bin/sh");
+    auth.write_atomic(&link, b"mine").unwrap();
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "mine");
+    // To any other remote user (a fake `id` on the remote PATH) it is a
+    // foreign link in a shared sticky directory: refused, for the link and
+    // for a path below a link to a directory.
+    let other_dir = scratch("sticky-save-other");
+    let bin = other_dir.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    script::write(
+        &bin.join("id"),
+        format!(
+            "#!/bin/sh
+echo {}
+",
+            me.checked_add(1).unwrap()
+        ),
+    )
+    .unwrap();
+    let quoted = String::from_utf8(sh_quote(bin.to_str().unwrap().as_bytes())).unwrap();
+    let target = SshTarget::parse("ssh://me@example.invalid:2222/srv").unwrap();
+    let options = SshOptions::default()
+        .with_program(fake_ssh_with(
+            &other_dir,
+            "/bin/sh",
+            &format!("PATH={quoted}:$PATH; export PATH"),
+        ))
+        .with_control_dir(control_dir(&other_dir));
+    let other = SshAuthority::with_options(target, options).unwrap();
+    for path in [link.clone(), link_dir.join("victim.txt")] {
+        let err = other.write_atomic(&path, b"theirs").unwrap_err();
+        assert_eq!(
+            err.kind(),
+            std::io::ErrorKind::PermissionDenied,
+            "{}: {err}",
+            path.display()
+        );
+    }
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "mine");
+    // A link in a private directory is still followed.
+    let private = dir.join("link.txt");
+    std::os::unix::fs::symlink(&victim, &private).unwrap();
+    other.write_atomic(&private, b"ok").unwrap();
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "ok");
+    let _ = std::fs::remove_file(&link);
+    let _ = std::fs::remove_file(&link_dir);
+    cleanup(&other_dir);
+    cleanup(&dir);
+}
+
+#[test]
 fn saves_write_through_links_keep_the_mode_and_report_conflicts() {
     let dir = scratch("save");
     let auth = authority(&dir, "/bin/sh");
