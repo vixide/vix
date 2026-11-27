@@ -146,9 +146,248 @@ pub fn matching_tag(text: &str, cursor: usize) -> Option<usize> {
     None
 }
 
+/// One tag read from the text by [`read_tag`]: its `>` (or the text's end)
+/// and what the matcher compares.
+struct ReadTag {
+    /// Char offset of the `<`.
+    open: usize,
+    /// Char offset of the closing `>`, or the text's length when unterminated.
+    end: usize,
+    /// Lowercased tag name.
+    name: String,
+    /// A closing tag (`</name>`).
+    closing: bool,
+    /// A self-closing tag (`<name/>`).
+    self_closing: bool,
+}
+
+/// The tag whose `<` is at char offset `open`, reading `chars` (the text
+/// from `open` on) only to its `>`: [`scan`]'s rules for one tag. `None`
+/// when no tag starts there (no `<`, or no name after it).
+fn read_tag(open: usize, mut chars: impl Iterator<Item = char>) -> Option<ReadTag> {
+    if chars.next()? != '<' {
+        return None;
+    }
+    let mut c = chars.next();
+    let closing = c == Some('/');
+    if closing {
+        c = chars.next();
+    }
+    // `pos` is the char offset of `c`; it counts chars actually read, so
+    // it never passes the text's length.
+    let mut pos = open.checked_add(1)?.checked_add(usize::from(closing))?;
+    let mut name = String::new();
+    let mut last = None;
+    while let Some(ch) = c.filter(|&ch| is_name_char(ch)) {
+        name.push(ch);
+        last = Some(ch);
+        pos = pos.checked_add(1)?;
+        c = chars.next();
+    }
+    if name.is_empty() {
+        return None;
+    }
+    while let Some(ch) = c.filter(|&ch| ch != '>') {
+        last = Some(ch);
+        pos = pos.checked_add(1)?;
+        c = chars.next();
+    }
+    Some(ReadTag {
+        open,
+        end: pos,
+        name: name.to_ascii_lowercase(),
+        closing,
+        self_closing: last == Some('/'),
+    })
+}
+
+/// Whether a `<` followed by `c1` then `c2` starts a tag (a name, after an
+/// optional `/`).
+fn starts_tag(c1: Option<char>, c2: Option<char>) -> bool {
+    c1.is_some_and(is_name_char) || (c1 == Some('/') && c2.is_some_and(is_name_char))
+}
+
+/// [`matching_tag`] without a copy of the text: the same answer, read from
+/// the cursor outward (T851).
+///
+/// `len` is the text's length in chars. `forward(at)` yields the text's
+/// chars from offset `at` on, in order, and `backward(at)` the chars before
+/// `at`, nearest first (`at - 1`, `at - 2`, …, `0`); both are only called
+/// with `at <= len`. A tag ends at the first `>` after its `<`, so the tag
+/// under the cursor is found from the last `>` before it, and the partner
+/// by reading tags only as far as it (or to a text end when there is none).
+///
+/// # Examples
+/// ```
+/// let html: Vec<char> = "<div><span>x</span></div>".chars().collect();
+/// let found = vix_tags::matching_tag_in(
+///     html.len(),
+///     1,
+///     |at| html[at..].iter().copied(),
+///     |at| html[..at].iter().rev().copied(),
+/// );
+/// assert_eq!(found, Some(19));
+/// ```
+pub fn matching_tag_in<F, IF, B, IB>(
+    len: usize,
+    cursor: usize,
+    forward: F,
+    backward: B,
+) -> Option<usize>
+where
+    F: Fn(usize) -> IF,
+    IF: Iterator<Item = char>,
+    B: Fn(usize) -> IB,
+    IB: Iterator<Item = char>,
+{
+    if cursor > len {
+        return None;
+    }
+    // The tag under the cursor starts at the first tag-starting `<` after
+    // the last `>` before the cursor, if that `<` is at or before it.
+    let gap = backward(cursor).take_while(|&c| c != '>').count();
+    let segment = cursor.checked_sub(gap)?;
+    let mut tag = None;
+    for (k, c) in forward(segment).take(gap.checked_add(1)?).enumerate() {
+        if c == '<' {
+            let open = segment.checked_add(k)?;
+            tag = read_tag(open, forward(open));
+            if tag.is_some() {
+                break;
+            }
+        }
+    }
+    let tag = tag.filter(|t| t.end >= cursor)?;
+    if tag.self_closing {
+        return None;
+    }
+    let mut depth = 0u32;
+    // One partner candidate, nearest first: `Some(found)` ends the search.
+    let mut visit = |t: &ReadTag| -> Option<Option<usize>> {
+        if t.name != tag.name || t.self_closing {
+            return Some(None);
+        }
+        if t.closing == tag.closing {
+            depth = depth.checked_add(1)?;
+        } else if let Some(shallower) = depth.checked_sub(1) {
+            depth = shallower;
+        } else {
+            return Some(Some(t.open));
+        }
+        Some(None)
+    };
+    if tag.closing {
+        // Tags before this one, nearest first. Each ends at a `>`; the tag
+        // ending at one starts at the first tag-starting `<` after the `>`
+        // before it. Reading back, `ahead` holds the two chars after the
+        // current one.
+        let mut ahead = (Some('<'), None);
+        let mut in_segment = false;
+        let mut first_open = None;
+        for (k, c) in backward(tag.open).enumerate() {
+            let i = tag.open.checked_sub(k)?.checked_sub(1)?;
+            if c == '>' {
+                if let Some(open) = first_open.take()
+                    && let Some(t) = read_tag(open, forward(open))
+                    && let Some(found) = visit(&t)?
+                {
+                    return Some(found);
+                }
+                in_segment = true;
+            } else if c == '<' && in_segment && starts_tag(ahead.0, ahead.1) {
+                first_open = Some(i);
+            }
+            ahead = (Some(c), ahead.0);
+        }
+        if let Some(open) = first_open
+            && let Some(t) = read_tag(open, forward(open))
+        {
+            return visit(&t)?;
+        }
+        return None;
+    }
+    // Tags after this one, in order: each search resumes past the last tag.
+    let mut from = tag.end.checked_add(1)?;
+    'tags: while from <= len {
+        for (k, c) in forward(from).enumerate() {
+            if c != '<' {
+                continue;
+            }
+            let open = from.checked_add(k)?;
+            if let Some(t) = read_tag(open, forward(open)) {
+                if let Some(found) = visit(&t)? {
+                    return Some(found);
+                }
+                from = t.end.checked_add(1)?;
+                continue 'tags;
+            }
+        }
+        break;
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// [`matching_tag_in`] over a char list, as a host would over a rope.
+    fn matching_in(text: &str, cursor: usize) -> Option<usize> {
+        let chars: Vec<char> = text.chars().collect();
+        matching_tag_in(
+            chars.len(),
+            cursor,
+            |at| chars[at..].iter().copied(),
+            |at| chars[..at].iter().rev().copied(),
+        )
+    }
+
+    /// The streaming matcher gives [`matching_tag`]'s answer at every
+    /// cursor position of `text` and two past its end.
+    fn assert_streaming_matches(text: &str) {
+        for cursor in 0..=text.chars().count() + 2 {
+            assert_eq!(
+                matching_in(text, cursor),
+                matching_tag(text, cursor),
+                "at {cursor} in {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn streaming_matcher_agrees_on_a_table() {
+        for text in [
+            "",
+            "<",
+            "<a",
+            "<div><span>x</span></div>",
+            "<a><a></a></a>",
+            "<A>x</a>",
+            "<br/><p>hi</p>",
+            "<!-- <b> --> <b>x</b>",
+            "<a <b> c> </b></a>",
+            "</a><a>",
+            "<p>日本<em>é</em></p>\n<p>",
+            "<x></y></x>",
+            "a > b < c <d>e</d>",
+        ] {
+            assert_streaming_matches(text);
+        }
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 512, ..Default::default() })]
+        #[test]
+        fn streaming_matcher_agrees_on_generated_text(
+            chars in proptest::collection::vec(
+                proptest::sample::select(vec!['<', '<', '>', '>', '/', '/', 'a', 'a', 'B', 'b', ' ', '!', 'é', '-']),
+                0..40,
+            )
+        ) {
+            let text: String = chars.into_iter().collect();
+            assert_streaming_matches(&text);
+        }
+    }
 
     #[test]
     fn jumps_open_to_close() {

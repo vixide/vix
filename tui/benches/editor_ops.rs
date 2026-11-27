@@ -381,6 +381,104 @@ fn bench_go_sentences(c: &mut Criterion) {
     group.finish();
 }
 
+/// Highlight Word (`App::refresh_word_highlight`, T851) as the event loop
+/// runs it after a cursor move: the cursor steps between `compute_something`
+/// and `alpha` (each once in the buffer, so the search reads to the end)
+/// and, for `common`, between two `the`s in the filler (500 marks, the cap,
+/// are found early).
+fn bench_word_highlight(c: &mut Criterion) {
+    let mut group = c.benchmark_group("editor/word_highlight");
+    group.sample_size(20);
+    for (label, bytes) in [("4KiB", 4 << 10), ("512KiB", 512 << 10), ("8MiB", 8 << 20)] {
+        let (mut app, cursor) = vi_app(&format!("word-highlight-{label}"), bytes);
+        app.settings.editor_visual.highlight_word = true;
+        let line_start = cursor - 16;
+        for (name, a, b) in [
+            ("rare", cursor, line_start + 34),
+            ("common", line_start - 61, line_start - 61 + 31),
+        ] {
+            group.bench_function(BenchmarkId::new(name, label), |bench| {
+                bench.iter(|| {
+                    for at in [a, b] {
+                        app.editor.active_tab_mut().unwrap().editor.set_cursor(at);
+                        app.refresh_word_highlight();
+                    }
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
+/// Go → Word → Next, Previous, Start and End, then Go → Sentence → Start
+/// and End (`nav.word_*`, `nav.sentence_start`/`_end` through
+/// `App::run_action`, T851), around the same line in prose: each should
+/// read the words or sentences it crosses, not the whole buffer.
+fn bench_go_words(c: &mut Criterion) {
+    let mut group = c.benchmark_group("editor/go_words");
+    group.sample_size(20);
+    for (label, bytes) in [("4KiB", 4 << 10), ("512KiB", 512 << 10), ("8MiB", 8 << 20)] {
+        let (mut app, cursor) = vi_app_filled(
+            &format!("go-words-{label}"),
+            bytes,
+            "The quick brown fox jumps. Over the lazy dog! Again and again?
+",
+        );
+        let actions: [(&str, &[&str]); 3] = [
+            ("word_next_prev", &["nav.word_next", "nav.word_prev"]),
+            ("word_start_end", &["nav.word_start", "nav.word_end"]),
+            (
+                "sentence_start_end",
+                &["nav.sentence_start", "nav.sentence_end"],
+            ),
+        ];
+        for (name, ids) in actions {
+            group.bench_function(BenchmarkId::new(name, label), |b| {
+                b.iter(|| {
+                    for id in ids {
+                        app.run_action(id);
+                    }
+                    app.editor
+                        .active_tab_mut()
+                        .unwrap()
+                        .editor
+                        .set_cursor(cursor + 3);
+                });
+            });
+        }
+        // Go → Word → Number and Go → Sentence → Number, to the 10th: they
+        // count from the start of the buffer, so they read up to it.
+        let area = app.layout.editor;
+        group.bench_function(BenchmarkId::new("goto_word_and_sentence_10", label), |b| {
+            b.iter(|| {
+                app.editor.goto_word(10, area);
+                app.editor.goto_sentence(10, area);
+            });
+        });
+    }
+    group.finish();
+}
+
+/// Go → Matching Tag (`nav.matching_tag`, T851) there and back, between the
+/// `<li>` and `</li>` of one line of HTML in the middle of the buffer.
+fn bench_matching_tag(c: &mut Criterion) {
+    const FILLER: &str = "<li><a href=\"page.html\">An item</a> and <b>more</b></li>\n";
+    let mut group = c.benchmark_group("editor/matching_tag");
+    group.sample_size(20);
+    for (label, bytes) in [("4KiB", 4 << 10), ("512KiB", 512 << 10), ("8MiB", 8 << 20)] {
+        let (mut app, cursor) = vi_app_filled(&format!("matching-tag-{label}"), bytes, FILLER);
+        let li = cursor - 16 - FILLER.len() + 1;
+        group.bench_function(BenchmarkId::new("there_and_back", label), |b| {
+            b.iter(|| {
+                app.editor.active_tab_mut().unwrap().editor.set_cursor(li);
+                app.run_action("nav.matching_tag");
+                app.run_action("nav.matching_tag");
+            });
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_open,
@@ -391,6 +489,9 @@ criterion_group!(
     bench_line_transforms,
     bench_vi_motions,
     bench_vi_sentences,
-    bench_go_sentences
+    bench_go_sentences,
+    bench_word_highlight,
+    bench_go_words,
+    bench_matching_tag
 );
 criterion_main!(benches);

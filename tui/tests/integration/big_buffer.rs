@@ -368,3 +368,59 @@ fn go_sentence_next_and_previous_make_no_whole_buffer_pass() {
         "Go → Sentence read the whole buffer"
     );
 }
+
+/// T851: Go → Word (Start, End, Next, Previous, Number), Go → Sentence
+/// (Start, End, Number), Go → Matching Tag and Highlight Word read the
+/// rope out from the cursor (or, for Number, from the top to the target),
+/// never a copy of the whole buffer, and land where they should.
+#[test]
+fn go_word_sentence_tag_and_highlight_word_make_no_whole_buffer_pass() {
+    use vix::editor_core::code::full_text_scans;
+    const MIDDLE: &str =
+        "Alpha one. Beta two! Gamma (three)? Delta.\n<ul><li>item</li><li>item</li></ul>\n";
+    let filler = vi_filler();
+    let mut app = vi_app_with("t851-scans", &format!("{filler}{MIDDLE}{filler}"));
+    app.settings.editor_visual.highlight_word = true;
+    let off = filler.chars().count();
+    let at = |s: &str| off + MIDDLE.find(s).unwrap();
+    let area = ratatui::layout::Rect::new(0, 0, 120, 40);
+    let before = full_text_scans();
+    for (from, action, want) in [
+        (at("Beta") + 2, "nav.word_start", at("Beta")),
+        (at("Beta") + 2, "nav.word_end", at("Beta") + 4),
+        (at("Beta") + 2, "nav.word_next", at("two")),
+        (at("two"), "nav.word_prev", at("Beta")),
+        (at("Beta") + 2, "nav.sentence_start", at("Beta")),
+        (at("Beta") + 2, "nav.sentence_end", at("Gamma") - 1),
+        (at("<ul>") + 1, "nav.matching_tag", at("</ul>")),
+        (at("</ul>") + 2, "nav.matching_tag", at("<ul>")),
+    ] {
+        set_vi_cursor(&mut app, from);
+        app.run_action(action);
+        assert_eq!(vi_cursor(&app), want, "{action} from {from}");
+        assert_eq!(full_text_scans(), before, "{action} read the whole buffer");
+    }
+    app.editor.goto_word(3, area);
+    assert_eq!(vi_cursor(&app), "filler words, ".len(), "Go → Word → 3");
+    app.editor.goto_sentence(2, area);
+    assert_eq!(
+        vi_cursor(&app),
+        "filler words, filler words. ".len(),
+        "Go → Sentence → 2"
+    );
+    set_vi_cursor(&mut app, at("item") + 1);
+    app.refresh_word_highlight();
+    let marks = app
+        .editor
+        .active_tab()
+        .unwrap()
+        .editor
+        .word_marks()
+        .cloned();
+    let second = at("item</li></ul>");
+    assert_eq!(
+        marks,
+        Some(vec![(at("item"), at("item") + 4), (second, second + 4)])
+    );
+    assert_eq!(full_text_scans(), before, "a whole-buffer pass");
+}

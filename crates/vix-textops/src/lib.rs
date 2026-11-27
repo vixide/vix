@@ -247,6 +247,125 @@ impl SentenceScan {
     }
 }
 
+/// Byte ranges of the first `cap` whole-word occurrences of `word` in the
+/// text made of `chunks` (a rope's chunks, say), left to right, reading
+/// the chunks once without joining them (T851).
+///
+/// A whole-word occurrence is not preceded or followed by a word char
+/// (alphanumeric or `_`); after one, the search resumes at its end, after
+/// a rejected match at the char after its start, as Highlight Word always
+/// did. Empty `word` or `cap` of 0 finds nothing. Offsets are bytes into
+/// the whole text; a caller holding a rope converts them with
+/// `byte_to_char`.
+///
+/// # Examples
+/// ```
+/// let found = vix_textops::whole_word_matches(["foo bar fo", "o foobar foo"], "foo", 10);
+/// assert_eq!(found, vec![(0, 3), (8, 11), (19, 22)]);
+/// ```
+#[must_use]
+pub fn whole_word_matches<'a>(
+    chunks: impl IntoIterator<Item = &'a str>,
+    word: &str,
+    cap: usize,
+) -> Vec<(usize, usize)> {
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let mut out = Vec::new();
+    let Some(step) = word.chars().next().map(char::len_utf8) else {
+        return out;
+    };
+    if cap == 0 {
+        return out;
+    }
+    // `buf` holds the text from byte `base` on, of which only starts at or
+    // after byte `next` are still to be decided; it keeps one char before
+    // `next` so the char before a match is always in it.
+    let mut buf = String::new();
+    let mut base = 0usize;
+    let mut next = 0usize;
+    let mut chunks = chunks.into_iter().peekable();
+    while let Some(chunk) = chunks.next() {
+        buf.push_str(chunk);
+        let last = chunks.peek().is_none();
+        let mut from = floor_char_boundary(&buf, sub_or(next, base, 0));
+        while let Some(k) = buf.get(from..).and_then(|rest| rest.find(word)) {
+            let Some(s) = from.checked_add(k) else { break };
+            let Some(e) = s.checked_add(word.len()) else {
+                break;
+            };
+            let abs = add_or(base, s, usize::MAX);
+            if abs < next {
+                from = s.checked_add(step).unwrap_or(buf.len());
+                continue;
+            }
+            // The char after a match at the chunk's end comes with the next.
+            if e == buf.len() && !last {
+                break;
+            }
+            let before_ok = !buf
+                .get(..s)
+                .and_then(|b| b.chars().next_back())
+                .is_some_and(is_word);
+            let after_ok = !buf
+                .get(e..)
+                .and_then(|a| a.chars().next())
+                .is_some_and(is_word);
+            if before_ok && after_ok {
+                out.push((abs, add_or(base, e, usize::MAX)));
+                if out.len() >= cap {
+                    return out;
+                }
+                from = e;
+            } else {
+                from = s.checked_add(step).unwrap_or(buf.len());
+            }
+            next = add_or(base, from, usize::MAX);
+        }
+        if last {
+            break;
+        }
+        // Every start that leaves a char after the word is decided now.
+        let decided = base.checked_add(sub_or(buf.len(), word.len(), 0));
+        next = next.max(decided.unwrap_or(next));
+        let keep_from = floor_char_boundary(&buf, sub_or(next, base, 0));
+        let keep = buf
+            .get(..keep_from)
+            .and_then(|b| b.char_indices().next_back())
+            .map_or(0, |(i, _)| i);
+        buf.drain(..keep);
+        base = base.checked_add(keep).unwrap_or(base);
+    }
+    out
+}
+
+/// `a - b`, or the declared `fallback` when it would go below zero. In
+/// [`whole_word_matches`] every use has `a >= b` (the decided offset never
+/// falls behind the buffer's base; a boundary search above byte 0), so the
+/// fallback of 0 is never taken. A parameter, so each call names it;
+/// written inline, `checked_sub(..).unwrap_or(0)` is rewritten by Clippy to
+/// `saturating_sub`, which the checked-arithmetic spec forbids.
+fn sub_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_sub(b).unwrap_or(fallback)
+}
+
+/// `a + b`, or the declared `fallback` when the sum does not fit: byte
+/// offsets into one text, which fit in `usize` (see [`sub_or`] for why the
+/// fallback is a parameter).
+fn add_or(a: usize, b: usize, fallback: usize) -> usize {
+    a.checked_add(b).unwrap_or(fallback)
+}
+
+/// The largest char boundary of `s` at or below byte `i` (its length
+/// when `i` is past it).
+fn floor_char_boundary(s: &str, i: usize) -> usize {
+    let mut i = i.min(s.len());
+    while !s.is_char_boundary(i) {
+        // Byte 0 is always a boundary, so `i` is above 0 here.
+        i = sub_or(i, 1, 0);
+    }
+    i
+}
+
 /// Char offsets where each sentence begins: the first non-space char, then the
 /// first non-space char after any `.`/`!`/`?` (plus trailing quotes/brackets)
 /// followed by whitespace. Shared by the Go → Sentence navigation and
@@ -961,6 +1080,107 @@ pub fn tag_column(line: &str, tag: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Highlight Word's search as it was before T851, on a copy of the
+    /// whole text as chars: char ranges of the first `cap` whole-word
+    /// occurrences.
+    fn old_word_marks(text: &str, word: &str, cap: usize) -> Vec<(usize, usize)> {
+        let chars: Vec<char> = text.chars().collect();
+        let wlen = word.chars().count();
+        let is_word = |c: char| c.is_alphanumeric() || c == '_';
+        let mut marks = Vec::new();
+        let mut i = 0;
+        while i + wlen <= chars.len() {
+            if chars[i..i + wlen].iter().copied().eq(word.chars())
+                && (i == 0 || !is_word(chars[i - 1]))
+                && !chars.get(i + wlen).copied().is_some_and(is_word)
+            {
+                marks.push((i, i + wlen));
+                i += wlen;
+                if marks.len() >= cap {
+                    break;
+                }
+            } else {
+                i += 1;
+            }
+        }
+        marks
+    }
+
+    /// [`whole_word_matches`] over `text` cut into chunks at the char
+    /// offsets `cuts`, as char ranges.
+    fn chunked_word_marks(
+        text: &str,
+        cuts: &[usize],
+        word: &str,
+        cap: usize,
+    ) -> Vec<(usize, usize)> {
+        let bytes_at: Vec<usize> = text
+            .char_indices()
+            .map(|(b, _)| b)
+            .chain([text.len()])
+            .collect();
+        let mut points: Vec<usize> = cuts.iter().map(|&c| bytes_at[c % bytes_at.len()]).collect();
+        points.extend([0, text.len()]);
+        points.sort_unstable();
+        points.dedup();
+        let chunks: Vec<&str> = points.windows(2).map(|w| &text[w[0]..w[1]]).collect();
+        let to_char = |b: usize| bytes_at.iter().position(|&x| x == b).unwrap();
+        whole_word_matches(chunks, word, cap)
+            .into_iter()
+            .map(|(s, e)| (to_char(s), to_char(e)))
+            .collect()
+    }
+
+    #[test]
+    fn whole_word_matches_agree_with_the_old_char_scan_on_a_table() {
+        for (text, word) in [
+            ("foo bar foo foobar foo", "foo"),
+            ("", "a"),
+            ("a", "a"),
+            ("aaa aa a", "aa"),
+            ("ab ab_ab ab", "ab"),
+            ("日本 日本語 日本", "日本"),
+            ("é é_é é", "é"),
+        ] {
+            let n = text.chars().count();
+            for cut in 0..=n {
+                for cap in [1, 2, 500] {
+                    assert_eq!(
+                        chunked_word_marks(text, &[cut, cut + 1, cut + 3], word, cap),
+                        old_word_marks(text, word, cap),
+                        "{word:?} in {text:?} cut at {cut}, cap {cap}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn whole_word_matches_find_nothing_for_an_empty_word_or_cap() {
+        assert_eq!(whole_word_matches(["x y"], "", 5), Vec::new());
+        assert_eq!(whole_word_matches(["x y"], "x", 0), Vec::new());
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 512, ..ProptestConfig::default() })]
+        #[test]
+        fn whole_word_matches_agree_with_the_old_char_scan(
+            chars in proptest::collection::vec(
+                proptest::sample::select(vec!['a', 'a', 'b', '_', 'é', '日', ' ', '\n', '.', '1']),
+                0..80,
+            ),
+            word in proptest::sample::select(vec!["a", "ab", "aa", "é", "a_é", "日a", "ba1"]),
+            cuts in proptest::collection::vec(0usize..100, 0..12),
+            cap in 1usize..6,
+        ) {
+            let text: String = chars.into_iter().collect();
+            prop_assert_eq!(
+                chunked_word_marks(&text, &cuts, word, cap),
+                old_word_marks(&text, word, cap)
+            );
+        }
+    }
 
     #[test]
     fn bump_number_increments_and_decrements() {

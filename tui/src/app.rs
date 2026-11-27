@@ -5389,7 +5389,13 @@ impl App {
             return;
         };
         let cursor = t.editor.get_cursor();
-        match crate::tags::matching_tag(&t.editor.get_content(), cursor) {
+        // Read the rope out from the cursor, not a copy of the buffer (T851).
+        let rope = t.editor.code_ref().rope();
+        let back = |at: usize| {
+            let mut chars = rope.chars_at(at);
+            std::iter::from_fn(move || chars.prev())
+        };
+        match crate::tags::matching_tag_in(rope.len_chars(), cursor, |at| rope.chars_at(at), back) {
             Some(off) => {
                 let area = self.editor_view();
                 self.editor.goto_offset(off, area);
@@ -6060,29 +6066,13 @@ impl App {
         let Some(tab) = self.editor.active_tab() else {
             return;
         };
-        let content = tab.editor.get_content();
-        let chars: Vec<char> = content.chars().collect();
-        let wlen = word.chars().count();
-        let is_word = |c: char| c.is_alphanumeric() || c == '_';
-        let mut marks = Vec::new();
-        // Whole-word occurrences of `word`, capped to keep the pass cheap.
-        let mut i = 0;
-        while i.plus(wlen) <= chars.len() {
-            if chars
-                .get(i..i.plus(wlen))
-                .is_some_and(|w| w.iter().copied().eq(word.chars()))
-                && (i == 0 || !chars.get(i.minus(1)).copied().is_some_and(is_word))
-                && !chars.get(i.plus(wlen)).copied().is_some_and(is_word)
-            {
-                marks.push((i, i.plus(wlen)));
-                i = i.plus(wlen);
-                if marks.len() >= 500 {
-                    break;
-                }
-            } else {
-                i = i.plus(1);
-            }
-        }
+        // Whole-word occurrences of `word`, capped to keep the pass cheap,
+        // searched over the rope's chunks without copying the buffer (T851).
+        let rope = tab.editor.code_ref().rope();
+        let marks: Vec<(usize, usize)> = vix_textops::whole_word_matches(rope.chunks(), &word, 500)
+            .into_iter()
+            .map(|(s, e)| (rope.byte_to_char(s), rope.byte_to_char(e)))
+            .collect();
         // A single occurrence (the word itself) isn't worth highlighting.
         self.editor
             .set_word_marks(if marks.len() > 1 { marks } else { Vec::new() });
@@ -13089,27 +13079,7 @@ impl App {
         if tab.is_image() {
             return None;
         }
-        let text = tab.text();
-        let cursor = tab.editor.get_cursor();
-        let chars: Vec<char> = text.chars().collect();
-        let is_word = |c: char| c.is_alphanumeric() || c == '_';
-        let mut start = cursor.min(chars.len());
-        while start > 0 && chars.get(start.minus(1)).copied().is_some_and(is_word) {
-            start = start.minus(1);
-        }
-        let mut end = cursor.min(chars.len());
-        while chars.get(end).copied().is_some_and(is_word) {
-            end = end.plus(1);
-        }
-        if start == end {
-            return None;
-        }
-        let sym: String = chars.get(start..end)?.iter().collect();
-        let ok = sym
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_alphabetic() || c == '_');
-        ok.then_some(sym)
+        symbol_at(tab.editor.code_ref().rope(), tab.editor.get_cursor())
     }
 
     /// Heuristic definition search for `symbol` across the workspace index and open buffers:
@@ -15357,6 +15327,31 @@ mod app_tests_r3a;
 #[path = "app_tests_r4a.rs"]
 mod app_tests_r4a;
 
+/// The identifier around char offset `cursor` in `rope` (clamped to its
+/// end): the run of word chars (alphanumeric or `_`) touching it, when that
+/// run starts with a letter or `_`. Reads the rope out from the cursor only
+/// as far as the run reaches, not a copy of the buffer (T851).
+fn symbol_at(rope: &ropey::Rope, cursor: usize) -> Option<String> {
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let at = cursor.min(rope.len_chars());
+    let mut back = rope.chars_at(at);
+    let mut before = 0usize;
+    while back.prev().is_some_and(is_word) {
+        before = before.plus(1);
+    }
+    let after = rope.chars_at(at).take_while(|&c| is_word(c)).count();
+    if before == 0 && after == 0 {
+        return None;
+    }
+    let start = at.minus(before);
+    let sym: String = rope.slice(start..at.plus(after)).chars().collect();
+    let ok = sym
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_');
+    ok.then_some(sym)
+}
+
 #[cfg(test)]
 mod tests {
     #[cfg(not(feature = "jj"))]
@@ -16016,6 +16011,47 @@ mod tests {
             "all three 'foo' occurrences marked: {marks:?}"
         );
         assert_eq!(marks[0], (0, 3));
+    }
+
+    /// T851: `symbol_at` (the rope scan behind Highlight Word and the
+    /// other symbol-under-cursor commands) gives the old answer, computed
+    /// on a copy of the text as chars, at every cursor position of a table
+    /// of texts and one past the end.
+    #[test]
+    fn symbol_at_matches_the_old_whole_text_scan() {
+        fn old(text: &str, cursor: usize) -> Option<String> {
+            let chars: Vec<char> = text.chars().collect();
+            let is_word = |c: char| c.is_alphanumeric() || c == '_';
+            let mut start = cursor.min(chars.len());
+            while start > 0 && is_word(chars[start - 1]) {
+                start -= 1;
+            }
+            let mut end = cursor.min(chars.len());
+            while chars.get(end).copied().is_some_and(is_word) {
+                end += 1;
+            }
+            let sym: String = chars[start..end].iter().collect();
+            sym.chars()
+                .next()
+                .is_some_and(|c| c.is_alphabetic() || c == '_')
+                .then_some(sym)
+        }
+        for text in [
+            "",
+            "foo",
+            "foo bar_9 9x _y é日本 (a)",
+            "  \n\tz",
+            &"word_one, two3 ".repeat(200),
+        ] {
+            let rope = ropey::Rope::from_str(text);
+            for cursor in 0..=text.chars().count() + 1 {
+                assert_eq!(
+                    super::symbol_at(&rope, cursor),
+                    old(text, cursor),
+                    "{cursor}"
+                );
+            }
+        }
     }
 
     #[test]

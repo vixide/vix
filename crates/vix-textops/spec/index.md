@@ -36,6 +36,17 @@ to the start it finds. All three give exactly the starts of the pre-T830
 whole-text scan, which the tests keep as an oracle and compare at every
 offset of a table of texts and of proptest-generated ones.
 
+**Whole-word search over chunks (T851).** `whole_word_matches(chunks, word,
+cap)` returns the byte ranges of the first `cap` whole-word occurrences of
+`word` (not preceded or followed by an alphanumeric char or `_`) in the
+text made of `chunks`, left to right: after an occurrence the search goes on
+at its end, after a rejected match at the char after its start. It reads each
+chunk once (a rope's `chunks()`), keeping only the few bytes around a chunk
+boundary that a match could straddle, so Highlight Word never copies the
+buffer; empty `word` or `cap` 0 finds nothing. A test compares it with the
+pre-T851 char scan on a table and on proptest-generated texts cut into
+chunks at random places.
+
 `wrap` refills text at a given width, treating blank lines and list bullets as
 chunk boundaries and keeping each chunk's indentation, shared comment/quote
 marker, and hanging bullet indent (see `crates/vix-editor/spec/wrap/index.md`).
