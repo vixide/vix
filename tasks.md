@@ -11016,6 +11016,7 @@ Fix boundaries of everyday edits before adding Vi features.
   largest messages), drop the connection with a translated error past it.
   See `docs/threat-model.md`.
 - [x] **T849 — Every keymap binding runs a real action.** (Done: Eclipse `C-d`, IntelliJ Windows `C-y` and ttt `C-k k` were bound to `edit.delete_line`, which no `run_action` arm handles; now `delete_line`. `tui/tests/action_catalog.rs` checks every built-in binding against the dispatch scan, which gained `run_text_transform_action` and the two multi-cursor dispatchers it had missed.) Found by T827.
+- [ ] **T851 — Navigation and highlight paths that copy the whole buffer.** Found while fixing Go → Sentence (T830): `refresh_word_highlight` in `tui/src/app.rs` copies the whole buffer, possibly on every keystroke — measure first; `goto_matching_tag` (`get_content()`); in `crates/vix-editor/src/editor.rs`, `cursor_sentence_start`/`goto_sentence`/`cursor_sentence_end` and the word navigation (`cursor_word_start`/`next`/`prev`/`end`, `goto_word`) call `sentence_starts`/`word_starts` on `get_content()` or collect it into a `Vec<char>`. Move each to rope- and line-local scans like T843/T830 did (same results, tested against the old code; benches at 4 KiB / 512 KiB / 8 MiB; add each to the big-buffer `full_text_scans` guard).
 
 ## Ideas backlog (unscoped)
 
