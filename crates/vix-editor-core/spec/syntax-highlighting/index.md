@@ -66,7 +66,12 @@ Edits reparse incrementally: the tree is told what changed (`InputEdit`) and
 Tree-sitter reuses the untouched subtrees. Buffers at or above
 `ASYNC_PARSE_THRESHOLD` (50 KB) reparse on a background thread and install the
 result when it arrives, with stale results rejected by an edit generation
-counter, so typing in a large file never blocks on a parse.
+counter, so typing in a large file never blocks on a parse. A newer edit
+cancels the parse in flight; the worker then resets its parser before the
+next request (T859). Tree-sitter otherwise resumes a cancelled parse on the
+next call, so the next snapshot was parsed as the continuation of the old
+one: its tree could hold the old text's nodes, and the half-finished state
+grew by about 0.13 MiB per superseded keystroke at 7 MiB of Rust.
 
 ## The initial parse is async too (T121)
 
