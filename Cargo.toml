@@ -11,7 +11,10 @@ default-members = ["tui"]
 # content — a project a tutorial opens *inside* Vix, not a crate Vix itself
 # builds — so it's excluded rather than swept in by a workspace glob or left
 # to error as an orphaned nested manifest.
-exclude = ["tui/examples/demo-workspace/rust-app"]
+exclude = [
+    "tui/examples/demo-workspace/rust-app",
+    "tui/examples/vim-exercise",
+]
 
 # Metadata shared by the `vix-tui` package and every `crates/vix-*` member, so
 # version/edition/license/etc. are declared once and inherited with

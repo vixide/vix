@@ -932,3 +932,7 @@ pdftoppm
 
 # Vim internals named in the modal-engine spec (T838)
 curswant
+nocompatible
+makeprg
+errorformat
+undolist

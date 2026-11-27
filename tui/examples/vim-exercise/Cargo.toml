@@ -1,0 +1,11 @@
+[package]
+name = "vim-exercise"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Its own workspace: this exercise lives inside the Vix repository, whose root
+# Cargo.toml would otherwise claim it. See docs/vix-for-vim-users/index.md.
+[workspace]
+
+[dependencies]

@@ -1,131 +1,245 @@
 # Vix™ for Vim users
 
-You live in a terminal. You think in motions. You have a `.vimrc` you have been
-tending for a decade, and every other editor feels like typing through
-molasses. Fair — so did we. This page is an honest pitch: what Vix gives you on
-day one, where it genuinely beats a stock Vim setup, where Vim still wins, and
-how to try Vix for an afternoon without betraying your muscle memory.
+You think in motions and you have a `.vimrc` you have tended for years. This
+page is for trying Vix without giving that up: a ten-minute exercise you run on
+a real (tiny) project, then an exact account of which Vim keys behave the same,
+which behave differently, and what Vix adds on top. Every parity claim here
+comes from one table that CI runs against Vix on every change and against an
+unconfigured Vim in a separate job, so the page cannot quietly drift from what
+the editor does.
 
-## The one-minute pitch
+## Turn on the Vi keymap
 
-Vix is a terminal IDE written in Rust: one static binary, no runtime, no plugin
-manager, no config archaeology. It ships with the things you would otherwise
-assemble from twenty plugins — LSP, a DAP debugger, Tree-sitter highlighting,
-fuzzy finding, git hunk staging, an integrated terminal, snippets, multi-cursor
-editing, and a persistent branching undo tree — already wired together and
-turned on. And it has a **Vi keymap**, so `hjkl`, `dd`, `gg`, and `:wq` work the
-moment you launch it.
+Set `keymap = "vi"` in `config.toml`, or pick **View -> Keymap -> Vi** (or open
+the command palette with `Ctrl+P` and type `keymap`). The status bar shows
+`-- NORMAL --`. The **Spacemacs** keymap is the same Vi Normal mode plus a
+`Space` leader with a which-key popup.
+
+## Three kinds of behavior
+
+The rest of this page keeps these apart:
+
+- **Stock Vim**: keys that mean the same in an unconfigured Vim (`vim -u NONE`,
+  no plugins). Rows of this kind in the table are checked against a real Vim.
+- **Optional Vix**: things Vix adds that a stock Vim has no keys for: Tree-sitter
+  text objects (`cia`, `daf`, `]f`), the undo tree view, menus and the command
+  palette. In Vim each of these is a plugin you would install and configure.
+- **External tools**: behavior that runs another program. Test at point runs
+  `cargo test` (or your project's test runner), staging a hunk runs `git`, and
+  `:cn` walks the problems parsed from a task's output, much as Vim's `:make`
+  fills the quickfix list through `makeprg` and `errorformat`.
+
+## A ten-minute migration exercise
+
+The repository ships a tiny Rust crate with one bug in two places,
+`tui/examples/vim-exercise`. It needs only `cargo` and `git` and no network.
+Copy it out and make it a git repository, so the last step has something to
+stage:
 
 ```sh
-cargo run                    # open Vix in the current directory
-# then: View -> Keymap -> Vi (or the command palette: "keymap")
+cp -R tui/examples/vim-exercise /tmp/vim-exercise
+cd /tmp/vim-exercise && git init -q && git add -A && git commit -qm start
+vix src/lib.rs                # with keymap = "vi"
 ```
 
-## What works out of the box
+The automated test `tui/tests/integration/vim_exercise.rs` types exactly these
+keys into Vix, runs the real `cargo` and `git`, and checks every step's result.
 
-Switch to the Vi keymap and the status bar shows `-- NORMAL --`, exactly where
-you expect it. Currently supported:
+1. **Run the test at point.** `/a_quarter<CR><Esc>` puts the cursor on the test
+   `a_quarter_is_25_percent` (stock Vim keys; the `<Esc>` hands the keyboard
+   back from Vix's find bar and is harmless in Vim). Then **Project -> Test at
+   Point** runs just that test (external tool: `cargo test -- --exact
+   tests::a_quarter_is_25_percent`). It fails: `percent(1, 4)` is `2`, not `25`.
+2. **Jump to the failure.** `:cn<CR>` goes to the first problem the run
+   reported, the failing `assert_eq!` on line 24 (the panic location is parsed
+   from the test output, like Vim's quickfix list).
+3. **Edit the argument.** `gg/10<CR><Esc>` finds the wrong scale, and
+   `ciw100<Esc>` changes it (stock Vim). With a Tree-sitter grammar, `cia`
+   changes the whole argument whatever it looks like (optional Vix).
+4. **Repeat.** `n.` finds the same mistake in `percent_label` and repeats the
+   change (stock Vim).
+5. **Take a detour through the undo tree.** `u` undoes the repeat, and
+   `0f1ciw50<Esc>` makes a different change instead: the undo history now has
+   two branches. **Edit -> Undo Tree…** shows them; `Up` previews the other
+   branch live (both scales `100`), `Enter` keeps it and `Esc` would put
+   everything back (optional Vix: Vim keeps the same tree and walks it with
+   `g-`/`g+` and `:undolist`, but draws it only with a plugin).
+6. **Rerun the test.** `:w<CR>`, then `gg/a_quarter<CR><Esc>` and **Project ->
+   Test at Point** again: it passes.
+7. **Stage the fix.** `:6<CR>` and **Git -> Stage Hunk**, then `:11<CR>` and
+   **Git -> Stage Hunk** stage the two changed lines (external tool: `git`);
+   `git diff --cached` in a shell shows both.
 
-| Vim habit | In Vix |
-| --------- | ------ |
-| `h` `j` `k` `l` | Motions, plus the arrow keys |
-| `w` / `b` | Next / previous word |
-| `0` / `^` / `$` | Line start / first non-blank / line end |
-| `gg` / `G` | File start / end |
-| `x`, `dd`, `yy`, `p` | Delete char, cut line, copy line, paste |
-| `u` | Undo (backed by a branching, *persistent* undo tree) |
-| `/` then `n` / `N` | Search, next / previous match |
-| `%` | Jump to the matching bracket |
-| `i` `a` `I` `A` `o` `O` | Enter Insert mode the usual ways |
-| `Esc` | Back to Normal mode |
-| `:w` `:q` `:q!` `:wq` `:x` | The classics |
-| `:42` | Go to line 42 |
-| `:e path` | Open a file |
-| `:Ex` | Open the file explorer (a netrw nod) |
+## The parity table
 
-If you prefer a leader-key workflow, try the **Spacemacs keymap** instead: it is
-Vi-modal editing plus a `Space` leader (`SPC f f` find file, `SPC g s` git
-status, `SPC w /` split, …), with a which-key popup that shows the candidate
-keys while you hesitate. Many Vim users find it the best of both worlds.
+Each row is a key sequence typed into a fresh buffer: the buffer before and
+after (`¦` is the cursor, `⏎` a line break; every buffer ends in a line break,
+not shown), the mode afterwards, and the row's kind. For a stock-Vim row the last
+column says whether an unconfigured Vim does the same; where it does not, it
+gives Vim's result and why, and the "After in Vix" column is what Vix does
+today. The rows put deletions and yanks in register `a` (`"a`), which Vix and
+Vim share; the unnamed register is the system clipboard in Vix.
 
-## Where Vix beats a stock Vim
+The table lives in `tui/tests/integration/vim_parity.rs`; this section is
+generated from it (`VIX_UPDATE_VIM_PARITY=1 cargo test -p vix-tui --lib
+vim_parity`), and the CI job that runs `stock_rows_match_an_unconfigured_vim`
+fails if Vim stops agreeing with a row.
 
-- **Zero assembly required.** LSP (diagnostics, rename, references, code
-  actions, call hierarchy), a debugger, Tree-sitter, fuzzy finder, git hunk
-  staging, terminal, test runner: in Vim these are `nvim-lspconfig` +
-  `nvim-dap` + `telescope` + `gitsigns` + a weekend. In Vix they are menu
-  items that already work.
-- **Discoverability without leaving the keyboard.** Menus (`F10`), a command
-  palette (`Ctrl+P`, `>` for commands), and `F1` for every shortcut. You never
-  need to remember whether it was `:vsplit` or `:vs` — though `:` still works.
-- **Relative line numbers, jump labels, and friends.** `View -> Editor ->
-  Relative Line Numbers` for count-free vertical jumps; `Go -> Jump to Line`
-  gives leap/EasyMotion-style labels with no plugin.
-- **Persistent undo by default.** The undo *tree* (not a line) survives closing
-  the file, guarded by a content hash. Vim needs `undofile` plus an undo-tree
-  plugin to match this.
-- **Safety.** Rust, `#![forbid(unsafe_code)]`, no exploit-friendly embedded
-  script runtime. Your editor is not also a package manager.
-- **Modern niceties Vim needs plugins for**: clipboard history, minimap,
-  sticky scroll, indent guides, rainbow brackets, word-occurrence highlighting,
-  Org mode with roam-style notes, an HTTP client, and a spreadsheet-style CSV
-  editor — all built in, all optional.
+<!-- vim-parity-table:begin (generated by tui/tests/integration/vim_parity.rs) -->
+<!-- cspell:disable -->
+
+| Keys | Before | After in Vix | Mode | Kind | Same in Vim? |
+| ---- | ------ | ------------ | ---- | ---- | ------------ |
+| `3l` | `¦hello world` | `hel¦lo world` | Normal | stock Vim | yes |
+| `$` | `¦hello` | `hell¦o` | Normal | stock Vim | yes |
+| `0` | `  ab¦c` | `¦  abc` | Normal | stock Vim | yes |
+| `^` | `  ab¦c` | `  ¦abc` | Normal | stock Vim | yes |
+| `w` | `¦pkg::run(arg);` | `pkg¦::run(arg);` | Normal | stock Vim | yes |
+| `3w` | `¦pkg::run(arg);` | `pkg::run¦(arg);` | Normal | stock Vim | yes |
+| `b` | `foo ba¦r` | `foo ¦bar` | Normal | stock Vim | yes |
+| `e` | `¦foo bar` | `fo¦o bar` | Normal | stock Vim | yes |
+| `W` | `¦a.b c` | `¦a.b c` | Normal | stock Vim | no: Vim gives `a.b ¦c`. WORD motions (`W` `B` `E`) are not implemented: the key does nothing |
+| `gg` | `one⏎two⏎th¦ree` | `¦one⏎two⏎three` | Normal | stock Vim | yes |
+| `G` | `¦one⏎two⏎three` | `one⏎two⏎¦three` | Normal | stock Vim | yes |
+| `2G` | `¦one⏎two⏎three` | `one⏎¦two⏎three` | Normal | stock Vim | yes |
+| `4ljj` | `¦abcdef⏎x⏎abcdef` | `abcdef⏎x⏎abcd¦ef` | Normal | stock Vim | yes: the column is kept across a shorter line |
+| `2f.` | `¦a.b.c` | `a.b¦.c` | Normal | stock Vim | yes |
+| `t.` | `¦ab.c` | `a¦b.c` | Normal | stock Vim | yes |
+| `F.` | `a.b.¦c` | `a.b¦.c` | Normal | stock Vim | yes |
+| `T.` | `a.b.¦c` | `a.b.¦c` | Normal | stock Vim | yes |
+| `f.;` | `¦a.b.c` | `a¦.b.c` | Normal | stock Vim | no: Vim gives `a.b¦.c`. `;` and `,` (repeat the last `f`/`t`) are not implemented |
+| `}` | `¦one⏎two⏎⏎three` | `one⏎two⏎⏎¦three` | Normal | stock Vim | no: Vim gives `one⏎two⏎¦⏎three`. `}` stops on the next paragraph's first line, not on the blank line before it (a parity bug) |
+| `)` | `¦One. Two.` | `One. ¦Two.` | Normal | stock Vim | yes |
+| `%` | `¦(a [b] c)` | `(a [b] c¦)` | Normal | stock Vim | yes |
+| `*` | `¦foo bar foo` | `¦foo bar foo` | Normal | stock Vim | no: Vim gives `foo bar ¦foo`. `*` and `#` are not implemented |
+| `/bar<CR>` | `¦foo bar` | `foo ¦bar` | Normal | stock Vim | yes: `/` opens Vix's find bar |
+| `/o<CR>n` | `¦xo o` | `xo ¦o` | Normal | stock Vim | yes |
+| `/bar<CR>"ax` | `¦foo bar` | `foo ¦bar` | Normal | stock Vim | no: Vim gives `foo ¦ar`. after `/pattern<CR>` the find bar keeps the keyboard until `<Esc>`, so the next keys edit the search, not the buffer (a parity bug) |
+| `/bar<CR><Esc>"ax` | `¦foo bar` | `foo ¦ar` | Normal | stock Vim | yes |
+| `"adw` | `¦foo bar` | `¦bar` | Normal | stock Vim | yes |
+| `"ade` | `¦foo bar` | `¦ bar` | Normal | stock Vim | yes |
+| `"add` | `¦one⏎  two` | `  ¦two` | Normal | stock Vim | yes |
+| `"a2dd` | `¦one⏎two⏎three` | `¦three` | Normal | stock Vim | yes |
+| `"adw` | `foo ¦bar⏎baz` | `foo¦ ⏎baz` | Normal | stock Vim | yes: `dw` on a line's last word keeps the line break |
+| `"ad$` | `fo¦o bar` | `f¦o` | Normal | stock Vim | yes |
+| `"aD` | `fo¦o bar` | `fo¦o bar` | Normal | stock Vim | no: Vim gives `f¦o`. `D` is not bound (`d$` is) |
+| `"ax` | `¦abc` | `¦bc` | Normal | stock Vim | yes |
+| `"a3x` | `¦abcd` | `¦d` | Normal | stock Vim | yes |
+| `"aX` | `ab¦c` | `ab¦c` | Normal | stock Vim | no: Vim gives `a¦c`. `X` is not bound (`dh` is) |
+| `"adf.` | `¦a.b.c` | `¦b.c` | Normal | stock Vim | yes |
+| `"a2d3w` | `¦a b c d e f g h` | `¦g h` | Normal | stock Vim | yes: the two counts multiply |
+| `"adj` | `¦one⏎two⏎three` | `¦three` | Normal | stock Vim | yes |
+| `"adG` | `one⏎¦two⏎three` | `¦one` | Normal | stock Vim | yes |
+| `"acwX<Esc>` | `¦foo bar` | `X¦ bar` | Normal | stock Vim | no: Vim gives `¦X bar`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `"accX<Esc>` | `  fo¦o⏎bar` | `X¦⏎bar` | Normal | stock Vim | no: Vim gives `¦X⏎bar`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug); an unconfigured Vim has `noautoindent`, so neither keeps the indent |
+| `"aCX<Esc>` | `fo¦o bar` | `fo¦o bar` | Normal | stock Vim | no: Vim gives `fo¦X`. `C` is not bound (`c$` is), and neither is the `X` typed after it |
+| `"asX<Esc>` | `¦abc` | `¦abc` | Normal | stock Vim | no: Vim gives `¦Xbc`. `s` is not bound (`cl` is) |
+| `rX` | `¦abc` | `¦abc` | Normal | stock Vim | no: Vim gives `¦Xbc`. `r` is not bound |
+| `~` | `¦abc` | `¦abc` | Normal | stock Vim | no: Vim gives `A¦bc`. `~` is not implemented |
+| `J` | `¦one⏎two` | `¦one⏎two` | Normal | stock Vim | no: Vim gives `one¦ two`. `J` is not bound |
+| `>>` | `¦one` | `¦one` | Normal | stock Vim | no: Vim gives `	¦one`. `>` and `<` are not implemented |
+| `"ayy"ap` | `¦one⏎two` | `one⏎¦one⏎two` | Normal | stock Vim | yes |
+| `"ayw"aP` | `¦foo bar` | `foo¦ foo bar` | Normal | stock Vim | yes |
+| `"ayl"a3p` | `¦ab` | `aaa¦ab` | Normal | stock Vim | yes |
+| `"ayiw` | `foo b¦ar` | `foo ¦bar` | Normal | stock Vim | yes |
+| `"adiw` | `foo b¦ar baz` | `foo ¦ baz` | Normal | stock Vim | yes |
+| `"adaw` | `foo b¦ar baz` | `foo ¦baz` | Normal | stock Vim | yes |
+| `"adi(` | `f(a, ¦b)` | `f(¦)` | Normal | stock Vim | yes |
+| `"adib` | `f(a, ¦b)` | `f(¦)` | Normal | stock Vim | yes |
+| `"ada"` | `say "h¦i" now` | `say ¦ now` | Normal | stock Vim | no: Vim gives `say ¦now`. `a"` leaves the white space after the closing quote (a parity bug) |
+| `"aci{X<Esc>` | `{ a¦b }` | `{X¦}` | Normal | stock Vim | no: Vim gives `{¦X}`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `"adi<lt>` | `<a¦b>` | `<¦>` | Normal | stock Vim | yes |
+| `"adip` | `one⏎tw¦o⏎⏎three` | `one⏎tw¦o⏎⏎three` | Normal | stock Vim | no: Vim gives `¦⏎three`. `ip`/`ap` and `is`/`as` are not implemented: the operator is cancelled |
+| `v` | `¦abc` | `¦abc` | Visual | stock Vim | yes |
+| `V` | `¦abc` | `abc⏎¦` | Visual Line | stock Vim | no: Vim gives `¦abc`. Visual Line puts the cursor on the start of the next line (a parity bug) |
+| `vll"ad` | `¦hello` | `¦lo` | Normal | stock Vim | yes |
+| `Vj"ad` | `¦one⏎two⏎three` | `¦three` | Normal | stock Vim | yes |
+| `viw"ay` | `foo b¦ar` | `foo ¦bar` | Normal | stock Vim | yes |
+| `"avlld` | `¦hello` | `¦lo` | Normal | stock Vim | no: Vim gives `¦lo`. same text, but a `"a` typed before `v` selects the register in Vix; Vim drops it and writes the unnamed register |
+| `vw"ad` | `¦foo bar` | `foo ¦ar` | Normal | stock Vim | no: Vim gives `¦ar`. Visual mode moves with `h` `j` `k` `l` only: `w` moves the cursor and drops the selection |
+| `vl"ad.` | `¦abcdef` | `¦cdef` | Normal | stock Vim | no: Vim gives `¦ef`. a Visual operator is not dot-repeatable: `.` does nothing |
+| `"adw.` | `¦a b c` | `¦c` | Normal | stock Vim | yes |
+| `"a2dw3.` | `¦a b c d e f g` | `¦f g` | Normal | stock Vim | yes: a count before `.` replaces the recorded one |
+| `"ax.` | `¦abc` | `¦c` | Normal | stock Vim | yes |
+| `"aciwX<Esc>w.` | `¦foo bar` | `X X¦` | Normal | stock Vim | no: Vim gives `X ¦X`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `A;<Esc>j.` | `¦one⏎two` | `one;⏎two;¦` | Normal | stock Vim | no: Vim gives `one;⏎two¦;`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `ofoo<Esc>.` | `¦top` | `top⏎foo⏎foo¦` | Normal | stock Vim | no: Vim gives `top⏎foo⏎fo¦o`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `iX<Esc>` | `ab¦c` | `abX¦c` | Normal | stock Vim | no: Vim gives `ab¦Xc`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `aX<Esc>` | `¦abc` | `aX¦bc` | Normal | stock Vim | no: Vim gives `a¦Xbc`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `AX<Esc>` | `¦abc` | `abcX¦` | Normal | stock Vim | no: Vim gives `abc¦X`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `IX<Esc>` | `  a¦bc` | `  X¦abc` | Normal | stock Vim | no: Vim gives `  ¦Xabc`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `oX<Esc>` | `¦one⏎two` | `one⏎X¦⏎two` | Normal | stock Vim | no: Vim gives `one⏎¦X⏎two`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `OX<Esc>` | `one⏎¦two` | `one⏎X¦⏎two` | Normal | stock Vim | no: Vim gives `one⏎¦X⏎two`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `iX` | `ab¦c` | `abX¦c` | Insert | stock Vim | yes |
+| `iXY<BS><Esc>` | `¦c` | `X¦c` | Normal | stock Vim | no: Vim gives `¦Xc`. leaving Insert mode does not move the cursor back onto the last typed character (a parity bug) |
+| `"ax"axu` | `¦abc` | `b¦c` | Normal | stock Vim | no: Vim gives `¦bc`. after `u` the cursor stays put instead of moving to the undone change (a parity bug) |
+| `"aciwXY<Esc>u` | `¦foo bar` | `foo¦ bar` | Normal | stock Vim | no: Vim gives `¦foo bar`. one `u` undoes the whole change, as in Vim; the cursor stays put (a parity bug) |
+| `"axu<C-r>` | `¦abc` | `r¦bc` | Normal | stock Vim | no: Vim gives `¦bc`. `Ctrl-R` is not redo: Normal mode types an `r` into the buffer (a parity bug; Edit -> Redo works) |
+| `"ax"axuug+` | `¦abc` | `a¦bc` | Normal | stock Vim | no: Vim gives `¦bc`. `g-`/`g+` are not bound; Edit -> Undo Tree browses the tree instead |
+| `:2<CR>` | `¦one⏎two` | `one⏎¦two` | Normal | stock Vim | yes |
+| `:s/o/0/<CR>` | `¦foo` | `¦f0o` | Normal | stock Vim | yes |
+| `:s/o/0/g<CR>` | `¦foo` | `¦f00` | Normal | stock Vim | yes |
+| `:%s/a/b/g<CR>` | `¦a⏎a` | `b⏎¦b` | Normal | stock Vim | yes |
+| `:s/./X/<CR>` | `¦a.b` | `¦a.b` | Normal | stock Vim | no: Vim gives `¦X.b`. `:s` takes literal patterns only and refuses Vim pattern syntax such as `.`, leaving the buffer unchanged |
+| `"aciaX<Esc>` | `fn f(a: u8, ¦b: u8) {}` | `fn f(a: u8, X¦) {}` | Normal | optional Vix | n/a: Tree-sitter argument object (a plugin in Vim) |
+| `"adaf` | `fn a() {}⏎fn ¦b() {}` | `fn a() {}⏎¦` | Normal | optional Vix | n/a: Tree-sitter function object (a plugin in Vim) |
+| `]f` | `¦fn a() {}⏎fn b() {}` | `fn a() {}⏎¦fn b() {}` | Normal | optional Vix | n/a: Tree-sitter next-function motion (a plugin in Vim) |
+| `:cn<CR>` | `¦one⏎two` | `one⏎t¦wo` | Normal | external tool | n/a: after a task printed `a.txt:2:2: error: boom` (Vim: `:make` with a `makeprg`) |
+
+<!-- cspell:enable -->
+<!-- vim-parity-table:end -->
+
+## Known differences, in short
+
+From the table, the places where Vix's Vi keymap does not yet do what Vim
+does:
+
+- **Cursor placement.** Leaving Insert mode leaves the cursor after the typed
+  text instead of on its last character; `u` leaves the cursor where it was;
+  Visual Line puts the cursor on the next line's start; `}` stops on the next
+  paragraph's first line rather than the blank line before it.
+- **Search.** After `/pattern<CR>` the find bar keeps the keyboard until
+  `<Esc>`. `*` and `#` are not implemented.
+- **Keys not bound yet**: `W` `B` `E`, `;` `,`, `D` `X` `C` `s` `r` `J`, `~`,
+  `>` `<`, the `ip`/`ap`/`is`/`as` objects, `g-`/`g+`, and `Ctrl-R`, which
+  types an `r` (use **Edit -> Redo**).
+- **Text objects.** `a"` keeps the white space after the closing quote.
+- **Visual mode** moves with `h` `j` `k` `l` and the arrows only, its operators
+  are not dot-repeatable, and a register typed before `v` applies to the
+  Visual operator (Vim ignores it). There is no Visual Block.
+- **Ex.** `:s` takes literal patterns only and refuses Vim pattern syntax.
+- **Beyond the table**: no uppercase, numbered or special registers, no `q`/`@`
+  register macros (Vix records macros from the Edit menu), no Vimscript, and
+  `cc` does not keep indentation (an unconfigured Vim, with `noautoindent`,
+  does not either). `crates/vix-modal/spec/index.md` keeps the exact line.
+
+## Where Vix goes further
+
+- **Built in, not assembled.** LSP, a debugger, Tree-sitter highlighting and
+  text objects, fuzzy finding, git hunk staging, a terminal, a test runner and
+  a drawn undo tree are menu items that already work. In Vim each is a plugin
+  (or several) to choose, install and configure.
+- **Discoverable from the keyboard.** Menus (`F10`), a command palette
+  (`Ctrl+P`, `>` for commands) and `F1` for every shortcut; `:` still works.
+- **Persistent undo by default.** The undo tree survives closing the file,
+  guarded by a content hash. Vim keeps a tree too, and `undofile` persists it.
+- **Safety.** Rust, `#![forbid(unsafe_code)]`, and no embedded script runtime.
 
 ## Where Vim still wins
 
-Honesty is the best advocacy:
-
-- **The full Vi language.** Vix's Normal mode ships a real modal-editing
-  engine now (`vix-modal`, on by default): counts (`3w`, `2d3w`), operators
-  composing with any motion (`dw`, `de`, `d}`, `dgg`, `df.`), text objects
-  (`diw`, `daw`, `di(`/`di{`/`di[`/`di<`, `da"`/`da'`/`` da` ``), the
-  Tree-sitter objects nvim-treesitter-textobjects users know (`daf`/`cif`
-  for a function, `ac`/`ic` for a class, `aa`/`ia` for a parameter, plus
-  `]f`/`[f`, `]c`/`[c`, `]a`/`[a` motions), named
-  registers (`"ayy`, `"ap`) alongside the unnamed one, counted put
-  (`"a3p`), Visual/Visual Line selection with `d`/`x`/`c`/`y` acting on
-  it, and `.` dot-repeat for `d{motion}`, a text object, `p`/`P`, or a
-  change that goes on into Insert mode (`ciw`, `cw`, `o`, `A`, …, with the
-  text typed there), each change also one undo step.
-  It is still a practical subset, not the full language: no Visual Block, no
-  WORD motions (`W`/`B`/`E`), no `;`/`,`/`*`/`#`, no `>`/`<`/`~` operators, no
-  uppercase/numbered/special registers, `cc`'s indentation preservation is
-  unimplemented, Visual mode moves with `h j k l` only and its operators
-  are not dot-repeatable, an Insert-mode session that uses a cursor key
-  is not dot-repeatable, and there's still no ex-command scripting or
-  macro-via-`q`/`@` (Vix has recorded macros, but in the Edit menu). See
-  `crates/vix-modal/spec/index.md` for the exact, current line. If your hands
-  speak the deepest corners of fluent Vim, you will still notice.
-- **Extensibility.** No Vimscript, no Lua, no plugin ecosystem. Vix's answer is
-  to build the common 90% in — but if your workflow depends on a niche plugin,
-  Vix cannot replace it today.
-- **Ubiquity.** Vim is on every server you will ever ssh into. Vix is a binary
-  you must bring along (though it *is* a single static binary, so `scp` works).
-- **Maturity.** Vim has thirty years of edge cases handled. Vix is young and
-  moving fast.
-
-## An honest experiment
-
-Give it one afternoon on a real task:
-
-1. `cargo build --release` and put `vix` on your `PATH`.
-2. Open a project: `vix .` — then switch the keymap: `Ctrl+P`, type `keymap`,
-   pick **Vi** (or **Spacemacs**).
-3. Do your normal work. When a Vim reflex misses, hit `F1` (all shortcuts) or
-   `Ctrl+P` `>` (all commands) instead of reaching for the docs.
-4. Try the things Vim makes hard: stage a single hunk from `Git -> Stage Hunk`,
-   rename a symbol with LSP, set a breakpoint from the Run menu, pop open the
-   undo *branch* you abandoned an hour ago (`Edit -> Undo Branch`).
-
-If it does not stick, your `.vimrc` will still be there, unjudging. But you may
-find — as we did — that the parts of Vim you love are the *motions*, and Vix
-keeps those while deleting the parts you merely tolerate.
+- **The full Vi language**, as the list above shows.
+- **Extensibility.** No Vimscript, no Lua, no plugin ecosystem: if your workflow
+  depends on a niche plugin, Vix cannot replace it today.
+- **Ubiquity.** Vim is on every server you will ssh into; Vix is a single static
+  binary you bring along.
+- **Maturity.** Vim has decades of edge cases handled. Vix is young.
 
 ## See also
 
-- [`docs/keymaps/index.md`](../keymaps/index.md) — every keymap, every binding.
-- [`crates/vix-keymap-model/spec/index.md`](../../crates/vix-keymap-model/spec/index.md) — the authoritative spec.
-- [`index.md`](../../index.md) — the full feature tour.
+- [`docs/keymaps/index.md`](../keymaps/index.md): every keymap, every binding.
+- [`crates/vix-modal/spec/index.md`](../../crates/vix-modal/spec/index.md): the modal engine's spec and its cut list.
+- [`crates/vix-keymap-model/spec/index.md`](../../crates/vix-keymap-model/spec/index.md): the keymap spec.
+- [`index.md`](../../index.md): the full feature tour.
 
 ---
 

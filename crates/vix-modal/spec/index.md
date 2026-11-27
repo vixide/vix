@@ -45,8 +45,8 @@ is one undo step (§ Design: dot-repeat); `cw` keeps the white space after
 the word (`operator::change_word_end`). `cc`'s indentation preservation
 remains deliberately unimplemented. None of the open items above are in this
 spec's own cut list; they're documented gaps, not silent omissions —
-`docs/vix-for-vim-users/index.md`'s "Where Vim still wins" states the same list
-in user-facing terms.
+`docs/vix-for-vim-users/index.md`'s "Known differences, in short" states the
+same list in user-facing terms, and § Vim-parity table (T844) measures it.
 
 ## The audit
 
@@ -520,6 +520,51 @@ is selected when `.` is pressed, so the host records *what* the last change
 was (delete, change with its typed text, insert with its typed text,
 replace with a char, switch case, indent, outdent, paste with its count)
 and applies it again with these same helpers.
+
+## Vim-parity table (T844)
+
+`tui/tests/integration/vim_parity.rs` holds a table of key sequences, each
+with a buffer before and after (cursor marked `|`), the mode afterwards and,
+for an operator or a put, the named register `a`'s text and kind. It is the
+source of truth for every parity claim in `docs/vix-for-vim-users/index.md`,
+whose table is generated from it (the test fails when the guide is stale;
+`VIX_UPDATE_VIM_PARITY=1` rewrites it).
+
+- **Kinds.** Each row is *stock Vim* (the keys mean the same in an
+  unconfigured Vim), *optional Vix* (no stock Vim key does this: the
+  Tree-sitter objects) or *external tool* (the result comes from another
+  program: `:cn` over a task's problems).
+- **Vix, always.** `every_row_does_what_the_table_says_in_vix` types every
+  row into a fresh Vi-keymap `App` and compares text, cursor, mode
+  (`App::vi_mode`) and register (`App::vi_register`). It runs in the normal
+  test suite on every CI run.
+- **Vim, in its own job.** `stock_rows_match_an_unconfigured_vim` (ignored by
+  default; CI's `vim-parity` job, `spec/ci/index.md`) types every stock row
+  into `vim -u NONE -i NONE -N` (`$VIX_VIM`, else `vim`), reading the state
+  back through a `<Cmd>` snapshot so Insert and Visual mode survive, and
+  compares it with what the row records for Vim.
+- **Differences are rows, not fixes.** Where Vix differs, the row asserts
+  Vix's current behavior, records Vim's result and says why (a gap in this
+  spec's cut list, or a parity bug). Closing a gap means changing the row to
+  "same as Vim" with the fix.
+- **Decisions.** "Unconfigured Vim" means `-u NONE` with `nocompatible`
+  (`-N`), so options such as `autoindent` are off in both. Rows put deletions
+  and yanks in register `a`: Vix's unnamed register is the process-wide
+  clipboard, which parallel tests would race on. The unnamed register is
+  therefore not compared.
+
+Parity bugs the table found (T844), recorded as rows and left for follow-on
+tasks: `<Esc>` out of Insert mode does not step the cursor back onto the last
+typed character; `u` does not move the cursor to the undone change; `V` puts
+the cursor on the next line's start; `}` stops on the next paragraph's first
+line instead of the blank line; `a"` drops Vim's trailing white space; after
+`/pattern<CR>` the find bar keeps the keyboard until `<Esc>`; `Ctrl-R` in
+Normal mode types `r` into the buffer instead of redoing. Unbound keys the
+table shows beyond the cut list: `D`, `X`, `C`, `s`, `r`, `J`, `g-`/`g+`.
+
+The runnable migration exercise in the same guide (`tui/examples/vim-exercise`,
+a tiny Rust crate) is walked step by step, with the real `cargo` and `git`,
+by `tui/tests/integration/vim_exercise.rs`.
 
 ## v1 cut line, summarized
 

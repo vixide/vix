@@ -72,4 +72,6 @@ mod textobjects;
 mod themes;
 mod tutor;
 mod undo_tree;
+mod vim_exercise;
+mod vim_parity;
 mod workspace;
