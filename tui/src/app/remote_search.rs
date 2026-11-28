@@ -997,6 +997,14 @@ mod tests {
             assert!(new.0.iter().any(|r| r.0 == rel), "{rel} found again");
         }
         // The just-written file is inside the racy window: not remembered.
+        // A stamp ahead of the scan keeps it there however long a loaded
+        // machine takes to reach the scan (a 2 s window raced under load).
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&grown)
+            .unwrap()
+            .set_modified(SystemTime::now() + Duration::from_secs(3_600))
+            .unwrap();
         let (new, _) = both(&app, "needlx");
         assert_eq!(new.0.len(), 0);
         assert!(!app.scan_memo.lock().unwrap().misses.contains_key(&grown));
