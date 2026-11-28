@@ -47,6 +47,9 @@ pub struct LineDecoder {
     buf: Vec<u8>,
     /// Discarding bytes up to the next newline after an oversized line.
     skipping: bool,
+    /// Length of the front of `buf` already searched and holding no newline,
+    /// so a long line arriving in many chunks is scanned once, not per chunk.
+    searched: usize,
     /// Count of lines dropped as oversized or not valid JSON.
     malformed: usize,
 }
@@ -75,6 +78,7 @@ impl LineDecoder {
                 // Dropped: we are inside an oversized line.
             } else if self.buf.len() >= MAX_LINE {
                 self.buf.clear();
+                self.searched = 0;
                 self.skipping = true;
                 #[expect(
                     clippy::arithmetic_side_effects,
@@ -93,7 +97,16 @@ impl LineDecoder {
     /// (the latter counted in [`Self::malformed`]).
     pub fn pop(&mut self) -> Option<Value> {
         loop {
-            let end = self.buf.iter().position(|&b| b == b'\n')?;
+            let unsearched = self.buf.get(self.searched..).unwrap_or_default();
+            let Some(end) = unsearched
+                .iter()
+                .position(|&b| b == b'\n')
+                .and_then(|at| at.checked_add(self.searched))
+            else {
+                self.searched = self.buf.len();
+                return None;
+            };
+            self.searched = 0;
             let line: Vec<u8> = self.buf.drain(..=end).collect();
             // Strip the trailing newline; `end` is its index so `len >= 1`.
             let text = line.strip_suffix(b"\n").map_or(&line[..], |t| t);
@@ -264,6 +277,25 @@ mod tests {
         d.push(b"more\n{\"ok\":true}\n");
         assert_eq!(d.pop(), Some(json!({"ok": true})));
         assert_eq!(d.malformed(), 1);
+    }
+
+    #[test]
+    fn a_long_line_in_many_chunks_is_found_once_complete() {
+        // Each pop only searches the bytes that arrived since the last one.
+        let mut d = LineDecoder::new();
+        let line = format!("{{\"s\":\"{}\"}}\n", "y".repeat(1 << 20));
+        for chunk in line.as_bytes().chunks(1024) {
+            d.push(chunk);
+            if chunk.last() != Some(&b'\n') {
+                assert_eq!(d.pop(), None);
+            }
+        }
+        assert_eq!(d.pop().unwrap()["s"].as_str().map(str::len), Some(1 << 20));
+        d.push(b"{\"a\":1}\n{\"b\"");
+        assert_eq!(d.pop(), Some(json!({"a": 1})));
+        assert_eq!(d.pop(), None);
+        d.push(b":2}\n");
+        assert_eq!(d.pop(), Some(json!({"b": 2})));
     }
 
     #[test]
