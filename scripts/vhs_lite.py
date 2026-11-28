@@ -32,6 +32,9 @@ matches VHS's own Hide/Show intent (skip the boring setup) without ever
 letting the replayed terminal state drift from what really happened.
 
 Supports the directives the current docs/demos/*.tape files use: `Output`,
+`Wait[+Screen][@<timeout>] /regex/` (wait until the decoded screen, kept by
+pyte, matches; for tapes that drive a real network service, such as
+`ai-agents.tape`),
 `Set` (parsed only for Width/Height/FontSize, to size the pty), `Hide`,
 `Show`, `Sleep`, `Type "..."`, `Enter`, `Escape`, `Tab`, `Backspace [N]`,
 `Down [N]`, `Up [N]`, `Left [N]`, `Right [N]`, and `Ctrl+<key>` /
@@ -46,6 +49,11 @@ import sys
 import time
 
 import pexpect
+
+try:  # only `Wait` needs a screen model
+    import pyte
+except ImportError:  # pragma: no cover - reported when a tape uses Wait
+    pyte = None
 
 CTRL = {chr(i + 96): chr(i) for i in range(1, 27)}  # 'a' -> \x01, etc.
 
@@ -214,6 +222,10 @@ def run_tape(tape_path: str, out_cast: str):
     cols, rows = cols_rows_from_tape(directives)
 
     rec = Recorder(cols, rows)
+    screen = stream = None
+    if pyte is not None:
+        screen = pyte.Screen(cols, rows)
+        stream = pyte.ByteStream(screen)
     child = pexpect.spawn(
         "bash", ["--noprofile", "--norc"], dimensions=(rows, cols), encoding=None, timeout=None
     )
@@ -223,6 +235,8 @@ def run_tape(tape_path: str, out_cast: str):
         try:
             data = child.read_nonblocking(size=65536, timeout=0.02)
             rec.feed(data)
+            if stream is not None:
+                stream.feed(data)
             return True
         except pexpect.exceptions.TIMEOUT:
             return False
@@ -287,6 +301,26 @@ def run_tape(tape_path: str, out_cast: str):
     # entry) needs fixing at the source, not papering over with a retry.
     FLUSH_RETRIES = 5
 
+    def wait_for(cmd: str, rest: str):
+        """VHS's `Wait[+Screen][@timeout] /regex/`: read until the decoded
+        screen matches (default timeout 15 s, as in VHS); fail the tape on a
+        timeout rather than record a demo that never got there."""
+        if screen is None:
+            raise SystemExit("Wait needs pyte: pip install --user pyte")
+        m = re.match(r"^Wait(?:\+Screen|\+Line)?(?:@([0-9.]+(?:ms|s)))?$", cmd)
+        assert m, f"bad Wait: {cmd}"
+        timeout = parse_duration(m.group(1)) if m.group(1) else 15.0
+        pat = rest.strip()
+        assert pat.startswith("/") and pat.endswith("/"), f"bad Wait pattern: {rest}"
+        rx = re.compile(pat[1:-1])
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if rx.search("\n".join(screen.display)):
+                return
+            if reader_tick() is None:
+                break
+        raise SystemExit(f"Wait timed out after {timeout}s: {pat}")
+
     pending = bytearray()
 
     def queue(b: bytes):
@@ -313,6 +347,10 @@ def run_tape(tape_path: str, out_cast: str):
         if cmd == "Show":
             flush()
             rec.set_visible(True)
+            continue
+        if cmd.startswith("Wait"):
+            flush()
+            wait_for(cmd, rest)
             continue
         if cmd == "Sleep":
             flush()

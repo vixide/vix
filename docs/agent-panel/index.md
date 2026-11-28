@@ -354,24 +354,13 @@ the_session_id_survives_a_restart). -->
 - [Threat model](../threat-model.md): what AI features and agents may and may
   not reach.
 
+## Native Codex and Claude Code
+
+The Agent panel drives ACP agents. To talk to the **Codex** or **Claude
+Code** program you already have installed and signed in to, use **AI → Agent
+Conversations…** instead, in a build with `--features ai-agents`. See
+[Native coding agents](../ai-agents/index.md).
+
 ---
 
 Vix™ and Vix IDE™ are trademarks.
-
-## Native Codex and Claude Code
-
-Build with `cargo run --features ai-agents`. For a desktop window, use
-`cargo run --manifest-path gui/Cargo.toml -p vix-egui --features ai-agents`
-or select any of the other GUI packages. Install the desired CLI and sign in
-on this machine. In a trusted local workspace, open **AI → Agent Conversations…**
-and choose a provider or a previous conversation. Type your prompt and press
-Enter. To review a tool request, scroll with the arrow keys. Ctrl+Y allows that
-request once. N or Esc declines it. Esc outside a request closes the conversation
-and stops any active turn. Open it again from the same menu to continue.
-
-In a new local workspace, opening the menu item offers Vix’s workspace trust
-dialog. After accepting, open **Agent Conversations…** again to choose a provider.
-
-Native agents use their own tool permissions and can change files in the
-workspace. Vix stores your visible messages and the provider resume ID alongside
-the editor session file. [Conversation spec](../../crates/vix-ai-agents/spec/index.md)

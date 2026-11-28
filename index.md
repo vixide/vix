@@ -239,7 +239,10 @@ co-editing with shared cursors, terminal, chat and notes
 
 **AI, on your terms.** An AI menu and chat panel that run the assistant CLI of
 your choice, or an Anthropic, OpenAI or Ollama HTTP API, on a selection;
-`ai = "off"` hides all of it without a rebuild. `vix --mcp` serves a
+`ai = "off"` hides all of it without a rebuild. With `--features ai-agents`,
+**AI → Agent Conversations…** talks to your installed Codex or Claude Code,
+with their own logins, and asks you before each tool request
+([native coding agents](docs/ai-agents/index.md)). `vix --mcp` serves a
 read-only view of a workspace to AI agents over the Model Context Protocol
 ([MCP server](docs/mcp-server/index.md)).
 
