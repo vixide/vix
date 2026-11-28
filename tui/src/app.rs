@@ -96,6 +96,7 @@ mod jupyter_off;
 mod memory;
 mod menu_pointer;
 mod workspace_search_input;
+mod workspace_search_job;
 #[cfg(feature = "jupyter")]
 use jupyter as jupyter_state;
 #[cfg(not(feature = "jupyter"))]
@@ -1462,6 +1463,8 @@ pub use crate::workspace_dashboard_panel::Dashboard;
 /// First-run welcome overlay state, re-exported from [`crate::welcome_panel`].
 /// Scrollable, informational; Esc closes.
 pub use crate::welcome_panel::Panel as WelcomePanel;
+/// How long a background workspace search took (T869).
+pub use workspace_search_job::SearchTiming;
 
 /// Contact-browser overlay state (Tools -> Contacts), re-exported from
 /// [`crate::contact_panel`]. Lists the vCard files in a directory; Enter/click opens
@@ -2748,7 +2751,14 @@ pub struct App {
     file_index_job: Option<file_index::FileIndexJob>,
     /// Files the last in-process scan read and found no candidate line in,
     /// so a narrower scan can skip them while unchanged (T830).
-    scan_memo: std::sync::Mutex<remote_search::ScanMemo>,
+    scan_memo: std::sync::Arc<std::sync::Mutex<remote_search::ScanMemo>>,
+    /// The workspace search scanning in the background, while one runs
+    /// (T869).
+    workspace_search_job: Option<workspace_search_job::SearchJob>,
+    /// The generation the next workspace search request takes (T869).
+    workspace_search_generation: u64,
+    /// How long the last completed background workspace search took (T869).
+    workspace_search_timing: Option<workspace_search_job::SearchTiming>,
     /// The first git refresh, running in the background (T830).
     git_refresh_job: Option<git_refresh::GitRefreshJob>,
     /// The file sizes past which opening warns or goes to the Large File
@@ -3249,7 +3259,10 @@ impl App {
             file_index_state: file_index::FileIndexState::Complete,
             file_index_folders: Vec::new(),
             file_index_job: None,
-            scan_memo: std::sync::Mutex::default(),
+            scan_memo: std::sync::Arc::default(),
+            workspace_search_job: None,
+            workspace_search_generation: 0,
+            workspace_search_timing: None,
             git_refresh_job: None,
             open_thresholds: crate::large_file::Thresholds::default(),
             palette_origin: None,
@@ -12132,7 +12145,7 @@ impl App {
                     .set(WorkspaceFlags::CASE_SENSITIVE, case_sensitive);
                 panel.flags.set(WorkspaceFlags::REGEX, regex);
                 self.workspace_search = Some(panel);
-                self.run_workspace_search();
+                self.request_workspace_search();
             }
             Scope::Workspace => {
                 self.search = None;
@@ -13237,28 +13250,56 @@ impl App {
         auth.read_to_string_guarded(path).ok()
     }
 
-    /// Re-run the project search for the panel's current pattern and replace its hits. Static
-    /// result lists (definitions, references) are never re-searched; an empty or invalid
-    /// pattern clears the hits and sets a status line.
-    fn run_workspace_search(&mut self) {
-        // Static result lists (e.g. go-to-definition) are not re-searched.
-        if self
-            .workspace_search
-            .as_ref()
-            .is_some_and(|p| p.flags.contains(WorkspaceFlags::STATIC_RESULTS))
-        {
-            return;
-        }
-        let Some(ps) = self.workspace_search.as_ref() else {
+    /// Re-run the project search for the panel's current pattern and replace its hits, on
+    /// this thread: for one-off refreshes (after a replace, or when a caller needs the hits
+    /// at once). Keystrokes use [`App::request_workspace_search`], which scans in the
+    /// background (T869). Static result lists (definitions, references) are never
+    /// re-searched; an empty or invalid pattern clears the hits and sets a status line.
+    pub(super) fn run_workspace_search(&mut self) {
+        let Some((query, filter, re)) = self.workspace_search_plan() else {
             return;
         };
+        let auth = crate::authority::current();
+        let mut hits: Vec<Hit> = Vec::new();
+        let files = workspace_search_job::collect_hits(
+            &self.live_scan(&*auth),
+            &query,
+            &filter,
+            &re,
+            &mut |hit| hits.push(hit),
+        );
+        if let Some(p) = self.workspace_search.as_mut() {
+            p.status = workspace_search_job::summary(hits.len(), files);
+            if p.selected >= hits.len() {
+                p.selected = hits.len().minus(1);
+            }
+            p.hits = hits;
+        }
+    }
+
+    /// What a search of the panel's current pattern scans for: the tool
+    /// query, the path filter and the compiled pattern. `None` when there
+    /// is nothing to scan (no panel, a static list, a pattern too short,
+    /// which clears the hits, or an invalid one, which says so). Either way
+    /// a background search still running is dropped, so its hits never land
+    /// (T869).
+    fn workspace_search_plan(
+        &mut self,
+    ) -> Option<(ToolQuery, crate::find_panel::PathFilter, Regex)> {
+        // Static result lists (e.g. go-to-definition) are not re-searched.
+        let ps = self.workspace_search.as_ref()?;
+        if ps.flags.contains(WorkspaceFlags::STATIC_RESULTS) {
+            return None;
+        }
+        self.workspace_search_job = None;
+        let ps = self.workspace_search.as_ref()?;
         let Some(pat) = ps.pattern() else {
             if let Some(p) = self.workspace_search.as_mut() {
                 p.hits.clear();
                 p.selected = 0;
                 p.status = t!("status.workspace_search_prompt").into();
             }
-            return;
+            return None;
         };
         let re = match Regex::new(&pat) {
             Ok(r) => r,
@@ -13266,58 +13307,15 @@ impl App {
                 if let Some(p) = self.workspace_search.as_mut() {
                     p.status = t!("msg.bad_regex", error = e).to_string();
                 }
-                return;
+                return None;
             }
         };
-
-        let filter = ps.path_filter();
         let query = remote_search::buffers_query(ToolQuery::search(
             &ps.query,
             ps.flags.contains(WorkspaceFlags::REGEX),
             ps.flags.contains(WorkspaceFlags::CASE_SENSITIVE),
         ));
-        let mut hits: Vec<Hit> = Vec::new();
-        let mut files = remote_search::FileCount::default();
-        self.scan_index(
-            &query,
-            remote_search::Source::Buffers,
-            &|rel| filter.allows(&rel.replace('\\', "/")),
-            |line| {
-                files.enter(line.path);
-                let Some((start, _)) = crate::find_panel::next_match(line.text, &re, 0) else {
-                    return ControlFlow::Continue(());
-                };
-                files.hit();
-                let clipped = crate::workspace_search::clip(line.text);
-                hits.push(Hit {
-                    path: line.path.to_path_buf(),
-                    rel: line.rel.to_string(),
-                    line: line.number,
-                    col: start.plus(1),
-                    display: format!("{}:{}: {clipped}", line.rel, line.number),
-                    text: clipped,
-                });
-                if hits.len() >= 5000 {
-                    files.cap();
-                    ControlFlow::Break(())
-                } else {
-                    ControlFlow::Continue(())
-                }
-            },
-        );
-        let files = files.total();
-
-        if let Some(p) = self.workspace_search.as_mut() {
-            p.status = if hits.is_empty() {
-                t!("status.no_matches_cap").into()
-            } else {
-                t!("status.matches_in_files", count = hits.len(), files = files).to_string()
-            };
-            if p.selected >= hits.len() {
-                p.selected = hits.len().minus(1);
-            }
-            p.hits = hits;
-        }
+        Some((query, ps.path_filter(), re))
     }
 
     /// **Alt+Enter** in the replace panel: plan a project-wide replace (see
@@ -17363,6 +17361,7 @@ mod tests {
         for c in "needle".chars() {
             app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
         }
+        app.wait_for_workspace_search();
         assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 1);
 
         let mut terminal = Terminal::new(TestBackend::new(100, 40)).unwrap();

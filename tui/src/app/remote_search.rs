@@ -31,9 +31,12 @@
 )]
 
 use crate::geo::Geo;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use super::App;
@@ -107,7 +110,12 @@ const RACY: Duration = Duration::from_secs(2);
 /// regex, or a literal query containing the remembered literal with the
 /// same case rule, as typing a query further makes) skips those files while
 /// their stamp is unchanged, at the cost of one `lstat` instead of a read.
-#[derive(Default)]
+///
+/// The App shares it with background scans (T869): a scan copies it (an
+/// `Arc`, not the map) when it starts and stores its own when it ends, so
+/// no lock is held while files are read, and a cancelled scan stores
+/// nothing.
+#[derive(Clone, Default)]
 pub(crate) struct ScanMemo {
     /// The remembered prefilter.
     regex: String,
@@ -115,7 +123,7 @@ pub(crate) struct ScanMemo {
     /// query.
     literal: Option<(String, bool)>,
     /// Files with no candidate line, by index path.
-    misses: HashMap<PathBuf, Stamp>,
+    misses: Arc<HashMap<PathBuf, Stamp>>,
 }
 
 impl ScanMemo {
@@ -178,6 +186,9 @@ struct Reader<'a> {
     /// one without a search tool sees the one request at a time it always
     /// did.
     parallel: bool,
+    /// Set when the scan's owner no longer wants it (T869): workers stop
+    /// taking files.
+    cancel: Option<&'a AtomicBool>,
 }
 
 impl Reader<'_> {
@@ -275,6 +286,9 @@ impl Reader<'_> {
                     s.spawn(|| {
                         let (mut mine, mut dirs) = (Vec::new(), DirCache::default());
                         loop {
+                            if self.cancelled() {
+                                break;
+                            }
                             let from =
                                 next.fetch_add(SCAN_GRAB, std::sync::atomic::Ordering::Relaxed);
                             let Some(grab) = files.get(from..from.plus(SCAN_GRAB).min(files.len()))
@@ -307,9 +321,133 @@ impl Reader<'_> {
         }
         out
     }
+
+    /// Whether the scan was cancelled.
+    fn cancelled(&self) -> bool {
+        self.cancel.is_some_and(|c| c.load(Ordering::Relaxed))
+    }
+}
+
+/// The open buffers a [`Source::Buffers`] scan reads instead of their
+/// files.
+pub(super) enum Buffers<'a> {
+    /// The App's own tabs, read as the scan reaches them (a scan on the
+    /// input thread).
+    Live(&'a [crate::editor::Tab]),
+    /// Each named tab's path and text when the scan was requested (T869):
+    /// a background scan sees the buffers as they were at that keystroke,
+    /// whatever is typed while it runs.
+    Snapshot(&'a [(PathBuf, String)]),
+}
+
+impl Buffers<'_> {
+    /// The paths the tabs show.
+    fn paths(&self) -> Vec<&Path> {
+        match self {
+            Buffers::Live(tabs) => tabs.iter().filter_map(|t| t.path.as_deref()).collect(),
+            Buffers::Snapshot(texts) => texts.iter().map(|(p, _)| p.as_path()).collect(),
+        }
+    }
+
+    /// The text of the first tab showing exactly `path`.
+    fn text(&self, path: &Path) -> Option<Cow<'_, str>> {
+        match self {
+            Buffers::Live(tabs) => tabs
+                .iter()
+                .find(|t| t.path.as_deref() == Some(path))
+                .map(|t| Cow::Owned(t.text())),
+            Buffers::Snapshot(texts) => texts
+                .iter()
+                .find(|(p, _)| p == path)
+                .map(|(_, text)| Cow::Borrowed(text.as_str())),
+        }
+    }
+}
+
+/// Everything a scan of the index reads, borrowed: from the App for a scan
+/// on the input thread, from a [`ScanSnapshot`] for a background one.
+pub(super) struct Scan<'a> {
+    /// The authority files are read through.
+    pub auth: &'a dyn crate::authority::Authority,
+    /// The file index, in order.
+    pub files: &'a [PathBuf],
+    /// The workspace root results are shown relative to.
+    pub root: &'a Path,
+    /// The workspace folders a remote search tool runs in.
+    pub folders: &'a [PathBuf],
+    /// The open buffers.
+    pub buffers: Buffers<'a>,
+    /// The memo shared with the App (T830).
+    pub memo: &'a Mutex<ScanMemo>,
+    /// Set when the owner no longer wants the scan (T869).
+    pub cancel: Option<&'a AtomicBool>,
+}
+
+/// An owned copy of what a [`Scan`] borrows, taken on the input thread
+/// when a background search is requested and moved to its worker (T869).
+pub(super) struct ScanSnapshot {
+    auth: Arc<dyn crate::authority::Authority>,
+    files: Vec<PathBuf>,
+    root: PathBuf,
+    folders: Vec<PathBuf>,
+    buffers: Vec<(PathBuf, String)>,
+    memo: Arc<Mutex<ScanMemo>>,
+    /// Shared with the job, which sets it when it is dropped.
+    pub cancel: Arc<AtomicBool>,
+}
+
+impl ScanSnapshot {
+    /// The scan over this snapshot.
+    pub(super) fn scan(&self) -> Scan<'_> {
+        Scan {
+            auth: &*self.auth,
+            files: &self.files,
+            root: &self.root,
+            folders: &self.folders,
+            buffers: Buffers::Snapshot(&self.buffers),
+            memo: &self.memo,
+            cancel: Some(&self.cancel),
+        }
+    }
 }
 
 impl App {
+    /// The scan over the App's own state, for a scan on this thread.
+    pub(super) fn live_scan<'a>(&'a self, auth: &'a dyn crate::authority::Authority) -> Scan<'a> {
+        Scan {
+            auth,
+            files: &self.file_index,
+            root: &self.root,
+            folders: &self.workspace_folders,
+            buffers: Buffers::Live(&self.editor.tabs),
+            memo: &self.scan_memo,
+            cancel: None,
+        }
+    }
+
+    /// A snapshot of the index, the workspace and, for
+    /// [`Source::Buffers`], the text of every named tab, for a scan on
+    /// another thread (T869).
+    pub(super) fn scan_snapshot(&self, source: Source) -> ScanSnapshot {
+        let buffers = if source == Source::Buffers {
+            self.editor
+                .tabs
+                .iter()
+                .filter_map(|t| Some((t.path.clone()?, t.text())))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        ScanSnapshot {
+            auth: crate::authority::current(),
+            files: self.file_index.clone(),
+            root: self.root.clone(),
+            folders: self.workspace_folders.clone(),
+            buffers,
+            memo: Arc::clone(&self.scan_memo),
+            cancel: Arc::new(AtomicBool::new(false)),
+        }
+    }
     /// Visit every line of every indexed file whose root-relative path
     /// `allow` accepts, in index order, until `visit` breaks. `query`
     /// describes what the caller looks for, so a remote authority can
@@ -324,7 +462,30 @@ impl App {
         allow: &dyn Fn(&str) -> bool,
         mut visit: impl FnMut(&IndexLine<'_>) -> ControlFlow<()>,
     ) {
+        let auth = crate::authority::current();
+        self.live_scan(&*auth).run(query, source, allow, &mut visit);
+    }
+}
+
+impl Scan<'_> {
+    /// Whether the scan's owner cancelled it.
+    pub(super) fn cancelled(&self) -> bool {
+        self.cancel.is_some_and(|c| c.load(Ordering::Relaxed))
+    }
+
+    /// [`App::scan_index`] over this scan's state; a cancelled scan stops
+    /// visiting.
+    pub(super) fn run(
+        &self,
+        query: &ToolQuery,
+        source: Source,
+        allow: &dyn Fn(&str) -> bool,
+        visit: &mut dyn FnMut(&IndexLine<'_>) -> ControlFlow<()>,
+    ) {
         if let Some(found) = self.tool_scan(query, source, allow) {
+            if self.cancelled() {
+                return;
+            }
             for f in &found {
                 let line = IndexLine {
                     path: &f.path,
@@ -338,7 +499,9 @@ impl App {
             }
             return;
         }
-        self.local_scan(query, source, allow, &mut visit);
+        if !self.cancelled() {
+            self.local_scan(query, source, allow, visit);
+        }
     }
 
     /// The in-process scan (T830): the index is read in batches of
@@ -356,40 +519,47 @@ impl App {
         allow: &dyn Fn(&str) -> bool,
         visit: &mut dyn FnMut(&IndexLine<'_>) -> ControlFlow<()>,
     ) {
-        let auth = crate::authority::current();
+        let auth = self.auth;
         let prefilter = regex::Regex::new(&query.regex).ok();
         let tabs: HashSet<PathBuf> = if source == Source::Buffers {
-            self.editor
-                .tabs
-                .iter()
-                .filter_map(|t| t.path.clone())
+            self.buffers
+                .paths()
+                .into_iter()
+                .map(Path::to_path_buf)
                 .collect()
         } else {
             HashSet::new()
         };
-        let mut memo = self
-            .scan_memo
+        let old = self
+            .memo
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let old = std::mem::take(&mut *memo);
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
         let reuse = prefilter.is_some() && old.covers(query);
         let reader = Reader {
-            auth: &*auth,
+            auth,
             source,
             tabs: &tabs,
             prefilter: prefilter.as_ref(),
             parallel: auth.is_local(),
-            memo: reuse.then_some(&old.misses),
+            memo: reuse.then_some(&*old.misses),
             started: SystemTime::now(),
+            cancel: self.cancel,
         };
         let mut misses = HashMap::new();
-        'scan: for batch in self.file_index.chunks(SCAN_BATCH) {
+        'scan: for batch in self.files.chunks(SCAN_BATCH) {
+            if self.cancelled() {
+                return;
+            }
             let wanted: Vec<(&Path, String)> = batch
                 .iter()
-                .map(|p| (p.as_path(), self.root_rel(p)))
+                .map(|p| (p.as_path(), root_rel(self.root, p)))
                 .filter(|(_, rel)| allow(rel))
                 .collect();
             let texts = reader.read_all(&wanted);
+            if self.cancelled() {
+                return;
+            }
             for ((path, rel), text) in wanted.iter().zip(texts) {
                 let content = match text {
                     Text::Skip | Text::Miss(None) => continue,
@@ -397,14 +567,9 @@ impl App {
                         misses.insert(path.to_path_buf(), stamp);
                         continue;
                     }
-                    Text::Read(s) => s,
-                    Text::Buffer(canon) => match self
-                        .editor
-                        .tabs
-                        .iter()
-                        .find(|t| t.path.as_deref() == Some(canon.as_path()))
-                    {
-                        Some(tab) => tab.text(),
+                    Text::Read(s) => Cow::Owned(s),
+                    Text::Buffer(canon) => match self.buffers.text(&canon) {
+                        Some(text) => text,
                         None => continue,
                     },
                 };
@@ -421,15 +586,20 @@ impl App {
                 }
             }
         }
-        if prefilter.is_some() {
-            *memo = ScanMemo {
+        if prefilter.is_some() && !self.cancelled() {
+            *self
+                .memo
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = ScanMemo {
                 regex: query.regex.clone(),
                 literal: ScanMemo::literal_of(query),
-                misses,
+                misses: Arc::new(misses),
             };
         }
     }
+}
 
+impl App {
     /// The scan as it was before T830, one file at a time with no
     /// prefilter: the oracle the batched scan is tested against, and the
     /// complete scan a remote workspace's Replace in Files scope uses (its
@@ -442,7 +612,7 @@ impl App {
     ) {
         let auth = crate::authority::current();
         for path in &self.file_index {
-            let rel = self.root_rel(path);
+            let rel = root_rel(&self.root, path);
             if !allow(&rel) {
                 continue;
             }
@@ -466,15 +636,17 @@ impl App {
             }
         }
     }
+}
 
-    /// `path` relative to the workspace root, lossily, as results show it.
-    fn root_rel(&self, path: &Path) -> String {
-        path.strip_prefix(&self.root)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .into_owned()
-    }
+/// `path` relative to the workspace `root`, lossily, as results show it.
+fn root_rel(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .into_owned()
+}
 
+impl Scan<'_> {
     /// The tool-backed scan, or `None` to scan in-process: the authority is
     /// local, no tool can run `query`, or the tool failed.
     fn tool_scan(
@@ -483,36 +655,35 @@ impl App {
         source: Source,
         allow: &dyn Fn(&str) -> bool,
     ) -> Option<Vec<Found>> {
-        let auth = crate::authority::current();
+        let auth = self.auth;
         if auth.is_local() {
             return None;
         }
-        let (tool, program, args) = pick_tool(&*auth, query)?;
+        let (tool, program, args) = pick_tool(auth, query)?;
         let order: HashMap<&Path, usize> = self
-            .file_index
+            .files
             .iter()
             .enumerate()
-            .filter(|(_, p)| allow(&self.root_rel(p)))
+            .filter(|(_, p)| allow(&root_rel(self.root, p)))
             .map(|(i, p)| (p.as_path(), i))
             .collect();
         // Files an open buffer shows are scanned from the buffer instead.
         let buffered: HashSet<&Path> = if source == Source::Buffers {
-            self.editor
-                .tabs
-                .iter()
-                .filter_map(|t| t.path.as_deref())
+            self.buffers
+                .paths()
+                .into_iter()
                 .filter(|p| order.contains_key(p))
                 .collect()
         } else {
             HashSet::new()
         };
         let mut found = Vec::new();
-        for folder in &self.workspace_folders {
+        for folder in self.folders {
             let known = |rel: &str| {
                 let p = folder.join(rel);
                 order.contains_key(p.as_path()) && !buffered.contains(p.as_path())
             };
-            for t in run_tool(&*auth, tool, &program, &args, folder, &known)? {
+            for t in run_tool(auth, tool, &program, &args, folder, &known, self.cancel)? {
                 let path = folder.join(&t.rel);
                 let Some(&i) = order.get(path.as_path()) else {
                     continue;
@@ -523,26 +694,20 @@ impl App {
                 found.push(Found {
                     order: i,
                     number: t.line,
-                    rel: self.root_rel(&path),
+                    rel: root_rel(self.root, &path),
                     path,
                     text: t.text,
                 });
             }
         }
         for path in buffered {
-            let Some(tab) = self
-                .editor
-                .tabs
-                .iter()
-                .find(|t| t.path.as_deref() == Some(path))
-            else {
+            let Some(text) = self.buffers.text(path) else {
                 continue;
             };
             let Some(&file_order) = order.get(path) else {
                 continue;
             };
-            let text = tab.text();
-            let rel = self.root_rel(path);
+            let rel = root_rel(self.root, path);
             found.extend(text.lines().enumerate().map(|(n, line)| Found {
                 order: file_order,
                 number: n.plus(1),
@@ -588,6 +753,7 @@ fn run_tool(
     args: &[String],
     dir: &Path,
     known: &dyn Fn(&str) -> bool,
+    cancel: Option<&AtomicBool>,
 ) -> Option<Vec<ToolLine>> {
     use std::io::BufRead as _;
     let spec = crate::authority::ProcessSpec::new(program)
@@ -605,6 +771,11 @@ fn run_tool(
     let mut lines = Vec::new();
     let mut capped = false;
     for raw in std::io::BufReader::new(stdout).split(b'\n') {
+        if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            // Nobody wants the lines: stop the tool (T869).
+            let _ = child.kill();
+            break;
+        }
         let Ok(raw) = raw else { break };
         let Ok(text) = std::str::from_utf8(&raw) else {
             continue;
@@ -632,6 +803,7 @@ fn run_tool(
     _args: &[String],
     _dir: &Path,
     _known: &dyn Fn(&str) -> bool,
+    _cancel: Option<&AtomicBool>,
 ) -> Option<Vec<ToolLine>> {
     None
 }
@@ -918,6 +1090,9 @@ mod tests {
                 vix_input::KeyModifiers::NONE,
             ));
         }
+        // The keystrokes searched in the background (T869): the same hits,
+        // in the same order, as the one-thread oracle.
+        app.wait_for_workspace_search();
         let tool = super::buffers_query(ToolQuery::search("needle", false, false));
         let re = Regex::new(&tool.regex).unwrap();
         let (rows, files) = search(&app, &tool, Source::Buffers, &re, 5_000, true);

@@ -2877,6 +2877,7 @@ fn search_fixture(name: &str) -> (PathBuf, App) {
 fn start_replace(a: &mut App, query: &str, with: &str) {
     a.run_action("search.workspace_replace");
     type_str(a, query);
+    a.wait_for_workspace_search();
     a.on_key(key(KeyCode::Tab));
     type_str(a, with);
 }

@@ -163,6 +163,8 @@ impl App {
         self.poll_file_index();
         // Install the background git refresh `start` began (T830).
         self.poll_git_refresh();
+        // Hits of the background workspace search (T869).
+        self.poll_workspace_search();
     }
 
     /// How long the loop may wait for input before ticking again: short
@@ -198,6 +200,7 @@ impl App {
             || self.large_file_busy()
             || self.file_index_busy()
             || self.git_refresh_busy()
+            || self.workspace_search_busy()
         {
             Duration::from_millis(50)
         } else {

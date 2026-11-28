@@ -400,6 +400,7 @@ fn symbol_and_workspace_search_previews_follow_the_selection() {
     for c in "alpha".chars() {
         app.on_key(key(c));
     }
+    app.wait_for_workspace_search();
     let buf = render(&mut app, 160, 50);
     assert!(
         row_with(&buf, "31 fn alpha() {}").is_some(),
@@ -445,11 +446,13 @@ fn resume_restores_the_workspace_search_panel() {
     for c in "needle".chars() {
         app.on_key(key(c));
     }
+    app.wait_for_workspace_search();
     app.on_key(keycode(KeyCode::Down));
     app.on_key(esc());
     assert!(app.workspace_search.is_none());
 
     app.run_action("palette.resume");
+    app.wait_for_workspace_search();
     let ps = app.workspace_search.as_ref().expect("panel reopened");
     assert_eq!(ps.query, "needle");
     assert_eq!(ps.hits.len(), 3);

@@ -175,7 +175,7 @@ impl App {
         // An open project search ran over the first pass only: search again
         // now that every file is listed, or its hits stay silently partial.
         if self.workspace_search.is_some() {
-            self.run_workspace_search();
+            self.request_workspace_search();
         }
     }
 
@@ -355,6 +355,8 @@ mod tests {
         let all = vec![dir.join("first.txt"), dir.join("later.txt")];
         app.file_index_job = Some(job_with(Some(all), app.workspace_folders.clone()));
         app.poll_file_index();
+        // The refresh runs in the background (T869).
+        app.wait_for_workspace_search();
         let hits: Vec<&str> = app
             .workspace_search_hits()
             .iter()

@@ -453,6 +453,7 @@ fn workspace_search_finds_matches_across_files() {
     for c in "beta".chars() {
         app.on_key(key(c));
     }
+    app.wait_for_workspace_search();
     let ps = app.workspace_search.as_ref().unwrap();
     assert_eq!(ps.hits.len(), 3, "two in a.txt, one in b.txt");
     let expected = ps.selected_hit().unwrap();
@@ -480,6 +481,7 @@ fn workspace_search_include_path_filter_narrows_results() {
     for c in "needle".chars() {
         app.on_key(key(c));
     }
+    app.wait_for_workspace_search();
     // Both files match before filtering.
     assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 2);
 
@@ -488,6 +490,7 @@ fn workspace_search_include_path_filter_narrows_results() {
     for c in r"\.rs$".chars() {
         app.on_key(key(c));
     }
+    app.wait_for_workspace_search();
     let hits = &app.workspace_search.as_ref().unwrap().hits;
     assert_eq!(hits.len(), 1, "only the .rs file remains");
     assert!(hits[0].path.to_string_lossy().ends_with("a.rs"));
@@ -512,6 +515,7 @@ fn workspace_search_exclude_path_filter_drops_results() {
     for c in r"\.txt$".chars() {
         app.on_key(key(c));
     }
+    app.wait_for_workspace_search();
     let hits = &app.workspace_search.as_ref().unwrap().hits;
     assert_eq!(hits.len(), 1, "the .txt file is excluded");
     assert!(hits[0].path.to_string_lossy().ends_with("a.rs"));
@@ -560,6 +564,7 @@ fn wgrep_alt_e_opens_results_as_an_editable_buffer() {
     for c in "needle".chars() {
         app.on_key(key(c));
     }
+    app.wait_for_workspace_search();
     assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 1);
 
     app.on_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
@@ -631,6 +636,7 @@ fn wgrep_deleting_a_line_skips_that_hit_entirely() {
     for c in "needle".chars() {
         app.on_key(key(c));
     }
+    app.wait_for_workspace_search();
     assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 2);
     app.on_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
 
@@ -1107,6 +1113,7 @@ fn workspace_search_panel_keys_navigate_and_toggle_options() {
     let mut app = app_at(&dir);
     app.run_action("search.workspace");
     type_str(&mut app, "beta");
+    app.wait_for_workspace_search();
     assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 3);
 
     app.on_key(keycode(KeyCode::Down));
@@ -1117,8 +1124,10 @@ fn workspace_search_panel_keys_navigate_and_toggle_options() {
 
     // Alt+C: case-sensitive drops the capitalised hit; Alt+C again restores it.
     app.on_key(alt(KeyCode::Char('c')));
+    app.wait_for_workspace_search();
     assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 2);
     app.on_key(alt(KeyCode::Char('c')));
+    app.wait_for_workspace_search();
     assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 3);
     // Alt+R: regex mode on and off; an unbound Alt letter just searches again.
     app.on_key(alt(KeyCode::Char('r')));
@@ -1131,6 +1140,7 @@ fn workspace_search_panel_keys_navigate_and_toggle_options() {
     );
     app.on_key(alt(KeyCode::Char('r')));
     app.on_key(alt(KeyCode::Char('z')));
+    app.wait_for_workspace_search();
     assert_eq!(app.workspace_search.as_ref().unwrap().hits.len(), 3);
 
     // Tab moves to the next field; typing there edits it.

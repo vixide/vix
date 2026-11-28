@@ -278,3 +278,314 @@ fn search_over_ssh_is_one_remote_tool_run_not_a_read_per_file() {
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&control);
 }
+
+/// T869: a delayed fake authority. The local file system, except that while
+/// it is held every text read waits until [`Held::release`], so a test can
+/// keep a background scan pending for as long as it likes and prove what the
+/// App does meanwhile.
+#[derive(Debug, Default)]
+struct Held {
+    /// Whether reads wait.
+    closed: Mutex<bool>,
+    /// Signalled on release.
+    released: std::sync::Condvar,
+    /// Reads that reached the gate.
+    reads: std::sync::atomic::AtomicUsize,
+}
+
+impl Held {
+    fn hold(&self) {
+        *self.closed.lock().unwrap() = true;
+    }
+
+    fn release(&self) {
+        *self.closed.lock().unwrap() = false;
+        self.released.notify_all();
+    }
+
+    fn is_held(&self) -> bool {
+        *self.closed.lock().unwrap()
+    }
+
+    fn reads(&self) -> usize {
+        self.reads.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Wait while held, counting the read.
+    fn gate(&self) {
+        self.reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let mut held = self.closed.lock().unwrap();
+        while *held {
+            held = self.released.wait(held).unwrap();
+        }
+    }
+
+    /// Wait (up to 30 s) until a held read is pending: the scan has
+    /// started and is stuck on the gate.
+    fn wait_for_a_pending_read(&self) {
+        let start = std::time::Instant::now();
+        while self.reads() == 0 {
+            assert!(start.elapsed().as_secs() < 30, "no scan reached the gate");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+}
+
+/// [`Held`] as an authority over the local file system.
+#[derive(Debug, Default)]
+struct HeldAuthority {
+    gate: Arc<Held>,
+}
+
+impl Authority for HeldAuthority {
+    fn name(&self) -> &'static str {
+        "held"
+    }
+    fn is_local(&self) -> bool {
+        true
+    }
+    fn read(&self, path: &Path) -> std::io::Result<Vec<u8>> {
+        vix_authority::LocalAuthority.read(path)
+    }
+    fn read_limited(&self, path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
+        vix_authority::LocalAuthority.read_limited(path, limit)
+    }
+    fn read_to_string(&self, path: &Path) -> std::io::Result<String> {
+        vix_authority::LocalAuthority.read_to_string(path)
+    }
+    fn read_text_guarded(
+        &self,
+        path: &Path,
+        max_bytes: u64,
+    ) -> std::io::Result<vix_authority::TextFile> {
+        self.gate.gate();
+        vix_authority::LocalAuthority.read_text_guarded(path, max_bytes)
+    }
+    fn read_to_string_guarded(&self, path: &Path) -> std::io::Result<String> {
+        self.gate.gate();
+        vix_authority::LocalAuthority.read_to_string_guarded(path)
+    }
+    fn write(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.write(path, data)
+    }
+    fn write_atomic(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.write_atomic(path, data)
+    }
+    fn write_text_in_file_encoding(&self, path: &Path, text: &str) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.write_text_in_file_encoding(path, text)
+    }
+    fn metadata(&self, path: &Path) -> std::io::Result<vix_authority::FileStat> {
+        vix_authority::LocalAuthority.metadata(path)
+    }
+    fn symlink_metadata(&self, path: &Path) -> std::io::Result<vix_authority::FileStat> {
+        vix_authority::LocalAuthority.symlink_metadata(path)
+    }
+    fn canonicalize(&self, path: &Path) -> std::io::Result<PathBuf> {
+        vix_authority::LocalAuthority.canonicalize(path)
+    }
+    fn read_dir(&self, dir: &Path) -> std::io::Result<Vec<vix_authority::DirEntry>> {
+        vix_authority::LocalAuthority.read_dir(dir)
+    }
+    fn create_dir_all(&self, dir: &Path) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.create_dir_all(dir)
+    }
+    fn rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.rename(from, to)
+    }
+    fn remove_file(&self, path: &Path) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.remove_file(path)
+    }
+    fn remove_path(&self, path: &Path) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.remove_path(path)
+    }
+    fn move_path(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.move_path(from, to)
+    }
+    fn copy_recursive(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.copy_recursive(from, to)
+    }
+    fn trash(&self, path: &Path) -> std::io::Result<()> {
+        vix_authority::LocalAuthority.trash(path)
+    }
+    fn is_unwritable(&self, path: &Path) -> bool {
+        vix_authority::LocalAuthority.is_unwritable(path)
+    }
+    fn walk_files(&self, root: &Path, opts: &vix_authority::WalkOptions) -> Vec<PathBuf> {
+        vix_authority::LocalAuthority.walk_files(root, opts)
+    }
+    fn which(&self, name: &str) -> Option<PathBuf> {
+        vix_authority::LocalAuthority.which(name)
+    }
+    fn command(&self, spec: &vix_authority::ProcessSpec) -> std::io::Result<std::process::Command> {
+        vix_authority::LocalAuthority.command(spec)
+    }
+}
+
+/// A small tree for the held-scan tests: files with `needle`, one with
+/// only `nexus`, and filler.
+fn held_tree(tag: &str) -> PathBuf {
+    let dir = scratch(tag);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\nlet needle = 1;\n").unwrap();
+    std::fs::write(dir.join("src/b.rs"), "// nexus only\n").unwrap();
+    std::fs::write(dir.join("src/c.rs"), "needle one\nneedle two\n").unwrap();
+    for i in 0..40 {
+        std::fs::write(dir.join(format!("src/f{i}.rs")), format!("filler {i}\n")).unwrap();
+    }
+    dir
+}
+
+fn type_keys(app: &mut App, text: &str) {
+    for c in text.chars() {
+        app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+}
+
+fn panel_query(app: &App) -> Option<String> {
+    app.workspace_search_panel().map(|p| p.query.clone())
+}
+
+/// The audit's reproduction through the real key path (PQ-08): with the
+/// scan held pending on the authority, every keystroke and Escape returns
+/// and takes effect before any file is read.
+#[test]
+fn a_held_scan_does_not_hold_up_typing_or_escape() {
+    let _slot = SLOT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let dir = held_tree("held-keys");
+    let auth = Arc::new(HeldAuthority::default());
+    let gate = Arc::clone(&auth.gate);
+    let previous = vix_authority::install(Arc::<HeldAuthority>::clone(&auth));
+    let mut app =
+        App::new(dir.clone(), Settings::default()).with_session_path(dir.join("session.toml"));
+    app.run_action("search.workspace");
+    gate.hold();
+    // A key handler that scanned on the spot would wait on the gate for
+    // ever; the watchdog opens it, so such a regression fails the
+    // `is_held` checks below instead of hanging.
+    let watchdog = Arc::clone(&gate);
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(20));
+        watchdog.release();
+    });
+
+    // The first query starts a scan that blocks on its first read; the key
+    // handler has already returned.
+    type_keys(&mut app, "ne");
+    gate.wait_for_a_pending_read();
+    assert!(gate.is_held());
+    assert!(app.workspace_search_busy());
+    assert_eq!(panel_query(&app).as_deref(), Some("ne"));
+    assert!(app.workspace_search_hits().is_empty());
+    let shown = screen(&mut app);
+    assert!(shown.contains("Searching"), "{shown}");
+
+    // A new query is processed while the first scan is still pending.
+    type_keys(&mut app, "x");
+    assert!(gate.is_held());
+    assert_eq!(panel_query(&app).as_deref(), Some("nex"));
+    assert!(app.workspace_search_busy());
+
+    // So is Escape: the panel closes and its scan is dropped.
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(gate.is_held());
+    assert!(app.workspace_search_panel().is_none());
+    assert!(!app.workspace_search_busy());
+
+    // The cancelled scans finish reading into nothing.
+    gate.release();
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    app.tick();
+    assert!(app.workspace_search_panel().is_none());
+    assert!(app.workspace_search_hits().is_empty());
+
+    vix_authority::install(previous);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A slow scan for an earlier query never lands over a newer one's hits,
+/// the newest query's hits come in index order, and the unsaved buffers a
+/// scan reads are the ones at its keystroke.
+#[test]
+fn a_stale_scan_is_discarded_and_buffers_are_read_as_of_the_keystroke() {
+    let _slot = SLOT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let dir = held_tree("held-stale");
+    let auth = Arc::new(HeldAuthority::default());
+    let gate = Arc::clone(&auth.gate);
+    let previous = vix_authority::install(Arc::<HeldAuthority>::clone(&auth));
+    let mut app =
+        App::new(dir.clone(), Settings::default()).with_session_path(dir.join("session.toml"));
+
+    // An unsaved edit gives src/b.rs a needle.
+    app.open_initial(&dir.join("src/b.rs"));
+    let area = ratatui::layout::Rect::new(0, 0, 80, 24);
+    assert!(app.editor.insert_str("unsaved needle\n", area));
+
+    app.run_action("search.workspace");
+    gate.hold();
+    type_keys(&mut app, "ne"); // matches nexus too
+    gate.wait_for_a_pending_read();
+    type_keys(&mut app, "ed"); // "need": the "ne" scan is now stale
+    // An edit after the keystroke is not what the pending scan reads.
+    assert!(app.editor.insert_str("and another needle\n", area));
+    gate.release();
+    app.wait_for_workspace_search();
+    assert!(!app.workspace_search_busy());
+
+    let hits: Vec<(String, usize)> = app
+        .workspace_search_hits()
+        .iter()
+        .map(|h| (h.rel.clone(), h.line))
+        .collect();
+    assert!(
+        !app.workspace_search_hits()
+            .iter()
+            .any(|h| h.text.contains("nexus")),
+        "the nexus line matched only the stale query: {hits:?}"
+    );
+    let mut b_lines: Vec<usize> = hits
+        .iter()
+        .filter(|(rel, _)| rel == "src/b.rs")
+        .map(|(_, l)| *l)
+        .collect();
+    b_lines.sort_unstable();
+    assert_eq!(b_lines, vec![1], "the buffer as of the keystroke: {hits:?}");
+    for want in [("src/a.rs", 2), ("src/c.rs", 1), ("src/c.rs", 2)] {
+        assert!(
+            hits.iter().any(|(rel, l)| rel == want.0 && *l == want.1),
+            "{want:?} in {hits:?}"
+        );
+    }
+    assert_eq!(hits.len(), 4, "{hits:?}");
+    let status = &app.workspace_search_panel().unwrap().status;
+    assert!(status.contains('4') && status.contains('3'), "{status}");
+    let timing = app.workspace_search_timing().unwrap();
+    assert!(timing.first_result <= timing.complete);
+
+    // The next keystroke snapshots the buffer again; the same search over
+    // the same state lists the same hits in the same order.
+    app.on_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    type_keys(&mut app, "d");
+    app.wait_for_workspace_search();
+    let again: Vec<(String, usize)> = app
+        .workspace_search_hits()
+        .iter()
+        .map(|h| (h.rel.clone(), h.line))
+        .collect();
+    assert_eq!(again.len(), 5, "both unsaved lines now: {again:?}");
+    app.on_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    type_keys(&mut app, "d");
+    app.wait_for_workspace_search();
+    let third: Vec<(String, usize)> = app
+        .workspace_search_hits()
+        .iter()
+        .map(|h| (h.rel.clone(), h.line))
+        .collect();
+    assert_eq!(again, third);
+
+    vix_authority::install(previous);
+    let _ = std::fs::remove_dir_all(&dir);
+}

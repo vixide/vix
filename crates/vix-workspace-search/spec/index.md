@@ -170,6 +170,17 @@ The remote path is unchanged (`rg`/`grep` on the remote host). The memory
 is one map of the missed files' paths and stamps (about 10 MB for 100,000
 files), replaced by each scan.
 
+**Off the input thread (T869).** The panel's keystrokes run this scan on a
+worker thread over a snapshot (`ScanSnapshot`: the index, the workspace
+folders, the authority and each named buffer's text at the keystroke), as
+[find-and-replace](../../../spec/find-and-replace/index.md#responsiveness-t869-pq-08)
+describes; other callers (the dock search, the TODO scan, the fallback
+go-to-definition, Replace All's scope) still scan on the spot over the App's
+own state (`Buffers::Live`). The scan can be cancelled: workers stop taking
+files, a remote tool is killed, and a cancelled scan stores no memo. The
+memo is shared (`Arc<Mutex<ScanMemo>>`): a scan copies it when it starts
+and stores its own when it ends, never holding the lock while it reads.
+
 ## Editable search results ("wgrep"-style, T211)
 
 **Alt+E** (or the `search.edit_results` command) turns the current hit list
