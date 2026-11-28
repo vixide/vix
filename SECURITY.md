@@ -43,7 +43,7 @@ Out of scope:
 
 | Version | Supported |
 | ------- | --------- |
-| Latest 2.x release | Yes |
+| Latest 3.x release | Yes |
 | Anything older | No |
 
 Only the latest published release gets fixes. There are no long-term-support
@@ -270,6 +270,15 @@ it.
   (`cargo +nightly fuzz run <target>`).
 - **Mutation testing.** A weekly `cargo mutants` run checks that the small
   pure crates' tests catch every behavior change.
+- **Secrets.** `tui/tests/secret_scan.rs` fails the tests when a tracked
+  file holds a credential-shaped string, and `scripts/secret-scan-history`
+  checks every commit in history with the same rules; the opt-in git hooks
+  (`make hooks`) run them on what you commit and push.
+- **Quarterly audit.** Once a quarter the maintainer works through the
+  [quarterly audit checklist](docs/threat-model.md#quarterly-audit-checklist):
+  advisories and licenses, dependency review, the history secret scan, the
+  threat model and its file-system audit table, and the claims in this
+  section.
 - **Release integrity.** Each release publishes a SHA-256 checksum for every
   artifact (and a combined `sha256.sum`) and a CycloneDX SBOM for each
   program it releases (`vix-tui.cdx.xml` and one per desktop GUI). Release

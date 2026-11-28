@@ -82,7 +82,20 @@ it adds no step the release process does not already have.
   (`make hooks`, [`spec/local-ci`](../local-ci/index.md)) also reads to scan
   each staged file before a commit, so the two cannot drift (T833). Its
   patterns use only the syntax a POSIX extended regular expression and the
-  `regex` crate read the same way.
+  `regex` crate read the same way. The same file drives
+  `scripts/secret-scan-history` (T832), which runs the rules over every line
+  each commit added (default: all refs; or a `git log` revision range),
+  reports commit, path, line and rule without the secret, and exits non-zero
+  on a finding; the pre-push hook runs it over the commits a push adds
+  ([`spec/local-ci`](../local-ci/index.md)). It is opt-in, not part of
+  `cargo test`, and never rewrites history.
+- **Quarterly audit.** [`docs/threat-model.md`](../../docs/threat-model.md)
+  ends with the checklist a quarterly security audit works through
+  (advisories and licenses, dependency review, the history secret scan, the
+  threat model and the file-system audit table, the hardening claims in
+  `SECURITY.md`), and `SECURITY.md`'s Hardening section links it. The
+  audit is a maintainer task, run by hand; its result is a dated line in the
+  checklist's log.
 
 ## See also
 

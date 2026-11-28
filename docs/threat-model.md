@@ -316,8 +316,15 @@ concurrently.
   an allowlist entry with a reason. `cargo deny` checks advisories and
   licenses (`deny.toml`); fuzzing and mutation testing are described in
   `SECURITY.md`.
-- **Open risks.** The scan sees only the working tree, not history, and only
-  the listed token shapes.
+  `scripts/secret-scan-history` runs the same rules over every line a commit
+  ever added (all refs by default, or a revision range), so a secret that was
+  committed and later deleted is still found; the opt-in pre-push hook runs it
+  over the commits a push adds, which also catches a commit made with
+  `--no-verify`.
+- **Open risks.** Only the listed token shapes are recognized, and the hooks
+  are opt-in (`make hooks`): a push from a clone without them, or with
+  `--no-verify`, is checked only by `tui/tests/secret_scan.rs` on the tree.
+  A full-history run on 2026-11-27 found nothing (2,672 commits).
 
 ## File-system audit (T832)
 
@@ -379,3 +386,54 @@ page and `SECURITY.md` in the same change.
 
 The longer [Security Checklist](security-checklist.md) covers the same ground
 in more general terms.
+
+## Quarterly audit checklist
+
+Once a quarter (January, April, July, October), the maintainer works through
+this list on a clean, up-to-date checkout of `main`. CI already runs most of
+these continuously; the audit is the point where someone reads the results
+and the open items instead of only seeing a green run. Everything here is
+local and read-only: anything outward-facing that comes out of it (an
+advisory, a release, a repository setting) goes through
+[incident response](incident-response.md) or the release process, and is the
+maintainer's to do.
+
+- [ ] **Advisories and licenses.** `cargo deny check` in the root, in
+      `matrix/` (its own `deny.toml`) and with `--manifest-path
+      gui/Cargo.toml`; `cargo audit` as a second opinion where it is
+      installed. Every `ignore` in `deny.toml` still has a dated reason that
+      holds; remove the ones whose advisory no longer applies.
+- [ ] **Dependency review.** The Dependabot PRs and alerts since the last
+      audit are merged or closed with a reason ([`spec/dependabot`](../spec/dependabot/index.md));
+      each `ignore` in `.github/dependabot.yml` still needs to be there;
+      new direct dependencies since the last audit (`git diff
+      <last-audit>..main -- '**/Cargo.toml'`) are maintained, licensed per
+      `deny.toml` and worth what they pull in; `cargo tree -d` duplicates
+      have not grown without a reason.
+- [ ] **Secrets in history.** `scripts/secret-scan-history` exits 0 over all
+      refs; a finding is revoked first and handled as an incident, never by
+      rewriting history unasked. `cargo test -p vix-tui --test secret_scan`
+      passes and the `allow` lines in `scripts/secret-patterns` still have
+      reasons that hold.
+- [ ] **Threat model.** Each trust boundary above still matches the code:
+      features added since the last audit that run something, read project
+      configuration, talk to the network, hold a secret or take a path from
+      outside are listed under their boundary (the new-feature checklist in
+      their pull requests says which); each open risk is still open, or is
+      marked closed with its task.
+- [ ] **File-system audit.** Each row of the
+      [file-system audit](#file-system-audit-t832) table still names the code
+      that does the check and the test that pins it; a new place that checks
+      a path and then acts on it gets a row.
+- [ ] **Hardening claims.** Each statement in `SECURITY.md`'s Hardening
+      section is still true (the weekly fuzz and mutation runs are green, or
+      their failures have tasks; release checksums and SBOMs were on the last
+      release); the supported-versions table names the current major.
+- [ ] **Log it.** Add a dated line below with what was found and the tasks
+      opened for it.
+
+### Audit log
+
+| Date | Result |
+| --- | --- |
+| 2026-11-27 | Checklist written (T832). `scripts/secret-scan-history` over all 2,672 commits of every ref: nothing found. The rest of the list starts with the first quarterly audit. |
