@@ -152,7 +152,10 @@ code.
 ### Native Codex and Claude Code conversations
 
 The opt-in `ai-agents` feature starts the installed provider in a trusted local
-workspace. It uses stdio and the provider’s login. Native tools run under the
+workspace. An isolated conversation runs in a verified linked Git checkout
+and keeps the original workspace as its trust boundary. Linked worktrees
+share repository history and refs. Provider permissions still govern access
+outside the working folder. Vix uses stdio and the provider’s login. Native tools run under the
 provider’s own permission rules and can edit files on disk. Vix never loosens
 those rules: it sends no sandbox, approval policy or permission mode, so the
 user's Codex config and Claude Code settings decide what runs unasked. Each

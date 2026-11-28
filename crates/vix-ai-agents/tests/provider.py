@@ -5,6 +5,7 @@ Modes: new, resume, queue, filechange, failed, interrupted, is_error, stop,
 exit, garbage. Markers for the test are written to the working directory.
 """
 import json
+import os
 import sys
 
 
@@ -35,6 +36,9 @@ def wait_for_eof():
 
 def misbehave(mode):
     """Modes shared by both providers once the prompt has arrived."""
+    if mode in ("new", "resume") and os.path.isfile("worktree-test.txt"):
+        with open("worktree-test.txt", "a") as tracked:
+            tracked.write(provider + "\n")
     if mode == "exit":
         sys.stderr.write("noise\n" * 2000 + "fatal: boom\n")
         sys.stderr.flush()
@@ -64,6 +68,7 @@ if provider == "codex":
         assert thread["params"]["threadId"] == "codex-id"
     else:
         assert thread["method"] == "thread/start"
+    assert os.path.samefile(thread["params"]["cwd"], os.getcwd())
     # The user's Codex config decides the sandbox and approval policy.
     assert set(thread["params"]) <= {"cwd", "threadId"}, thread
     send({"id": thread["id"], "result": {"thread": {"id": "codex-id"}}})

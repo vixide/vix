@@ -25,6 +25,11 @@ its resume ID to the same provider on the next turn. Vix stores the provider,
 resume ID and visible conversation in owner-private files alongside its
 session settings, scoped to the workspace. Each conversation has one writer.
 
+A worktree conversation has a distinct transcript filename and an immutable
+checkout name derived from its UUID. Its chooser entry and open conversation
+expose this binding to the host. The host creates and validates the Git
+checkout and supplies its working folder to both the process and protocol.
+
 Codex uses the stdio app server. Claude Code uses its streaming JSON CLI.
 The panel shows replies and asks for individual tool approvals requested by
 the provider. Vix never loosens provider settings: it sends no Codex sandbox

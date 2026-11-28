@@ -1,4 +1,6 @@
 //! Native Codex and Claude conversations shared by the TUI and GUI front ends.
+mod worktree;
+
 use super::ide_parity::{ChoiceList, ChoicePurpose};
 use super::{App, KeyCode, KeyEvent};
 use crate::ai_panel::{Panel, Role};
@@ -24,6 +26,8 @@ const STDERR_LINES: usize = 20;
 #[derive(Clone, Debug)]
 pub(crate) enum Choice {
     New(Provider),
+    #[cfg(feature = "git")]
+    NewWorktree(Provider),
     Resume(Entry),
 }
 
@@ -52,6 +56,7 @@ pub(crate) struct NativePanel {
     pub(crate) panel: Panel,
     pub(crate) conversation: Conversation,
     root: PathBuf,
+    create_worktree: bool,
     running: Option<Running>,
     stopping: Option<Stopping>,
     /// Esc was pressed once during a turn; a second Esc stops the provider.
@@ -132,7 +137,7 @@ impl NativePanel {
         }
     }
 
-    fn open(conversation: Conversation, root: PathBuf) -> Self {
+    fn open(conversation: Conversation, root: PathBuf, create_worktree: bool) -> Self {
         let mut panel = Panel::open();
         let messages = &conversation.transcript.messages;
         let skip = messages.len().minus(SHOWN_MESSAGES);
@@ -146,6 +151,7 @@ impl NativePanel {
             panel,
             conversation,
             root,
+            create_worktree,
             running: None,
             stopping: None,
             stop_armed: false,
@@ -161,15 +167,24 @@ impl NativePanel {
         }
         // A stopped turn still winding down gives way to the new one.
         self.stopping = None;
+        let cwd = if let Some(checkout) = self.conversation.worktree() {
+            if self.create_worktree {
+                // Persist ownership before Git can create files or a branch.
+                self.conversation.save()?;
+            }
+            worktree::directory(&self.root, &checkout, &mut self.create_worktree)?
+        } else {
+            self.root.clone()
+        };
         let transcript = &self.conversation.transcript;
         let provider = transcript.provider;
         let turn = Turn::new(
             provider,
-            self.root.display().to_string(),
+            cwd.display().to_string(),
             transcript.session.clone(),
             self.panel.input.clone(),
         );
-        let mut process = spawn(&turn.argv(), &self.root).map_err(|e| {
+        let mut process = spawn(&turn.argv(), &cwd).map_err(|e| {
             if e.kind() == io::ErrorKind::NotFound {
                 io::Error::new(
                     e.kind(),
@@ -384,15 +399,29 @@ impl App {
             }
         };
         let mut choices = vec![Choice::New(Provider::Codex), Choice::New(Provider::Claude)];
+        #[cfg(feature = "git")]
+        if crate::git::is_repo(&self.root) {
+            choices.extend([
+                Choice::NewWorktree(Provider::Codex),
+                Choice::NewWorktree(Provider::Claude),
+            ]);
+        }
         choices.extend(entries.into_iter().map(Choice::Resume));
         let rows = choices
             .iter()
             .map(|choice| match choice {
                 Choice::New(p) => t!("ui.agent_new", provider = p.name()).to_string(),
+                #[cfg(feature = "git")]
+                Choice::NewWorktree(p) => {
+                    t!("ui.agent_new_worktree", provider = p.name()).to_string()
+                }
                 Choice::Resume(e) => t!(
                     "ui.agent_saved_row",
                     provider = e.provider.name(),
-                    title = sanitize(&e.title)
+                    title = e.worktree_branch().map_or_else(
+                        || sanitize(&e.title),
+                        |b| format!("{} · {b}", sanitize(&e.title))
+                    )
                 )
                 .to_string(),
             })
@@ -415,10 +444,14 @@ impl App {
             return;
         }
         match self.agent_store().and_then(|s| match choice {
-            Choice::New(p) => s.create(*p),
-            Choice::Resume(entry) => s.resume(entry),
+            Choice::New(p) => s.create(*p).map(|c| (c, false)),
+            #[cfg(feature = "git")]
+            Choice::NewWorktree(p) => s.create_worktree(*p).map(|c| (c, true)),
+            Choice::Resume(entry) => s.resume(entry).map(|c| (c, false)),
         }) {
-            Ok(c) => self.native_panel = Some(NativePanel::open(c, self.root.clone())),
+            Ok((c, create)) => {
+                self.native_panel = Some(NativePanel::open(c, self.root.clone(), create));
+            }
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                 self.status = t!("status.agent_conversation_locked").to_string();
             }
@@ -566,13 +599,17 @@ mod tests {
     fn trusted(name: &str) -> (PathBuf, App) {
         let dir = temp(name);
         let mut app = app_at(&dir);
+        trust(&mut app);
+        (dir, app)
+    }
+
+    fn trust(app: &mut App) {
         app.run_action("ai.agent_conversations");
         assert!(app.choice_list.is_none());
         assert!(app.script_trust.is_some());
         app.script_trust_opened_at = None;
         app.on_key(code(KeyCode::Char('y')));
         assert!(app.workspace_trusted());
-        (dir, app)
     }
 
     /// Open the chooser and pick row `row` (0 new Codex, 1 new Claude, 2.. saved).
@@ -687,6 +724,126 @@ mod tests {
     #[test]
     fn native_claude_conversation_and_resume() {
         exercise(Provider::Claude);
+    }
+
+    #[cfg(feature = "git")]
+    #[test]
+    fn isolated_providers_resume_in_distinct_checkouts_of_the_open_subfolder() {
+        use crate::app::git::tests::{git, repo};
+        use std::fs;
+        let repo = repo("agents", &[("sub/worktree-test.txt", "base\n")]);
+        let sub = repo.join("sub");
+        fs::write(sub.join("worktree-test.txt"), "my draft").unwrap();
+        fs::write(sub.join("untracked"), "private draft").unwrap();
+        let config = temp("agent-config");
+        let app_for_sub = || app_at(&sub).with_session_path(config.join("session.toml"));
+        let mut app = app_for_sub();
+        trust(&mut app);
+        let mut checkouts = Vec::new();
+        for (row, provider) in [(2, Provider::Codex), (3, Provider::Claude)] {
+            choose(&mut app, row);
+            let checkout = app
+                .native_panel
+                .as_ref()
+                .unwrap()
+                .conversation
+                .worktree()
+                .unwrap();
+            assert!(
+                !checkout.exists(),
+                "opening the panel is side-effect free for Git"
+            );
+            for mode in ["new", "resume"] {
+                if mode == "resume" {
+                    app = app_for_sub();
+                    choose(&mut app, 4); // most recently used conversation
+                }
+                assert_eq!(
+                    app.native_panel.as_ref().unwrap().conversation.worktree(),
+                    Some(checkout.clone())
+                );
+                send_to_fake(&mut app, mode);
+                wait(
+                    &mut app,
+                    "worktree approval",
+                    NativePanel::awaiting_approval,
+                );
+                if provider == Provider::Codex {
+                    app.on_key(code(KeyCode::Esc));
+                } else {
+                    app.on_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL));
+                }
+                wait(&mut app, "worktree reply", |p| !p.panel.busy);
+                assert_eq!(
+                    errors(app.native_panel.as_ref().unwrap()),
+                    Vec::<&str>::new()
+                );
+                app.on_key(code(KeyCode::Esc));
+            }
+            let name = provider.executable();
+            assert_eq!(
+                fs::read_to_string(checkout.join("sub/worktree-test.txt")).unwrap(),
+                format!("base\n{name}\n{name}\n")
+            );
+            assert!(!checkout.join("sub/untracked").exists());
+            assert_eq!(
+                git(&checkout, &["branch", "--show-current"]),
+                checkout.file_name().unwrap().to_str().unwrap()
+            );
+            checkouts.push(checkout);
+        }
+        assert_ne!(checkouts[0], checkouts[1]);
+        assert_eq!(
+            fs::read_to_string(sub.join("worktree-test.txt")).unwrap(),
+            "my draft"
+        );
+        assert_eq!(git(&repo, &["branch", "--show-current"]), "main");
+
+        // Changing the branch after opening a saved conversation blocks a
+        // turn, as does moving the checkout away between consecutive attempts.
+        choose(&mut app, 4);
+        let panel = app.native_panel.as_mut().unwrap();
+        panel.panel.input = "keep this draft".into();
+        git(&checkouts[1], &["switch", "-c", "other"]);
+        assert!(
+            panel
+                .start(|_, _| panic!("provider started on another branch"))
+                .is_err()
+        );
+        fs::rename(&checkouts[1], config.join("moved")).unwrap();
+        assert!(
+            panel
+                .start(|_, _| panic!("provider started without its worktree"))
+                .is_err()
+        );
+        assert_eq!(panel.panel.input, "keep this draft");
+        assert!(!checkouts[1].exists());
+        drop(app);
+        fs::remove_dir_all(config).unwrap();
+        fs::remove_dir_all(repo).unwrap();
+    }
+
+    #[cfg(not(feature = "git"))]
+    #[test]
+    fn a_build_without_git_can_read_an_isolated_chat_but_cannot_start_its_provider() {
+        let (dir, mut app) = trusted("without-git");
+        let mut chat = app
+            .agent_store()
+            .unwrap()
+            .create_worktree(Provider::Claude)
+            .unwrap();
+        chat.transcript
+            .messages
+            .push(Message::Reply("saved reply".into()));
+        chat.save().unwrap();
+        drop(chat);
+        choose(&mut app, 2);
+        let panel = app.native_panel.as_mut().unwrap();
+        assert_eq!(panel.panel.last_assistant(), Some("saved reply"));
+        panel.panel.input = "draft".into();
+        assert!(panel.start(|_, _| panic!("started without Git")).is_err());
+        drop(app);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

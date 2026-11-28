@@ -184,6 +184,7 @@ fn quit_action_ends_the_loop_request() {
 #[test]
 fn native_agent_conversation_draws_and_accepts_a_draft() {
     let root = scratch("native-agents").canonicalize().unwrap();
+    vix::git::run(&root, &["init", "-q"]).unwrap();
     let mut session = vix::session::Session::default();
     session.set_scripts_trusted(&root.to_string_lossy(), Some(true));
     session.save_to(&root.join("session.toml")).unwrap();
@@ -196,8 +197,10 @@ fn native_agent_conversation_draws_and_accepts_a_draft() {
             .run_action("ai.agent_conversations");
         cx.notify_all();
         let (_, _, before) = cx.draw(win.id);
-        assert!(grid_has(&shared, "Claude Code"));
+        assert!(grid_has(&shared, "New worktree conversation"));
         cx.simulate_mouse_move(win.id, 450.0, 200.0);
+        cx.simulate_key(win.id, "", "Down");
+        cx.simulate_key(win.id, "", "Down");
         cx.simulate_key(win.id, "", "Return");
         for ch in "draft".chars() {
             let text = ch.to_string();
@@ -210,6 +213,7 @@ fn native_agent_conversation_draws_and_accepts_a_draft() {
             "{}",
             shared.model.borrow().grid_lines().join("\n")
         );
+        assert!(grid_has(&shared, "vix-agent-"));
         assert!(grid_has(&shared, "draft"));
         assert_ne!(before, after);
     });

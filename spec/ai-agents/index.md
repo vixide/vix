@@ -47,10 +47,27 @@ sees or stores an API key for them.
    the conversation from the chooser continues it: the next turn resumes the
    provider session.
 
+## Isolated worktrees
+
+With both `ai-agents` and `git`, a trusted local Git workspace also offers
+a new worktree conversation for either provider. Selecting one reserves a
+conversation. Sending its first prompt creates a linked checkout on its own `vix-agent-<UUID>`
+branch from the workspace's committed HEAD. The working folder for a
+workspace opened below the repository root is the corresponding subfolder.
+The picker and panel identify the worktree. Opening the picker creates
+nothing. Existing conversations use their original folder.
+
+The checkout lives alongside the private transcript and survives closing Vix.
+Its path and branch are derived from the conversation ID. Before each turn,
+Vix verifies the registered worktree, repository, branch and working folder.
+An unavailable worktree or a build without Git can still show the saved
+transcript. Sending fails there and never falls back to the original folder.
+The user controls review, merge and removal through ordinary Git operations.
+
 ## Providers
 
 Each prompt is one *turn*, run by a fresh child process started directly
-(argv, no shell) in the workspace root, speaking newline-delimited JSON on
+(argv, no shell) in the conversation’s working folder, speaking newline-delimited JSON on
 standard input and output.
 
 | | Codex | Claude Code |
@@ -133,6 +150,7 @@ at once.
 
 Conversations live in owner-private files next to the session file:
 `<session file>.agents/<UUID v5 of the canonical workspace>/<conversation UUID>.json`
+(isolated conversations use `<UUID>.worktree.json`)
 holding the provider, its resume ID and the visible messages (user prompts
 and replies; approval payloads and tool lines are not stored), and a small
 `<UUID>.meta` holding the provider and the title, so listing the chooser
@@ -187,6 +205,8 @@ one without an explicit key press.
   close-time interrupts, lock contention and a corrupt transcript in the
   chooser, and sanitized drafts. Waits sleep-poll with a 30 s deadline. No
   test runs the real `codex` or `claude`, or reaches the network.
+- The headless BUI test selects a worktree conversation and checks its branch
+  and draft through real window events.
 - The home-page recording `docs/demos/ai-agents.gif`
   (`docs/demos/ai-agents.tape`) is made by hand with the real installed
   programs and the maintainer's own logins.
