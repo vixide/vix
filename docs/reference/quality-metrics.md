@@ -17,10 +17,10 @@ lines and comments.
 |---|---|
 | Workspace crates (`tui/` and `crates/`) | 149 |
 | Desktop GUI crates (`gui/`) | 7 |
-| Lines of Rust in `src/` | 335,666 |
-| Lines of Rust in `tests/` | 61,723 |
+| Lines of Rust in `src/` | 335,540 |
+| Lines of Rust in `tests/` | 61,815 |
 | Lines of Rust elsewhere (`benches/`, `examples/`, `build.rs`) | 4,432 |
-| Test functions (`#[test]`, `#[tokio::test]`) | 6,961 |
+| Test functions (`#[test]`, `#[tokio::test]`) | 6,967 |
 | Property tests (`#[test]` in `proptest!`) | 131 in 59 blocks |
 | Fuzz targets (`fuzz/fuzz_targets/`) | 17 |
 | Criterion benchmark files (`benches/`) | 7 |
@@ -64,18 +64,18 @@ few keys are deliberate partial catalogs.
 | `pt` | 4,063 | 0 | 100.0% |
 | `ru` | 4,063 | 0 | 100.0% |
 | `zh` | 4,063 | 0 | 100.0% |
-| `tlh` | 11 | 4,052 | 0.2% |
-| `sjn` | 9 | 4,054 | 0.2% |
-| `el` | 5 | 4,058 | 0.1% |
-| `fa` | 5 | 4,058 | 0.1% |
-| `id` | 5 | 4,058 | 0.1% |
-| `it` | 5 | 4,058 | 0.1% |
-| `ko` | 5 | 4,058 | 0.1% |
-| `nl` | 5 | 4,058 | 0.1% |
-| `th` | 5 | 4,058 | 0.1% |
-| `tr` | 5 | 4,058 | 0.1% |
-| `uk` | 5 | 4,058 | 0.1% |
-| `vi` | 5 | 4,058 | 0.1% |
+| `tlh` | 21 | 4,042 | 0.5% |
+| `sjn` | 19 | 4,044 | 0.4% |
+| `el` | 16 | 4,047 | 0.3% |
+| `fa` | 16 | 4,047 | 0.3% |
+| `id` | 16 | 4,047 | 0.3% |
+| `it` | 16 | 4,047 | 0.3% |
+| `ko` | 16 | 4,047 | 0.3% |
+| `nl` | 16 | 4,047 | 0.3% |
+| `th` | 16 | 4,047 | 0.3% |
+| `tr` | 16 | 4,047 | 0.3% |
+| `uk` | 16 | 4,047 | 0.3% |
+| `vi` | 16 | 4,047 | 0.3% |
 
 ## Allowlists
 
@@ -232,7 +232,7 @@ file of the crate, property tests included.
 | `vix-theme-model` | 928 | 0 | 11 | 0 | 0 |
 | `vix-time-zone-model` | 2,743 | 0 | 4 | 0 | 0 |
 | `vix-todo-tree` | 477 | 0 | 8 | 0 | 0 |
-| `vix-tui` | 112,101 | 43,483 | 2,589 | 0 | 7 |
+| `vix-tui` | 111,975 | 43,575 | 2,595 | 0 | 7 |
 | `vix-tutor` | 498 | 0 | 14 | 0 | 0 |
 | `vix-undo-store` | 1,100 | 0 | 17 | 0 | 0 |
 | `vix-undo-tree-panel` | 499 | 0 | 7 | 0 | 0 |

@@ -17,6 +17,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use vix_i18n::t;
+
+vix_i18n::surface!();
+
 /// The repository root (this test's package lives in `tui/`).
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -328,27 +332,27 @@ const LOCALE_FLOORS: &[(&str, usize)] = &[
     ("bn", 2418),
     ("cy", 2418),
     ("de", 2418),
-    ("el", 0),
+    ("el", 16),
     ("es", 2418),
-    ("fa", 0),
+    ("fa", 16),
     ("fr", 2418),
     ("ga", 2418),
     ("gd", 2418),
     ("hi", 2418),
-    ("id", 0),
-    ("it", 0),
+    ("id", 16),
+    ("it", 16),
     ("ja", 2418),
-    ("ko", 0),
-    ("nl", 0),
+    ("ko", 16),
+    ("nl", 16),
     ("pl", 2418),
     ("pt", 2418),
     ("ru", 2418),
-    ("sjn", 0),
-    ("th", 0),
-    ("tlh", 0),
-    ("tr", 0),
-    ("uk", 0),
-    ("vi", 0),
+    ("sjn", 19),
+    ("th", 16),
+    ("tlh", 21),
+    ("tr", 16),
+    ("uk", 16),
+    ("vi", 16),
     ("zh", 2418),
 ];
 
@@ -589,4 +593,194 @@ fn counted_messages_in_ar_ru_pl_are_count_invariant() {
         "these counted strings put the number before a noun, which is wrong for most \
          counts in ar/ru/pl (rephrase as `Label: %{{n}}`): {bad:#?}"
     );
+}
+
+/// The save decisions (T796, audit PQ-06): the three messages that ask about,
+/// or refuse, a save that could lose data, and every label their choices
+/// lead to: the dialog's title, the status line each answer leaves, the
+/// compare view's title and identical-files notice, and the menu items the
+/// messages name. A missing locale here would show a destructive choice in
+/// English, so unlike the aggregate [`LOCALE_FLOORS`] these must have direct
+/// text in every language the chooser offers.
+const SAVE_DECISION_KEYS: &[&str] = &[
+    "confirm.save_as_overwrite",
+    "confirm.save_conflict",
+    "msg.save_unmappable",
+    "ui.confirm",
+    "status.save_as_cancelled",
+    "status.save_conflict_kept",
+    "ui.save_conflict_compare",
+    "status.diff_identical",
+    "menu.file",
+    "menu.item.file.save",
+    "menu.item.file.save_as",
+    "menu.item.file.save_with_encoding",
+];
+
+/// The `%{name}` placeholders in `text`.
+fn placeholders_in(text: &str) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("%{") {
+        rest = &rest[at + 2..];
+        if let Some(end) = rest.find('}') {
+            names.insert(rest[..end].to_string());
+            rest = &rest[end + 1..];
+        }
+    }
+    names
+}
+
+/// The direct (non-fallback) text of `key` in `locale`, if it has any.
+fn direct<'a>(
+    entries: &'a BTreeMap<String, serde_norway::Mapping>,
+    key: &str,
+    locale: &str,
+) -> Option<&'a str> {
+    entries
+        .get(key)?
+        .get(locale)
+        .and_then(serde_norway::Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+}
+
+#[test]
+fn save_decisions_have_direct_text_in_every_chooser_locale() {
+    let entries = catalog_entries(&workspace_root());
+    let mut missing = Vec::new();
+    let mut wrong = Vec::new();
+    for key in SAVE_DECISION_KEYS {
+        let english = direct(&entries, key, "en").unwrap_or_else(|| panic!("{key} has no en"));
+        let want = placeholders_in(english);
+        for locale in vix_locale_model::LOCALES {
+            match direct(&entries, key, locale.code) {
+                // Reported pair by pair, even for a locale whose aggregate
+                // coverage clears its floor.
+                None => missing.push(format!("({key}, {})", locale.code)),
+                Some(text) => {
+                    let got = placeholders_in(text);
+                    if got != want {
+                        wrong.push(format!("({key}, {}): {got:?} != {want:?}", locale.code));
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "save decisions fall back to English in these (key, locale) pairs: {missing:#?}"
+    );
+    assert!(
+        wrong.is_empty(),
+        "placeholders differ from English: {wrong:#?}"
+    );
+}
+
+#[test]
+fn save_decision_key_hints_name_the_keys_the_app_reads() {
+    // The answer keys are read as these Latin letters in every language
+    // (`confirm_key`, `save_conflict_key`), so each translation must offer
+    // exactly them, in the English order.
+    let entries = catalog_entries(&workspace_root());
+    let hints: &[(&str, &[&str])] = &[
+        ("confirm.save_as_overwrite", &["y", "n"]),
+        ("confirm.save_conflict", &["o", "c", "n"]),
+    ];
+    let mut bad = Vec::new();
+    for (key, letters) in hints {
+        for locale in vix_locale_model::LOCALES {
+            let Some(text) = direct(&entries, key, locale.code) else {
+                continue; // reported by the direct-text test
+            };
+            let mut from = 0;
+            for letter in *letters {
+                // A hint is the letter, an optional space and a colon (a
+                // full-width one in Chinese).
+                let found = [
+                    format!("{letter}:"),
+                    format!("{letter} :"),
+                    format!("{letter}："),
+                ]
+                .iter()
+                .filter_map(|h| text[from..].find(h.as_str()).map(|i| from + i + h.len()))
+                .min();
+                let Some(end) = found else {
+                    bad.push(format!(
+                        "({key}, {}): no `{letter}:` hint in order",
+                        locale.code
+                    ));
+                    break;
+                };
+                from = end;
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
+}
+
+#[test]
+fn the_unmappable_message_names_the_menu_item_as_each_locale_shows_it() {
+    // "Try File → Save with Encoding…" must match the File menu the person
+    // is looking at, in their language.
+    let entries = catalog_entries(&workspace_root());
+    let mut bad = Vec::new();
+    for locale in vix_locale_model::LOCALES {
+        let code = locale.code;
+        let (Some(msg), Some(file), Some(item)) = (
+            direct(&entries, "msg.save_unmappable", code),
+            direct(&entries, "menu.file", code),
+            direct(&entries, "menu.item.file.save_with_encoding", code),
+        ) else {
+            continue; // reported by the direct-text test
+        };
+        if !msg.contains(file) || !msg.contains(item) {
+            bad.push(format!(
+                "{code}: {msg:?} does not name {file:?} and {item:?}"
+            ));
+        }
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
+}
+
+#[test]
+fn save_decisions_interpolate_a_non_latin_path_and_an_unmappable_character() {
+    // Rendered through the real backend, by explicit locale (never
+    // `set_locale`, which is process-global): a path in three scripts and a
+    // character windows-1252 has no bytes for come through whole.
+    let path = "/home/ünï/日本語/файл-ملف.txt";
+    let mut bad = Vec::new();
+    for locale in vix_locale_model::LOCALES {
+        let code = locale.code;
+        let rendered = [
+            t!("confirm.save_as_overwrite", locale = code, path = path).to_string(),
+            t!("confirm.save_conflict", locale = code, path = path).to_string(),
+            t!(
+                "msg.save_unmappable",
+                locale = code,
+                path = path,
+                encoding = "windows-1252",
+                ch = '日',
+                code = "65E5"
+            )
+            .to_string(),
+        ];
+        for text in &rendered {
+            if !text.contains(path) || text.contains("%{") {
+                bad.push(format!("{code}: {text}"));
+            }
+        }
+        let unmappable = &rendered[2];
+        if !["windows-1252", "日", "U+65E5"]
+            .iter()
+            .all(|s| unmappable.contains(s))
+        {
+            bad.push(format!("{code}: {unmappable}"));
+        }
+        if code != "en"
+            && rendered[0] == t!("confirm.save_as_overwrite", locale = "en", path = path)
+        {
+            bad.push(format!("{code}: the overwrite question is the English one"));
+        }
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
 }

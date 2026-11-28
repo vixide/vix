@@ -234,6 +234,44 @@ text rather than an i18n key (the View → Theme/Locale/Time Zone submenus).
   `build.rs` also makes Cargo track every file in the directory so edits
   actually trigger a rebuild), and read everywhere through `vix_i18n::t!`.
 
+## Save decisions in every language (T796)
+
+A message that asks about, or refuses, a save that could lose data must
+never fall back to English, whatever the locale's aggregate coverage. These
+keys have direct text in **every** locale of `vix_locale_model::LOCALES`:
+English, the 14 core locales and the other 12 alike:
+
+- the three decisions: `confirm.save_as_overwrite` (Save As onto an existing
+  file), `confirm.save_conflict` (the file changed on disk since it was
+  opened) and `msg.save_unmappable` (the file's encoding has no bytes for a
+  character);
+- what their choices lead to: the dialog title `ui.confirm`, the status
+  lines `status.save_as_cancelled` and `status.save_conflict_kept`, the
+  compare view's title `ui.save_conflict_compare` and its
+  `status.diff_identical` notice;
+- the menu items they name: `menu.file`, `menu.item.file.save`,
+  `menu.item.file.save_as` and `menu.item.file.save_with_encoding`.
+
+`tui/tests/i18n_keys.rs` holds the list (`SAVE_DECISION_KEYS`) and checks,
+for each key and each `LOCALES` code, that the text is there (naming every
+missing `(key, locale)` pair), that its placeholders are English's, that the
+answer hints offer the Latin letters the App reads, in the English order
+(`y`, `n` for the overwrite; `o`, `c`, `n` for the conflict), that
+`msg.save_unmappable` names the File menu and its Save with Encoding item
+exactly as that locale's menu shows them, and that each message renders a
+path in three non-Latin scripts and a character windows-1252 cannot hold
+whole. The answer letters are not translated: the dialog reads the same keys
+in every language, as every other Vix confirmation does, so a hint always
+names a key that works. (Vim's translated `:confirm` dialogs translate their
+`&` accelerators instead; Vix keeps one set of keys so muscle memory and
+the documentation carry across languages.)
+The overwrite question now carries its key hint, like the other confirmations
+(`(y: overwrite, n: cancel)`).
+
+The wording for the constructed languages (`tlh`, `sjn`) is a best effort
+and wants review by a speaker. Every other message keeps the English
+fallback until it is translated.
+
 ## Counted messages (T565)
 
 `rust-i18n` has no plural rules: a key is one fixed string whatever the number. English
