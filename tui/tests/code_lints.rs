@@ -27,7 +27,9 @@
 //!    with `T<n>` an open task in `tasks.md`, so a quarantine cannot outlive
 //!    the work that is meant to end it.
 //!
-//! A last test keeps the GitHub and Forgejo pull-request templates identical.
+//! A last test keeps the GitHub and Forgejo pull-request templates identical,
+//! and another the `ignore` lists of the `cargo` entries in
+//! `.github/dependabot.yml` (T832, `spec/dependabot`).
 //!
 //! "No blocking I/O in async code" is not checked: the workspace has only two
 //! async call paths and both run on a private single-task runtime on their own
@@ -786,5 +788,81 @@ fn the_pull_request_templates_match() {
     assert_eq!(
         github, forgejo,
         ".forgejo/pull_request_template.md differs from .github/pull_request_template.md; copy one over the other"
+    );
+}
+
+/// The `ignore:` block of each `cargo` entry in a `dependabot.yml`, as
+/// `(directory, the block's lines)`; an entry without one has an empty block.
+fn dependabot_cargo_ignores(yml: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for entry in yml.split("\n  - package-ecosystem: ").skip(1) {
+        if !entry.starts_with("\"cargo\"") {
+            continue;
+        }
+        let directory = entry
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("directory:"))
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let mut block = String::new();
+        let mut inside = false;
+        for line in entry.lines() {
+            if line == "    ignore:" {
+                inside = true;
+            } else if inside && line.starts_with("    ") && !line.starts_with("     ") {
+                inside = false;
+            }
+            if inside {
+                block.push_str(line);
+                block.push('\n');
+            }
+        }
+        out.push((directory, block));
+    }
+    out
+}
+
+#[test]
+fn the_dependabot_cargo_ignore_lists_match() {
+    // gui/ and matrix/ reach root-workspace crates through path dependencies,
+    // so an update there can bump a crate the root entry ignores.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
+    let yml = std::fs::read_to_string(root.join(".github/dependabot.yml")).unwrap();
+    let entries = dependabot_cargo_ignores(&yml);
+    let directories: Vec<&str> = entries.iter().map(|(d, _)| d.as_str()).collect();
+    assert_eq!(
+        directories,
+        ["\"/\"", "\"/gui\"", "\"/matrix\""],
+        "the cargo entries changed; update this test and spec/dependabot"
+    );
+    let (_, first) = &entries[0];
+    assert!(
+        first.contains("dependency-name"),
+        "the root cargo entry has no ignore list"
+    );
+    for (directory, block) in &entries[1..] {
+        assert_eq!(
+            block, first,
+            "the ignore list of the {directory} cargo entry differs from the root entry's; keep them in step"
+        );
+    }
+}
+
+#[test]
+fn the_dependabot_reader_finds_each_ignore_block() {
+    let yml = "updates:\n  - package-ecosystem: \"cargo\"\n    directory: \"/\"\n    ignore:\n      - dependency-name: \"a\"\n    groups:\n      g:\n  - package-ecosystem: \"github-actions\"\n    directory: \"/\"\n  - package-ecosystem: \"cargo\"\n    directory: \"/gui\"\n";
+    let entries = dependabot_cargo_ignores(yml);
+    assert_eq!(
+        entries,
+        [
+            (
+                "\"/\"".to_string(),
+                "    ignore:\n      - dependency-name: \"a\"\n".to_string()
+            ),
+            ("\"/gui\"".to_string(), String::new()),
+        ]
     );
 }

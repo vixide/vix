@@ -5,6 +5,16 @@
 # (.github/workflows/security.yml, the `deny` job of .gitlab-ci.yml, and
 # .forgejo/workflows/security.yml) already scans advisories on all three
 # forges; this adds version-bump PRs on top of that, on GitHub.
+#
+# Grouping (T832), to keep the number of PRs low: in each entry, every minor
+# and patch update lands in one grouped PR a week; a major update is not in
+# the group, so each opens its own PR, to be reviewed (and migrated) on its
+# own. Security updates are not grouped: each advisory fix opens its own PR
+# as soon as it is published.
+#
+# The `ignore` list is the same in each cargo entry: gui/ and matrix/ reach
+# the root workspace's crates through path dependencies (see below), so an
+# update there can touch the same crates. Keep the three lists in step.
 
 version: 2
 updates:
@@ -43,12 +53,92 @@ updates:
       - dependency-name: "vt100"
         versions: [">=0.16.0"]
     groups:
-      cargo-dependencies:
+      cargo-minor-and-patch:
+        applies-to: version-updates
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The desktop GUIs (gui/Cargo.toml, its own workspace and Cargo.lock): the
+  # GUI toolkits (gpui, egui, iced, gtk4, slint, ...) are in no other graph.
+  # gui/ path-depends on tui/ and crates/vix-input and crates/vix-i18n, so,
+  # as with fuzz/ above, a PR here can also edit the root Cargo.toml: close
+  # such a PR and let the root entry make that change (spec/dependabot).
+  - package-ecosystem: "cargo"
+    directory: "/gui"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    ignore:
+      # AGPL-3.0-only as of 12.0.0 — incompatible with the license Vix
+      # offers (see the comment beside evalexpr in Cargo.toml and deny.toml's
+      # license allowlist). Do not lift without replacing the calculator's
+      # evaluator.
+      - dependency-name: "evalexpr"
+        versions: [">=12.0.0"]
+      # A breaking API change past this version, hit and reverted while
+      # triaging a grouped update — not a policy block like evalexpr's, just
+      # unmigrated. Lift once someone updates the call sites: 0.18's
+      # Parser::new/set_size take NonZeroU16 and Screen's *_formatted/*_diff
+      # return String (vix-terminal, the Cowork terminal mirror in
+      # tui/src/app/cowork.rs). getrandom (0.4, ::fill) and ureq (3.x) had
+      # the same kind of ignore until their call sites were migrated.
+      - dependency-name: "vt100"
+        versions: [">=0.16.0"]
+    groups:
+      gui-cargo-minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The Matrix helper (matrix/Cargo.toml, its own workspace and Cargo.lock):
+  # matrix-sdk and its tree are in no other graph. It path-depends on
+  # crates/vix-matrix-protocol, with the same caveat as gui/ above.
+  - package-ecosystem: "cargo"
+    directory: "/matrix"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    ignore:
+      # AGPL-3.0-only as of 12.0.0 — incompatible with the license Vix
+      # offers (see the comment beside evalexpr in Cargo.toml and deny.toml's
+      # license allowlist). Do not lift without replacing the calculator's
+      # evaluator.
+      - dependency-name: "evalexpr"
+        versions: [">=12.0.0"]
+      # A breaking API change past this version, hit and reverted while
+      # triaging a grouped update — not a policy block like evalexpr's, just
+      # unmigrated. Lift once someone updates the call sites: 0.18's
+      # Parser::new/set_size take NonZeroU16 and Screen's *_formatted/*_diff
+      # return String (vix-terminal, the Cowork terminal mirror in
+      # tui/src/app/cowork.rs). getrandom (0.4, ::fill) and ureq (3.x) had
+      # the same kind of ignore until their call sites were migrated.
+      - dependency-name: "vt100"
+        versions: [">=0.16.0"]
+    groups:
+      matrix-cargo-minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Actions used by the GitHub workflow files.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      actions-minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
