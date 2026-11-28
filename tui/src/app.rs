@@ -2481,6 +2481,12 @@ pub struct App {
     /// Last document revision pushed to a language server, keyed by file path, so
     /// edits sync once per change rather than once per frame.
     lsp_synced: std::collections::HashMap<PathBuf, u64>,
+    /// The protocol position behind each row of the static results panel an
+    /// LSP reply built (T795), parallel to its hits; `None` for a row that
+    /// came from elsewhere (a task problem). Opening a row converts this
+    /// position against the target buffer instead of trusting the row's
+    /// column, which is only the raw protocol column plus one.
+    lsp_row_origins: Vec<Option<lsp_dap::LspRowOrigin>>,
     /// Inline-blame cache: the `(path, 1-based line)` last blamed, so the blame is
     /// recomputed only when the cursor moves to a different line.
     #[cfg(feature = "git")]
@@ -3139,6 +3145,7 @@ impl App {
             vcard: None,
             lsp,
             lsp_synced: std::collections::HashMap::new(),
+            lsp_row_origins: Vec::new(),
             #[cfg(feature = "git")]
             blame_cache: None,
             diag_status: None,
@@ -12943,92 +12950,98 @@ impl App {
         let Some(path) = self.active_path() else {
             return;
         };
-        let mut hits: Vec<Hit> = syms
+        let encoding = self.lsp.encoding_for(&path);
+        let mut rows: Vec<lsp_dap::LspRow> = syms
             .iter()
             .map(|(line, character, name)| {
                 let rel = self.root_relative(&path);
-                let line1 = usize::try_from(*line).unwrap_or(usize::MAX).plus(1);
-                Hit {
+                let origin = lsp_dap::LspRowOrigin::new(&path, *line, *character, encoding);
+                let line1 = origin.line1();
+                let hit = Hit {
                     path: path.clone(),
                     rel,
                     line: line1,
-                    col: usize::try_from(*character).unwrap_or(usize::MAX).plus(1),
+                    col: origin.raw_col1(),
                     display: format!("{name}  :{line1}"),
                     text: name.clone(),
-                }
+                };
+                (hit, Some(origin))
             })
             .collect();
-        if hits.is_empty() {
+        if rows.is_empty() {
             self.status = t!("status.no_symbols").to_string();
             return;
         }
-        hits.sort_by_key(|h| h.line);
+        rows.sort_by_key(|(h, _)| h.line);
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
         ps.title = Some(t!("ui.results_document_symbols").to_string());
-        ps.status = t!("status.symbols_n", n = hits.len()).to_string();
-        ps.hits = hits;
-        self.workspace_search = Some(ps);
+        ps.status = t!("status.symbols_n", n = rows.len()).to_string();
+        self.show_lsp_rows(ps, rows);
     }
 
     /// Show workspace symbols in the static-results panel (Enter jumps).
     fn show_workspace_symbols(&mut self, syms: &[(PathBuf, u32, u32, String)]) {
-        let mut hits: Vec<Hit> = syms
+        let mut rows: Vec<lsp_dap::LspRow> = syms
             .iter()
             .map(|(path, line, character, name)| {
                 let rel = self.root_relative(path);
-                let line1 = usize::try_from(*line).unwrap_or(usize::MAX).plus(1);
-                Hit {
+                let encoding = self.reply_encoding(path);
+                let origin = lsp_dap::LspRowOrigin::new(path, *line, *character, encoding);
+                let line1 = origin.line1();
+                let hit = Hit {
                     path: path.clone(),
                     rel: rel.clone(),
                     line: line1,
-                    col: usize::try_from(*character).unwrap_or(usize::MAX).plus(1),
+                    col: origin.raw_col1(),
                     display: format!("{name}  {rel}:{line1}"),
                     text: name.clone(),
-                }
+                };
+                (hit, Some(origin))
             })
             .collect();
-        if hits.is_empty() {
+        if rows.is_empty() {
             self.status = t!("status.no_symbols").to_string();
             return;
         }
-        hits.sort_by(|a, b| a.display.cmp(&b.display));
+        rows.sort_by(|a, b| a.0.display.cmp(&b.0.display));
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
         ps.title = Some(t!("ui.results_workspace_symbols").to_string());
-        ps.status = t!("status.symbols_n", n = hits.len()).to_string();
-        ps.hits = hits;
-        self.workspace_search = Some(ps);
+        ps.status = t!("status.symbols_n", n = rows.len()).to_string();
+        self.show_lsp_rows(ps, rows);
     }
 
     /// Show LSP reference locations in the static-results panel (Enter jumps).
     fn show_references(&mut self, locs: &[(PathBuf, u32, u32)]) {
-        let mut hits: Vec<Hit> = locs
+        let mut rows: Vec<lsp_dap::LspRow> = locs
             .iter()
             .map(|(path, line, character)| {
                 let rel = self.root_relative(path);
-                let line1 = usize::try_from(*line).unwrap_or(usize::MAX).plus(1);
-                Hit {
+                let encoding = self.reply_encoding(path);
+                let origin = lsp_dap::LspRowOrigin::new(path, *line, *character, encoding);
+                let line1 = origin.line1();
+                let hit = Hit {
                     path: path.clone(),
                     rel: rel.clone(),
                     line: line1,
-                    col: usize::try_from(*character).unwrap_or(usize::MAX).plus(1),
+                    col: origin.raw_col1(),
                     display: format!("{rel}:{line1}"),
                     text: String::new(),
-                }
+                };
+                (hit, Some(origin))
             })
             .collect();
-        if hits.is_empty() {
+        if rows.is_empty() {
             self.status = t!("status.no_references").to_string();
             return;
         }
-        hits.sort_by(|a, b| a.display.cmp(&b.display));
+        rows.sort_by(|a, b| a.0.display.cmp(&b.0.display));
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
         ps.title = Some(t!("ui.results_references").to_string());
-        ps.status = t!("status.references_n", n = hits.len()).to_string();
-        ps.hits = hits;
-        self.workspace_search = Some(ps);
+        ps.status = t!("status.references_n", n = rows.len()).to_string();
+        self.show_lsp_rows(ps, rows);
     }
 
     /// Go to the definition of the symbol under the cursor: ask the language server when one
@@ -13702,19 +13715,26 @@ impl App {
     /// Close the project-search panel and jump to the selected hit, recorded as a navigation
     /// jump.
     fn open_selected_hit(&mut self) {
-        let target = self
-            .workspace_search
-            .as_ref()
-            .and_then(|p| p.selected_hit())
-            .map(|h| (h.path.clone(), h.line, h.col));
-        if let Some((path, line, col)) = target {
+        let target = self.workspace_search.as_ref().and_then(|p| {
+            let hit = p.selected_hit()?;
+            let origin = self.lsp_row_origin(p.selected, hit);
+            Some((hit.path.clone(), hit.line, hit.col, origin))
+        });
+        if let Some((path, line, col, origin)) = target {
             self.remember_workspace_search();
             self.workspace_search = None;
+            self.lsp_row_origins.clear();
             self.with_jump(|s| {
                 s.open_path(&path, false);
-                let area = s.editor_view();
-                s.editor.goto(line, Some(col), area);
                 s.focus = Focus::Editor;
+                // T795: a protocol position converts against the buffer
+                // just opened, in the encoding of the server that sent it.
+                if let Some(o) = origin {
+                    s.goto_lsp_position(o.line, o.character, o.encoding);
+                } else {
+                    let area = s.editor_view();
+                    s.editor.goto(line, Some(col), area);
+                }
             });
         }
     }

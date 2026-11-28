@@ -778,3 +778,208 @@ fn every_lsp_action_applies_a_mock_servers_reply() {
     app.lsp.shutdown();
     fs::remove_dir_all(&root).ok();
 }
+
+/// A mock language server for T795 that reports `positionEncoding`
+/// `argv[1]` and places every result at the `x` of `界💡x` (line 1 of the
+/// open `a.rs` buffer, which exists only unsaved, and of the unopened
+/// `b.rs`), in that encoding's code units, plus an ASCII control at
+/// `main` (line 0, character 3) of `a.rs`.
+#[cfg(feature = "lsp")]
+const MOCK_ENCODING_SERVER: &str = r"
+import json, sys
+
+enc = sys.argv[1]
+col = {'utf-8': 7, 'utf-16': 3, 'utf-32': 2}[enc]
+
+def read_msg():
+    length = None
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        line = line.strip()
+        if not line:
+            break
+        if line.lower().startswith(b'content-length:'):
+            length = int(line.split(b':')[1])
+    return json.loads(sys.stdin.buffer.read(length))
+
+def send(obj):
+    data = json.dumps(obj).encode()
+    sys.stdout.buffer.write(b'Content-Length: %d\r\n\r\n' % len(data) + data)
+    sys.stdout.buffer.flush()
+
+def rng(l, c):
+    return {'start': {'line': l, 'character': c}, 'end': {'line': l, 'character': c + 1}}
+
+a = None
+b = None
+while True:
+    msg = read_msg()
+    if msg is None:
+        break
+    method = msg.get('method')
+    mid = msg.get('id')
+    p = msg.get('params') or {}
+    def reply(result):
+        send({'jsonrpc': '2.0', 'id': mid, 'result': result})
+    if method == 'initialize':
+        reply({'capabilities': {
+            'positionEncoding': enc, 'textDocumentSync': 1,
+            'referencesProvider': True, 'documentSymbolProvider': True,
+            'workspaceSymbolProvider': True}})
+    elif method == 'textDocument/didOpen' and a is None:
+        a = p['textDocument']['uri']
+        b = a[:-len('a.rs')] + 'b.rs'
+        send({'jsonrpc': '2.0', 'method': 'textDocument/publishDiagnostics', 'params': {
+            'uri': a, 'diagnostics': [
+                {'range': rng(1, col), 'severity': 2, 'message': 'wide target',
+                 'relatedInformation': [{'location': {'uri': b, 'range': rng(1, col)},
+                                         'message': 'related in b'}]},
+                {'range': rng(0, 3), 'severity': 1, 'message': 'ascii control'}]}})
+    elif method == 'textDocument/references':
+        reply([{'uri': a, 'range': rng(1, col)}, {'uri': b, 'range': rng(1, col)},
+               {'uri': a, 'range': rng(0, 3)}])
+    elif method == 'textDocument/documentSymbol':
+        reply([{'name': 'main', 'kind': 12, 'range': rng(0, 3), 'selectionRange': rng(0, 3)},
+               {'name': 'x', 'kind': 13, 'range': rng(1, col), 'selectionRange': rng(1, col)}])
+    elif method == 'workspace/symbol':
+        reply([{'name': 'x', 'kind': 13, 'location': {'uri': b, 'range': rng(1, col)}},
+               {'name': 'main', 'kind': 12, 'location': {'uri': a, 'range': rng(0, 3)}}])
+    elif method == 'shutdown':
+        reply(None)
+    elif method == 'exit':
+        break
+    elif mid is not None:
+        reply(None)
+";
+
+/// The active tab's file name and 1-based `(line, column)` of its cursor.
+#[cfg(feature = "lsp")]
+fn cursor_at(app: &App) -> (String, usize, usize) {
+    let t = app.editor.active_tab().unwrap();
+    let name = t
+        .path
+        .as_deref()
+        .and_then(Path::file_name)
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    let code = t.editor.code_ref();
+    let cur = t.editor.get_cursor();
+    let line = code.char_to_line(cur);
+    (name, line + 1, cur - code.line_to_char(line) + 1)
+}
+
+/// T795: a document-symbol, workspace-symbol, reference, diagnostic and
+/// related-information row each land on the `x` of `界💡x` -- editor
+/// column 3 -- whether the server counts UTF-8 (7), UTF-16 (3) or UTF-32 (2)
+/// code units, in an unsaved buffer and in a file only the jump opens; an
+/// ASCII row lands on its plain column in every encoding.
+#[test]
+#[cfg(feature = "lsp")]
+fn lsp_result_rows_convert_the_servers_position_encoding() {
+    let has_python = std::process::Command::new("python3")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !has_python {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    for enc in ["utf-8", "utf-16", "utf-32"] {
+        let root = unique_dir(&format!("lsp-encoding-{enc}"));
+        let mock = root.join("mock_encoding.py");
+        fs::write(&mock, MOCK_ENCODING_SERVER).unwrap();
+        let a = root.join("a.rs");
+        let b = root.join("b.rs");
+        // On disk `a.rs` has no line 1: the target exists only unsaved.
+        fs::write(&a, "fn main() {}\n").unwrap();
+        fs::write(&b, "// b\n界💡x\n").unwrap();
+        let mut settings = Settings::default();
+        settings.lsp_servers.push(vix::settings::LspServer {
+            language_id: "rust".into(),
+            extensions: vec!["rs".into()],
+            command: vec![
+                "python3".into(),
+                mock.to_string_lossy().into_owned(),
+                enc.into(),
+            ],
+        });
+        let mut app = app_at_with(&root, settings);
+        app.open_initial(&a);
+        buffer_with(&mut app, "fn main() {}\n界💡x\n", 0);
+        app.editor.active_tab_mut().unwrap().dirty = true;
+        let until = Instant::now() + Duration::from_secs(15);
+        while app.lsp.diagnostics_for(&a).is_empty() && Instant::now() < until {
+            app.poll_lsp();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !app.lsp.diagnostics_for(&a).is_empty(),
+            "{enc}: no diagnostics; log {}",
+            app.lsp.server_log(&a)
+        );
+        // (action, row's file, row's 1-based line, expected column).
+        let cases = [
+            // The related location first, while `b.rs` is still unopened.
+            ("lsp.diagnostics", "b.rs", 2, 3),
+            ("lsp.diagnostics", "a.rs", 2, 3),
+            ("lsp.diagnostics", "a.rs", 1, 4),
+            ("lsp.references", "a.rs", 2, 3),
+            ("lsp.references", "b.rs", 2, 3),
+            ("lsp.references", "a.rs", 1, 4),
+            ("lsp.document_symbols", "a.rs", 2, 3),
+            ("lsp.document_symbols", "a.rs", 1, 4),
+            ("lsp.workspace_symbols", "b.rs", 2, 3),
+            ("lsp.workspace_symbols", "a.rs", 1, 4),
+        ];
+        for (action, file, line, col) in cases {
+            app.open_initial(&a);
+            app.workspace_search = None;
+            app.run_action(action);
+            if app.prompt.is_some() {
+                // Workspace symbols asks for a query first.
+                type_str(&mut app, "x");
+                app.on_key(keycode(KeyCode::Enter));
+            }
+            let until = Instant::now() + Duration::from_secs(15);
+            let shown = |s: &App| {
+                s.workspace_search
+                    .as_ref()
+                    .is_some_and(|p| !p.hits.is_empty())
+            };
+            while !shown(&app) && Instant::now() < until {
+                app.poll_lsp();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(
+                shown(&app),
+                "{enc} {action}: no results; status {:?}; log {}",
+                app.status,
+                app.lsp.server_log(&a)
+            );
+            let ps = app.workspace_search.as_mut().unwrap();
+            let idx = ps
+                .hits
+                .iter()
+                .position(|h| h.path.file_name() == Some(file.as_ref()) && h.line == line)
+                .unwrap_or_else(|| panic!("{enc} {action}: no {file}:{line} row"));
+            ps.selected = idx;
+            app.on_key(keycode(KeyCode::Enter));
+            assert_eq!(
+                cursor_at(&app),
+                (file.to_string(), line, col),
+                "{enc} {action} {file}:{line}"
+            );
+        }
+        // The `a.rs` rows resolved against the unsaved buffer: the file
+        // on disk still has no line 1.
+        assert_eq!(fs::read_to_string(&a).unwrap(), "fn main() {}\n", "{enc}");
+        app.open_initial(&a);
+        assert!(
+            app.editor.active_tab().unwrap().text().contains("界💡x"),
+            "{enc}: the unsaved a.rs buffer is kept"
+        );
+        app.lsp.shutdown();
+        fs::remove_dir_all(&root).ok();
+    }
+}

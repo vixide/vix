@@ -10360,7 +10360,7 @@ principle, so it waits for a deliberate decision.
   panel result with Enter and click a dock result after a prefix of CJK, emoji
   and a combining mark.
   Both assert the final line and column.
-- [ ] **T795 — Preserve the server's position encoding in result lists.**
+- [x] **T795 — Preserve the server's position encoding in result lists.** (Done: each LSP row keeps its protocol position and server encoding and converts it on open via `goto_lsp_position`, shared with direct jumps; tested in UTF-8/16/32 with a dirty buffer, an unopened second file and an ASCII row; call/type hierarchy lists share the references builder and are fixed too.)
   Follow a document symbol, workspace symbol, reference, diagnostic and
   related-information row through the static results panel. The row builders in
   `tui/src/app.rs` and `tui/src/app/lsp_dap.rs` add one to the raw protocol
