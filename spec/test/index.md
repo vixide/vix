@@ -380,6 +380,34 @@ messages stay right. The same module writes
 `docs/reference/crate-layers.md` from `cargo run --example list_commands --
 --write`, so the gate's "generated reference docs current?" step keeps it in
 step with the workspace.
+
+### Quality metrics (T833)
+
+`docs/reference/quality-metrics.md` is the quality-metrics dashboard, written
+by the same `list_commands --write` run from
+`tui/tests/support/quality_metrics.rs` and so kept current by the same gate
+step. It holds only numbers that are deterministic and cheap: read from the
+source tree as text (comments and string-literal contents masked out, offsets
+kept), with no build, test run, coverage run or network, in well under a
+second. For the workspace and the desktop GUIs it gives lines of Rust under
+`src/`, under `tests/` and elsewhere; `#[test]`/`#[tokio::test]` functions;
+property tests (`#[test]` inside `proptest!`) and their blocks; fuzz targets;
+Criterion benchmark files; `#[ignore]` attributes and how many are flaky
+quarantine (`#[ignore = "flaky…"]`); `allow`/`expect` lint suppressions under
+`src/`; and a table per crate. It also gives the crate count per layer (from
+`crate_graph::layers`), the translation keys with each locale's count,
+missing count and completeness, and the size of each written-down exception
+list: `PRINT_ALLOWED` (files and print macros) and `SINK_ALLOWED` in
+`code_lints.rs`, `allow` lines in `scripts/secret-patterns`, equivalent
+mutants in `.cargo/mutants.toml` and ignored advisories in `deny.toml`.
+Public items lacking examples are not counted: telling an item's docs apart
+needs a parse of every item, not a text scan. Line coverage (`cargo tarpaulin`,
+`bin/test-coverage`), mutation score (`mutants.yml`) and flakiness
+(`scripts/flaky-hunt`) need a build or many runs and stay where they are
+measured; the page ends with pointers to them. `tui/tests/quality_metrics.rs`
+tests the counters on small inputs (masking, test/property/ignore counts,
+catalog parsing, the allowlist reader, number formatting).
+
 ### Secret scanning (T832)
 
 `tui/tests/secret_scan.rs` fails `cargo test` when a tracked file holds what

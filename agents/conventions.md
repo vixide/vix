@@ -89,6 +89,10 @@ on top.
   offending edge. After changing a crate's dependencies, regenerate
   `docs/reference/crate-layers.md` with
   `cargo run --example list_commands -- --write`.
+- The same run rewrites `docs/reference/quality-metrics.md` (lines, test,
+  property-test and ignore counts, translation completeness, allowlist sizes),
+  so adding tests, keys or allowlist entries changes it too; commit the
+  regenerated page with the change.
 
 ## Rendering
 
