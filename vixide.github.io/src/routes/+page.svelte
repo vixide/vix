@@ -12,7 +12,8 @@
     { file: 'palette', title: 'Command palette', text: 'Fuzzy-find files, then switch to command mode with >.' },
     { file: 'multi-cursor', title: 'Multiple cursors', text: 'Select every occurrence of a word and edit them all at once.' },
     { file: 'git-hunks', title: 'Git hunk staging', text: 'Stage two changes in one file, one hunk at a time.' },
-    { file: 'db-workbench', title: 'Database workbench', text: 'Connect to a SQLite file, run a join, read the results grid.' }
+    { file: 'db-workbench', title: 'Database workbench', text: 'Connect to a SQLite file, run a join, read the results grid.' },
+    { file: 'ai-agents', title: 'Claude Code and Codex', text: 'Ask your installed Claude Code about the code, then let Codex fix it after you allow its edit (opt-in build feature, not released yet).' }
   ];
 
 

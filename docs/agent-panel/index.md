@@ -354,6 +354,13 @@ the_session_id_survives_a_restart). -->
 - [Threat model](../threat-model.md): what AI features and agents may and may
   not reach.
 
+## Native Codex and Claude Code
+
+The Agent panel drives ACP agents. To talk to the **Codex** or **Claude
+Code** program you already have installed and signed in to, use **AI → Agent
+Conversations…** instead, in a build with `--features ai-agents`. See
+[Native coding agents](../ai-agents/index.md).
+
 ---
 
 Vix™ and Vix IDE™ are trademarks.

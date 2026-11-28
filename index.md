@@ -96,6 +96,13 @@ quit. Other ways to install, including Windows, Linux packages and
 | ![Git hunk staging: stage two changes in one file, one hunk at a time](docs/demos/git-hunks.gif) | ![Database workbench: connect to SQLite, run a join, read the result grid](docs/demos/db-workbench.gif) |
 | **Git hunk staging.** Stage one change at a time. | **Database workbench.** Run a query, read the grid. |
 
+![Native coding agents: ask Claude Code about the code, then Codex asks before it edits the file and Vix reloads it](docs/demos/ai-agents.gif)
+
+**Claude Code and Codex, natively.** Ask your installed Claude Code about the
+code, then have Codex fix it: every tool request is shown, and nothing runs
+until you allow it ([native coding agents](docs/ai-agents/index.md); an
+opt-in build feature, not released yet).
+
 More recordings — Org-roam, edit surfaces and themes — are in
 [`docs/demos/`](docs/demos/).
 
@@ -239,7 +246,10 @@ co-editing with shared cursors, terminal, chat and notes
 
 **AI, on your terms.** An AI menu and chat panel that run the assistant CLI of
 your choice, or an Anthropic, OpenAI or Ollama HTTP API, on a selection;
-`ai = "off"` hides all of it without a rebuild. `vix --mcp` serves a
+`ai = "off"` hides all of it without a rebuild. With `--features ai-agents`,
+**AI → Agent Conversations…** talks to your installed Codex or Claude Code,
+with their own logins, and asks you before each tool request
+([native coding agents](docs/ai-agents/index.md)). `vix --mcp` serves a
 read-only view of a workspace to AI agents over the Model Context Protocol
 ([MCP server](docs/mcp-server/index.md)).
 
@@ -372,7 +382,7 @@ feature.
 ## Contributing
 
 Vix is a Cargo workspace: a thin app shell (the `vix-tui` package in `tui/`)
-over about 147 focused `vix-*` crates in `crates/`, with the desktop GUIs in
+over about 148 focused `vix-*` crates in `crates/`, with the desktop GUIs in
 `gui/`. Development is specification-driven — each crate's spec at
 `crates/<crate>/spec/index.md` is the source of truth. Start with
 [`AGENTS.md`](AGENTS.md) (conventions, workflow and crate map, for humans and

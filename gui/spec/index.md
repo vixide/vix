@@ -24,6 +24,9 @@ cargo run --manifest-path gui/Cargo.toml --release -p vix-bui [-- FILE…]    # 
 cargo run --manifest-path gui/Cargo.toml --release -p vix-zgui [-- FILE…]
 ```
 
+Each GUI forwards `--features ai-agents` to the shared App. Its AI menu opens
+the same conversation picker, input and approval UI as the TUI.
+
 All take the same command line as `vix` (`vix::cli::Cli`).
 
 ## Layout

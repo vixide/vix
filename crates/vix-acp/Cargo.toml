@@ -10,10 +10,14 @@ description = "An Agent Client Protocol (ACP) client for Vix (T635)"
 [features]
 default = []
 # Spawn the agent process. Off, the crate is pure: no processes, no threads.
-process = []
+process = ["dep:nix"]
 
 [dependencies]
 serde_json = { workspace = true }
+
+# Unix: kill an isolated agent's whole process group.
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, optional = true }
 
 [[test]]
 name = "fake_agent"

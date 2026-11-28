@@ -17,6 +17,7 @@ readme = "../../README.md"
 description = "Vix desktop GUI on GPUI (GPUI Kit): the full Vix App in a native GPU-rendered window."
 
 [features]
+ai-agents = ["vix/ai-agents"]
 # `VIX_GUI_SCREENSHOT=out.png vix-gpui` renders the window to a PNG a few
 # seconds after startup and quits — a real-render smoke test for CI and for
 # checking a change without screen-recording permission. GPUI Kit's own

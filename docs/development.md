@@ -133,7 +133,7 @@ works; the repository ships no editor-specific project files (there is no
 `.vscode/` or `.idea/`). Whatever you use, set it up so that it:
 
 - **opens the repository root**, so rust-analyzer loads the whole workspace
-  (all 147 member crates and `tui/`), not one crate;
+  (all 148 member crates and `tui/`), not one crate;
 - **checks with clippy**, because the gate runs
   `cargo clippy --workspace --all-targets -- -D warnings` with
   `clippy::pedantic` on for every crate, and a pedantic warning is an error;
@@ -408,7 +408,7 @@ git push origin my-feature-branch
 vix/
 ├── Cargo.toml           # Workspace manifest
 ├── Cargo.lock           # Dependency lockfile (checked in)
-├── crates/              # The 147 `vix-*` member crates
+├── crates/              # The 148 `vix-*` member crates
 │   ├── vix-*/           # Feature crates
 │   └── ...
 ├── tui/                 # App shell (vix-tui package)

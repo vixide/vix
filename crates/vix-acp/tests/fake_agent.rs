@@ -189,3 +189,85 @@ fn file_requests_are_answered_through_the_client() {
 fn dropping_the_agent_kills_the_process_and_empty_argv_is_refused() {
     assert!(AgentProcess::spawn(&[], Path::new(".")).is_err());
 }
+
+/// Poll `ready` every 20 ms for up to 20 s (the gate runs under heavy load).
+fn eventually(mut ready: impl FnMut() -> bool) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while Instant::now() < deadline {
+        if ready() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    ready()
+}
+
+#[test]
+fn stderr_keeps_a_bounded_tail_and_an_isolated_agent_takes_its_tools_down() {
+    let Some(py) = python() else {
+        return;
+    };
+    let dir = temp("isolated");
+    let pid_file = dir.join("tool.pid");
+    // 20 KiB of stderr, a marker, a long-lived "tool" child, then a line on
+    // stdout; the agent then waits for stdin.
+    let code = format!(
+        "import subprocess,sys\n\
+         sys.stderr.write('x'*20000+'END-OF-STDERR'); sys.stderr.flush()\n\
+         p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'])\n\
+         open({:?},'w').write(str(p.pid))\n\
+         print('{{\"ready\":true}}', flush=True)\n\
+         sys.stdin.readline()\n",
+        pid_file.display().to_string()
+    );
+    let argv = vec![py.to_owned(), "-c".to_owned(), code];
+    let mut agent = AgentProcess::spawn_isolated(&argv, &dir).unwrap_or_else(|e| panic!("{e}"));
+    let mut seen = Vec::new();
+    assert!(eventually(|| {
+        seen.extend(agent.drain());
+        !seen.is_empty() && agent.stderr_tail().ends_with("END-OF-STDERR")
+    }));
+    assert!(agent.stderr_tail().len() <= vix_acp::process::STDERR_TAIL_BYTES);
+    assert_eq!(seen[0]["ready"], true);
+    // A queued write still reaches the agent.
+    agent
+        .send(&serde_json::json!({"go": 1}))
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert!(eventually(|| pid_file.exists()));
+    let tool: u32 = std::fs::read_to_string(&pid_file)
+        .unwrap_or_else(|e| panic!("{e}"))
+        .trim()
+        .parse()
+        .unwrap_or_else(|e| panic!("{e}"));
+    drop(agent);
+    #[cfg(unix)]
+    assert!(
+        eventually(|| !std::process::Command::new("kill")
+            .args(["-0", &tool.to_string()])
+            .status()
+            .is_ok_and(|s| s.success())),
+        "the tool process outlived its agent"
+    );
+    #[cfg(not(unix))]
+    let _ = tool;
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn closing_stdin_ends_a_reading_agent_and_later_sends_fail() {
+    let Some(py) = python() else {
+        return;
+    };
+    let dir = temp("close-stdin");
+    let argv = vec![
+        py.to_owned(),
+        "-c".to_owned(),
+        "import sys; sys.stdin.read()".to_owned(),
+    ];
+    let mut agent = AgentProcess::spawn_isolated(&argv, &dir).unwrap_or_else(|e| panic!("{e}"));
+    agent.close_stdin();
+    assert!(eventually(|| agent.try_wait().is_ok_and(|s| s.is_some())));
+    assert!(agent.send(&serde_json::json!({})).is_err());
+    assert!(agent.is_closed());
+    let _ = std::fs::remove_dir_all(dir);
+}

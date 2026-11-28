@@ -12071,6 +12071,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vix-acp"
 version = "3.0.0"
 dependencies = [
+ "nix 0.32.0",
  "serde_json",
 ]
 
@@ -12081,6 +12082,16 @@ version = "3.0.0"
 [[package]]
 name = "vix-affix"
 version = "3.0.0"
+
+[[package]]
+name = "vix-ai-agents"
+version = "3.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "uuid",
+ "vix-fileops",
+]
 
 [[package]]
 name = "vix-ai-core"
@@ -13209,6 +13220,7 @@ dependencies = [
  "vix-acp",
  "vix-action-catalog",
  "vix-affix",
+ "vix-ai-agents",
  "vix-ai-core",
  "vix-ai-diff",
  "vix-ai-panel",

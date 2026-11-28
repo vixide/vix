@@ -133,10 +133,54 @@ fn seg_line_count(seg: &crate::ai_diff::Seg) -> usize {
 /// Draw the AI chat panel overlay (conversation, input line). No-op when the
 /// panel is closed.
 pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
-    use crate::ai_panel::Role;
-    if app.ai_panel.is_none() {
+    let Some(panel) = app.ai_panel.as_mut() else {
         return;
-    }
+    };
+    let title = if panel.busy {
+        t!("ui.ai_thinking")
+    } else {
+        t!("menu.ai")
+    };
+    app.layout.ai_panel = draw_conversation(panel, frame, area, &title, &t!("ui.ai_panel_hint"));
+}
+
+/// Draw a native provider conversation using the same grid in every host.
+#[cfg(feature = "ai-agents")]
+pub(super) fn draw_native_conversation(app: &mut App, frame: &mut Frame, area: Rect) {
+    let Some(native) = &mut app.native_panel else {
+        return;
+    };
+    let name = native.conversation.transcript.provider.name();
+    let title = if native.panel.busy {
+        t!(
+            "ui.agent_title_busy",
+            provider = name,
+            state = t!("ui.ai_thinking")
+        )
+        .to_string()
+    } else {
+        name.to_owned()
+    };
+    let hint = if native.awaiting_approval() {
+        t!("ui.agent_decision")
+    } else if native.stop_armed {
+        t!("status.agent_esc_again")
+    } else if native.panel.busy {
+        t!("ui.agent_running_hint")
+    } else {
+        t!("ui.agent_conversation_hint")
+    };
+    draw_conversation(native.displayed_panel(), frame, area, &title, &hint);
+}
+
+fn draw_conversation(
+    panel: &mut crate::ai_panel::Panel,
+    frame: &mut Frame,
+    area: Rect,
+    title: &str,
+    hint: &str,
+) -> Rect {
+    use crate::ai_panel::Role;
     let width = area.width.times(7).quot(10).clamp_fit(30, area.width);
     let height = area.height.times(7).quot(10).clamp_fit(8, area.height);
     let rect = Rect {
@@ -146,12 +190,7 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
         height,
     };
     frame.render_widget(Clear, rect);
-    let busy = app.ai_panel.as_ref().is_some_and(|p| p.busy);
-    let title = if busy {
-        format!(" {} {} ", icon::INFO, t!("ui.ai_thinking"))
-    } else {
-        format!(" {} {} ", icon::INFO, t!("menu.ai"))
-    };
+    let title = format!(" {} {} ", icon::INFO, title);
     let block = Block::default()
         .style(theme::base())
         .borders(Borders::ALL)
@@ -173,10 +212,7 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     let view_h = usize::from(body.height);
     let view_w = usize::from(body.width);
     let lines: Vec<Line> = {
-        let Some(p) = app.ai_panel.as_mut() else {
-            return;
-        };
-        let visible = p.visible(view_w, view_h);
+        let visible = panel.visible(view_w, view_h);
         visible
             .into_iter()
             .map(|(role, text)| {
@@ -190,10 +226,10 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
             .collect()
     };
     frame.render_widget(Paragraph::new(lines), body);
-    app.layout.ai_panel = body;
 
-    // Input line: a leading prompt glyph then the in-progress text plus a caret.
-    let input = app.ai_panel.as_ref().map_or_default(|p| p.input.clone());
+    // Input line: a leading prompt glyph then the in-progress text plus a
+    // caret. Pasted text may hold control or bidi characters: drawn sanitized.
+    let input = vix_acp::display::sanitize(&panel.input.replace('\n', " ↵ "));
     let input_line = Line::from(vec![
         Span::styled("› ", theme::title(true).add_modifier(Modifier::BOLD)),
         Span::raw(input),
@@ -201,11 +237,9 @@ pub(super) fn draw_ai_panel(app: &mut App, frame: &mut Frame, area: Rect) {
     ]);
     frame.render_widget(Paragraph::new(input_line), chunk(&chunks, 1));
 
-    let hint = Line::from(Span::styled(
-        t!("ui.ai_panel_hint").to_string(),
-        theme::dim(),
-    ));
+    let hint = Line::from(Span::styled(hint, theme::dim()));
     frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
+    body
 }
 
 /// The docked agent plan pane (T635, `ai.agent_plan_dock`): the agent's plan,

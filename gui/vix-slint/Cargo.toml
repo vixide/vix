@@ -45,6 +45,7 @@ slint-interpreter = "=1.18.1"
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
 [features]
+ai-agents = ["vix/ai-agents"]
 # `VIX_GUI_SCREENSHOT=out.png vix-slint` renders the window to a PNG after
 # scripted actions/keystrokes and quits (see gui/spec/index.md).
 screenshot = ["dep:image"]

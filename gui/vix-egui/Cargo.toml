@@ -33,6 +33,7 @@ fontique = { version = "0.12", default-features = false, features = ["system", "
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
 [features]
+ai-agents = ["vix/ai-agents"]
 # `VIX_GUI_SCREENSHOT=out.png vix-egui` renders the window to a PNG after
 # scripted actions/keystrokes and quits (see gui/spec/index.md).
 screenshot = ["dep:image"]

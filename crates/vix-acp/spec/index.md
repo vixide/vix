@@ -17,7 +17,7 @@ The crate is split so the protocol is pure and the process is optional:
 | `client`  | no | `Client`, a state machine: no IO, no clock, no threads |
 | `policy`  | no | Path containment, and picking a rejecting permission option |
 | `display` | no | `sanitize` (strip control sequences) and `TerminalViews`, what the user sees of each terminal |
-| `process` | yes | `AgentProcess`: spawn, stdin writer, stdout reader thread |
+| `process` | yes | `AgentProcess`: spawn, stdin writer, stdout reader thread, stderr tail |
 | `terminal` | yes | `Terminal`: one approved agent command, merged capped output, exit status |
 
 ## Framing
@@ -26,7 +26,9 @@ ACP over stdio is **one JSON object per line** (`\n`-terminated, no embedded
 newlines), not the `Content-Length` envelope LSP uses, so `vix-lsp-core`'s
 framer is not reused; only the JSON-RPC 2.0 message shapes are alike. A line
 over 16 MiB is dropped (the decoder resynchronizes at the next newline), and
-a line that is not JSON is skipped and counted, never fatal.
+a line that is not JSON is skipped and counted, never fatal. Each chunk is
+searched for a newline only in the bytes that arrived since the last search,
+so a long line costs time linear in its length however it is split.
 
 ## Conversation
 
@@ -113,8 +115,20 @@ Agents can write files and run commands, so:
   keeps the output; `release`, stopping the agent, or dropping the host kills
   and forgets it. An unknown terminal id is an error. The spawn site
   (`terminal.rs`) is listed in `tui/tests/spawn_sites.rs` beside `process.rs`.
-- The agent's stderr is discarded. Dropping or stopping the agent kills the
+- The agent's stderr is read on its own thread (so the agent never blocks
+  on a full pipe) and only its newest `STDERR_TAIL_BYTES` (8 KiB) are kept,
+  for the host to quote, sanitized, when the agent fails
+  (`AgentProcess::stderr_tail`). Dropping or stopping the agent kills the
   process.
+- `AgentProcess::spawn_isolated` (used by the native agents of
+  `vix-ai-agents`, not by ACP agents) also writes through a writer thread,
+  so `send` never blocks the UI on a full pipe (a failed write is reported
+  by the next `send`), and on Unix starts the agent as the leader of a new
+  process group (`process_group(0)`): dropping it sends `SIGKILL` to the
+  whole group, so tool processes the agent started do not outlive it.
+  `close_stdin` ends the agent's input after the queued writes;
+  `try_wait` reports whether it exited. ACP agents keep `spawn`: writes on
+  the caller's thread, one process.
 
 ## Settings
 

@@ -60,11 +60,13 @@ pub enum Capability {
     /// Jupyter kernels (`jupyter`): Vix starts the installed kernel programs
     /// and runs code in them over ZeroMQ. Off by default (T734).
     Jupyter,
+    /// The workspace coding-agent conversation picker (`ai-agents`).
+    AiAgents,
 }
 
 impl Capability {
     /// Every capability, in a stable order.
-    pub const ALL: [Capability; 16] = [
+    pub const ALL: [Capability; 17] = [
         Capability::Sql,
         Capability::Image,
         Capability::Script,
@@ -81,6 +83,7 @@ impl Capability {
         Capability::Hunspell,
         Capability::Cowork,
         Capability::Jupyter,
+        Capability::AiAgents,
     ];
 
     /// The Cargo feature (and user-visible) name.
@@ -93,6 +96,7 @@ impl Capability {
             Capability::Terminal => "terminal",
             Capability::Http => "http",
             Capability::Ai => "ai",
+            Capability::AiAgents => "ai-agents",
             Capability::Git => "git",
             Capability::Jj => "jj",
             Capability::Oc => "oc",
@@ -116,6 +120,7 @@ impl Capability {
             Capability::Terminal => cfg!(feature = "terminal"),
             Capability::Http => cfg!(feature = "http"),
             Capability::Ai => cfg!(feature = "ai"),
+            Capability::AiAgents => cfg!(feature = "ai-agents"),
             Capability::Git => cfg!(feature = "git"),
             Capability::Jj => cfg!(feature = "jj"),
             Capability::Oc => cfg!(feature = "oc"),
@@ -135,7 +140,7 @@ impl Capability {
     pub fn for_action(action: &str) -> Option<Capability> {
         // Action-id prefixes that belong to an optional capability. The first
         // `starts_with` match wins, so order matters if prefixes ever overlap
-        // (today none do). Entries without a trailing `.` are deliberately
+        // (the conversation picker precedes the general AI prefix). Entries without a trailing `.` are deliberately
         // exact-ish ids or id stems rather than whole families.
         const PREFIXES: &[(&str, Capability)] = &[
             ("db.", Capability::Sql),
@@ -147,6 +152,7 @@ impl Capability {
             ("tools.http_", Capability::Http),
             // The HL7 MLLP sender is a network client: it rides `http`.
             ("tools.hl7_send", Capability::Http),
+            ("ai.agent_conversations", Capability::AiAgents),
             ("ai.", Capability::Ai),
             ("git.", Capability::Git),
             ("jj.", Capability::Jj),
@@ -191,7 +197,10 @@ pub fn is_available(action: &str) -> bool {
 /// runtime `ai = "off"` setting (T730) also hides and refuses.
 #[must_use]
 pub fn is_ai_action(action: &str) -> bool {
-    Capability::for_action(action) == Some(Capability::Ai)
+    matches!(
+        Capability::for_action(action),
+        Some(Capability::Ai | Capability::AiAgents)
+    )
 }
 
 /// The names of the capabilities compiled into this build, in [`Capability::ALL`]

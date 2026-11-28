@@ -34,6 +34,12 @@ git checkout -- tui/examples/demo-workspace
 
 count=0
 for tape in docs/demos/*.tape; do
+	# ai-agents.tape drives the real claude and codex and needs Wait,
+	# which only scripts/render-demos-lite.sh is set up for here.
+	if grep -q '^# Requires: ai-agents' "$tape"; then
+		echo "==> skip $tape (record it with VIX_DEMO_AGENTS=1 scripts/render-demos-lite.sh)"
+		continue
+	fi
 	echo "==> vhs $tape"
 	vhs "$tape"
 	count=$((count + 1))

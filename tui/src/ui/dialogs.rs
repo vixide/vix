@@ -127,7 +127,8 @@ pub(super) fn draw_script_trust(app: &App, frame: &mut Frame, area: Rect) {
         ),
         (true, false) => t!("ui.script_trust_message", count = p.count).to_string(),
         (false, true) => t!("ui.workspace_trust_settings_message").to_string(),
-        (false, false) => t!("ui.workspace_trust_env_message").to_string(),
+        (false, false) if p.env => t!("ui.workspace_trust_env_message").to_string(),
+        (false, false) => t!("ui.agent_workspace_trust").to_string(),
     };
     // T667: an environment source (`.envrc`, mise, `.vix/env.toml`) too.
     let message = if p.env && (p.count > 0 || p.settings) {

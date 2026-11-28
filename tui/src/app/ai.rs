@@ -28,6 +28,8 @@ impl App {
             return true;
         }
         match action {
+            #[cfg(feature = "ai-agents")]
+            "ai.agent_conversations" => self.agent_conversations(),
             "ai.chat" => self.open_ai_panel(),
             "ai.summarize" => self.ai_summarize(),
             "ai.explain" => self.ai_explain(),

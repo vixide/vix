@@ -37,6 +37,8 @@ Top menu bar with keyboard-navigable dropdowns (a dropdown plus two nested subme
 The menus, left to right, are
 **Vix · File · Edit · View · Go · Run · AI · DB · JJ · Git · IM · Org · Project ·
 OC · Tools · Help**. IM and OC have no Alt mnemonic.
+The optional `ai-agents` feature adds **AI → Agent Conversations…**
+(`ai.agent_conversations`) to start or resume a workspace conversation.
 
 ## Vix menu
 

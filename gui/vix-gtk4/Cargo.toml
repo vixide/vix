@@ -35,6 +35,7 @@ pangocairo = "0.22.9"
 cairo-rs = { version = "0.22", features = ["png"], optional = true }
 
 [features]
+ai-agents = ["vix/ai-agents"]
 # `VIX_GUI_SCREENSHOT=out.png vix-gtk4` renders the window to a PNG after
 # scripted actions/keystrokes and quits (see gui/spec/index.md).
 screenshot = ["dep:cairo-rs"]

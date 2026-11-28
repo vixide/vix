@@ -100,7 +100,7 @@ const ALLOWED: &[(&str, &str, &str)] = &[
     ),
     (
         "crates/vix-acp/src/process.rs",
-        "the ACP coding agent (T635), started only for a trusted workspace from the user's `ai_agents` setting (argv, no shell)",
+        "configured ACP agents and, with ai-agents, native Codex and Claude Code (trusted workspace, argv, stdio)",
         "`process` feature, enabled only by root `ai`",
     ),
     (
