@@ -950,3 +950,4 @@ cpus
 
 # T860 (CommonMark's underlined heading form)
 setext
+Authenticode

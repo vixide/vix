@@ -38,6 +38,55 @@ repository does and does not do with them.
   A download that fails with a server error or a network error is retried
   up to five times; a 404 means the asset has no sum.
 
+## Verifying a download
+
+Administrators get one tested verification path per distribution route
+(T870, audit item PQ-09), written up in
+[`docs/verify-release`](../../docs/verify-release/index.md). For each route
+the page names the producer, the exact file, the verification material, what
+that material is trusted through, the command and the expected result, and it
+keeps three kinds of evidence apart:
+
+- **Signed manifest.** `SHA256SUMS` with `SHA256SUMS.sig` (`ssh-keygen -Y`,
+  namespace `vix-release`), only from `scripts/release-local` (2.0.0 so far).
+  Trusted through the maintainer's SSH signing key. The repository does not
+  publish an allowed-signers file yet, so the page says to obtain the key out
+  of band.
+- **Checksums.** `<file>.sha256`, `sha256.sum` (dist) and
+  `linux-packages.sha256`: integrity against the same release page, not
+  authenticity.
+- **Registry integrity and provenance.** Homebrew's formula SHA-256, npm's
+  registry signatures and (only for versions published through OIDC)
+  provenance, and crates.io's index checksums.
+
+SBOMs are listed as dependency evidence, not as integrity material. Every
+channel that is not published (winget, Scoop, AUR, `cargo binstall`, Nix,
+mise, the container image) is listed under "Not published" with no route.
+
+`scripts/verify-release DIR` is the offline verifier. It checks the
+signature of `SHA256SUMS` against an allowed-signers file before trusting any
+line of it, then every listed file against every manifest that names it
+(`SHA256SUMS`, `sha256.sum`, `linux-packages.sha256`, each `<file>.sha256`,
+which must name its own file). It rejects a missing listed file, a mismatch, a
+disagreement between manifests, a name that is not a plain file name, and any
+file in `DIR` that nothing covers. `--require-signature` also rejects every
+file the signed manifest does not list. It prints each file's SHA-256, target
+and coverage, and `--record FILE` writes them as tab-separated values with
+the version. When a release has both, the signed manifest decides the
+coverage.
+
+`scripts/test-verify-release` (push tier) runs it in a clean environment
+(`env -i`) on fixtures (real archives, dist-style checksum files, a
+Linux-packages checksum file, an SBOM, a release signed with a generated key)
+and checks that each modified fixture is rejected;
+`scripts/test-release-local` runs it on what `scripts/release-local` really
+produces. `scripts/packaging check` fails when the page misses one of
+`dist-workspace.toml`'s installers or a fixed route, gives an unpublished
+channel a route, or when `SECURITY.md` stops linking it or again says the
+release artifacts are unsigned. Not yet done: running the page's
+instructions on real downloads of a published release per route and recording
+target, version and digest; that needs network access.
+
 ## CI
 
 `.github/workflows/packaging.yml` (GitHub only):

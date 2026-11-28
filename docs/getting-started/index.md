@@ -67,6 +67,8 @@ release's package. See [`spec/linux-packages/index.md`](../../spec/linux-package
 **Direct download:** prebuilt archives (`.tar.xz` for macOS/Linux, `.msi`/
 `.zip` for Windows) are attached to every
 [GitHub Release](https://github.com/vixide/vix/releases).
+[Verifying a download](../verify-release/index.md) says how to check each
+file, and each install route, before installing.
 
 **Minimal build** (small and locked down): every GitHub Release also carries
 `vix-minimal-<target>.tar.gz` (`.zip` on Windows) plus a `.sha256` file. It is

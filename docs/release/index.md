@@ -71,7 +71,9 @@ For each target the script writes `vix-tui-<target>.tar.xz` (`.zip` for Windows)
 a matching `.sha256`, one `SHA256SUMS`, and `SHA256SUMS.sig`
 (`ssh-keygen -Y sign -n vix-release`, verified with the allowed signers file that
 signs commits). A downloader verifies with `scripts/release-local --verify-dir DIR`
-or `ssh-keygen -Y verify -n vix-release`.
+or `ssh-keygen -Y verify -n vix-release`. What an administrator checks on each
+distribution route, signed or not, is in
+[Verifying a download](../verify-release/index.md) (`scripts/verify-release`).
 
 ## Packaging handoff
 
