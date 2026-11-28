@@ -704,10 +704,7 @@ impl App {
                 ps.exclude_path = m.exclude_path;
                 ps.flags = m.flags;
                 self.workspace_search = Some(ps);
-                self.run_workspace_search();
-                if let Some(ps) = self.workspace_search.as_mut() {
-                    ps.selected = m.selected.min(ps.hits.len().minus(1));
-                }
+                self.request_workspace_search_selecting(Some(m.selected));
             }
             None => self.status = t!("status.picker_resume_none").to_string(),
         }

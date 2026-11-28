@@ -237,7 +237,7 @@ and `--in-diff <file>` limits it to a diff). Output goes to `mutants.out/`
 | ----- | ------ |
 | `text_ops` | The pure transforms, at 100 and 2,000 lines — they rebuild their unit ranges from the whole buffer on every keystroke |
 | `editor_ops` | Opening a file (parsing it, up to a ~100 MB synthetic file — highlighting is a separate, always-lazy, per-viewport cost that `render_ops` measures), typing, a 10k-operation burst of random inserts/deletes, pasting, undo, whole-buffer line transforms, and a keystroke plus the frame after it at 4 KiB to 64 MiB (`editor/keystroke`, T858) |
-| `search_and_palette` | The three per-keystroke search paths: find-in-buffer, workspace search (up to a generated 10k-file tree), and palette fuzzy filtering |
+| `search_and_palette` | The three per-keystroke search paths: find-in-buffer, workspace search (up to a generated 10k-file tree; since T869 key-to-return, time to first result and time to complete are measured apart, as `workspace_search/keystroke`, `first_result` and `complete`, beside `rescan`, the keystroke and its scan together), and palette fuzzy filtering. `tui/examples/workspace_search_latency.rs` prints cold and warm percentiles of the same three for a 10,000-file tree |
 | `startup` | Cold-start cost: `App::new` (theme scan, editor/menu/LSP-client setup) and `refresh_git` (the three `git` subprocesses a real workspace's cold start pays), benchmarked separately; and the large-checkout open-time exercise (T823, `-- open/`): a seeded 20,000-file checkout generated in a temp directory, opened with a fresh `App` per run, timing the first editable frame and the first Quick Open result locally and through the in-process `FakeAuthority`, printed as median / p90 / min / max with versions, workspace size, capabilities and load average. Its language-server half (`-- lsp/`, first semantic definition and first actionable diagnostic) runs only with `VIX_BENCH_LSP=1` and a working `rust-analyzer`; the default run starts no server. Under `cargo test --benches` (no `--bench` flag) only the Criterion smoke run happens |
 | `frame_ops` | The two per-*frame* buffer scans found and fixed by T510/T511: the editor diff gutter (`vix_git::diff_marks`) and the sticky-scroll/breadcrumb declaration scan (`vix_palette::symbols`; since T858 the frame reads up from one line instead, measured by `editor_ops`' `editor/keystroke`) |
 | `gutter_diff` | The git gutter diff against `HEAD` (`vix_git::diff_marks`, T574) for lightly edited and heavily rewritten buffers, so the 40 ms deadline and the 50,000-line cap stay visible |
@@ -270,6 +270,15 @@ Benchmark what the user waits for: a keystroke, a frame, a file open. Do not
 benchmark what runs once at startup or what is dominated by I/O. See
 [`docs/performance/index.md`](../../docs/performance/index.md) for one
 machine's baseline numbers.
+
+A benchmark shows how fast a path is; whether work stays off the input
+thread is a correctness property and gets a deterministic test instead. The
+pattern (T869, `tui/tests/authority_search.rs`): install an authority whose
+reads wait until the test releases them, start the background work, and
+check that the keys under test are processed while it is held, with a
+watchdog that releases it after 20 s so a regression fails instead of
+hanging. Such tests live in a test binary of their own, since the authority
+slot is process-wide.
 
 ## Repository invariants
 

@@ -3,6 +3,9 @@
 //!
 //! [`command_for`] is a pure table from a key to a [`Command`], testable
 //! without an [`App`]; [`App::ps_key`] applies the command to the open panel.
+//! A key that changes the result set only requests a search, which runs in
+//! the background (T869, `workspace_search_job`), so typing never waits for
+//! a scan.
 
 #![cfg_attr(
     not(test),
@@ -86,6 +89,8 @@ impl App {
         };
         match command {
             Command::Close => {
+                // Dropping the job cancels a scan still running (T869).
+                self.workspace_search_job = None;
                 self.remember_workspace_search();
                 self.workspace_search = None;
             }
@@ -105,6 +110,8 @@ impl App {
                 }
             }
             Command::Enter { alt } => {
+                // Act on the hits of the pattern as typed, not a stale list.
+                self.wait_for_workspace_search();
                 let replacing = self
                     .workspace_search
                     .as_ref()
@@ -128,6 +135,7 @@ impl App {
                     p.flags.contains(WorkspaceFlags::CASE_SENSITIVE),
                     p.flags.contains(WorkspaceFlags::REGEX),
                 );
+                self.workspace_search_job = None;
                 self.workspace_search = None;
                 if query.is_empty() {
                     self.prompt = Some(Prompt::new(
@@ -162,12 +170,14 @@ impl App {
                 }
                 // T211: Alt+E opens the results as a real editable buffer, closing
                 // this panel -- `open_wgrep_results` handles that itself, so the
-                // `run_workspace_search` below (harmless either way) becomes a
-                // no-op once it does.
+                // `request_workspace_search` below (harmless either way) becomes a
+                // no-op once it does. It opens the complete hits of the pattern
+                // as typed, so a search still running finishes first (T869).
                 if command == Command::OpenAsBuffer {
+                    self.wait_for_workspace_search();
                     self.open_wgrep_results();
                 }
-                self.run_workspace_search();
+                self.request_workspace_search();
             }
             Command::Backspace | Command::Type(_) => {
                 // Editing any field except Replace (query or the path filters)
@@ -183,7 +193,7 @@ impl App {
                     }
                 }
                 if affects {
-                    self.run_workspace_search();
+                    self.request_workspace_search();
                 }
             }
         }

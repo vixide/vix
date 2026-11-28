@@ -1089,9 +1089,9 @@ the OS cache is warm); *narrowing* is typing the last character, *widening*
 the backspace before it (medians of 7). Measured on a heavily loaded machine
 (load average about 30 on 16 cores), so read the ratios.
 `workspace_search/rescan` is the existing Criterion bench (one character
-typed and deleted after `need`, so two scans per iteration; it does not wait
-for the background index, so the 10,000-file case scans the first 5,000
-files).
+typed and deleted after `need`, so two scans per iteration; at the time it
+did not wait for the background index, so the 10,000-file case scanned the
+first 5,000 files; since T869 it does, see § Workspace search latency).
 
 | Benchmark | Before | Parallel reads | … and no `canonicalize` | After (… and the memo) |
 | --------- | ------ | -------------- | ------------------------ | ---------------------- |
@@ -1114,6 +1114,53 @@ lookup, and skips, with one `lstat` each, the files the last scan found no
 candidate in when the query only got longer. A file watcher could save the
 remaining `lstat`s (about 0.1 s), not the reads, so none was added; see
 `crates/vix-workspace-search/spec/index.md`, § The in-process scan.
+
+## Workspace search latency (T869, measured 2026-11-28)
+
+Audit item PQ-08 found the project-search key handler scanning the whole
+index before it returned. Since T869 a keystroke only requests the search;
+the scan runs on a worker thread and its hits land on a later tick
+(`spec/find-and-replace`, § Responsiveness). Three times are now measured
+apart: **key-to-return** (`App::on_key`, what typing waits for), **first
+result** (request to the first hits posted) and **complete** (request to the
+summary). All numbers are `[profile.bench]` builds (`opt-level = 3`, the
+build `cargo bench` uses), macOS arm64, 16 cores, under load (load average
+13–20 from other builds), so read the ratios.
+
+`cargo run --profile bench --example workspace_search_latency -p vix-tui -- 10000 40`:
+10,000 one-line files, a tenth holding `needle`, 40 samples each. *Cold*
+opens a fresh App per sample (no scan memo, every file read; the OS file
+cache is warm) and types `ne`; *warm* types `l` after `need` in one App,
+so the memo skips the files the last scan found nothing in. *Before* is the
+same build with the request routed to the one-thread search, so key-to-return
+equals completion. Milliseconds, p50 / p90 / p99 / max:
+
+| Case | Before: key-to-return | After: key-to-return | After: first result | After: complete |
+| ---- | --------------------- | -------------------- | ------------------- | --------------- |
+| Cold | 142 / 145 / 147 / 148 | 0.14 / 0.15 / 0.17 / 0.63 | 81.5 / 82.7 / 83.4 / 88.7 | 133 / 135 / 135 / 143 |
+| Warm | 26.5 / 27.2 / 27.4 / 27.6 | 0.19 / 0.20 / 0.21 / 0.21 | 12.9 / 13.1 / 13.3 / 13.3 | 25.9 / 26.6 / 26.8 / 26.8 |
+
+`cargo bench --bench search_and_palette -- workspace_search` (Criterion,
+the `l` keystroke after `need`; `rescan` is that keystroke and its
+backspace, each with its scan to completion, the number this bench always
+gave; it now waits for the background file index, which it did not before,
+so its 10,000-file case scans all 10,000 files instead of the first 5,000):
+
+| Benchmark | 1,000 files | 10,000 files |
+| --------- | ----------- | ------------ |
+| `workspace_search/keystroke` | 63.6 µs | 227 µs |
+| `workspace_search/first_result` | 2.04 ms | 10.6 ms |
+| `workspace_search/complete` | 2.25 ms | 20.0 ms |
+| `workspace_search/rescan` | 10.6 ms | 102 ms |
+
+The keystroke's remaining cost is the snapshot: copying the file index's
+paths and each named buffer's text. The scan itself is unchanged (T830's
+`workspace_search/large`, 100,000 files, timed to completion: cold 0.91 s,
+narrowing 0.15 s, widening 0.91 s), and it now never delays a keystroke,
+`Esc` or the frame drawn after it. On `main` before T869 the audit's
+reproduction, typing `x`, `y`, `z` with the whole index in, returned in
+1.6 / 102 / 16 ms in this build (the audit measured 0 / 195 / 167 ms in a
+debug build; `x` alone is under the 2-character minimum and scans nothing).
 
 ## Reading the numbers
 

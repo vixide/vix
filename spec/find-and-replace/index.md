@@ -289,6 +289,54 @@ is treated as empty rather than hiding every file — for example Include `\.rs$
 limits to Rust files and Exclude `(^|/)target/` skips the build directory. See
 `crates/vix-find-panel/spec/index.md`.
 
+### Responsiveness (T869, PQ-08)
+
+Typing in the panel never waits for a scan. A keystroke that changes the
+result set (the query, a path filter, an `Alt` option) only **requests** a
+search: `App::request_workspace_search` takes a snapshot of what the scan
+reads (the file index, the workspace folders, the authority, and the text of
+every open buffer that has a path) and hands it to a worker thread, and the
+key handler returns (about 0.2 ms with 10,000 files). The worker runs the
+same scan as before (`App::scan_index`, batched and memoized, T830; one
+remote `rg`/`grep` on a remote authority, T715) and posts the hits it has
+found, in index order, the first at once and then at most every 50 ms,
+followed by the `N matches in M files` summary; the event loop installs them
+on its next tick (`App::poll_workspace_search`).
+
+- **Generations.** Every request takes a new generation and replaces the job
+  before it; dropping a job cancels its scan (workers stop taking files, a
+  remote tool is killed). An event tagged with any other generation is
+  discarded, so a slow scan for an older query never overwrites a newer
+  one's hits.
+- **Display while searching.** The status line reads *Searching…*; the
+  previous hits stay listed until the new generation's first hits arrive
+  (then they are replaced, and later hits appended), so typing does not
+  flash an empty list. A search that finds nothing clears them when it
+  completes. The selection is kept in range as hits arrive.
+- **Close.** `Esc` (and `Alt+I` continuing in the dock) drops the job, so
+  the scan stops and nothing lands after the panel closed.
+- **Unsaved buffers.** The scan reads open buffers as they were at the
+  keystroke that requested it; an edit made while it runs is searched by the
+  next request, never half-read by this one.
+- **Actions that need the full list.** `Enter` (open a hit, or plan a
+  replace) and `Alt+E` (results as a buffer) first wait for the search in
+  flight, so they act on the hits of the pattern as typed — the choice
+  closest to Vim, where a command acts on what was typed, never on a stale
+  list.
+- **Unchanged.** Result order, the 5,000-hit cap, the file count, the path
+  filter, the 2-character minimum and the skipped files are the same as the
+  one-thread search, which still runs on the spot for a one-off refresh (after
+  a replace is applied) or when no thread can be started.
+
+`tui/tests/authority_search.rs` proves the property with a delayed fake
+authority whose reads wait until the test releases them: with a scan held
+pending, a new query and `Esc` are both processed, and a stale generation
+and a later buffer edit never reach the hits. Latency is measured by
+`cargo bench --bench search_and_palette -- workspace_search` (key-to-return,
+first result and completion separately) and
+`tui/examples/workspace_search_latency.rs` (cold and warm percentiles);
+numbers in `docs/performance`, § Workspace search latency.
+
 ## As implemented in Vix
 
 The **`vix-find-panel`** crate owns both the box's **state** and the

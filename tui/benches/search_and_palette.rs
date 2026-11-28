@@ -17,7 +17,7 @@ use std::fs;
 use std::hint::black_box;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use vix::app::App;
+use vix::app::{App, SearchTiming};
 use vix::find_panel;
 use vix::palette::{fuzzy_match, fuzzy_score};
 use vix::settings::Settings;
@@ -100,28 +100,65 @@ fn backspace() -> KeyEvent {
 
 /// Plan T006's "workspace search over a generated 10k-file tree". The file
 /// index (`App::build_file_index`, an `ignore::WalkBuilder` walk) is built
-/// once in setup, matching `bench_find`/`bench_palette` below: what's timed
-/// is the per-keystroke rescan (`run_workspace_search`), not the one-time
-/// index build. Each iteration types one character (completing the query,
+/// once in setup, background walk included (before T869 the bench typed
+/// into the 5,000-file first pass), matching `bench_find`/`bench_palette`
+/// below: what's timed is the per-keystroke rescan, not the one-time index
+/// build. Each iteration types one character (completing the query,
 /// triggering a scan) then backspaces it (reverting to the baseline query,
 /// triggering a second scan) — symmetric, so the query never drifts and
 /// every iteration measures the same work.
+///
+/// Since T869 a keystroke only requests the scan, which runs on a worker
+/// thread, so three numbers are measured apart, for the `l` keystroke of
+/// each iteration (the backspace and its scan run untimed):
+///
+/// - `rescan`: the keystroke and its scan to completion
+///   (`App::wait_for_workspace_search`), the number this bench always gave;
+/// - `keystroke`: `App::on_key` alone, what typing waits for;
+/// - `first_result` / `complete`: from the request to the first posted
+///   hits and to the summary (`App::workspace_search_timing`).
 fn bench_workspace_search(c: &mut Criterion) {
-    let mut group = c.benchmark_group("workspace_search/rescan");
+    let mut group = c.benchmark_group("workspace_search");
     group.sample_size(10);
     for n in [1_000_usize, 10_000] {
         let root = workspace_tree(n);
         let mut app = App::new(root, Settings::default());
         app.run_action("search.workspace");
+        wait_for_index(&mut app);
         for ch in "need".chars() {
             app.on_key(key(ch));
         }
-        group.bench_with_input(BenchmarkId::from_parameter(n), &(), |b, ()| {
+        app.wait_for_workspace_search();
+        assert_eq!(app.workspace_search_hits().len(), n / 10, "every needle");
+        group.bench_with_input(BenchmarkId::new("rescan", n), &(), |b, ()| {
             b.iter(|| {
                 app.on_key(key('l'));
+                app.wait_for_workspace_search();
                 app.on_key(backspace());
+                app.wait_for_workspace_search();
             });
         });
+        let mut timed = |name: &str, pick: fn(Duration, SearchTiming) -> Duration| {
+            group.bench_with_input(BenchmarkId::new(name, n), &(), |b, ()| {
+                b.iter_custom(|iters| {
+                    let mut total = Duration::ZERO;
+                    for _ in 0..iters {
+                        let start = Instant::now();
+                        app.on_key(key('l'));
+                        let handler = start.elapsed();
+                        app.wait_for_workspace_search();
+                        let timing = app.workspace_search_timing().expect("a search completed");
+                        total += pick(handler, timing);
+                        app.on_key(backspace());
+                        app.wait_for_workspace_search();
+                    }
+                    total
+                });
+            });
+        };
+        timed("keystroke", |handler, _| handler);
+        timed("first_result", |_, t| t.first_result);
+        timed("complete", |_, t| t.complete);
     }
     group.finish();
 }
@@ -295,6 +332,10 @@ fn median(samples: &mut [Duration]) -> Duration {
 /// - `widening`: the backspace before it, median of 7: a shorter query reads
 ///   every file again, like `cold`.
 ///
+/// Each time runs from the keystroke to the search's completion
+/// (`App::wait_for_workspace_search`; since T869 the keystroke itself
+/// returns at once and the scan runs on a worker thread).
+///
 /// Run with `cargo bench --bench search_and_palette -- workspace_search/large`;
 /// `VIX_BENCH_SEARCH_FILES` changes the size.
 fn bench_workspace_search_large() {
@@ -313,6 +354,7 @@ fn bench_workspace_search_large() {
     }
     let start = Instant::now();
     app.on_key(key(last));
+    app.wait_for_workspace_search();
     let first_pass = start.elapsed();
     wait_for_index(&mut app);
     assert_eq!(app.file_index_len(), n, "every file indexed");
@@ -320,18 +362,22 @@ fn bench_workspace_search_large() {
     std::thread::sleep(Duration::from_secs(2));
     let start = Instant::now();
     app.on_key(backspace());
+    app.wait_for_workspace_search();
     let cold = start.elapsed();
     let expected = n.div_ceil(20_000);
     assert_eq!(app.workspace_search_hits().len(), expected);
     app.on_key(key(last));
+    app.wait_for_workspace_search();
     assert_eq!(app.workspace_search_hits().len(), expected);
     let (mut narrowing, mut widening) = (Vec::new(), Vec::new());
     for _ in 0..7 {
         let start = Instant::now();
         app.on_key(backspace());
+        app.wait_for_workspace_search();
         widening.push(start.elapsed());
         let start = Instant::now();
         app.on_key(key(last));
+        app.wait_for_workspace_search();
         narrowing.push(start.elapsed());
         assert_eq!(app.workspace_search_hits().len(), expected);
     }
