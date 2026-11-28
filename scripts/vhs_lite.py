@@ -319,6 +319,7 @@ def run_tape(tape_path: str, out_cast: str):
                 return
             if reader_tick() is None:
                 break
+        print("\n".join(line.rstrip() for line in screen.display), file=sys.stderr)
         raise SystemExit(f"Wait timed out after {timeout}s: {pat}")
 
     pending = bytearray()
@@ -332,10 +333,16 @@ def run_tape(tape_path: str, out_cast: str):
         data = bytes(pending)
         pending.clear()
         for attempt in range(FLUSH_RETRIES):
+            before = list(screen.display) if screen is not None else None
             child.send(data)
             if settle():
                 return
             drain(0.3 * (attempt + 1))  # backoff before retrying
+            # A slow redraw that lands during the backoff still counts as a
+            # reaction: resending then would apply the keys twice (a trust
+            # dialog's "y" also typed into the buffer, say).
+            if before is not None and list(screen.display) != before:
+                return
 
     for cmd, rest in directives:
         if cmd in ("Output", "Set"):

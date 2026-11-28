@@ -26,8 +26,13 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-if ! command -v agg >/dev/null 2>&1; then
-	echo "agg not found on PATH -- see this script's header for how to build it" >&2
+# Without agg, scripts/cast_to_gif.py (pyte + Pillow) renders the GIF.
+if command -v agg >/dev/null 2>&1; then
+	render() { agg "$1" "$2"; }
+elif python3 -c "import pyte, PIL" >/dev/null 2>&1; then
+	render() { python3 scripts/cast_to_gif.py "$1" "$2"; }
+else
+	echo "neither agg nor pyte+Pillow found -- see this script's header" >&2
 	exit 1
 fi
 if ! python3 -c "import pexpect" >/dev/null 2>&1; then
@@ -35,8 +40,17 @@ if ! python3 -c "import pexpect" >/dev/null 2>&1; then
 	exit 1
 fi
 
-echo "==> cargo build --release"
-cargo build --release
+# Tapes marked "# Requires: ai-agents" drive the real installed claude and
+# codex (network, your logins, usage): only with VIX_DEMO_AGENTS=1, which
+# also builds the feature (and isolated-user-dirs, so your own Vix settings
+# stay out of the demo).
+if [ "${VIX_DEMO_AGENTS:-0}" = 1 ]; then
+	echo "==> cargo build --release (ai-agents)"
+	cargo build --release -p vix-tui --features ai-agents,vix-fileops/isolated-user-dirs
+else
+	echo "==> cargo build --release"
+	cargo build --release
+fi
 export PATH="$PWD/target/release:$PATH"
 
 # overview.tape and themes.tape both edit tui/examples/demo-workspace/rust-app/
@@ -48,12 +62,16 @@ git checkout -- tui/examples/demo-workspace
 
 count=0
 for tape in docs/demos/*.tape; do
+	if grep -q '^# Requires: ai-agents' "$tape" && [ "${VIX_DEMO_AGENTS:-0}" != 1 ]; then
+		echo "==> skip $tape (set VIX_DEMO_AGENTS=1 to record it)"
+		continue
+	fi
 	out_gif=$(grep -m1 '^Output ' "$tape" | awk '{print $2}')
 	cast="$(mktemp -t vhs-lite-XXXXXX).cast"
 	echo "==> $tape -> $cast"
 	python3 scripts/vhs_lite.py "$tape" "$cast"
-	echo "==> agg $cast -> $out_gif"
-	agg "$cast" "$out_gif"
+	echo "==> render $cast -> $out_gif"
+	render "$cast" "$out_gif"
 	rm -f "$cast"
 	count=$((count + 1))
 done

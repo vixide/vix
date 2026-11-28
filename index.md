@@ -96,6 +96,13 @@ quit. Other ways to install, including Windows, Linux packages and
 | ![Git hunk staging: stage two changes in one file, one hunk at a time](docs/demos/git-hunks.gif) | ![Database workbench: connect to SQLite, run a join, read the result grid](docs/demos/db-workbench.gif) |
 | **Git hunk staging.** Stage one change at a time. | **Database workbench.** Run a query, read the grid. |
 
+![Native coding agents: ask Claude Code about the code, then Codex asks before it edits the file and Vix reloads it](docs/demos/ai-agents.gif)
+
+**Claude Code and Codex, natively.** Ask your installed Claude Code about the
+code, then have Codex fix it: every tool request is shown, and nothing runs
+until you allow it ([native coding agents](docs/ai-agents/index.md); an
+opt-in build feature, not released yet).
+
 More recordings — Org-roam, edit surfaces and themes — are in
 [`docs/demos/`](docs/demos/).
 
