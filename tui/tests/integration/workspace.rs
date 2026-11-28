@@ -1217,3 +1217,268 @@ fn workspace_search_alt_i_continues_in_the_dock_or_asks() {
     assert!(app.prompt.is_none());
     fs::remove_dir_all(&dir).ok();
 }
+
+// ----- T864: Replace All is bound to the previewed version and scope ----
+
+/// Open Replace in Files for `find` → `with` and stop at the preview.
+fn preview_replace_in_files(app: &mut App, find: &str, with: &str) {
+    app.run_action("search.workspace_replace");
+    type_str(app, find);
+    app.on_key(keycode(KeyCode::Tab));
+    type_str(app, with);
+    app.on_key(keycode(KeyCode::Enter));
+}
+
+/// The open tab on `path`, by canonical path.
+fn tab_text(app: &App, path: &Path) -> (String, bool) {
+    let canon = path.canonicalize().unwrap();
+    let tab = app
+        .editor
+        .tabs
+        .iter()
+        .find(|t| t.path.as_deref() == Some(canon.as_path()))
+        .unwrap();
+    (tab.text(), tab.dirty)
+}
+
+/// PQ-01: a file edited on disk after the preview is not overwritten with
+/// the text planned from the old version; it is offered again, re-planned
+/// from what is there now, while an unchanged file is written as previewed.
+#[test]
+fn replace_in_files_does_not_clobber_a_file_edited_after_the_preview() {
+    let dir = unique_dir("t864-edited");
+    fs::write(dir.join("a.txt"), "beta\n").unwrap();
+    fs::write(dir.join("b.txt"), "beta\n").unwrap();
+    let mut app = app_at(&dir);
+    preview_replace_in_files(&mut app, "beta", "Z");
+    assert!(app.replace_confirm.is_some());
+
+    fs::write(dir.join("a.txt"), "beta\nsecond line\n").unwrap();
+    app.on_key(key('y'));
+
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "beta\nsecond line\n",
+        "the external edit survives"
+    );
+    assert_eq!(fs::read_to_string(dir.join("b.txt")).unwrap(), "Z\n");
+    let note = t!("status.replaced_in_files", replaced = 1, files = 1).to_string();
+    assert_eq!(app.workspace_search.as_ref().unwrap().status, note);
+
+    // The changed file is offered again, planned from its new contents.
+    let rc = app.replace_confirm.as_ref().expect("refreshed preview");
+    assert_eq!(rc.lines, vec!["a.txt (1)".to_string()]);
+    app.on_key(key('y'));
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "Z\nsecond line\n"
+    );
+    assert!(app.replace_confirm.is_none());
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// PQ-01: a file deleted after the preview is not recreated.
+#[test]
+fn replace_in_files_does_not_recreate_a_file_deleted_after_the_preview() {
+    let dir = unique_dir("t864-deleted");
+    fs::write(dir.join("a.txt"), "beta\n").unwrap();
+    fs::write(dir.join("b.txt"), "beta\n").unwrap();
+    let mut app = app_at(&dir);
+    preview_replace_in_files(&mut app, "beta", "Z");
+    fs::remove_file(dir.join("a.txt")).unwrap();
+    app.on_key(key('y'));
+
+    assert!(!dir.join("a.txt").exists(), "the deletion is kept");
+    assert_eq!(fs::read_to_string(dir.join("b.txt")).unwrap(), "Z\n");
+    assert!(app.replace_confirm.is_none(), "nothing left to review");
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// PQ-01: a dirty buffer edited again after the preview keeps the user's
+/// newer text; its refreshed preview then changes the buffer only.
+#[test]
+fn replace_in_files_skips_a_dirty_buffer_changed_after_the_preview() {
+    let dir = unique_dir("t864-dirty");
+    fs::write(dir.join("a.txt"), "beta\n").unwrap();
+    let mut app = app_at(&dir);
+    app.editor.open(&dir.join("a.txt"), false).unwrap();
+    {
+        let tab = app.editor.active_tab_mut().unwrap();
+        tab.editor.set_content("beta\nunsaved\n");
+        tab.dirty = true;
+    }
+    preview_replace_in_files(&mut app, "beta", "Z");
+    {
+        let canon = dir.join("a.txt").canonicalize().unwrap();
+        let tab = app
+            .editor
+            .tabs
+            .iter_mut()
+            .find(|t| t.path.as_deref() == Some(canon.as_path()))
+            .unwrap();
+        tab.editor.set_content("beta\nunsaved, more\n");
+    }
+    app.on_key(key('y'));
+
+    assert_eq!(
+        tab_text(&app, &dir.join("a.txt")),
+        ("beta\nunsaved, more\n".to_string(), true)
+    );
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "beta\n");
+
+    app.on_key(key('y')); // the refreshed preview
+    assert_eq!(
+        tab_text(&app, &dir.join("a.txt")),
+        ("Z\nunsaved, more\n".to_string(), true)
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "beta\n",
+        "a dirty buffer's change stays in memory"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// PQ-01: successes and skips in one confirmation; the summary counts only
+/// what was actually replaced, from the per-file counts.
+#[test]
+fn replace_in_files_reports_a_mixture_of_successes_and_skips() {
+    let dir = unique_dir("t864-mixed");
+    fs::write(dir.join("a.txt"), "beta\n").unwrap(); // read-only tab
+    fs::write(dir.join("b.txt"), "beta beta\n").unwrap(); // edited
+    fs::write(dir.join("c.txt"), "beta beta beta\n").unwrap(); // control
+    fs::write(dir.join("d.txt"), "beta\n").unwrap(); // deleted
+    let mut app = app_at(&dir);
+    app.editor.open(&dir.join("a.txt"), false).unwrap();
+    app.editor.active_tab_mut().unwrap().read_only = true;
+    preview_replace_in_files(&mut app, "beta", "Z");
+    assert_eq!(app.replace_confirm.as_ref().unwrap().replaced, 7);
+
+    fs::write(dir.join("b.txt"), "other beta beta\n").unwrap();
+    fs::remove_file(dir.join("d.txt")).unwrap();
+    app.on_key(key('y'));
+
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "beta\n");
+    assert_eq!(
+        fs::read_to_string(dir.join("b.txt")).unwrap(),
+        "other beta beta\n"
+    );
+    assert_eq!(fs::read_to_string(dir.join("c.txt")).unwrap(), "Z Z Z\n");
+    assert!(!dir.join("d.txt").exists());
+    let note = t!("status.replaced_in_files", replaced = 3, files = 1).to_string();
+    assert_eq!(app.workspace_search.as_ref().unwrap().status, note);
+    let rc = app.replace_confirm.as_ref().expect("b.txt offered again");
+    assert_eq!(rc.lines, vec!["b.txt (2)".to_string()]);
+    app.on_key(esc());
+    assert_eq!(
+        fs::read_to_string(dir.join("b.txt")).unwrap(),
+        "other beta beta\n",
+        "cancelling the refreshed preview writes nothing"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// PQ-01: editable results are guarded the same way: a file edited
+/// elsewhere after the preview is not overwritten with the planned text.
+#[test]
+fn wgrep_does_not_clobber_a_file_edited_after_the_preview() {
+    let dir = unique_dir("t864-wgrep");
+    fs::write(dir.join("a.txt"), "keep\nneedle line\n").unwrap();
+    let mut app = app_at(&dir);
+    wgrep_append(&mut app, "needle", " EDITED");
+    app.run_action("file.save");
+    assert!(app.wgrep_confirm.is_some());
+
+    fs::write(dir.join("a.txt"), "keep CHANGED\nneedle line\n").unwrap();
+    app.on_key(key('y'));
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "keep CHANGED\nneedle line\n"
+    );
+
+    app.on_key(key('y')); // the refreshed preview
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "keep CHANGED\nneedle line EDITED\n"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// PQ-04: two files of 5,001 matching lines each. The panel shows its
+/// 5,000-hit cap, but the preview covers both files and all 10,002 changes;
+/// cancel writes nothing; a file changed before apply is held back while the
+/// other is written in full.
+#[test]
+fn replace_in_files_scope_is_every_eligible_file_not_the_displayed_hits() {
+    let dir = unique_dir("t864-scope");
+    let body: String = (0..5001).map(|i| format!("beta {i}\n")).collect();
+    fs::write(dir.join("a.txt"), &body).unwrap();
+    fs::write(dir.join("b.txt"), &body).unwrap();
+    let mut app = app_at(&dir);
+    preview_replace_in_files(&mut app, "beta", "Z");
+
+    assert_eq!(
+        app.workspace_search.as_ref().unwrap().hits.len(),
+        5000,
+        "the display is capped"
+    );
+    let rc = app.replace_confirm.as_ref().expect("preview");
+    assert_eq!(rc.replaced, 10_002);
+    assert_eq!(
+        rc.lines,
+        vec!["a.txt (5001)".to_string(), "b.txt (5001)".to_string()]
+    );
+
+    app.on_key(esc());
+    assert!(app.replace_confirm.is_none());
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), body);
+    assert_eq!(fs::read_to_string(dir.join("b.txt")).unwrap(), body);
+
+    app.on_key(keycode(KeyCode::Enter)); // preview again from the panel
+    assert_eq!(app.replace_confirm.as_ref().unwrap().replaced, 10_002);
+    let changed_b = format!("{body}beta again\n");
+    fs::write(dir.join("b.txt"), &changed_b).unwrap();
+    app.on_key(key('y'));
+
+    let replaced: String = (0..5001).map(|i| format!("Z {i}\n")).collect();
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), replaced);
+    assert_eq!(fs::read_to_string(dir.join("b.txt")).unwrap(), changed_b);
+    let note = t!("status.replaced_in_files", replaced = 5001, files = 1).to_string();
+    assert_eq!(app.workspace_search.as_ref().unwrap().status, note);
+    let rc = app.replace_confirm.as_ref().expect("b.txt offered again");
+    assert_eq!(rc.lines, vec!["b.txt (5002)".to_string()]);
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// PQ-04: while the file list is incomplete, the preview says so and
+/// `y`/Enter refuse; `!` deliberately replaces in the listed files only.
+#[test]
+fn replace_in_files_needs_a_deliberate_choice_when_the_file_list_is_incomplete() {
+    let dir = unique_dir("t864-partial");
+    fs::write(dir.join("a.txt"), "beta\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("search.workspace_replace");
+    type_str(&mut app, "beta");
+    app.on_key(keycode(KeyCode::Tab));
+    type_str(&mut app, "Z");
+    app.file_index_state = crate::app::FileIndexState::CutShort;
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.replace_confirm.is_some());
+    let screen = draw_frame(&mut app, 120, 30);
+    let warning = t!("ui.replace_partial_scope").to_string();
+    assert!(
+        screen.contains(warning.split(':').next().unwrap()),
+        "{screen}"
+    );
+
+    app.on_key(key('y'));
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.replace_confirm.is_some(), "y/Enter do not apply");
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "beta\n");
+    assert_eq!(app.status, warning);
+
+    app.on_key(key('!'));
+    assert!(app.replace_confirm.is_none());
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "Z\n");
+    fs::remove_dir_all(&dir).ok();
+}

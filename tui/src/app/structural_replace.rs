@@ -23,6 +23,7 @@ use vix_input::{KeyCode, KeyEvent};
 
 use vix_structural_replace::{Pattern, render_replacement};
 
+use super::replace_guard::{ReplaceReview, ReviewOrigin};
 use super::{App, Decision, Prompt, PromptKind, ReplaceConfirm, StructuralReplace};
 use crate::editor::Tab;
 
@@ -81,7 +82,9 @@ impl App {
             return;
         };
         if workspace {
-            self.begin_structural_replace_workspace(&pattern, input);
+            if !self.plan_structural_workspace(&pattern, input, None) {
+                self.status = t!("status.sr_no_matches").into();
+            }
         } else {
             self.begin_structural_replace_buffer(&pattern, input, label);
         }
@@ -217,14 +220,30 @@ impl App {
     }
 
     /// **Edit → Structural Replace in Workspace…**: compute a per-file
-    /// replacement plan across every file in `self.file_index` and reuse
-    /// `ReplaceConfirm`'s existing preview-and-confirm step (the same one
-    /// `workspace_replace_all` uses) rather than writing anything yet.
-    fn begin_structural_replace_workspace(&mut self, pattern: &Pattern, template: &str) {
+    /// replacement plan across every file in `self.file_index` (or only
+    /// `only`, a refreshed preview of files changed since the last one) and
+    /// reuse `ReplaceConfirm`'s existing preview-and-confirm step (the same
+    /// one `workspace_replace_all` uses, bound to the previewed versions the
+    /// same way, T864) rather than writing anything yet. Returns whether a
+    /// preview opened.
+    pub(super) fn plan_structural_workspace(
+        &mut self,
+        pattern: &Pattern,
+        template: &str,
+        only: Option<&[std::path::PathBuf]>,
+    ) -> bool {
         let mut plan: Vec<(std::path::PathBuf, String)> = Vec::new();
+        let mut review = ReplaceReview::new(
+            ReviewOrigin::Structural {
+                pattern: pattern.clone(),
+                template: template.to_string(),
+            },
+            only.is_none() && self.file_index_incomplete(),
+        );
         let mut lines: Vec<String> = Vec::new();
         let mut replaced = 0usize;
-        for path in self.file_index.clone() {
+        let paths = only.map_or_else(|| self.file_index.clone(), <[_]>::to_vec);
+        for path in paths {
             let Some(content) = self.current_text(&path) else {
                 continue;
             };
@@ -240,11 +259,11 @@ impl App {
             let rel = path.strip_prefix(&self.root).unwrap_or(&path);
             lines.push(format!("{} ({})", rel.display(), hits.len()));
             replaced = replaced.plus(hits.len());
+            review.push(hits.len(), &content);
             plan.push((path, new_content));
         }
         if plan.is_empty() {
-            self.status = t!("status.sr_no_matches").into();
-            return;
+            return false;
         }
         self.replace_confirm = Some(ReplaceConfirm {
             plan,
@@ -252,6 +271,8 @@ impl App {
             lines,
             scroll: 0,
         });
+        self.replace_review = Some(review);
+        true
     }
 }
 

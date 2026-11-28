@@ -2621,20 +2621,31 @@ fn workspace_search_and_replace_report_an_invalid_regex() {
     assert!(a.replace_confirm.is_none());
 }
 
-/// A confirmed replace into a clean open file refreshes that tab; a file
-/// that cannot be written is reported.
+/// A confirmed replace into a clean open file refreshes that tab; a target
+/// that no longer exists is reported, not created.
 #[test]
-fn applying_a_file_plan_refreshes_clean_tabs_and_reports_write_failures() {
+fn applying_a_file_plan_refreshes_clean_tabs_and_reports_missing_targets() {
     let dir = temp("r3-fileplan");
     let f = dir.join("f.txt");
     std::fs::write(&f, "old\n").unwrap();
     let mut a = app_at(&dir);
     a.open_path(&f, false);
-    let changed = a.apply_file_plan(&[
-        (f.clone(), "new\n".to_string()),
-        (dir.join("no/such/dir/g.txt"), "x".to_string()),
-    ]);
-    assert_eq!(changed, vec![f.clone()]);
+    let g = dir.join("no/such/dir/g.txt");
+    let mut review = crate::app::replace_guard::ReplaceReview::new(
+        crate::app::replace_guard::ReviewOrigin::Text,
+        false,
+    );
+    review.push(1, "old\n");
+    review.push(1, "y");
+    let applied = a.apply_reviewed(
+        &[
+            (f.clone(), "new\n".to_string()),
+            (g.clone(), "x".to_string()),
+        ],
+        &review,
+    );
+    assert_eq!(applied.files, vec![(f.clone(), 1)]);
+    assert!(!g.exists());
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "new\n");
     assert_eq!(a.editor.active_tab().unwrap().text(), "new\n");
     assert!(!a.editor.active_tab().unwrap().dirty);

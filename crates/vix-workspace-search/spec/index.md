@@ -126,7 +126,8 @@ the same prefilter contract as the remote tool: every caller's own check
 definition keywords) can only accept a line that regex matches. The
 scanning thread then visits the kept files' lines in index order, so
 results, their order, the file count and every cap (5,000 hits here and in
-the dock search, 2,000 TODOs, 200 definitions) are what the
+the dock search, 2,000 TODOs, 200 definitions; Replace All's scope is not
+capped, see [find-and-replace](../../../spec/find-and-replace/index.md#scope-and-display-cap-t864-pq-04)) are what the
 one-file-at-a-time walk produced; a cap still stops the scan after the
 batch it is reached in. Open buffers are read on the scanning thread, from
 their unsaved text. A remote authority's fallback reads one file at a time,
@@ -216,13 +217,24 @@ The line rewrite is `rewrite_lines`, a pure function over one file's text:
 - **Line endings are kept.** Each line keeps its own `\r\n` or `\n`, and
   the file keeps its final-newline state.
 
-Applying a plan — here and in **Replace in Files**, which shares the step
-(`App::apply_file_plan`) — writes with `vix_fileops::write_atomic`, refuses a
-file open in a **read-only** tab (reported, not written), and changes a file
-open in a **dirty** tab in that buffer only, leaving it dirty: writing it to
-disk would also save that tab's unrelated unsaved edits. The on-save
-normalizations are not applied, since the preview showed exactly what is
-written.
+Applying a plan — here, in **Replace in Files** and in **Structural Replace
+in Workspace**, which share the step (`App::apply_reviewed`,
+`tui/src/app/replace_guard.rs`) — writes with `vix_fileops::write_atomic`,
+refuses a file open in a **read-only** tab (reported, not written), and
+changes a file open in a **dirty** tab in that buffer only, leaving it dirty:
+writing it to disk would also save that tab's unrelated unsaved edits. The
+on-save normalizations are not applied, since the preview showed exactly what
+is written.
+
+Each target is also bound to the version the user previewed (T864): the plan
+records a fingerprint of the whole text it was computed from, and applying
+re-reads the target (the dirty buffer, or the file through the authority) and
+writes only while it still holds that text. A file changed since the preview
+is skipped and offered again in a refreshed preview, planned from its current
+text (here: the line-level drift check above runs again over the new text); a
+deleted file is reported and not recreated. The summary counts only the edits
+of files actually written. See
+[find-and-replace](../../../spec/find-and-replace/index.md#bound-to-the-previewed-version-t864-pq-01).
 
 **Known limitation**: a `rel` (workspace-relative path) containing a
 literal `:` would parse wrong — essentially never seen in practice, and

@@ -108,8 +108,10 @@ mod keymap;
 mod overlays;
 use chooser::ChooserSlot;
 use edit_surface::EditSlot;
+pub(crate) use file_index::FileIndexState;
 use info_panel::InfoSlot;
 pub(crate) use overlays::OverlayId;
+use replace_guard::{ReplaceReview, ReviewOrigin};
 /// Shared helpers of the coverage tests (builders, keys, temp dirs); not feature-gated
 /// because tests of ungated modules use them.
 #[cfg(test)]
@@ -137,6 +139,7 @@ mod project_settings;
 mod remote_pick;
 mod remote_search;
 mod remote_session;
+mod replace_guard;
 mod roam;
 #[cfg(feature = "script")]
 mod scripts;
@@ -2229,6 +2232,9 @@ pub struct App {
     project_settings: Option<Box<project_settings::ProjectLayer>>,
     /// Project-wide replace preview awaiting confirmation, when open.
     pub(crate) replace_confirm: Option<ReplaceConfirm>,
+    /// The version of each `replace_confirm` target the user previewed,
+    /// and the plan's origin and scope (T864), while it is open.
+    pub(crate) replace_review: Option<ReplaceReview>,
     /// Baseline for the T211 editable search-results buffer (**Alt+E** from
     /// workspace search, or `search.edit_results`), if one is open: one row
     /// per line the buffer started with, diffed against the buffer's current
@@ -2240,6 +2246,8 @@ pub struct App {
     /// but is a distinct field from `replace_confirm` since the two confirms
     /// have different wording and are never open at the same time).
     pub(crate) wgrep_confirm: Option<ReplaceConfirm>,
+    /// The previewed version of each `wgrep_confirm` target (T864).
+    wgrep_review: Option<ReplaceReview>,
     /// `(path, 1-based line, new text)` for each line the pending
     /// `wgrep_confirm` will write, so applying it can re-baseline those
     /// exact lines afterward without re-reading anything back off disk.
@@ -2727,7 +2735,7 @@ pub struct App {
     /// File paths under the workspace root, for the palette file finder.
     file_index: Vec<PathBuf>,
     /// Whether `file_index` is complete, still building, or cut short (T845).
-    file_index_state: file_index::FileIndexState,
+    pub(crate) file_index_state: file_index::FileIndexState,
     /// The workspace folders `file_index` was walked from.
     file_index_folders: Vec<PathBuf>,
     /// The background walk finishing `file_index`, while one runs (T845).
@@ -3037,8 +3045,10 @@ impl App {
             lsp_probe: None,
             project_settings: None,
             replace_confirm: None,
+            replace_review: None,
             wgrep_baseline: None,
             wgrep_confirm: None,
+            wgrep_review: None,
             wgrep_pending_edits: Vec::new(),
             dir_edit: None,
             dir_edit_confirm: None,
@@ -13294,18 +13304,31 @@ impl App {
         }
     }
 
-    /// Plan a project-wide replace for every file with hits: compute the new text of each file
-    /// but write nothing, then open the confirmation overlay listing the files and counts.
-    /// Nothing touches disk until the user confirms (see `apply_replace_confirm`).
+    /// **Alt+Enter** in the replace panel: plan a project-wide replace (see
+    /// [`App::plan_text_replace`]) and open its preview.
     fn workspace_replace_all(&mut self) {
+        self.plan_text_replace(None);
+    }
+
+    /// Plan a project-wide replace: compute the new text of each target but
+    /// write nothing, then open the confirmation overlay listing every file
+    /// with its count. Nothing touches disk until the user confirms (see
+    /// `apply_replace_confirm`). Returns whether a preview opened.
+    ///
+    /// The scope is every eligible file (T864, PQ-04): every indexed file
+    /// the panel's path filter allows and whose current text has a matching
+    /// line, found by a scan of its own, never the panel's hits, which stop
+    /// at their 5,000-row display cap. `only` narrows it to those paths
+    /// (a refreshed preview of targets that changed since the last one).
+    pub(super) fn plan_text_replace(&mut self, only: Option<&[PathBuf]>) -> bool {
         let Some(ps) = self.workspace_search.as_ref() else {
-            return;
+            return false;
         };
         if !ps.flags.contains(WorkspaceFlags::REPLACING) {
-            return;
+            return false;
         }
         let Some(pat) = ps.pattern() else {
-            return;
+            return false;
         };
         let re = match Regex::new(&pat) {
             Ok(r) => r,
@@ -13313,20 +13336,23 @@ impl App {
                 if let Some(p) = self.workspace_search.as_mut() {
                     p.status = t!("msg.bad_regex", error = e).to_string();
                 }
-                return;
+                return false;
             }
         };
         let use_regex = ps.flags.contains(WorkspaceFlags::REGEX);
         let replacement = ps.replace.clone();
-
-        // Unique set of files that currently have hits.
-        let mut paths: Vec<PathBuf> = ps.hits.iter().map(|h| h.path.clone()).collect();
-        paths.sort();
-        paths.dedup();
+        let paths = match only {
+            Some(only) => only.to_vec(),
+            None => self.text_replace_scope(ps, &re),
+        };
 
         // Compute (but do not yet write) the replacement for each file, so the
         // user can preview and confirm before anything touches disk.
         let mut plan: Vec<(PathBuf, String)> = Vec::new();
+        let mut review = ReplaceReview::new(
+            ReviewOrigin::Text,
+            only.is_none() && self.file_index_incomplete(),
+        );
         let mut lines: Vec<String> = Vec::new();
         let mut replaced = 0usize;
         for path in &paths {
@@ -13340,14 +13366,17 @@ impl App {
             }
             let rel = path.strip_prefix(&self.root).unwrap_or(path);
             lines.push(format!("{} ({count})", rel.display()));
+            review.push(count, &content);
             plan.push((path.clone(), new));
             replaced = replaced.plus(count);
         }
         if plan.is_empty() {
-            if let Some(p) = self.workspace_search.as_mut() {
+            if only.is_none()
+                && let Some(p) = self.workspace_search.as_mut()
+            {
                 p.status = t!("status.replaced_in_files", replaced = 0, files = 0).to_string();
             }
-            return;
+            return false;
         }
         self.replace_confirm = Some(ReplaceConfirm {
             plan,
@@ -13355,93 +13384,92 @@ impl App {
             lines,
             scroll: 0,
         });
+        self.replace_review = Some(review);
+        true
     }
 
-    /// Apply a confirmed project-wide replace: write every planned file and keep
-    /// open buffers in sync, then refresh the search and report the totals.
+    /// Every indexed file the panel `ps`'s path filter allows with a line
+    /// `re` matches, in index order, from the files' current text (open
+    /// buffers included). The in-process scan reads the whole index; a
+    /// remote authority is read file by file, since its search tool stops
+    /// after a fixed number of lines.
+    fn text_replace_scope(&self, ps: &WorkspaceSearch, re: &Regex) -> Vec<PathBuf> {
+        let filter = ps.path_filter();
+        let allow = |rel: &str| filter.allows(&rel.replace('\\', "/"));
+        let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+        let mut paths: Vec<PathBuf> = Vec::new();
+        let mut visit = |line: &remote_search::IndexLine<'_>| {
+            if !seen.contains(line.path)
+                && crate::find_panel::next_match(line.text, re, 0).is_some()
+            {
+                seen.insert(line.path.to_path_buf());
+                paths.push(line.path.to_path_buf());
+            }
+            ControlFlow::Continue(())
+        };
+        if crate::authority::current().is_local() {
+            let query = remote_search::buffers_query(ToolQuery::search(
+                &ps.query,
+                ps.flags.contains(WorkspaceFlags::REGEX),
+                ps.flags.contains(WorkspaceFlags::CASE_SENSITIVE),
+            ));
+            self.scan_index(&query, remote_search::Source::Buffers, &allow, &mut visit);
+        } else {
+            self.scan_index_sequential(remote_search::Source::Buffers, &allow, &mut visit);
+        }
+        paths.sort();
+        paths
+    }
+
+    /// Apply a confirmed project-wide replace: write every planned target
+    /// that still holds the previewed text (see [`App::apply_reviewed`]),
+    /// refresh the search, report what was really replaced, and offer the
+    /// targets that changed since the preview again.
     fn apply_replace_confirm(&mut self) {
         let Some(rc) = self.replace_confirm.take() else {
             return;
         };
-        let replaced = rc.replaced;
-        let files = self.apply_file_plan(&rc.plan).len();
-        self.run_workspace_search();
+        let Some(review) = self.replace_review.take() else {
+            return;
+        };
+        let applied = self.apply_reviewed(&rc.plan, &review);
+        if self.workspace_search.is_some() {
+            self.run_workspace_search();
+        }
         let note = t!(
             "status.replaced_in_files",
-            replaced = replaced,
-            files = files
+            replaced = applied.replaced(),
+            files = applied.files.len()
         )
         .to_string();
         if let Some(p) = self.workspace_search.as_mut() {
             p.status.clone_from(&note);
         }
-        self.messages.info(note);
-    }
-
-    /// Apply a confirmed per-file plan (Replace in Files, editable search
-    /// results) and return the paths it changed (T653).
-    ///
-    /// - A path open in a **read-only** tab (the View-only toggle, a lossy
-    ///   or synthetic buffer) is refused and reported, never written.
-    /// - A path open in a **dirty** tab is changed in that buffer only and
-    ///   left dirty: writing it to disk would also save the tab's unrelated
-    ///   unsaved edits.
-    /// - Everything else is written with `write_atomic`, and a clean open
-    ///   tab on it is refreshed to match.
-    ///
-    /// The on-save normalizations (trim trailing whitespace, final newline)
-    /// are deliberately not applied: the preview showed exactly these
-    /// contents, and a targeted replace must not rewrite unrelated lines.
-    fn apply_file_plan(&mut self, plan: &[(PathBuf, String)]) -> Vec<PathBuf> {
-        let mut changed = Vec::new();
-        let mut buffer_only = 0usize;
-        for (path, new) in plan {
-            let canon = crate::authority::current()
-                .canonicalize(path)
-                .unwrap_or_else(|_| path.clone());
-            let open = self
-                .editor
-                .tabs
-                .iter()
-                .position(|t| t.path.as_deref() == Some(canon.as_path()));
-            if let Some(tab) = open.and_then(|i| self.editor.tabs.get_mut(i)) {
-                if tab.read_only || tab.is_image() {
-                    self.messages.error(
-                        t!("msg.replace_read_only_skipped", path = path.display()).to_string(),
-                    );
-                    continue;
-                }
-                if tab.dirty {
-                    tab.editor.set_content(new);
-                    buffer_only = buffer_only.plus(1);
-                    changed.push(path.clone());
-                    continue;
-                }
-            }
-            if let Err(e) = crate::authority::current().write_text_in_file_encoding(path, new) {
-                self.messages
-                    .error(t!("msg.write_failed", path = path.display(), error = e).to_string());
-                continue;
-            }
-            if let Some(tab) = open.and_then(|i| self.editor.tabs.get_mut(i)) {
-                tab.editor.set_content(new);
-                tab.dirty = false;
-            }
-            changed.push(path.clone());
-        }
-        if buffer_only > 0 {
-            self.messages
-                .warn(t!("msg.replace_buffer_only", count = buffer_only).to_string());
-        }
-        changed
+        self.messages.info(note.clone());
+        self.status = note;
+        self.refresh_conflicted(review.origin, &applied.conflicted);
     }
 
     /// Handle a key in the project-wide replace preview: `y`/Enter applies,
-    /// `n`/Esc cancels, arrows scroll the file list.
+    /// `n`/Esc cancels, arrows scroll the file list. When the plan's file
+    /// list was incomplete (PQ-04), `y`/Enter only say so and `!` applies
+    /// to the listed files deliberately.
     fn replace_confirm_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.apply_replace_confirm(),
-            KeyCode::Char('n' | 'N') | KeyCode::Esc => self.replace_confirm = None,
+            KeyCode::Char('y' | 'Y') | KeyCode::Enter
+                if self.replace_review.as_ref().is_some_and(|r| r.partial) =>
+            {
+                let note = t!("ui.replace_partial_scope").to_string();
+                if let Some(p) = self.workspace_search.as_mut() {
+                    p.status.clone_from(&note);
+                }
+                self.status = note;
+            }
+            KeyCode::Char('y' | 'Y' | '!') | KeyCode::Enter => self.apply_replace_confirm(),
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                self.replace_confirm = None;
+                self.replace_review = None;
+            }
             KeyCode::Up => {
                 if let Some(rc) = self.replace_confirm.as_mut() {
                     rc.scroll = rc.scroll.minus(1);
@@ -13521,11 +13549,18 @@ impl App {
     /// from scratch (not matching that shape at all) is ignored rather than
     /// misread. No-op with a status message when nothing changed.
     fn prepare_wgrep_confirm(&mut self) {
+        self.plan_wgrep_confirm(None);
+    }
+
+    /// [`App::prepare_wgrep_confirm`]'s planner, returning whether a
+    /// preview opened; `only` narrows it to those source files (a refreshed
+    /// preview of files that changed since the last one, T864).
+    pub(super) fn plan_wgrep_confirm(&mut self, only: Option<&[PathBuf]>) -> bool {
         let Some(baseline) = self.wgrep_baseline.as_ref() else {
-            return;
+            return false;
         };
         let Some(text) = self.editor.active_tab().map(Tab::text) else {
-            return;
+            return false;
         };
         let index: std::collections::HashMap<(&str, usize), &WgrepBaseline> = baseline
             .iter()
@@ -13543,6 +13578,9 @@ impl App {
             let Some(b) = index.get(&(rel, n)) else {
                 continue;
             };
+            if only.is_some_and(|o| !o.contains(&b.path)) {
+                continue;
+            }
             if new_text != b.text {
                 by_path.entry(b.path.clone()).or_default().push(
                     crate::workspace_search::LineEdit {
@@ -13556,6 +13594,7 @@ impl App {
         let mut plan: Vec<(PathBuf, String)> = Vec::new();
         let mut lines: Vec<String> = Vec::new();
         let mut pending_edits: Vec<(PathBuf, usize, String)> = Vec::new();
+        let mut review = ReplaceReview::new(ReviewOrigin::EditedResults, false);
         let mut edited = 0usize;
         let mut drifted = 0usize;
         for (path, changes) in by_path {
@@ -13577,6 +13616,7 @@ impl App {
             }
             let applied = rewrite.applied.len();
             lines.push(format!("{} ({applied})", rel.display()));
+            review.push(applied, &content);
             plan.push((path, rewrite.content));
             edited = edited.plus(applied);
         }
@@ -13584,10 +13624,10 @@ impl App {
             self.status = t!("status.wgrep_drifted", count = drifted).to_string();
         }
         if plan.is_empty() {
-            if drifted == 0 {
+            if drifted == 0 && only.is_none() {
                 self.status = t!("status.wgrep_no_changes").into();
             }
-            return;
+            return false;
         }
         self.wgrep_pending_edits = pending_edits;
         self.wgrep_confirm = Some(ReplaceConfirm {
@@ -13596,21 +13636,28 @@ impl App {
             lines,
             scroll: 0,
         });
+        self.wgrep_review = Some(review);
+        true
     }
 
-    /// Write a confirmed `wgrep_confirm` plan to disk, sync any open tabs on
-    /// those paths, and re-baseline the edited lines so saving again without
-    /// further edits does nothing.
+    /// Write a confirmed `wgrep_confirm` plan to disk (each file only while
+    /// it still holds the previewed text, see [`App::apply_reviewed`]), sync
+    /// any open tabs on those paths, re-baseline the edited lines so saving
+    /// again without further edits does nothing, and offer the files that
+    /// changed since the preview again.
     fn apply_wgrep_confirm(&mut self) {
         let Some(wc) = self.wgrep_confirm.take() else {
             return;
         };
-        let changed = self.apply_file_plan(&wc.plan);
-        let files = changed.len();
+        let Some(review) = self.wgrep_review.take() else {
+            return;
+        };
+        let applied = self.apply_reviewed(&wc.plan, &review);
+        let files = applied.files.len();
         let pending = std::mem::take(&mut self.wgrep_pending_edits);
-        let edited = pending.iter().filter(|(p, ..)| changed.contains(p)).count();
+        let edited = pending.iter().filter(|(p, ..)| applied.changed(p)).count();
         if let Some(baseline) = self.wgrep_baseline.as_mut() {
-            for (path, line, text) in pending.iter().filter(|(p, ..)| changed.contains(p)) {
+            for (path, line, text) in pending.iter().filter(|(p, ..)| applied.changed(p)) {
                 if let Some(b) = baseline
                     .iter_mut()
                     .find(|b| &b.path == path && b.line == *line)
@@ -13622,6 +13669,7 @@ impl App {
         let note = t!("status.wgrep_applied", edited = edited, files = files).to_string();
         self.status.clone_from(&note);
         self.messages.info(note);
+        self.refresh_conflicted(review.origin, &applied.conflicted);
     }
 
     /// Handle a key in the wgrep apply-and-confirm step: `y`/Enter applies,
@@ -13630,7 +13678,10 @@ impl App {
     fn wgrep_confirm_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.apply_wgrep_confirm(),
-            KeyCode::Char('n' | 'N') | KeyCode::Esc => self.wgrep_confirm = None,
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                self.wgrep_confirm = None;
+                self.wgrep_review = None;
+            }
             KeyCode::Up => {
                 if let Some(wc) = self.wgrep_confirm.as_mut() {
                     wc.scroll = wc.scroll.minus(1);

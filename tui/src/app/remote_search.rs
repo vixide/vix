@@ -431,8 +431,9 @@ impl App {
     }
 
     /// The scan as it was before T830, one file at a time with no
-    /// prefilter: the oracle the batched scan is tested against.
-    #[cfg(test)]
+    /// prefilter: the oracle the batched scan is tested against, and the
+    /// complete scan a remote workspace's Replace in Files scope uses (its
+    /// search tool stops after [`MAX_TOOL_LINES`], T864).
     pub(super) fn scan_index_sequential(
         &self,
         source: Source,

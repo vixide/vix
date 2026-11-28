@@ -76,6 +76,13 @@ this optimizes for.
     file under the workspace root and reuses `ReplaceConfirm`'s existing
     preview-and-confirm step verbatim (the same one workspace
     search-and-replace uses), rather than building a second confirm UI.
+    Like that step it is bound to the previewed version of each file
+    (T864): a file edited or deleted after the preview is not overwritten
+    or recreated, a changed one is offered again in a refreshed preview
+    re-planned with the same pattern and template, and while the workspace
+    file list is incomplete `y`/Enter refuse and `!` applies to the listed
+    files only. See
+    [find-and-replace](../../../spec/find-and-replace/index.md#bound-to-the-previewed-version-t864-pq-01).
 
 ## Checked arithmetic
 
