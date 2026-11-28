@@ -51,7 +51,7 @@ flowchart TD
         undo["vix-undo-store"]
         http["vix-http-client"]
     end
-    subgraph L2["Layer 2 (8 crates)"]
+    subgraph L2["Layer 2 (9 crates)"]
         settings["vix-settings"]
         authority["vix-authority"]
         session["vix-session"]

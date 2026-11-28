@@ -153,10 +153,19 @@ code.
 
 The opt-in `ai-agents` feature starts the installed provider in a trusted local
 workspace. It uses stdio and the provider’s login. Native tools run under the
-provider’s own permission rules and can edit files on disk. Each approval Vix
-receives belongs to the current turn. The user sees the request and can allow
-it once or decline it. The private conversation file contains prompts and
-visible replies. A separate lock keeps another Vix from editing it concurrently.
+provider’s own permission rules and can edit files on disk. Vix never loosens
+those rules: it sends no sandbox, approval policy or permission mode, so the
+user's Codex config and Claude Code settings decide what runs unasked. Each
+approval Vix receives belongs to the current turn. The user sees the request
+(sanitized, with Codex file changes and their diffs) and can allow it once or
+decline it; requests arriving together are queued, never answered without a
+key press. Questions Vix cannot answer are declined. Stopping a turn sends the
+provider's interrupt, closes its input and, after 500 ms, kills it; on Unix the
+kill takes its whole process group, so the commands it started stop too. The
+provider's stderr is kept only as an 8 KiB tail for error messages. The
+private conversation file contains prompts and visible replies, in an
+owner-only directory. A separate lock keeps another Vix from editing it
+concurrently.
 [Conversation contract](../crates/vix-ai-agents/spec/index.md)
 
 ### ACP agents (the Agent panel)

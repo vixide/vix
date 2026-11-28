@@ -14642,6 +14642,9 @@ impl App {
         self.cancel_undo_tree();
         self.flush_hot_exit();
         self.lsp.shutdown();
+        // A native agent's turn is interrupted, and it and its tools stopped.
+        #[cfg(feature = "ai-agents")]
+        self.close_native_agents();
         if let Err(e) = self.save_session() {
             // This used to be `let _ = self.save_session();`, silently
             // discarding the error while the identically-shaped

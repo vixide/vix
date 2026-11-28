@@ -171,7 +171,11 @@ impl App {
     #[must_use]
     pub fn poll_interval(&self) -> Duration {
         #[cfg(feature = "ai-agents")]
-        if self.native_panel.as_ref().is_some_and(|p| p.panel.busy) {
+        if self
+            .native_panel
+            .as_ref()
+            .is_some_and(|p| p.panel.busy || p.active())
+        {
             return Duration::from_millis(50);
         }
         if self.command_running()

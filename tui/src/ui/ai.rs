@@ -152,12 +152,21 @@ pub(super) fn draw_native_conversation(app: &mut App, frame: &mut Frame, area: R
     };
     let name = native.conversation.transcript.provider.name();
     let title = if native.panel.busy {
-        format!("{name} · {}", t!("ui.ai_thinking"))
+        t!(
+            "ui.agent_title_busy",
+            provider = name,
+            state = t!("ui.ai_thinking")
+        )
+        .to_string()
     } else {
         name.to_owned()
     };
     let hint = if native.awaiting_approval() {
         t!("ui.agent_decision")
+    } else if native.stop_armed {
+        t!("status.agent_esc_again")
+    } else if native.panel.busy {
+        t!("ui.agent_running_hint")
     } else {
         t!("ui.agent_conversation_hint")
     };
@@ -218,8 +227,9 @@ fn draw_conversation(
     };
     frame.render_widget(Paragraph::new(lines), body);
 
-    // Input line: a leading prompt glyph then the in-progress text plus a caret.
-    let input = panel.input.replace('\n', " ↵ ");
+    // Input line: a leading prompt glyph then the in-progress text plus a
+    // caret. Pasted text may hold control or bidi characters: drawn sanitized.
+    let input = vix_acp::display::sanitize(&panel.input.replace('\n', " ↵ "));
     let input_line = Line::from(vec![
         Span::styled("› ", theme::title(true).add_modifier(Modifier::BOLD)),
         Span::raw(input),
