@@ -17,7 +17,7 @@ lines and comments.
 |---|---|
 | Workspace crates (`tui/` and `crates/`) | 149 |
 | Desktop GUI crates (`gui/`) | 7 |
-| Lines of Rust in `src/` | 335,535 |
+| Lines of Rust in `src/` | 335,534 |
 | Lines of Rust in `tests/` | 61,518 |
 | Lines of Rust elsewhere (`benches/`, `examples/`, `build.rs`) | 4,432 |
 | Test functions (`#[test]`, `#[tokio::test]`) | 6,960 |
@@ -253,7 +253,7 @@ file of the crate, property tests included.
 | Crate | src | tests | Test fns | Property tests | Ignored |
 |---|---|---|---|---|---|
 | `vix-bui` | 3,768 | 0 | 63 | 0 | 0 |
-| `vix-egui` | 1,898 | 0 | 17 | 0 | 0 |
+| `vix-egui` | 1,897 | 0 | 17 | 0 | 0 |
 | `vix-gpui` | 1,703 | 0 | 16 | 0 | 0 |
 | `vix-gtk4` | 2,287 | 0 | 23 | 0 | 0 |
 | `vix-iced` | 2,324 | 0 | 21 | 0 | 0 |
