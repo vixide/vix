@@ -223,9 +223,15 @@ echo "signing and --verify-dir"
 expect_pass "verify-dir accepts the fresh release" sh $rl --verify-dir "$out"
 cp -R "$out" "$work/dl"
 expect_pass "verify-dir accepts a copy" sh $rl --verify-dir "$work/dl"
+# The administrators' verifier (T870) accepts what this script really produces,
+# with every file in the signed manifest, and rejects it once modified.
+expect_pass "verify-release accepts the signed release" sh "$src/verify-release" "$work/dl" --allowed-signers "$work/allowed" --require-signature
+expect_msg "3 in the signed SHA256SUMS (signer tester)"
 echo tamper >>"$work/dl/vix-tui-x86_64-pc-windows-gnu.zip"
 expect_fail "a tampered asset is rejected" sh $rl --verify-dir "$work/dl"
 expect_msg "does not match"
+expect_fail "verify-release rejects the tampered asset" sh "$src/verify-release" "$work/dl" --allowed-signers "$work/allowed"
+expect_msg "does not match its SHA-256"
 cp -R "$out" "$work/dl2"
 echo "$(sha256sum /dev/null 2>/dev/null | cut -c1-64 || echo 0)  extra" >>"$work/dl2/SHA256SUMS"
 expect_fail "an edited SHA256SUMS is rejected" sh $rl --verify-dir "$work/dl2"

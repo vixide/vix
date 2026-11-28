@@ -158,6 +158,8 @@ def check(root):
         if flake.count(a) != flake.count(b):
             err(f"flake.nix: unbalanced {a}{b}")
 
+    verification(root, dist, err)
+
     if errors:
         print(f"FAIL: {len(errors)} packaging problem(s)")
         for e in errors:
@@ -165,6 +167,60 @@ def check(root):
         return 1
     print(f"OK: packaging templates consistent (version {version})")
     return 0
+
+
+# What the administrators' verification guide (T870) must name for each route:
+# a dist installer, or a fixed route, mapped to text its section must contain.
+INSTALLER_ROUTES = {
+    "shell": "vix-tui-installer.sh",
+    "powershell": "vix-tui-installer.ps1",
+    "npm": "npm audit signatures",
+    "homebrew": "brew fetch",
+    "msi": ".msi",
+}
+FIXED_ROUTES = (
+    "SHA256SUMS.sig",
+    "sha256.sum",
+    "linux-packages.sha256",
+    "vix-minimal-",
+    ".cdx.xml",
+    "cargo install --locked",
+    "scripts/verify-release",
+)
+UNPUBLISHED = ("winget", "Scoop", "AUR", "cargo binstall", "Nix", "mise", "Container image")
+VERIFY_DOC = ("docs", "verify-release", "index.md")
+
+
+def verification(root, dist, err):
+    """The verification guide covers every route, and SECURITY.md agrees with it."""
+    path = os.path.join(root, *VERIFY_DOC)
+    if not os.path.exists(path):
+        err("docs/verify-release/index.md: missing (the per-route verification guide)")
+        return
+    doc = read(root, *VERIFY_DOC)
+    m = re.search(r"^installers = \[([^\]]*)\]", dist, re.M)
+    for inst in re.findall(r'"([a-z]+)"', m.group(1) if m else ""):
+        want = INSTALLER_ROUTES.get(inst)
+        if want is None:
+            err(f"docs/verify-release: dist installer {inst!r} has no route in scripts/packaging")
+        elif want not in doc:
+            err(f"docs/verify-release: the {inst} route should name {want!r}")
+    for want in FIXED_ROUTES:
+        if want not in doc:
+            err(f"docs/verify-release: expected {want!r}")
+    head, _, tail = doc.partition("## Not published")
+    if not tail:
+        err("docs/verify-release: no '## Not published' section")
+    for channel in UNPUBLISHED:
+        if channel not in tail:
+            err(f"docs/verify-release: {channel} should be listed under 'Not published'")
+        if f"| {channel}" in head:
+            err(f"docs/verify-release: {channel} has a route row but is not published")
+    security = read(root, "SECURITY.md")
+    if "docs/verify-release" not in security:
+        err("SECURITY.md: Release integrity should link docs/verify-release")
+    if re.search(r"artifacts are not (yet )?signed", security):
+        err("SECURITY.md: says release artifacts are unsigned, but the local release path signs SHA256SUMS")
 
 
 def fetch_sum(version, name, attempts=5):

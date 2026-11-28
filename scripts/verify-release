@@ -1,0 +1,189 @@
+#!/bin/sh
+# Verify a downloaded Vix release, offline (T870; spec/packaging, "Verifying a
+# download"; how-to: docs/verify-release).
+#
+#   scripts/verify-release DIR [--allowed-signers FILE] [--require-signature]
+#                              [--version VERSION] [--record FILE]
+#
+# DIR holds files downloaded from one release (a new, empty directory per
+# release) and the verification material that came with them:
+#
+#   SHA256SUMS + SHA256SUMS.sig  the signed manifest of scripts/release-local.
+#                                The signature (ssh-keygen -Y, namespace
+#                                "vix-release") is checked against the
+#                                allowed-signers FILE (or $VIX_ALLOWED_SIGNERS)
+#                                before any line of SHA256SUMS is trusted.
+#   sha256.sum                   dist's combined checksum file.
+#   linux-packages.sha256        the checksums of the Linux packages.
+#   <file>.sha256                one checksum beside each asset.
+#
+# Every listed file must be present and match, every manifest that names a
+# file must agree, and every other file in DIR must be covered by at least one
+# of them. A listed name must be a plain file name ([A-Za-z0-9._+-], no
+# directory part). With --require-signature every file must also be in the
+# signed SHA256SUMS. Each verified file is printed with its SHA-256, its target
+# (read from the asset name) and what covered it; --record FILE also writes
+# those lines as tab-separated values (version, target, file, sha256, coverage).
+#
+# Checksums from the release page detect a damaged or swapped download only as
+# far as the page itself is trusted; only the signed manifest ties the files to
+# the maintainer's key. Exit status: 0 verified, 1 rejected or unusable.
+set -eu
+
+die() {
+	echo "scripts/verify-release: $*" >&2
+	exit 1
+}
+fail() { die "VERIFY FAILED: $*"; }
+usage() { sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+
+dir='' allowed=${VIX_ALLOWED_SIGNERS:-} require=0 version=- record=''
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--allowed-signers)
+		[ $# -ge 2 ] || die "--allowed-signers needs a file"
+		allowed=$2
+		shift
+		;;
+	--require-signature) require=1 ;;
+	--version)
+		[ $# -ge 2 ] || die "--version needs a value"
+		version=$2
+		shift
+		;;
+	--record)
+		[ $# -ge 2 ] || die "--record needs a file"
+		record=$2
+		shift
+		;;
+	-h | --help)
+		usage
+		exit 0
+		;;
+	-*) die "unknown option $1 (see --help)" ;;
+	*)
+		[ -z "$dir" ] || die "one DIR only"
+		dir=$1
+		;;
+	esac
+	shift
+done
+[ -n "$dir" ] || die "usage: scripts/verify-release DIR [--allowed-signers FILE] [--require-signature] (see --help)"
+d=$(cd "$dir" 2>/dev/null && pwd) || die "no such directory: $dir"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+: >"$work/expect"
+
+sha256() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | cut -c1-64
+	elif command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$1" | cut -c1-64
+	else
+		die "neither sha256sum nor shasum is installed"
+	fi
+}
+
+# add_manifest FILE SOURCE [ONLY-NAME]: append "name hash source" per line.
+add_manifest() {
+	awk -v src="$2" -v only="${3:-}" '
+		/^[[:space:]]*$/ { next }
+		{
+			if (NF != 2 || length($1) != 64 || $1 !~ /^[0-9a-fA-F]+$/) { print "malformed line " NR > "/dev/stderr"; bad = 1; exit }
+			n = $2
+			sub(/^\*/, "", n)
+			if (n !~ /^[A-Za-z0-9][A-Za-z0-9._+-]*$/ || n ~ /\.\./) { print "unsafe file name " n > "/dev/stderr"; bad = 1; exit }
+			if (only != "" && n != only) { print "names " n ", not " only > "/dev/stderr"; bad = 1; exit }
+			print n, tolower($1), src
+			count++
+		}
+		END { if (bad) exit 1; if (!count) { print "lists no file" > "/dev/stderr"; exit 1 } }
+	' "$1" >"$work/part" 2>"$work/why" || fail "$2: $(cat "$work/why")"
+	cat "$work/part" >>"$work/expect"
+}
+
+# ---- the signed manifest ----------------------------------------------------
+principal=
+if [ -f "$d/SHA256SUMS" ] || [ -f "$d/SHA256SUMS.sig" ]; then
+	[ -f "$d/SHA256SUMS" ] || fail "SHA256SUMS.sig without SHA256SUMS"
+	[ -f "$d/SHA256SUMS.sig" ] || fail "SHA256SUMS has no SHA256SUMS.sig (unsigned)"
+	[ -n "$allowed" ] || fail "SHA256SUMS.sig is checked against the maintainer's allowed-signers file: pass --allowed-signers FILE"
+	[ -f "$allowed" ] || die "allowed-signers file not found: $allowed"
+	command -v ssh-keygen >/dev/null 2>&1 || die "ssh-keygen is not installed, so SHA256SUMS.sig cannot be checked"
+	principal=$(ssh-keygen -Y find-principals -f "$allowed" -s "$d/SHA256SUMS.sig" 2>/dev/null | head -n1 || true)
+	[ -n "$principal" ] || fail "SHA256SUMS.sig is not from a key in $allowed"
+	ssh-keygen -Y verify -f "$allowed" -I "$principal" -n vix-release -s "$d/SHA256SUMS.sig" <"$d/SHA256SUMS" >/dev/null 2>&1 ||
+		fail "bad signature on SHA256SUMS (edited, or not signed for vix-release)"
+	add_manifest "$d/SHA256SUMS" "signed:SHA256SUMS"
+fi
+
+# ---- checksum files ---------------------------------------------------------
+[ ! -f "$d/sha256.sum" ] || add_manifest "$d/sha256.sum" "checksum:sha256.sum"
+[ ! -f "$d/linux-packages.sha256" ] || add_manifest "$d/linux-packages.sha256" "checksum:linux-packages.sha256"
+for s in "$d"/*.sha256; do
+	[ -f "$s" ] || continue
+	b=${s##*/}
+	[ "$b" != linux-packages.sha256 ] || continue
+	add_manifest "$s" "checksum:$b" "${b%.sha256}"
+done
+[ -s "$work/expect" ] || fail "no verification material in $d (SHA256SUMS, sha256.sum, linux-packages.sha256 or <file>.sha256)"
+
+is_material() {
+	case "$1" in SHA256SUMS | SHA256SUMS.sig | sha256.sum | *.sha256) return 0 ;; esac
+	return 1
+}
+target_of() {
+	t=$(printf '%s' "$1" | sed -En 's/^vix-[a-z0-9]+-([a-z0-9_]+-[a-z0-9_]+-[a-z0-9_]+(-[a-z0-9_]+)?)\.(tar\.xz|tar\.gz|zip|msi)$/\1/p')
+	printf '%s' "${t:--}"
+}
+
+# ---- every listed file ------------------------------------------------------
+: >"$work/records"
+signed=0 total=0
+awk '{ print $1 }' "$work/expect" | sort -u >"$work/names"
+while read -r name; do
+	if [ ! -f "$d/$name" ]; then
+		fail "$name is listed in $(awk -v n="$name" '$1 == n { sub(/^[a-z]*:/, "", $3); print $3 }' "$work/expect" | tr '\n' ' ')but is missing"
+	fi
+	have=$(sha256 "$d/$name")
+	sources=
+	while read -r n h src; do
+		[ "$n" = "$name" ] || continue
+		[ "$h" = "$have" ] || fail "$name does not match its SHA-256 in ${src#*:} (expected $h, got $have)"
+		sources="${sources:+$sources,}$src"
+	done <"$work/expect"
+	case ",$sources," in
+	*,signed:*)
+		coverage="signed by $principal ($sources)"
+		signed=$((signed + 1))
+		;;
+	*)
+		[ "$require" = 0 ] || fail "$name is not in the signed SHA256SUMS (--require-signature)"
+		coverage="checksum only ($sources)"
+		;;
+	esac
+	total=$((total + 1))
+	target=$(target_of "$name")
+	echo "ok  $name  sha256=$have  target=$target  $coverage"
+	printf '%s\t%s\t%s\t%s\t%s\n' "$version" "$target" "$name" "$have" "$coverage" >>"$work/records"
+done <"$work/names"
+
+# ---- nothing unaccounted for ------------------------------------------------
+for f in "$d"/* "$d"/.[!.]*; do
+	[ -e "$f" ] || [ -L "$f" ] || continue
+	b=${f##*/}
+	{ [ -f "$f" ] && [ ! -L "$f" ]; } || fail "$b is not a regular file"
+	is_material "$b" && continue
+	awk -v n="$b" '$1 == n { found = 1 } END { exit !found }' "$work/expect" || fail "no checksum covers $b"
+done
+
+if [ -n "$record" ]; then
+	{
+		printf 'version\ttarget\tfile\tsha256\tcoverage\n'
+		cat "$work/records"
+	} >"$record"
+fi
+checked=$((total - signed))
+echo "scripts/verify-release: OK $total file(s) in $d: $signed in the signed SHA256SUMS${principal:+ (signer $principal)}, $checked by checksums only"
+[ "$checked" = 0 ] || echo "scripts/verify-release: a checksum from the release page proves the download is intact, not who made it"

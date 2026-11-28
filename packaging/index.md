@@ -10,7 +10,8 @@ maintainer has verified it on a real machine or CI runner and published it.
 The channels that do ship today (Homebrew, the shell and PowerShell
 installers, npm, the MSI, `.deb`/`.rpm`/Arch packages and the release
 archives) are all built by `dist` and `.github/workflows/linux-packages.yml`;
-see [`dist-workspace.toml`](../dist-workspace.toml).
+see [`dist-workspace.toml`](../dist-workspace.toml). How to verify what each of
+them ships is in [`docs/verify-release`](../docs/verify-release/index.md).
 
 ## The old `vix` crate
 

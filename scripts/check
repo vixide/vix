@@ -590,6 +590,10 @@ if in_tier push; then
 	sh "$(dirname "$0")/test-release-local"
 	step_end
 
+	step_begin "scripts/test-verify-release (T870)"
+	sh "$(dirname "$0")/test-verify-release"
+	step_end
+
 	step_begin "scripts/test-clean-room (T764)"
 	sh "$(dirname "$0")/test-clean-room"
 	step_end

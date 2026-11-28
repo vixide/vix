@@ -439,7 +439,11 @@ targets, which the Makefile does not build, so the handoff is partial. How-to:
 `scripts/test-release-local` tests the refusal paths, the dry run, signing and
 `--verify-dir`, the confirmation, and that no tag appears without `--tag`, in a
 throwaway repository with a generated key and stub `make`, `gh` and `tea` (no
-network); it runs in the `push` tier and above. It was used for real once, to
+network); it runs in the `push` tier and above. It also runs
+`scripts/verify-release` (T870, [`spec/packaging`](../packaging/index.md),
+"Verifying a download") on the signed output with `--require-signature` and on
+a tampered copy; `scripts/test-verify-release` tests the verifier itself on
+fixtures, in the same tier. It was used for real once, to
 build and sign 2.0.0's three archives. Honest limit: the `tea` flags are from its
 documentation, not exercised against Codeberg.
 

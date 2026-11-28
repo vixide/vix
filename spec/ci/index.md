@@ -282,6 +282,12 @@ real once, for 2.0.0's three archives: it builds the Makefile targets, signs
 `gh` and `tea`. It never creates or pushes a tag (only `--tag`, a local signed
 tag). See [`spec/local-ci`](../local-ci/index.md).
 
+What an administrator can check on each route's output (the signed
+`SHA256SUMS` of the local path, the checksum files this pipeline writes, the
+registries' own checks) is in [`spec/packaging`](../packaging/index.md),
+"Verifying a download" (T870); a tag-built release has checksums and SBOMs
+but no signature or attestation.
+
 ### Offline tests (T573)
 
 GitHub only: an `offline-test` job builds the tests with the network, then

@@ -1,0 +1,224 @@
+#!/bin/sh
+# Tests for scripts/verify-release (T870).
+#
+#     scripts/test-verify-release
+#
+# Builds release fixtures in one private temporary directory (removed on exit):
+# real .tar.xz/.tar.gz archives of a stand-in binary, dist-style .sha256 files and
+# sha256.sum, a linux-packages.sha256, a CycloneDX SBOM, and a release signed
+# with a generated ed25519 key the way scripts/release-local signs one. Each
+# accepted case runs in a clean environment (env -i, a minimal PATH, a fresh
+# HOME); each modified fixture must be rejected. No network, no real key.
+set -u
+
+src=$(cd "$(dirname "$0")" && pwd)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+export HOME="$work/home"
+mkdir -p "$HOME"
+vr="$src/verify-release"
+
+fails=0
+checks=0
+ok() {
+	checks=$((checks + 1))
+	echo "  ok   $1"
+}
+bad() {
+	checks=$((checks + 1))
+	fails=$((fails + 1))
+	echo "  FAIL $1"
+}
+# run: the verifier in a clean environment (no inherited variables).
+run() { env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$HOME" LC_ALL=C sh "$vr" "$@"; }
+expect_pass() {
+	name=$1
+	shift
+	if run "$@" >"$work/out" 2>&1; then ok "$name"; else
+		bad "$name"
+		sed 's/^/       /' "$work/out"
+	fi
+}
+expect_fail() {
+	name=$1
+	shift
+	if run "$@" >"$work/out" 2>&1; then
+		bad "$name (unexpectedly passed)"
+		sed 's/^/       /' "$work/out"
+	else ok "$name"; fi
+}
+expect_msg() {
+	if grep -q -- "$1" "$work/out"; then ok "output mentions '$1'"; else
+		bad "output mentions '$1'"
+		sed 's/^/       /' "$work/out"
+	fi
+}
+sum() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+
+# ---- fixtures ---------------------------------------------------------------
+stage="$work/stage"
+mkdir -p "$stage"
+pack() { # NAME TARGET EXT
+	mkdir -p "$stage/$1-$2"
+	printf 'stand-in %s binary for %s\n' "$1" "$2" >"$stage/$1-$2/vix"
+	case $3 in
+	tar.xz) tar -C "$stage" -cJf "$4/$1-$2.tar.xz" "$1-$2" ;;
+	tar.gz) tar -C "$stage" -czf "$4/$1-$2.tar.gz" "$1-$2" ;;
+	esac
+}
+
+dist="$work/dist"
+mkdir -p "$dist"
+pack vix-tui x86_64-unknown-linux-gnu tar.xz "$dist"
+pack vix-tui aarch64-apple-darwin tar.xz "$dist"
+pack vix-minimal x86_64-unknown-linux-musl tar.gz "$dist"
+printf '<?xml version="1.0"?>\n<bom xmlns="http://cyclonedx.org/schema/bom/1.3"/>\n' >"$dist/vix-tui.cdx.xml"
+printf 'stand-in deb\n' >"$dist/vix-tui_3.0.0-1_amd64.deb"
+printf 'stand-in rpm\n' >"$dist/vix-tui-3.0.0-1.x86_64.rpm"
+(
+	cd "$dist" || exit 1
+	for f in vix-tui-*.tar.xz vix-minimal-*.tar.gz; do sum "$f" >"$f.sha256"; done
+	# dist's combined file (binary-mode marker on one line, as shasum -b writes).
+	sum vix-tui-*.tar.xz vix-tui.cdx.xml | sed '1s/  / */' >sha256.sum
+	sum ./*.deb ./*.rpm | sed 's#  \./#  #' >linux-packages.sha256
+)
+
+ssh-keygen -q -t ed25519 -N '' -C maintainer -f "$work/key" || exit 1
+ssh-keygen -q -t ed25519 -N '' -C other -f "$work/other" || exit 1
+echo "maintainer $(cat "$work/key.pub")" >"$work/allowed"
+echo "other $(cat "$work/other.pub")" >"$work/allowed-other"
+
+signed="$work/signed"
+mkdir -p "$signed"
+pack vix-tui aarch64-apple-darwin tar.xz "$signed"
+pack vix-tui x86_64-unknown-linux-musl tar.xz "$signed"
+(
+	cd "$signed" || exit 1
+	for f in vix-tui-*.tar.xz; do sum "$f" >"$f.sha256"; done
+	sum vix-tui-*.tar.xz >SHA256SUMS
+)
+ssh-keygen -Y sign -f "$work/key" -n vix-release "$signed/SHA256SUMS" >/dev/null 2>&1 || exit 1
+
+fresh() { # SRC DST: a fresh copy of a fixture
+	rm -rf "$2"
+	cp -R "$1" "$2"
+}
+
+echo "dist release (checksums)"
+expect_pass "an intact dist download verifies" "$dist" --version 3.0.0 --record "$work/record.tsv"
+expect_msg "OK 6 file(s)"
+expect_msg "0 in the signed SHA256SUMS"
+expect_msg "not who made it"
+expect_msg "target=x86_64-unknown-linux-gnu"
+expect_msg "checksum only (checksum:sha256.sum,checksum:vix-tui-x86_64-unknown-linux-gnu.tar.xz.sha256)"
+want=$(sum "$dist/vix-tui-aarch64-apple-darwin.tar.xz" | cut -c1-64)
+if grep -q "^3.0.0	aarch64-apple-darwin	vix-tui-aarch64-apple-darwin.tar.xz	$want	checksum only" "$work/record.tsv"; then
+	ok "the record has version, target, file and digest"
+else
+	bad "the record has version, target, file and digest"
+	sed 's/^/       /' "$work/record.tsv"
+fi
+if grep -q "	-	vix-tui_3.0.0-1_amd64.deb	" "$work/record.tsv"; then ok "a package has no target"; else bad "a package has no target"; fi
+expect_fail "--require-signature refuses an unsigned release" "$dist" --require-signature
+expect_msg "not in the signed SHA256SUMS"
+
+t="$work/t"
+fresh "$dist" "$t"
+printf 'x' >>"$t/vix-tui-x86_64-unknown-linux-gnu.tar.xz"
+expect_fail "a modified archive is rejected" "$t"
+expect_msg "does not match its SHA-256"
+fresh "$dist" "$t"
+printf 'x' >>"$t/vix-tui_3.0.0-1_amd64.deb"
+expect_fail "a modified Linux package is rejected" "$t"
+expect_msg "linux-packages.sha256"
+fresh "$dist" "$t"
+printf 'x' >>"$t/vix-tui.cdx.xml"
+expect_fail "a modified SBOM is rejected" "$t"
+fresh "$dist" "$t"
+printf 'x' >>"$t/vix-minimal-x86_64-unknown-linux-musl.tar.gz"
+expect_fail "a modified minimal archive is rejected" "$t"
+fresh "$dist" "$t"
+sum "$t/vix-tui.cdx.xml" | sed 's#  .*#  vix-tui-aarch64-apple-darwin.tar.xz#' >"$t/vix-tui-aarch64-apple-darwin.tar.xz.sha256"
+expect_fail "a sidecar that disagrees with sha256.sum is rejected" "$t"
+expect_msg "does not match its SHA-256 in"
+fresh "$dist" "$t"
+sum "$t/vix-tui.cdx.xml" | sed 's#  .*#  other.tar.xz#' >"$t/vix-tui-aarch64-apple-darwin.tar.xz.sha256"
+expect_fail "a sidecar naming another file is rejected" "$t"
+expect_msg "not vix-tui-aarch64-apple-darwin.tar.xz"
+fresh "$dist" "$t"
+rm "$t/vix-tui-aarch64-apple-darwin.tar.xz"
+expect_fail "a listed file that is missing is rejected" "$t"
+expect_msg "is missing"
+fresh "$dist" "$t"
+printf 'unexpected\n' >"$t/vix-tui-installer.sh"
+expect_fail "a file no checksum covers is rejected" "$t"
+expect_msg "no checksum covers vix-tui-installer.sh"
+fresh "$dist" "$t"
+printf 'hidden\n' >"$t/.extra"
+expect_fail "a hidden file no checksum covers is rejected" "$t"
+fresh "$dist" "$t"
+echo "$want  ../vix-tui-aarch64-apple-darwin.tar.xz" >>"$t/sha256.sum"
+expect_fail "a name with a directory part is rejected" "$t"
+expect_msg "unsafe file name"
+fresh "$dist" "$t"
+echo "not a checksum line" >>"$t/sha256.sum"
+expect_fail "a malformed manifest line is rejected" "$t"
+expect_msg "malformed line"
+fresh "$dist" "$t"
+: >"$t/sha256.sum"
+expect_fail "an empty manifest is rejected" "$t"
+mkdir -p "$work/empty"
+expect_fail "a directory with no verification material is rejected" "$work/empty"
+expect_msg "no verification material"
+expect_fail "a missing directory is rejected" "$work/nope"
+
+echo "local release (signed SHA256SUMS)"
+expect_pass "an intact signed download verifies" "$signed" --allowed-signers "$work/allowed" --require-signature
+expect_msg "2 in the signed SHA256SUMS (signer maintainer)"
+expect_msg "target=x86_64-unknown-linux-musl  signed by maintainer"
+expect_fail "a signed release needs the allowed-signers file" "$signed"
+expect_msg "allowed-signers"
+expect_fail "a signature from a key not in the allowed signers is rejected" "$signed" --allowed-signers "$work/allowed-other"
+fresh "$signed" "$t"
+printf 'x' >>"$t/vix-tui-aarch64-apple-darwin.tar.xz"
+expect_fail "a modified signed archive is rejected" "$t" --allowed-signers "$work/allowed"
+expect_msg "does not match"
+fresh "$signed" "$t"
+printf 'x' >>"$t/vix-tui-aarch64-apple-darwin.tar.xz"
+(cd "$t" && sum vix-tui-*.tar.xz >SHA256SUMS && sum vix-tui-aarch64-apple-darwin.tar.xz >vix-tui-aarch64-apple-darwin.tar.xz.sha256)
+expect_fail "a modified archive with a rewritten SHA256SUMS is rejected" "$t" --allowed-signers "$work/allowed"
+expect_msg "bad signature"
+fresh "$signed" "$t"
+rm "$t/SHA256SUMS.sig"
+expect_fail "a missing signature is rejected" "$t" --allowed-signers "$work/allowed"
+expect_msg "unsigned"
+fresh "$signed" "$t"
+rm "$t/SHA256SUMS.sig"
+ssh-keygen -Y sign -f "$work/key" -n vix-gate "$t/SHA256SUMS" >/dev/null 2>&1
+expect_fail "a signature in another namespace is rejected" "$t" --allowed-signers "$work/allowed"
+fresh "$signed" "$t"
+rm "$t/SHA256SUMS.sig"
+ssh-keygen -Y sign -f "$work/other" -n vix-release "$t/SHA256SUMS" >/dev/null 2>&1
+expect_fail "a signature by another key is rejected" "$t" --allowed-signers "$work/allowed"
+fresh "$signed" "$t"
+printf 'extra\n' >"$t/vix-tui-x86_64-pc-windows-msvc.zip"
+sum "$t/vix-tui-x86_64-pc-windows-msvc.zip" | sed 's#  .*/#  #' >"$t/vix-tui-x86_64-pc-windows-msvc.zip.sha256"
+expect_pass "an extra file with only a checksum still verifies without --require-signature" "$t" --allowed-signers "$work/allowed"
+expect_msg "1 by checksums only"
+expect_fail "...but not with --require-signature" "$t" --allowed-signers "$work/allowed" --require-signature
+
+echo "one downloaded file and its .sha256"
+one="$work/one"
+mkdir -p "$one"
+cp "$dist/vix-tui-x86_64-unknown-linux-gnu.tar.xz" "$dist/vix-tui-x86_64-unknown-linux-gnu.tar.xz.sha256" "$one/"
+expect_pass "a single archive with its .sha256 verifies" "$one"
+printf 'x' >>"$one/vix-tui-x86_64-unknown-linux-gnu.tar.xz"
+expect_fail "...and is rejected once modified" "$one"
+
+echo
+if [ "$fails" -eq 0 ]; then
+	echo "OK: scripts/test-verify-release: $checks checks passed"
+else
+	echo "FAILED: $fails of $checks checks failed"
+	exit 1
+fi

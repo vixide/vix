@@ -281,8 +281,16 @@ it.
   section.
 - **Release integrity.** Each release publishes a SHA-256 checksum for every
   artifact (and a combined `sha256.sum`) and a CycloneDX SBOM for each
-  program it releases (`vix-tui.cdx.xml` and one per desktop GUI). Release
-  artifacts are not yet signed or attested.
+  program it releases (`vix-tui.cdx.xml` and one per desktop GUI). Those
+  checksums come from the release page itself, so they show a download is
+  intact, not who made it. Only a release made with `scripts/release-local`
+  (so far 2.0.0) also carries a `SHA256SUMS` signed with the maintainer's SSH
+  key; the tag-built releases (2.0.1 and later) are neither signed nor
+  attested, and the MSI and Linux packages carry no signature of their own.
+  [Verifying a download](docs/verify-release/index.md) gives, per
+  distribution route, the file, its verification material, what that is
+  trusted through, the command and the expected result;
+  `scripts/verify-release` checks a downloaded release offline.
 
 ## Checklist for contributors
 
