@@ -39,9 +39,10 @@ pub const fn is_isolated() -> bool {
     cfg!(feature = "isolated-user-dirs")
 }
 
-/// The per-process root that stands in for the home directory when isolated.
-#[cfg(feature = "isolated-user-dirs")]
-fn isolated_root() -> PathBuf {
+/// The per-process root that stands in for the home directory when isolated
+/// (and, for this crate's own tests, for the recovery directory).
+#[cfg(any(test, feature = "isolated-user-dirs"))]
+pub(crate) fn isolated_root() -> PathBuf {
     std::env::temp_dir().join(format!("vix-isolated-home-{}", std::process::id()))
 }
 

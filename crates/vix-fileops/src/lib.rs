@@ -16,6 +16,11 @@
 )]
 
 pub mod dir_edit;
+/// Save-failure injection for tests (T865): see the `fault-injection` feature.
+#[cfg(any(test, feature = "fault-injection"))]
+pub mod fault;
+#[cfg(not(any(test, feature = "fault-injection")))]
+mod fault;
 /// The freedesktop.org trash, written here so it needs no `chrono`. Built where
 /// it is used (Linux and the BSDs) and, for its tests, on every Unix.
 #[cfg(any(
@@ -28,7 +33,10 @@ pub mod dir_edit;
     all(test, unix)
 ))]
 mod freedesktop_trash;
+mod recovery_record;
 pub mod user_dirs;
+
+use fault::SaveFault;
 
 use std::fs;
 use std::io;
@@ -253,27 +261,73 @@ pub fn trash_path(path: &Path) -> io::Result<()> {
 ///
 /// The atomic path needs write+execute permission on the *parent directory* (to
 /// create the temp and rename it). When only the file itself is writable (a
-/// writable file inside a directory you can't write), this falls back to a plain
-/// in-place write — losing atomicity but preserving the ability to save, as
-/// `fs::write` did before.
+/// writable file inside a directory you can't write), or the rename is
+/// refused, this falls back to a plain in-place write — losing atomicity but
+/// preserving the ability to save, as `fs::write` did before.
+///
+/// Only those cases fall back (T865). A failure to **write or sync the
+/// replacement data** into the temp file (a full disk, an I/O error) is
+/// returned as it is, with the target untouched: writing the same data in
+/// place would fail the same way, after truncating the original. And an
+/// in-place write of an existing file goes ahead only once a complete
+/// recovery copy of the original has been written, read back and published
+/// in [`recovery_dir`]; when no copy can be kept the save fails and the file
+/// is left as it was.
 ///
 /// # Errors
 ///
-/// Returns an error only if both the atomic write and the in-place fallback
-/// fail (e.g. the file itself is not writable, or the disk is full).
+/// The temp file's write or sync error; or, when the atomic route was not
+/// available, the in-place write's error (the recovery copy could not be
+/// kept, the file itself is not writable, the disk is full), with the atomic
+/// attempt's error in the message.
 pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
     refuse_foreign_sticky_symlink(path)?;
-    match write_atomic_inner(path, data, false) {
+    write_with_fallback(path, &mut |w| w.write_all(data), false)
+}
+
+/// The shared body of the `write_atomic*` writers: the atomic attempt, and
+/// the in-place fallback when (and only when) the atomic route itself was
+/// unavailable. `private` narrows a file this call creates to `0600`.
+fn write_with_fallback(
+    path: &Path,
+    fill: &mut dyn FnMut(&mut dyn io::Write) -> io::Result<()>,
+    private: bool,
+) -> io::Result<()> {
+    let existed = path.exists();
+    match write_atomic_inner_with(path, fill, private) {
         Ok(()) => Ok(()),
-        Err(atomic_err) => {
+        Err(AtomicFailure::Data(e)) => Err(e),
+        Err(AtomicFailure::Unavailable(atomic_err)) => {
             // Fall back to a truncating in-place write, which needs write
             // permission only on the file (not its directory). The original is
-            // copied to the recovery directory first (T663).
+            // copied to the recovery directory first (T663), and that copy is
+            // required (T865).
             let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-            write_in_place_with_recovery(&target, data, recovery_dir().as_deref())
-                .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))
+            write_in_place(
+                &target,
+                fill,
+                CopyPolicy::Required(recovery_dir().as_deref()),
+            )
+            .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))?;
+            if private && !existed {
+                restrict_to_owner(&target);
+            }
+            Ok(())
         }
     }
+}
+
+/// Why the atomic write-temp-then-rename attempt did not replace the file.
+#[derive(Debug)]
+enum AtomicFailure {
+    /// The atomic route is not available for this file: the temp file could
+    /// not be created (an unwritable directory), the rename was refused, or
+    /// a rename would change the file's hard links or owner. Writing in
+    /// place may still work.
+    Unavailable(io::Error),
+    /// Writing or syncing the replacement data failed (or the caller's
+    /// `fill` did). The target was not touched; this is the save's error.
+    Data(io::Error),
 }
 
 /// Refuse a save that would follow a symlink another user planted in a
@@ -360,49 +414,79 @@ fn rename_would_change_identity(_target: &Path, _tmp: &fs::File) -> bool {
     false
 }
 
-/// Magic first line of a recovery copy.
-const RECOVERY_MAGIC: &str = "VIXRECOVER";
-
 /// The directory holding pre-save copies of files that were written in place:
 /// `$XDG_STATE_HOME/vix/recovery`, else `~/.local/state/vix/recovery`. `None`
-/// when no home directory is known.
+/// when no home directory is known. With the `isolated-user-dirs` feature
+/// (tests only) it is under the per-process stand-in home instead, so a test
+/// save never leaves a copy in the real one.
 #[must_use]
 pub fn recovery_dir() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_STATE_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .filter(|v| !v.is_empty())
-                .map(|h| PathBuf::from(h).join(".local").join("state"))
-        })?;
-    Some(base.join("vix").join("recovery"))
+    #[cfg(any(test, feature = "isolated-user-dirs"))]
+    {
+        Some(
+            user_dirs::isolated_root()
+                .join("state")
+                .join("vix")
+                .join("recovery"),
+        )
+    }
+    #[cfg(not(any(test, feature = "isolated-user-dirs")))]
+    {
+        let base = std::env::var_os("XDG_STATE_HOME")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .filter(|v| !v.is_empty())
+                    .map(|h| PathBuf::from(h).join(".local").join("state"))
+            })?;
+        Some(base.join("vix").join("recovery"))
+    }
 }
 
 /// Write `data` over `target` in place, first copying the existing contents to
-/// `recovery` (when given and the target exists). The copy is deleted once the
-/// write has been flushed; if the process dies mid-write it stays behind for
-/// [`pending_recoveries`]. A failure to take the copy is not fatal: the save
-/// proceeds without one.
+/// `recovery` (when given and the target exists).
+///
+/// With `Some(dir)` the copy is required (T865): it is written, synced, read
+/// back and checked, and only then published as a `*.vixrecover` record and
+/// the target truncated. If no complete copy can be kept the target is not
+/// touched and the error is returned. If the in-place write then fails, the
+/// original bytes are written back; if even that fails, the record stays for
+/// [`pending_recoveries`]. The record is deleted once the new data is synced.
+/// `None` writes with no copy at all (what [`Recovery::restore`] does: the
+/// copy it restores from is the safety net).
 ///
 /// # Errors
 ///
-/// Returns the I/O error of the in-place write.
+/// The recovery copy's error (the target unchanged), or the in-place write's.
 pub fn write_in_place_with_recovery(
     target: &Path,
     data: &[u8],
     recovery: Option<&Path>,
 ) -> io::Result<()> {
-    write_in_place_with_recovery_with(target, &mut |w| w.write_all(data), recovery)
+    let policy = recovery.map_or(CopyPolicy::Skip, |dir| CopyPolicy::Required(Some(dir)));
+    write_in_place(target, &mut |w| w.write_all(data), policy)
 }
 
-/// [`write_in_place_with_recovery`] with the bytes produced by `fill`.
-fn write_in_place_with_recovery_with(
+/// Whether an in-place write keeps a recovery copy of the original.
+#[derive(Debug, Clone, Copy)]
+enum CopyPolicy<'a> {
+    /// An existing target must be copied to this directory first; `None`
+    /// (no directory is known) fails the write of an existing file.
+    Required(Option<&'a Path>),
+    /// Write with no copy.
+    Skip,
+}
+
+/// Write the bytes `fill` produces over `target` in place, after a copy of
+/// the original as `policy` asks (see [`write_in_place_with_recovery`]).
+fn write_in_place(
     target: &Path,
     fill: &mut dyn FnMut(&mut dyn io::Write) -> io::Result<()>,
-    recovery: Option<&Path>,
+    policy: CopyPolicy<'_>,
 ) -> io::Result<()> {
-    use std::io::Write as _;
+    use std::io::{Seek as _, Write as _};
+    let existed = fs::metadata(target).is_ok_and(|m| m.is_file());
     // Open (without truncating) before taking the copy, so a target we cannot
     // write leaves no copy behind.
     let mut f = fs::OpenOptions::new()
@@ -410,38 +494,126 @@ fn write_in_place_with_recovery_with(
         .create(true)
         .truncate(false)
         .open(target)?;
-    let backup = recovery.and_then(|dir| make_recovery_copy(target, dir));
-    f.set_len(0)?;
-    {
-        let mut buffered = io::BufWriter::with_capacity(WRITE_BUFFER_BYTES, &mut f);
-        fill(&mut buffered)?;
-        buffered.flush()?;
+    let saved = match policy {
+        CopyPolicy::Required(dir) if existed => {
+            let kept = dir
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::NotFound, "no recovery directory is known")
+                })
+                .and_then(|dir| {
+                    let original = fs::read(target)?;
+                    let record = publish_recovery_record(target, &original, dir)?;
+                    Ok((original, record))
+                })
+                .map_err(|e| {
+                    io::Error::new(
+                        e.kind(),
+                        format!(
+                            "could not keep a recovery copy before writing in place, \
+                             so the file was left unchanged: {e}"
+                        ),
+                    )
+                })?;
+            Some(kept)
+        }
+        CopyPolicy::Required(_) | CopyPolicy::Skip => None,
+    };
+    let written = f
+        .set_len(0)
+        .and_then(|()| fault::hit(SaveFault::InPlaceWrite))
+        .and_then(|()| {
+            let mut buffered = io::BufWriter::with_capacity(WRITE_BUFFER_BYTES, &mut f);
+            fill(&mut buffered).and_then(|()| buffered.flush())
+        })
+        .and_then(|()| f.sync_all());
+    match (written, saved) {
+        (Ok(()), saved) => {
+            if let Some((_, record)) = saved {
+                let _ = fs::remove_file(record);
+            }
+            Ok(())
+        }
+        (Err(e), None) => Err(e),
+        (Err(e), Some((original, record))) => {
+            // Put the original back; the record is the fallback if that fails too.
+            let rolled_back = f
+                .set_len(0)
+                .and_then(|()| f.seek(io::SeekFrom::Start(0)).map(drop))
+                .and_then(|()| fault::hit(SaveFault::InPlaceWrite))
+                .and_then(|()| f.write_all(&original))
+                .and_then(|()| f.sync_all());
+            if rolled_back.is_ok() {
+                let _ = fs::remove_file(record);
+                Err(io::Error::new(
+                    e.kind(),
+                    format!("{e} (the file was put back as it was)"),
+                ))
+            } else {
+                Err(io::Error::new(
+                    e.kind(),
+                    format!(
+                        "{e} (the file's previous contents are kept in {})",
+                        record.display()
+                    ),
+                ))
+            }
+        }
     }
-    f.sync_all()?;
-    if let Some(b) = backup {
-        let _ = fs::remove_file(b);
-    }
-    Ok(())
 }
 
-/// Write a pre-save copy of `target` into the recovery directory `dir`, so an
-/// interrupted in-place save can be repaired on the next launch. The copy holds
-/// the `RECOVERY_MAGIC` line, the original path, then the original bytes. Best
-/// effort: any failure yields `None` and the save proceeds without a copy.
-/// The file is created `0600` and `create_new` (never clobbers) with a
-/// process-id + sequence prefix so concurrent saves cannot collide.
-fn make_recovery_copy(target: &Path, dir: &Path) -> Option<PathBuf> {
+/// Create the recovery directory `dir` (owner-only on Unix) if needed.
+fn create_recovery_dir(dir: &Path) -> io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt as _;
+        builder.mode(0o700);
+    }
+    builder.create(dir)
+}
+
+/// Write a pre-save copy of `target` (whose bytes are `original`) into the
+/// recovery directory `dir`, so an interrupted in-place save can be repaired
+/// on the next launch, and return the published record's path.
+///
+/// The framed record (see `recovery_record`) goes first to a
+/// `*.vixrecover-partial` file (`0600`, `create_new`), is synced, read back
+/// and decoded, and must give back exactly this path and these bytes; only
+/// then is it renamed to its `*.vixrecover` name and the directory synced.
+/// So a record under the final name is always complete: a crash part-way
+/// leaves only a `-partial` file, which is never offered. The name carries
+/// the process id and a sequence number, so concurrent saves cannot collide.
+fn publish_recovery_record(target: &Path, original: &[u8], dir: &Path) -> io::Result<PathBuf> {
     use std::io::Write as _;
-    let original = fs::read(target).ok()?;
-    fs::create_dir_all(dir).ok()?;
-    let base = target
+    fault::hit(SaveFault::Backup)?;
+    let absolute = std::path::absolute(target)?;
+    let (kind, path_bytes) = recovery_record::native_path_field(&absolute).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the file's path cannot be recorded",
+        )
+    })?;
+    create_recovery_dir(dir)?;
+    // The name is only for people browsing the directory: the path is inside.
+    let base: String = target
         .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("file");
+        .map_or_default(|n| n.to_string_lossy())
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(80)
+        .collect();
     let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
-    let dest = dir.join(format!("{}-{seq}-{base}.vixrecover", std::process::id()));
-    let mut out = format!("{RECOVERY_MAGIC}\n{}\n", target.display()).into_bytes();
-    out.extend_from_slice(&original);
+    let stem = format!("{}-{seq}-{base}", std::process::id());
+    let partial = dir.join(format!("{stem}.vixrecover-partial"));
+    let published = dir.join(format!("{stem}.vixrecover"));
+    let bytes = recovery_record::encode(kind, &path_bytes, original);
     let mut opts = fs::OpenOptions::new();
     opts.write(true).create_new(true);
     #[cfg(unix)]
@@ -449,10 +621,49 @@ fn make_recovery_copy(target: &Path, dir: &Path) -> Option<PathBuf> {
         use std::os::unix::fs::OpenOptionsExt as _;
         opts.mode(0o600);
     }
-    let mut f = opts.open(&dest).ok()?;
-    f.write_all(&out).ok()?;
-    f.sync_all().ok()?;
-    Some(dest)
+    let written = opts.open(&partial).and_then(|mut f| {
+        f.write_all(&bytes)?;
+        f.sync_all()
+    });
+    let checked = written.and_then(|()| {
+        let back = fs::read(&partial)?;
+        let intact = recovery_record::decode(&back)
+            .is_some_and(|r| r.kind == kind && r.path == path_bytes && r.data == original);
+        if intact {
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "the recovery copy did not read back intact",
+            ))
+        }
+    });
+    let published_ok = checked.and_then(|()| {
+        if fs::symlink_metadata(&published).is_ok() {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "a recovery copy of that name already exists",
+            ));
+        }
+        fs::rename(&partial, &published)
+    });
+    if let Err(e) = published_ok {
+        let _ = fs::remove_file(&partial);
+        return Err(e);
+    }
+    sync_dir(dir);
+    Ok(published)
+}
+
+/// Best effort: flush a directory's entries to disk, so a rename in it
+/// survives a crash. A no-op where directories cannot be opened.
+fn sync_dir(dir: &Path) {
+    #[cfg(unix)]
+    if let Ok(d) = fs::File::open(dir) {
+        let _ = d.sync_all();
+    }
+    #[cfg(not(unix))]
+    let _ = dir;
 }
 
 /// A leftover copy of a file whose in-place save was interrupted.
@@ -460,34 +671,119 @@ fn make_recovery_copy(target: &Path, dir: &Path) -> Option<PathBuf> {
 pub struct Recovery {
     /// The recovery copy on disk.
     pub copy: PathBuf,
-    /// The file that was being saved.
+    /// The file that was being saved. When the record cannot establish it
+    /// exactly (see [`RecoveryRecord::original`]) this is only the best
+    /// reading of what it recorded, and [`Recovery::restore`] refuses.
     pub original: PathBuf,
 }
 
+/// The layout of a recovery record on disk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RecoveryFormat {
+    /// Before T865: a magic line, the path as text and a newline, then the
+    /// bytes. A newline or non-UTF-8 byte in the path makes it ambiguous.
+    Legacy,
+    /// T865's version 2: the native path and the bytes, each framed by its
+    /// length, then an end marker.
+    Framed,
+}
+
+/// The decoded contents of a recovery record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct RecoveryRecord {
+    /// The record's layout.
+    pub format: RecoveryFormat,
+    /// The file the copy belongs to, when the record establishes it exactly:
+    /// always for a framed record of this platform; for a legacy one only
+    /// when its path passes the checks in the spec ("Interrupted saves").
+    /// `None` means the destination must be chosen by the person
+    /// ([`Recovery::restore_to`]).
+    pub original: Option<PathBuf>,
+    /// The recorded path for people to read (lossy where it must be).
+    pub recorded: String,
+    /// The file's bytes from before the save.
+    pub contents: Vec<u8>,
+}
+
+/// Decode the record at `copy` from its bytes `raw`. `None` for anything
+/// that is neither a complete framed record nor a legacy one.
+fn decode_record(copy: &Path, raw: &[u8]) -> Option<RecoveryRecord> {
+    if raw.starts_with(recovery_record::FRAMED_MAGIC) {
+        let framed = recovery_record::decode(raw)?;
+        let original =
+            recovery_record::native_path(framed.kind, &framed.path).filter(|p| p.is_absolute());
+        return Some(RecoveryRecord {
+            format: RecoveryFormat::Framed,
+            original,
+            recorded: recovery_record::display_path(framed.kind, &framed.path),
+            contents: framed.data,
+        });
+    }
+    let (recorded, contents) = recovery_record::decode_legacy(raw)?;
+    Some(RecoveryRecord {
+        format: RecoveryFormat::Legacy,
+        original: recovery_record::legacy_identity(copy, &recorded),
+        recorded,
+        contents,
+    })
+}
+
 impl Recovery {
+    /// Read and decode the record.
+    ///
+    /// # Errors
+    ///
+    /// The read error, or `InvalidData` for a malformed or incomplete record.
+    pub fn read(&self) -> io::Result<RecoveryRecord> {
+        let raw = fs::read(&self.copy)?;
+        decode_record(&self.copy, &raw)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "malformed recovery copy"))
+    }
+
     /// The saved pre-save contents.
     ///
     /// # Errors
     ///
     /// Returns an error if the copy cannot be read or is malformed.
     pub fn contents(&self) -> io::Result<Vec<u8>> {
-        let raw = fs::read(&self.copy)?;
-        let bad = || io::Error::new(io::ErrorKind::InvalidData, "malformed recovery copy");
-        let mut parts = raw.splitn(3, |b| *b == b'\n');
-        parts.next().ok_or_else(bad)?;
-        parts.next().ok_or_else(bad)?;
-        Ok(parts.next().ok_or_else(bad)?.to_vec())
+        self.read().map(|r| r.contents)
     }
 
     /// Restore: write the saved contents back over the original and delete the
-    /// copy.
+    /// copy. Refused when the record does not establish its file exactly
+    /// (T865): use [`Recovery::restore_to`] with a destination the person chose.
     ///
     /// # Errors
     ///
-    /// Returns an error if the copy cannot be read or the original written.
+    /// `InvalidData` when the original is not established; otherwise an error
+    /// if the copy cannot be read or the original written.
     pub fn restore(&self) -> io::Result<()> {
-        let data = self.contents()?;
-        write_in_place_with_recovery(&self.original, &data, None)?;
+        let record = self.read()?;
+        let original = record.original.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "the recovery copy cannot establish which file it belongs to \
+                     (it records {}); choose where to restore it",
+                    record.recorded
+                ),
+            )
+        })?;
+        write_in_place_with_recovery(&original, &record.contents, None)?;
+        fs::remove_file(&self.copy)
+    }
+
+    /// Restore the saved contents to `dest` (a destination the person chose,
+    /// written with [`write_atomic`]) and delete the copy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the copy cannot be read or `dest` written.
+    pub fn restore_to(&self, dest: &Path) -> io::Result<()> {
+        let record = self.read()?;
+        write_atomic(dest, &record.contents)?;
         fs::remove_file(&self.copy)
     }
 
@@ -502,7 +798,9 @@ impl Recovery {
 }
 
 /// Leftover recovery copies in `dir`, ordered by file name. Unreadable or
-/// malformed entries are skipped.
+/// malformed entries are skipped, and so are incomplete ones: a framed record
+/// that does not decode in full, and a `*.vixrecover-partial` file that was
+/// never published.
 #[must_use]
 pub fn pending_recoveries(dir: &Path) -> Vec<Recovery> {
     let Ok(rd) = fs::read_dir(dir) else {
@@ -514,11 +812,10 @@ pub fn pending_recoveries(dir: &Path) -> Vec<Recovery> {
         .filter(|p| p.extension().is_some_and(|x| x == "vixrecover"))
         .filter_map(|copy| {
             let raw = fs::read(&copy).ok()?;
-            let mut lines = raw.splitn(3, |b| *b == b'\n');
-            if lines.next()? != RECOVERY_MAGIC.as_bytes() {
-                return None;
-            }
-            let original = PathBuf::from(String::from_utf8(lines.next()?.to_vec()).ok()?);
+            let record = decode_record(&copy, &raw)?;
+            let original = record
+                .original
+                .unwrap_or_else(|| PathBuf::from(record.recorded));
             Some(Recovery { copy, original })
         })
         .collect();
@@ -554,19 +851,7 @@ fn combine_errors(atomic_err: &io::Error, fallback_err: &io::Error) -> io::Error
 /// fail (e.g. the file itself is not writable, or the disk is full).
 pub fn write_atomic_private(path: &Path, data: &[u8]) -> io::Result<()> {
     refuse_foreign_sticky_symlink(path)?;
-    let existed = path.exists();
-    match write_atomic_inner(path, data, true) {
-        Ok(()) => Ok(()),
-        Err(atomic_err) => {
-            let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-            write_in_place_with_recovery(&target, data, recovery_dir().as_deref())
-                .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))?;
-            if !existed {
-                restrict_to_owner(&target);
-            }
-            Ok(())
-        }
-    }
+    write_with_fallback(path, &mut |w| w.write_all(data), true)
 }
 
 /// [`write_atomic_private`] for data too large to hold in one buffer:
@@ -575,7 +860,7 @@ pub fn write_atomic_private(path: &Path, data: &[u8]) -> io::Result<()> {
 /// buffer is streamed from its rope instead of copied first). The same
 /// guarantees hold: the temp is created `O_EXCL`, a new file is `0600`, the
 /// rename is atomic, and the in-place fallback (which calls `fill` again)
-/// is used only when the atomic attempt failed on its own.
+/// is used only when the atomic route was unavailable.
 ///
 /// An error `fill` returns aborts the write: the temp file is removed, the
 /// target is left untouched and that error is returned, without trying the
@@ -583,37 +868,13 @@ pub fn write_atomic_private(path: &Path, data: &[u8]) -> io::Result<()> {
 ///
 /// # Errors
 ///
-/// The error `fill` returned, or an error only if both the atomic write
-/// and the in-place fallback fail (as [`write_atomic_private`]).
+/// The error `fill` returned, or as [`write_atomic_private`].
 pub fn write_atomic_private_with<F>(path: &Path, mut fill: F) -> io::Result<()>
 where
     F: FnMut(&mut dyn io::Write) -> io::Result<()>,
 {
     refuse_foreign_sticky_symlink(path)?;
-    let existed = path.exists();
-    let mut fill_failed = false;
-    let atomic = write_atomic_inner_with(
-        path,
-        &mut |w| {
-            let result = fill(w);
-            fill_failed = result.is_err();
-            result
-        },
-        true,
-    );
-    match atomic {
-        Ok(()) => Ok(()),
-        Err(e) if fill_failed => Err(e),
-        Err(atomic_err) => {
-            let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-            write_in_place_with_recovery_with(&target, &mut fill, recovery_dir().as_deref())
-                .map_err(|fallback_err| combine_errors(&atomic_err, &fallback_err))?;
-            if !existed {
-                restrict_to_owner(&target);
-            }
-            Ok(())
-        }
-    }
+    write_with_fallback(path, &mut fill, true)
 }
 
 /// Buffer size for the streamed writes of [`write_atomic_private_with`].
@@ -639,22 +900,17 @@ pub fn restrict_to_owner(path: &Path) {
     }
 }
 
-/// The atomic write-temp-then-rename path. Returns an error (which
-/// [`write_atomic`]/[`write_atomic_private`] use to trigger the in-place
-/// fallback) if the directory can't be written, the temp can't be created,
-/// or the rename fails. `force_private_for_new` is what tells the two apart
-/// for a file that doesn't exist yet — see [`write_atomic_private`].
-fn write_atomic_inner(path: &Path, data: &[u8], force_private_for_new: bool) -> io::Result<()> {
-    write_atomic_inner_with(path, &mut |w| w.write_all(data), force_private_for_new)
-}
-
-/// [`write_atomic_inner`] with the bytes produced by `fill` into a
-/// buffered writer on the temp file, instead of taken from one slice.
+/// The atomic write-temp-then-rename path, with the bytes produced by `fill`
+/// into a buffered writer on the temp file. Its failure says whether the
+/// atomic route was unavailable (the caller may write in place) or the data
+/// could not be written ([`AtomicFailure`]). `force_private_for_new` is what
+/// tells [`write_atomic`] and [`write_atomic_private`] apart for a file that
+/// doesn't exist yet.
 fn write_atomic_inner_with(
     path: &Path,
     fill: &mut dyn FnMut(&mut dyn io::Write) -> io::Result<()>,
     force_private_for_new: bool,
-) -> io::Result<()> {
+) -> Result<(), AtomicFailure> {
     use std::io::Write as _;
 
     let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
@@ -679,25 +935,32 @@ fn write_atomic_inner_with(
     // No mode bits to set elsewhere: the new file gets the directory's ACL.
     #[cfg(not(unix))]
     let _ = force_private_for_new;
-    let mut f = opts.open(&tmp)?;
+    let mut f = opts.open(&tmp).map_err(AtomicFailure::Unavailable)?;
 
     // T663: a rename would split a hard link or change the owner/group; decline
     // so the caller writes in place (after taking a recovery copy) instead.
     if rename_would_change_identity(&target, &f) {
         drop(f);
         let _ = fs::remove_file(&tmp);
-        return Err(io::Error::other(RenameWouldChangeIdentity));
+        return Err(AtomicFailure::Unavailable(io::Error::other(
+            RenameWouldChangeIdentity,
+        )));
     }
 
+    // T865: the data itself failing to reach the disk is the save's error,
+    // never a reason to try again by truncating the original.
     let write_result = {
         let mut buffered = io::BufWriter::with_capacity(WRITE_BUFFER_BYTES, &mut f);
-        fill(&mut buffered).and_then(|()| buffered.flush())
+        fault::hit(SaveFault::TempWrite)
+            .and_then(|()| fill(&mut buffered))
+            .and_then(|()| buffered.flush())
     }
+    .and_then(|()| fault::hit(SaveFault::TempSync))
     .and_then(|()| f.sync_all());
     if let Err(e) = write_result {
         drop(f);
         let _ = fs::remove_file(&tmp);
-        return Err(e);
+        return Err(AtomicFailure::Data(e));
     }
 
     // Restore the existing file's exact permission bits (the 0600 temp above may
@@ -707,9 +970,9 @@ fn write_atomic_inner_with(
     }
     drop(f);
 
-    if let Err(e) = fs::rename(&tmp, &target) {
+    if let Err(e) = fault::hit(SaveFault::Rename).and_then(|()| fs::rename(&tmp, &target)) {
         let _ = fs::remove_file(&tmp);
-        return Err(e);
+        return Err(AtomicFailure::Unavailable(e));
     }
     Ok(())
 }
@@ -1179,6 +1442,278 @@ pub fn read_to_string_guarded(path: &Path) -> io::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The legacy record's magic line.
+    pub(super) const RECOVERY_MAGIC: &str = "VIXRECOVER";
+
+    /// Records in the (test-isolated) recovery directory for `f`.
+    fn records_for(f: &Path) -> Vec<Recovery> {
+        let want = fs::canonicalize(f).unwrap();
+        pending_recoveries(&recovery_dir().unwrap())
+            .into_iter()
+            .filter(|r| r.original == want)
+            .collect()
+    }
+
+    /// The names in `dir`, sorted.
+    fn names(dir: &Path) -> Vec<String> {
+        let mut v: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// T865 (PQ-02): a temp-file write or sync failure is the save's error.
+    /// It used to be retried as a truncating in-place write.
+    #[test]
+    fn a_temp_write_or_sync_failure_fails_the_save_and_keeps_the_original() {
+        for (fault, kind) in [
+            (SaveFault::TempWrite, io::ErrorKind::StorageFull),
+            (SaveFault::TempSync, io::ErrorKind::Other),
+        ] {
+            let dir = scratch("temp-fault");
+            let f = dir.join("f.txt");
+            fs::write(&f, b"old").unwrap();
+            let armed = fault::inject(fault);
+            let err = write_atomic(&f, b"new").unwrap_err();
+            let private = write_atomic_private(&f, b"new").unwrap_err();
+            drop(armed);
+            assert_eq!(
+                (err.kind(), private.kind()),
+                (kind, kind),
+                "{fault:?}: {err}"
+            );
+            assert!(err.to_string().contains(&format!("{fault:?}")), "{err}");
+            assert!(
+                !err.to_string().contains("atomic write also failed"),
+                "{err}"
+            );
+            assert_eq!(fs::read(&f).unwrap(), b"old");
+            assert_eq!(names(&dir), ["f.txt"], "the temp file is removed");
+            assert_eq!(records_for(&f), [], "no in-place write was tried");
+            write_atomic(&f, b"new").unwrap();
+            assert_eq!(fs::read(&f).unwrap(), b"new");
+            let _ = fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// T865: a required in-place write (a hard link) with no usable recovery
+    /// copy fails before touching the file; it used to go ahead with none.
+    #[cfg(unix)]
+    #[test]
+    fn an_in_place_save_without_a_recovery_copy_is_refused() {
+        let dir = scratch("backup-fault");
+        let a = dir.join("a.txt");
+        let b = dir.join("b.txt");
+        fs::write(&a, b"old").unwrap();
+        fs::hard_link(&a, &b).unwrap();
+        let armed = fault::inject(SaveFault::Backup);
+        let err = write_atomic(&a, b"new").unwrap_err();
+        drop(armed);
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied, "{err}");
+        assert!(err.to_string().contains("left unchanged"), "{err}");
+        assert_eq!(
+            (fs::read(&a).unwrap(), fs::read(&b).unwrap()),
+            (b"old".to_vec(), b"old".to_vec())
+        );
+        assert_eq!(records_for(&a), []);
+        // No recovery directory at all is refused the same way.
+        let err = write_in_place(&a, &mut |w| w.write_all(b"new"), CopyPolicy::Required(None))
+            .unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound, "{err}");
+        assert_eq!(fs::read(&a).unwrap(), b"old");
+        // A new file needs no copy.
+        let fresh = dir.join("fresh.txt");
+        write_in_place(
+            &fresh,
+            &mut |w| w.write_all(b"x"),
+            CopyPolicy::Required(None),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&fresh).unwrap(), b"x");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The unwritable-directory fallback needs its copy too.
+    #[cfg(unix)]
+    #[test]
+    fn the_unwritable_directory_fallback_needs_its_recovery_copy() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = scratch("rodir-backup-fault");
+        let p = dir.join("f.txt");
+        fs::write(&p, b"old").unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let armed = fault::inject(SaveFault::Backup);
+        let result = write_atomic(&p, b"new");
+        drop(armed);
+        let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o755));
+        if let Err(e) = result {
+            assert!(e.to_string().contains("left unchanged"), "{e}");
+            assert_eq!(fs::read(&p).unwrap(), b"old");
+        } // else: root, whose atomic route never needed the fallback
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// T865: an in-place write that fails after truncating puts the original
+    /// back, and when even that fails the published record holds it.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_in_place_write_leaves_usable_recovery_bytes() {
+        let dir = scratch("inplace-fault");
+        let a = dir.join("a.txt");
+        let b = dir.join("b.txt");
+        fs::write(&a, b"old bytes").unwrap();
+        fs::hard_link(&a, &b).unwrap();
+        let armed = fault::inject(SaveFault::InPlaceWrite);
+        let err = write_atomic(&a, b"new").unwrap_err();
+        drop(armed);
+        assert_eq!(err.kind(), io::ErrorKind::StorageFull, "{err}");
+        assert!(err.to_string().contains("kept in"), "{err}");
+        let left = records_for(&a);
+        assert_eq!(left.len(), 1, "the record survives the failure");
+        assert_eq!(left[0].contents().unwrap(), b"old bytes");
+        assert_eq!(left[0].read().unwrap().format, RecoveryFormat::Framed);
+        left[0].restore().unwrap();
+        assert_eq!(
+            fs::read(&b).unwrap(),
+            b"old bytes",
+            "restored through the link"
+        );
+        assert_eq!(records_for(&a), []);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A refused rename is an unavailable atomic route: the save goes in place,
+    /// with its copy taken and then removed.
+    #[test]
+    fn a_refused_rename_falls_back_in_place() {
+        let dir = scratch("rename-fault");
+        let f = dir.join("f.txt");
+        fs::write(&f, b"old").unwrap();
+        let armed = fault::inject(SaveFault::Rename);
+        write_atomic(&f, b"new").unwrap();
+        drop(armed);
+        assert_eq!(fs::read(&f).unwrap(), b"new");
+        assert_eq!(names(&dir), ["f.txt"]);
+        assert_eq!(records_for(&f), []);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// T865 (PQ-03): a newline in a Unix file name, and empty contents, come
+    /// back exactly (the legacy layout gave a different file and contents).
+    #[cfg(unix)]
+    #[test]
+    fn recovery_records_keep_any_path_and_contents_exactly() {
+        let dir = scratch("lossless");
+        let rec = dir.join("rec");
+        let odd = dir.join("a\nb.txt");
+        fs::write(&odd, b"line one\nline two").unwrap();
+        let copy = make_recovery_copy(&odd, &rec).unwrap();
+        let empty = dir.join("empty.txt");
+        fs::write(&empty, b"").unwrap();
+        make_recovery_copy(&empty, &rec).unwrap();
+        let found = pending_recoveries(&rec);
+        assert_eq!(found.len(), 2);
+        let odd_rec = found.iter().find(|r| r.copy == copy).unwrap();
+        assert_eq!(odd_rec.original, odd);
+        assert_eq!(odd_rec.contents().unwrap(), b"line one\nline two");
+        let empty_rec = found.iter().find(|r| r.copy != copy).unwrap();
+        assert_eq!(empty_rec.contents().unwrap(), b"");
+        assert!(empty_rec.read().unwrap().original.is_some());
+        // Non-UTF-8 path bytes (not every file system accepts them as names,
+        // so the record is written directly).
+        let raw_path = b"/tmp/caf\xe9.txt";
+        fs::write(
+            rec.join("9-9-x.vixrecover"),
+            recovery_record::encode(recovery_record::PathKind::Unix, raw_path, b"x"),
+        )
+        .unwrap();
+        let raw = Recovery {
+            copy: rec.join("9-9-x.vixrecover"),
+            original: PathBuf::new(),
+        };
+        let read = raw.read().unwrap();
+        assert_eq!(
+            std::os::unix::ffi::OsStrExt::as_bytes(read.original.unwrap().as_os_str()),
+            raw_path
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// T865: an incomplete record is never offered: a cut-off framed record
+    /// and an unpublished `-partial` file.
+    #[test]
+    fn incomplete_recovery_records_are_rejected() {
+        let dir = scratch("incomplete");
+        let f = dir.join("f.txt");
+        fs::write(&f, b"contents").unwrap();
+        let copy = make_recovery_copy(&f, &dir).unwrap();
+        let whole = fs::read(&copy).unwrap();
+        fs::write(&copy, whole.get(..whole.len() - 3).unwrap()).unwrap();
+        fs::write(dir.join("1-2-g.vixrecover-partial"), &whole).unwrap();
+        assert_eq!(pending_recoveries(&dir), []);
+        let cut = Recovery { copy, original: f };
+        assert_eq!(
+            cut.contents().unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// T865: a legacy record is trusted only when its path is unambiguous;
+    /// otherwise `restore` refuses and `restore_to` takes a chosen file.
+    #[test]
+    fn legacy_records_restore_only_when_their_file_is_established() {
+        let dir = fs::canonicalize(scratch("legacy")).unwrap();
+        let rec = dir.join("rec");
+        fs::create_dir_all(&rec).unwrap();
+        let f = dir.join("notes.txt");
+        fs::write(&f, b"damaged").unwrap();
+        fs::write(
+            rec.join("10-0-notes.txt.vixrecover"),
+            format!("{RECOVERY_MAGIC}\n{}\nold\n", f.display()),
+        )
+        .unwrap();
+        // What the legacy writer made of `<dir>/a\nb.txt`: the split moves.
+        fs::write(dir.join("a"), b"unrelated").unwrap();
+        fs::write(
+            rec.join("10-1-a\nb.txt.vixrecover"),
+            format!(
+                "{RECOVERY_MAGIC}\n{}\nb.txt\nold\n",
+                dir.join("a").display()
+            ),
+        )
+        .unwrap();
+        let found = pending_recoveries(&rec);
+        assert_eq!(found.len(), 2);
+        let ordinary = found.iter().find(|r| r.original == f).unwrap();
+        assert_eq!(ordinary.read().unwrap().format, RecoveryFormat::Legacy);
+        ordinary.restore().unwrap();
+        assert_eq!(fs::read(&f).unwrap(), b"old\n");
+        let ambiguous = found.iter().find(|r| r.original != f).unwrap();
+        assert_eq!(ambiguous.read().unwrap().original, None);
+        assert_eq!(
+            ambiguous.restore().unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        assert_eq!(
+            fs::read(dir.join("a")).unwrap(),
+            b"unrelated",
+            "not written"
+        );
+        let chosen = dir.join("chosen.txt");
+        ambiguous.restore_to(&chosen).unwrap();
+        assert_eq!(fs::read(&chosen).unwrap(), b"b.txt\nold\n");
+        assert_eq!(pending_recoveries(&rec), []);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Take the recovery copy an in-place save of `f` would take, into `rec`.
+    fn make_recovery_copy(f: &Path, rec: &Path) -> io::Result<PathBuf> {
+        publish_recovery_record(f, &fs::read(f)?, rec)
+    }
 
     /// A unique scratch directory for one test, created fresh.
     fn scratch(tag: &str) -> PathBuf {
@@ -1839,6 +2374,7 @@ mod tests {
 
 #[cfg(test)]
 mod cov_tests {
+    use super::tests::RECOVERY_MAGIC;
     use super::*;
 
     fn scratch(tag: &str) -> PathBuf {

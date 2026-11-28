@@ -3307,7 +3307,9 @@ impl App {
     }
 
     /// T663: if an earlier in-place save was interrupted, a pre-save copy of
-    /// the file is still in the recovery directory; say so in the status line.
+    /// the file is still in the recovery directory; say so in the status line
+    /// and offer each copy in the recovery prompt (T865: Restore, Diff,
+    /// Discard or decide later).
     ///
     /// Opt-in, like the system clipboard: only `main` calls it, so `App::new`
     /// (and every test that builds an app) never reads the real
@@ -3329,6 +3331,7 @@ impl App {
                 dir = dir.display().to_string()
             )
             .to_string();
+            self.offer_interrupted_saves(dir);
         }
     }
 

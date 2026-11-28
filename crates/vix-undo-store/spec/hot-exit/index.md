@@ -97,6 +97,13 @@ owner-only, since unsaved text may be secret.
   a later edit of the buffer replaces it.
 - Several offers queue and are shown one at a time, after any other open
   confirmation.
+- **Interrupted saves** (T663, T865) share this prompt: at startup each
+  record `vix-fileops` left from an in-place save that never finished is
+  queued, and `r` restores the copy to its file, `d` diffs the file on disk
+  against it, `x` discards it and `n`/`Esc` keeps it. A record whose file
+  cannot be established opens in a new unsaved buffer instead of being
+  written anywhere. See [vix-fileops](../../../vix-fileops/spec/index.md),
+  "Interrupted saves".
 
 ## When a backup is deleted
 
@@ -120,7 +127,8 @@ temporary directory. The host is `tui/src/app/hot_exit.rs`: `poll_hot_exit`
 `check_backup_on_open` (from `App::open_path_with`), the backup worker
 (`backup_worker_loop`, `queue_backup_write`, `remove_backup`,
 `settle_backups`, `drain_backup_results`), `offer_untitled_recovery`
-(from `App::start`), `drop_active_backup` (from the save, Save As and discard
+(from `App::start`), `offer_interrupted_saves` (from
+`App::notice_interrupted_saves_in`), `drop_active_backup` (from the save, Save As and discard
 paths) and the `ConfirmKind::RecoverBackup` prompt. The store directory is
 `App::with_backup_dir` when set, else `backup/` beside an overridden settings
 file, else beside an overridden session file, else `<config>/backup/`, so a

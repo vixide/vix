@@ -298,3 +298,140 @@ fn a_failed_settings_load_is_reported_as_a_warning() {
     app.warn_settings_load_failed("bad toml");
     assert_eq!(app.messages.items.len(), before + 1);
 }
+
+/// T865: arm `fault` for the rest of the scope (this thread's saves only).
+fn arm(fault: fileops::fault::SaveFault) -> fileops::fault::Injected {
+    fileops::fault::inject(fault)
+}
+
+/// The record a failed in-place save of `file` left in the (test-isolated)
+/// recovery directory, moved into `into` as a restart would find it.
+fn take_record(file: &Path, into: &Path) -> PathBuf {
+    let want = fs::canonicalize(file).unwrap();
+    let rec = fileops::pending_recoveries(&fileops::recovery_dir().unwrap())
+        .into_iter()
+        .find(|r| r.original == want)
+        .expect("the failed save left a recovery record");
+    fs::create_dir_all(into).unwrap();
+    let moved = into.join(rec.copy.file_name().unwrap());
+    fs::rename(&rec.copy, &moved).unwrap();
+    moved
+}
+
+/// T865 (PQ-02): a save whose data cannot be written or synced fails with
+/// the file untouched and the buffer still dirty. The fallback used to retry
+/// it as a truncating in-place write.
+#[test]
+fn a_save_whose_data_cannot_reach_the_disk_keeps_the_file_and_stays_dirty() {
+    use fileops::fault::SaveFault;
+    for fault in [SaveFault::TempWrite, SaveFault::TempSync] {
+        let dir = unique_dir("save-temp-fault");
+        let file = dir.join("notes.txt");
+        fs::write(&file, "old\n").unwrap();
+        let mut app = app_at(&dir);
+        open_dirty(&mut app, &file, "new\n");
+        let armed = arm(fault);
+        app.run_action("file.save");
+        drop(armed);
+        assert_eq!(fs::read_to_string(&file).unwrap(), "old\n", "{fault:?}");
+        assert!(app.editor.active_tab().unwrap().dirty, "{fault:?}");
+        let reported = format!("{fault:?}");
+        assert!(
+            app.messages
+                .items
+                .iter()
+                .any(|m| m.text.contains(&reported)),
+            "{fault:?}: the error is reported"
+        );
+        app.run_action("file.save");
+        assert_eq!(fs::read_to_string(&file).unwrap(), "new\n");
+        assert!(!app.editor.active_tab().unwrap().dirty);
+        fs::remove_dir_all(&dir).ok();
+    }
+}
+
+/// T865: when the save must go in place (here the rename is refused) and no
+/// recovery copy can be kept, nothing is written and the buffer stays dirty.
+#[test]
+fn an_in_place_save_without_a_recovery_copy_leaves_the_file_alone() {
+    use fileops::fault::SaveFault;
+    let dir = unique_dir("save-backup-fault");
+    let file = dir.join("notes.txt");
+    fs::write(&file, "old\n").unwrap();
+    let mut app = app_at(&dir);
+    open_dirty(&mut app, &file, "new\n");
+    let rename = arm(SaveFault::Rename);
+    let backup = arm(SaveFault::Backup);
+    app.run_action("file.save");
+    drop((rename, backup));
+    assert_eq!(fs::read_to_string(&file).unwrap(), "old\n");
+    assert!(app.editor.active_tab().unwrap().dirty);
+    // With the copy available the same in-place save succeeds and cleans up.
+    let rename = arm(SaveFault::Rename);
+    app.run_action("file.save");
+    drop(rename);
+    assert_eq!(fs::read_to_string(&file).unwrap(), "new\n");
+    assert!(!app.editor.active_tab().unwrap().dirty);
+    let want = fs::canonicalize(&file).unwrap();
+    assert!(
+        fileops::pending_recoveries(&fileops::recovery_dir().unwrap())
+            .iter()
+            .all(|r| r.original != want),
+        "a finished save removes its copy"
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T865: an in-place write that fails part-way leaves the buffer dirty and
+/// the original bytes in a recovery record, which a restart restores.
+#[test]
+fn a_failed_in_place_save_is_restored_after_a_restart() {
+    use fileops::fault::SaveFault;
+    let dir = unique_dir("save-inplace-fault");
+    let file = dir.join("notes.txt");
+    fs::write(&file, "old\n").unwrap();
+    let mut app = app_at(&dir);
+    open_dirty(&mut app, &file, "new\n");
+    let rename = arm(SaveFault::Rename);
+    let write = arm(SaveFault::InPlaceWrite);
+    app.run_action("file.save");
+    drop((rename, write));
+    assert!(app.editor.active_tab().unwrap().dirty);
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        "",
+        "truncated, as a crash would"
+    );
+    let recovery = dir.join("recovery");
+    take_record(&file, &recovery);
+    drop(app);
+
+    let mut app = app_at(&dir);
+    app.notice_interrupted_saves_in(&recovery);
+    assert!(app.recovery_pending());
+    app.on_key(key('r'));
+    assert_eq!(fs::read_to_string(&file).unwrap(), "old\n");
+    assert_eq!(fileops::pending_recoveries(&recovery), []);
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// The writable-file-in-an-unwritable-directory save still works (in place,
+/// with its recovery copy).
+#[test]
+#[cfg(unix)]
+fn a_writable_file_in_an_unwritable_directory_still_saves() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = unique_dir("save-rodir");
+    let sub = dir.join("ro");
+    fs::create_dir_all(&sub).unwrap();
+    let file = sub.join("notes.txt");
+    fs::write(&file, "old\n").unwrap();
+    let mut app = app_at(&dir);
+    open_dirty(&mut app, &file, "new\n");
+    fs::set_permissions(&sub, fs::Permissions::from_mode(0o555)).unwrap();
+    app.run_action("file.save");
+    fs::set_permissions(&sub, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(fs::read_to_string(&file).unwrap(), "new\n");
+    assert!(!app.editor.active_tab().unwrap().dirty);
+    fs::remove_dir_all(&dir).ok();
+}

@@ -484,7 +484,8 @@ vix-welcome-panel = { workspace = true }
 
 [dev-dependencies]
 # Tests never read or write the real ~/.config/vix (crates/vix-fileops user_dirs).
-vix-fileops = { workspace = true, features = ["isolated-user-dirs"] }
+# `fault-injection`: save-failure tests make chosen steps of a save fail (T865).
+vix-fileops = { workspace = true, features = ["isolated-user-dirs", "fault-injection"] }
 clap_mangen = { workspace = true }
 criterion = { workspace = true }
 insta = { workspace = true }
