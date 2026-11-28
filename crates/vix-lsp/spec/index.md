@@ -549,6 +549,24 @@ default; UTF-8/UTF-32 honored if the server reports `positionEncoding`). The hos
 converts between those and the editor's char offsets per line with
 `vix_lsp::position`, so multi-byte and astral characters map correctly.
 
+**Result lists (T795).** A row of the static results panel built from a
+reply -- a document symbol, workspace symbol, reference (and so a call or
+type hierarchy row, built the same way), diagnostic or a diagnostic's related
+location -- keeps the protocol `(line, character)` it
+came from and the encoding of the server that sent it: the server handling
+the diagnostic's file for diagnostics and their related locations, and the
+active file's server (the one asked) for references, hierarchies and symbols, even when a
+location is in a file another server would handle. The row's own column is
+only the raw protocol column plus one. Selecting the row opens its file and
+converts the kept position against that buffer as it is then, an unsaved
+buffer or a file opened only by the jump included, with the same conversion a
+direct definition jump uses (`App::goto_lsp_position`). For `x` in `界💡x`,
+a UTF-8, UTF-16 or UTF-32 server's `character` 7, 3 or 2 all land at editor
+column 3; `tui/tests/integration/lsp.rs` checks every kind of row in all
+three encodings, with an ASCII control row. The kept positions are checked
+against the row they were built for, so a panel opened since by something
+else (a TODO list, a text search) never borrows one.
+
 ## Document sync
 
 Edits are detected with the editor's monotonic content revision: once per

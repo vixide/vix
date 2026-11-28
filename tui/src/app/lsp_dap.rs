@@ -38,6 +38,61 @@ use super::{
 use crate::editor::SEARCH_MARK;
 use crate::workspace_search::{Flags as WorkspaceFlags, Hit, WorkspaceSearch};
 
+/// A result-panel row built from an LSP reply: the hit, and the protocol
+/// position it came from (`None` for a row from another source).
+pub(crate) type LspRow = (Hit, Option<LspRowOrigin>);
+
+/// Where an LSP result row points, in the terms the server used (T795): a
+/// 0-based line and a `character` counting code units of the encoding that
+/// server negotiated. Kept beside the row so selecting it converts against
+/// the target buffer as it is then (an unsaved buffer, or a file opened
+/// only by the jump) rather than trusting the raw column.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LspRowOrigin {
+    /// The target file.
+    pub(crate) path: PathBuf,
+    /// The 0-based protocol line.
+    pub(crate) line: u32,
+    /// The protocol column, in `encoding` code units.
+    pub(crate) character: u32,
+    /// The encoding of the server that reported the position.
+    pub(crate) encoding: crate::lsp_core::Encoding,
+}
+
+impl LspRowOrigin {
+    /// A row origin for `(line, character)` in `path`, counted in `encoding`.
+    pub(crate) fn new(
+        path: &Path,
+        line: u32,
+        character: u32,
+        encoding: crate::lsp_core::Encoding,
+    ) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            line,
+            character,
+            encoding,
+        }
+    }
+
+    /// The 1-based line the row shows.
+    pub(crate) fn line1(&self) -> usize {
+        lsp_index(self.line).plus(1)
+    }
+
+    /// The raw protocol column plus one: the row's stored column, only a
+    /// fallback (and the key [`LspRowOrigin::matches`] checks) since it is
+    /// right only for ASCII text.
+    pub(crate) fn raw_col1(&self) -> usize {
+        lsp_index(self.character).plus(1)
+    }
+
+    /// Whether `hit` is the row this origin was built for.
+    fn matches(&self, hit: &Hit) -> bool {
+        hit.path == self.path && hit.line == self.line1() && hit.col == self.raw_col1()
+    }
+}
+
 /// A 0-based LSP line or column as an index; a value past `usize` cannot occur
 /// and would name a position past the end of any buffer.
 fn lsp_index(n: u32) -> usize {
@@ -508,20 +563,65 @@ impl App {
             s.open_path(&path, false);
             s.focus = Focus::Editor;
             let enc = s.lsp.encoding_for(&path);
-            let (target_line, target_col) = {
-                let Some(t) = s.editor.active_tab() else {
-                    return;
-                };
-                let code = t.editor.code_ref();
-                let ln = lsp_index(line).min(code.len_lines().minus(1));
-                let line_start = code.line_to_char(ln);
-                let line_text = code.slice(line_start, line_start.plus(code.line_len(ln)));
-                let col = crate::lsp_core::position::col_to_char(&line_text, character, enc);
-                (ln.plus(1), col.plus(1))
-            };
-            let area = s.editor_view();
-            s.editor.goto(target_line, Some(target_col), area);
+            s.goto_lsp_position(line, character, enc);
         });
+    }
+
+    /// Move the active tab's cursor to the LSP position `(line, character)`,
+    /// `character` counting code units in `enc`: the one conversion every
+    /// jump to a protocol position uses -- a direct definition jump and a
+    /// result-list row alike (T795) -- measured against the buffer as it is
+    /// now, unsaved edits included. A line past the end clamps to the last.
+    pub(super) fn goto_lsp_position(
+        &mut self,
+        line: u32,
+        character: u32,
+        enc: crate::lsp_core::Encoding,
+    ) {
+        let (target_line, target_col) = {
+            let Some(t) = self.editor.active_tab() else {
+                return;
+            };
+            let code = t.editor.code_ref();
+            let ln = lsp_index(line).min(code.len_lines().minus(1));
+            let line_start = code.line_to_char(ln);
+            let line_text = code.slice(line_start, line_start.plus(code.line_len(ln)));
+            let col = crate::lsp_core::position::col_to_char(&line_text, character, enc);
+            (ln.plus(1), col.plus(1))
+        };
+        let area = self.editor_view();
+        self.editor.goto(target_line, Some(target_col), area);
+    }
+
+    /// The encoding of the server that answered a request about the active
+    /// file (references, workspace symbols): the active file's server, or
+    /// `target`'s when no file is active (T795). A result in a file another
+    /// server handles still counts in the encoding of the server that sent it.
+    pub(super) fn reply_encoding(&self, target: &Path) -> crate::lsp_core::Encoding {
+        let origin = self.active_path().filter(|p| self.lsp.handles(p));
+        self.lsp.encoding_for(origin.as_deref().unwrap_or(target))
+    }
+
+    /// Show `rows` -- hits paired with the protocol position each came
+    /// from -- in the static results panel `ps`, keeping the positions so
+    /// opening a row converts them against its target (T795).
+    pub(super) fn show_lsp_rows(&mut self, mut ps: WorkspaceSearch, rows: Vec<LspRow>) {
+        let (hits, origins): (Vec<Hit>, Vec<Option<LspRowOrigin>>) = rows.into_iter().unzip();
+        ps.hits = hits;
+        self.workspace_search = Some(ps);
+        self.lsp_row_origins = origins;
+    }
+
+    /// The protocol position behind row `index` of the open results panel,
+    /// when that row was built from an LSP reply and still is the `hit` it
+    /// was built as -- a panel opened since by something else never borrows
+    /// a stale position (T795).
+    pub(super) fn lsp_row_origin(&self, index: usize, hit: &Hit) -> Option<LspRowOrigin> {
+        self.lsp_row_origins
+            .get(index)?
+            .as_ref()
+            .filter(|o| o.matches(hit))
+            .cloned()
     }
 
     /// Restart the language server(s) for the active file (T576): the host
@@ -1050,9 +1150,13 @@ impl App {
         // `relatedInformation` rows (T134 audit: parsed but never shown
         // before this) -- kept grouped so sorting reorders diagnostics
         // without scattering a diagnostic's notes away from it.
-        let mut groups: Vec<(Hit, Vec<Hit>)> = Vec::new();
+        // T795: each row keeps its protocol position, counted in the
+        // encoding of the server that published the diagnostic (its related
+        // locations too, wherever they point).
+        let mut groups: Vec<(LspRow, Vec<LspRow>)> = Vec::new();
         for (path, diags) in self.lsp.all_diagnostics() {
             let rel = self.root_relative(path);
+            let encoding = self.lsp.encoding_for(path);
             for d in diags {
                 let sev = match d.severity {
                     Severity::Error => "error",
@@ -1069,11 +1173,13 @@ impl App {
                     .chars()
                     .take(100)
                     .collect();
+                let origin =
+                    LspRowOrigin::new(path, d.range.start.line, d.range.start.character, encoding);
                 let parent = Hit {
                     path: path.clone(),
                     rel: rel.clone(),
                     line,
-                    col: lsp_index(d.range.start.character).plus(1),
+                    col: origin.raw_col1(),
                     display: format!("{rel}:{line}: [{sev}] {msg}"),
                     text: msg,
                 };
@@ -1085,17 +1191,24 @@ impl App {
                         let related_rel = self.root_relative(&related_path);
                         let related_line = lsp_index(related_loc.range.start.line).plus(1);
                         let text: String = related_msg.chars().take(100).collect();
-                        Hit {
+                        let related_origin = LspRowOrigin::new(
+                            &related_path,
+                            related_loc.range.start.line,
+                            related_loc.range.start.character,
+                            encoding,
+                        );
+                        let hit = Hit {
                             path: related_path,
                             rel: related_rel.clone(),
                             line: related_line,
-                            col: lsp_index(related_loc.range.start.character).plus(1),
+                            col: related_origin.raw_col1(),
                             display: format!("    ↳ {related_rel}:{related_line}: {text}"),
                             text,
-                        }
+                        };
+                        (hit, Some(related_origin))
                     })
                     .collect();
-                groups.push((parent, related));
+                groups.push(((parent, Some(origin)), related));
             }
         }
         // Problems matched in the last task's output, after the servers'
@@ -1105,19 +1218,18 @@ impl App {
             self.status = t!("status.no_diagnostics").to_string();
             return;
         }
-        groups.sort_by(|a, b| a.0.display.cmp(&b.0.display));
+        groups.sort_by(|a, b| a.0.0.display.cmp(&b.0.0.display));
         let count = groups.len().plus(task_hits.len());
-        let hits: Vec<Hit> = groups
+        let rows: Vec<LspRow> = groups
             .into_iter()
             .flat_map(|(parent, related)| std::iter::once(parent).chain(related))
-            .chain(task_hits)
+            .chain(task_hits.into_iter().map(|h| (h, None)))
             .collect();
         let mut ps = WorkspaceSearch::new(false);
         ps.flags.insert(WorkspaceFlags::STATIC_RESULTS);
         ps.title = Some(t!("ui.results_diagnostics").to_string());
         ps.status = t!("status.diagnostics_n", n = count).to_string();
-        ps.hits = hits;
-        self.workspace_search = Some(ps);
+        self.show_lsp_rows(ps, rows);
     }
 
     /// Handle a completed debugger prompt (REPL evaluate, add-watch, the
