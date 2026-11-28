@@ -16,7 +16,7 @@ enforced by `tui/tests/crate_layering.rs`.
 | 5 | 1 |
 | 4 | 2 |
 | 3 | 19 |
-| 2 | 8 |
+| 2 | 9 |
 | 1 | 54 |
 | 0 | 64 |
 
@@ -24,7 +24,7 @@ enforced by `tui/tests/crate_layering.rs`.
 
 | Crate | Layer | Direct workspace dependencies | Dependents |
 |---|---|---|---|
-| `vix-tui` | 5 | `vix-acp`, `vix-action-catalog`, `vix-affix`, `vix-ai-core`, `vix-ai-diff`, `vix-ai-panel`, `vix-align`, `vix-ascii-character-picker`, `vix-authority`, `vix-base-tool`, `vix-base16`, `vix-base64-tool`, `vix-bottom-dock`, `vix-byte-size`, `vix-calculator-tool`, `vix-calendar-panel`, `vix-case`, `vix-checksum-tool`, `vix-choice-list`, `vix-clipboard`, `vix-clock-panel`, `vix-color-converter-tool`, `vix-column-view`, `vix-conflict-tool`, `vix-contact-panel`, `vix-convert-from-csv-into-json-tool`, `vix-convert-from-csv-into-tsv-tool`, `vix-convert-from-html-into-markdown-tool`, `vix-convert-from-json-into-csv-tool`, `vix-convert-from-json-into-toml-tool`, `vix-convert-from-json-into-tsv-tool`, `vix-convert-from-json-into-yaml-tool`, `vix-convert-from-markdown-into-html-tool`, `vix-convert-from-toml-into-json-tool`, `vix-convert-from-tsv-into-csv-tool`, `vix-convert-from-tsv-into-json-tool`, `vix-convert-from-yaml-into-json-tool`, `vix-convert-tabular`, `vix-coverage`, `vix-cowork`, `vix-cowork-net`, `vix-dap`, `vix-db`, `vix-diff-view`, `vix-doctor`, `vix-edit-bytes`, `vix-edit-outline`, `vix-edit-sql`, `vix-edit-table`, `vix-edit-value`, `vix-editor`, `vix-editor-core`, `vix-editorconfig`, `vix-emmet`, `vix-encoding`, `vix-fhir`, `vix-file-browser-panel`, `vix-file-information-panel`, `vix-fileops`, `vix-find-panel`, `vix-format-tool`, `vix-git`, `vix-git-graph`, `vix-hl7`, `vix-html-character-picker`, `vix-http-client`, `vix-i18n`, `vix-im`, `vix-im-irc`, `vix-im-panel`, `vix-input`, `vix-jupyter`, `vix-jwt-tool`, `vix-keybinding-editor-panel`, `vix-keybindings`, `vix-keyboard-shortcut-panel`, `vix-keymap-model`, `vix-large-file`, `vix-left-dock`, `vix-list-state`, `vix-locale-model`, `vix-lorem`, `vix-lsp`, `vix-lsp-core`, `vix-macros`, `vix-markdown-preview`, `vix-matrix-protocol`, `vix-mcp-server`, `vix-media-type`, `vix-menu`, `vix-modal`, `vix-nerd-font-picker`, `vix-oci`, `vix-oci-panel`, `vix-org`, `vix-org-capture`, `vix-org-contacts`, `vix-org-table`, `vix-outline-panel`, `vix-palette`, `vix-pomodoro-tool`, `vix-project-env`, `vix-qr-tool`, `vix-regex-tool`, `vix-review`, `vix-right-dock`, `vix-roam`, `vix-script`, `vix-session`, `vix-settings`, `vix-settings-bundle`, `vix-snippet-tool`, `vix-snippets`, `vix-spellcheck`, `vix-status-bar-panel`, `vix-structural-replace`, `vix-system-information-panel`, `vix-tags`, `vix-tasks`, `vix-terminal`, `vix-test-runner`, `vix-text-information-panel`, `vix-textops`, `vix-theme`, `vix-theme-editor-panel`, `vix-theme-model`, `vix-time-zone-model`, `vix-todo-tree`, `vix-tutor`, `vix-undo-store`, `vix-undo-tree-panel`, `vix-unit-converter-tool`, `vix-url-tool`, `vix-uuid-tool`, `vix-vcard-panel`, `vix-vcard-parser`, `vix-welcome-panel`, `vix-workspace`, `vix-workspace-dashboard-panel`, `vix-workspace-search`, `vix-x11-color-picker`, `vix-zid-tool` | 0 |
+| `vix-tui` | 5 | `vix-acp`, `vix-action-catalog`, `vix-affix`, `vix-ai-agents`, `vix-ai-core`, `vix-ai-diff`, `vix-ai-panel`, `vix-align`, `vix-ascii-character-picker`, `vix-authority`, `vix-base-tool`, `vix-base16`, `vix-base64-tool`, `vix-bottom-dock`, `vix-byte-size`, `vix-calculator-tool`, `vix-calendar-panel`, `vix-case`, `vix-checksum-tool`, `vix-choice-list`, `vix-clipboard`, `vix-clock-panel`, `vix-color-converter-tool`, `vix-column-view`, `vix-conflict-tool`, `vix-contact-panel`, `vix-convert-from-csv-into-json-tool`, `vix-convert-from-csv-into-tsv-tool`, `vix-convert-from-html-into-markdown-tool`, `vix-convert-from-json-into-csv-tool`, `vix-convert-from-json-into-toml-tool`, `vix-convert-from-json-into-tsv-tool`, `vix-convert-from-json-into-yaml-tool`, `vix-convert-from-markdown-into-html-tool`, `vix-convert-from-toml-into-json-tool`, `vix-convert-from-tsv-into-csv-tool`, `vix-convert-from-tsv-into-json-tool`, `vix-convert-from-yaml-into-json-tool`, `vix-convert-tabular`, `vix-coverage`, `vix-cowork`, `vix-cowork-net`, `vix-dap`, `vix-db`, `vix-diff-view`, `vix-doctor`, `vix-edit-bytes`, `vix-edit-outline`, `vix-edit-sql`, `vix-edit-table`, `vix-edit-value`, `vix-editor`, `vix-editor-core`, `vix-editorconfig`, `vix-emmet`, `vix-encoding`, `vix-fhir`, `vix-file-browser-panel`, `vix-file-information-panel`, `vix-fileops`, `vix-find-panel`, `vix-format-tool`, `vix-git`, `vix-git-graph`, `vix-hl7`, `vix-html-character-picker`, `vix-http-client`, `vix-i18n`, `vix-im`, `vix-im-irc`, `vix-im-panel`, `vix-input`, `vix-jupyter`, `vix-jwt-tool`, `vix-keybinding-editor-panel`, `vix-keybindings`, `vix-keyboard-shortcut-panel`, `vix-keymap-model`, `vix-large-file`, `vix-left-dock`, `vix-list-state`, `vix-locale-model`, `vix-lorem`, `vix-lsp`, `vix-lsp-core`, `vix-macros`, `vix-markdown-preview`, `vix-matrix-protocol`, `vix-mcp-server`, `vix-media-type`, `vix-menu`, `vix-modal`, `vix-nerd-font-picker`, `vix-oci`, `vix-oci-panel`, `vix-org`, `vix-org-capture`, `vix-org-contacts`, `vix-org-table`, `vix-outline-panel`, `vix-palette`, `vix-pomodoro-tool`, `vix-project-env`, `vix-qr-tool`, `vix-regex-tool`, `vix-review`, `vix-right-dock`, `vix-roam`, `vix-script`, `vix-session`, `vix-settings`, `vix-settings-bundle`, `vix-snippet-tool`, `vix-snippets`, `vix-spellcheck`, `vix-status-bar-panel`, `vix-structural-replace`, `vix-system-information-panel`, `vix-tags`, `vix-tasks`, `vix-terminal`, `vix-test-runner`, `vix-text-information-panel`, `vix-textops`, `vix-theme`, `vix-theme-editor-panel`, `vix-theme-model`, `vix-time-zone-model`, `vix-todo-tree`, `vix-tutor`, `vix-undo-store`, `vix-undo-tree-panel`, `vix-unit-converter-tool`, `vix-url-tool`, `vix-uuid-tool`, `vix-vcard-panel`, `vix-vcard-parser`, `vix-welcome-panel`, `vix-workspace`, `vix-workspace-dashboard-panel`, `vix-workspace-search`, `vix-x11-color-picker`, `vix-zid-tool` | 0 |
 
 ## Layer 4 (2 crates)
 
@@ -57,10 +57,11 @@ enforced by `tui/tests/crate_layering.rs`.
 | `vix-undo-store` | 3 | `vix-editor-core`, `vix-fileops`, `vix-settings` | 1 |
 | `vix-workspace` | 3 | `vix-authority` | 1 |
 
-## Layer 2 (8 crates)
+## Layer 2 (9 crates)
 
 | Crate | Layer | Direct workspace dependencies | Dependents |
 |---|---|---|---|
+| `vix-ai-agents` | 2 | `vix-fileops` | 1 |
 | `vix-authority` | 2 | `vix-fileops` | 14 |
 | `vix-column-view` | 2 | `vix-input`, `vix-org` | 1 |
 | `vix-macros` | 2 | `vix-fileops`, `vix-input` | 2 |
@@ -102,7 +103,7 @@ enforced by `tui/tests/crate_layering.rs`.
 | `vix-edit-value` | 1 | `vix-capped-stack`, `vix-input`, `vix-list-state` | 1 |
 | `vix-editor-core` | 1 | `vix-clipboard`, `vix-hex-rgb`, `vix-input` | 3 |
 | `vix-file-information-panel` | 1 | `vix-byte-size`, `vix-civil-date`, `vix-i18n`, `vix-list-state` | 1 |
-| `vix-fileops` | 1 | `vix-encoding` | 8 |
+| `vix-fileops` | 1 | `vix-encoding` | 9 |
 | `vix-hl7` | 1 | `vix-list-state` | 1 |
 | `vix-html-character-picker` | 1 | `vix-list-state` | 1 |
 | `vix-im-irc` | 1 | `vix-civil-date` | 1 |

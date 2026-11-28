@@ -431,7 +431,8 @@ Codeberg) run, for the `vix-tui` package: `cargo clippy --no-default-features
 `cargo hack check --each-feature --no-dev-deps`, so every capability feature
 (`spec/cargo-features/index.md`) keeps compiling alone and all-off. `scripts/check`
 runs the same three (the `cargo hack` step is skipped with a note when
-`cargo-hack` isn't installed). The opt-in `cowork` feature is in no default or
+`cargo-hack` isn't installed). The opt-in `ai-agents` feature has a Clippy build and shared App conversation tests.
+The opt-in `cowork` feature is in no default or
 `full` build, so the same job (and `scripts/check`) also runs `cargo clippy
 --features cowork --all-targets -- -D warnings` and `cargo test --features cowork
 --lib cowork` (its unit and two-peer loopback integration tests). The opt-in

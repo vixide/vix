@@ -7,6 +7,7 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | Action ID | Title | Source |
 | --- | --- | --- |
 | `add_tab` | New Tab | Catalog |
+| `ai.agent_conversations` | Agent Conversations… | Menu |
 | `ai.agent_plan` | Agent Plan | Menu |
 | `ai.agent_plan_dock` | Toggle Agent Plan Pane | Menu |
 | `ai.agent_prompt` | Prompt Agent… | Menu |
@@ -1005,4 +1006,4 @@ A handful of ids are dynamically suffixed (`view.theme:Dark`, `script:my_script`
 | `workspace.open` | Open Workspace from File… | Menu |
 | `workspace.save` | Save Workspace into File… | Menu |
 
-**998 actions.**
+**999 actions.**

@@ -73,3 +73,5 @@ Rules for every such page:
 
 - [dbjoy](dbjoy.md): a macOS PostgreSQL client, compared with the DB
   workbench (2026-11-07; Run W, T774–T786).
+- [Coding agents](coding-agents.md) compares the Vix ACP host with Orbit and
+  T3 Code and recommends an order for adding conversation and workspace controls.

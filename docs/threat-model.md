@@ -149,6 +149,16 @@ code.
 - **Open risks.** `is_secret` is a name list: a secret kept in a file with an
   ordinary name (a production settings file, say) is readable by any MCP client you connect.
 
+### Native Codex and Claude Code conversations
+
+The opt-in `ai-agents` feature starts the installed provider in a trusted local
+workspace. It uses stdio and the provider’s login. Native tools run under the
+provider’s own permission rules and can edit files on disk. Each approval Vix
+receives belongs to the current turn. The user sees the request and can allow
+it once or decline it. The private conversation file contains prompts and
+visible replies. A separate lock keeps another Vix from editing it concurrently.
+[Conversation contract](../crates/vix-ai-agents/spec/index.md)
+
 ### ACP agents (the Agent panel)
 
 - **Assets.** Workspace files, secrets, your account (agents can ask to run

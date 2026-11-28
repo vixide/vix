@@ -158,7 +158,7 @@ Until then Vix does not:
 - run project environment detectors (direnv, mise, `.vix/env.toml`);
 - use a project's own Prettier from `node_modules/.bin`, or its Jupyter
   kernelspecs;
-- start ACP agents;
+- start ACP agents or native Codex and Claude Code conversations;
 - start the well-known language servers it finds on your `PATH` (it asks,
   naming the server, the first time you open a file one would serve).
 

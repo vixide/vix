@@ -378,6 +378,17 @@ impl App {
             self.editor.paste_str(text, area);
             return;
         }
+        #[cfg(feature = "ai-agents")]
+        if self.open_overlays().next_back().map(|o| o.id)
+            == Some(super::overlays::OverlayId::AgentConversation)
+        {
+            if let Some(native) = &mut self.native_panel
+                && !native.awaiting_approval()
+            {
+                native.panel.input.push_str(&text.replace("\r\n", "\n"));
+            }
+            return;
+        }
         // The DB connection form takes a pasted connection string whole
         // (T781): it fills the form, and its password never reaches a field.
         if self.open_overlays().next_back().map(|o| o.id) == Some(super::overlays::OverlayId::Db)

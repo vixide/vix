@@ -523,6 +523,8 @@ fn draw_overlay_2(app: &mut App, frame: &mut Frame, area: Rect, id: OverlayId) {
     match id {
         OverlayId::LargeFile => large_file::draw_large_file(app, frame, area),
         OverlayId::Qrcode => draw_qrcode(app, frame, area),
+        #[cfg(feature = "ai-agents")]
+        OverlayId::AgentConversation => ai::draw_native_conversation(app, frame, area),
         #[cfg(feature = "ai")]
         OverlayId::AiPanel => draw_ai_panel(app, frame, area),
         #[cfg(feature = "terminal")]

@@ -38,6 +38,7 @@ ttf-parser = { version = "0.25", default-features = false, features = ["std"] }
 png = { version = "0.17", optional = true }
 
 [features]
+ai-agents = ["vix/ai-agents"]
 # `VIX_GUI_SCREENSHOT=out.png vix-bui` renders the window to a PNG after
 # scripted actions/keystrokes and quits (see gui/spec/index.md).
 screenshot = ["dep:png"]

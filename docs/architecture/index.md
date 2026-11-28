@@ -26,8 +26,8 @@ rendering (`ratatui`), and calls into the feature crates. The desktop GUIs in
 The build-time picture is a layered dependency graph. A crate's *layer* is the
 longest chain of workspace dependencies below it: layer 0 crates depend on no
 other workspace crate, and each layer depends only on layers below it. The App
-shell `vix-tui` is the single crate at the top: it depends directly on 142 of
-the 147 member crates under `crates/` (the other five, such as
+shell `vix-tui` is the single crate at the top: it depends directly on 143 of
+the 148 member crates under `crates/` (the other five, such as
 `vix-civil-date` and `vix-jupyter-core`, it reaches through other crates).
 The diagram shows the layers with a few well-known crates in each; every arrow
 is a real direct dependency ("depends on"), not every dependency is drawn.
@@ -114,7 +114,7 @@ flowchart TD
 `tui/tests/docs_crate_graph.rs` keeps this diagram honest: it runs
 `cargo metadata`, fails if an arrow between two crates is not a direct
 dependency, if a crate is drawn in the wrong layer, or if a layer's crate count
-or the "142 of the 147" sentence above no longer matches, and checks that every
+or the "143 of the 148" sentence above no longer matches, and checks that every
 crate this page or the [crate map](../crate-map.md) names really exists. To
 list the layers yourself:
 
@@ -180,7 +180,7 @@ vix/
 │   ├── examples/                 # Cargo examples
 │   ├── benches/                  # Benchmarks
 │   └── tests/                    # Integration tests
-├── crates/                       # 147 feature crates (vix-*)
+├── crates/                       # 148 feature crates (vix-*)
 │   ├── vix-editor/               # Editor host
 │   │   ├── Cargo.toml
 │   │   ├── src/
