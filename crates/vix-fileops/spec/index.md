@@ -194,19 +194,12 @@ symlink rather than following it into some other file:
   would split a hard link or change the owner/group when saving another
   user's file. So when the target's link count is above 1, or its uid/gid
   differs from the new file's, `write_atomic` writes **in place** instead.
-  Every in-place write (this, and the old fallback when the directory is not
-  writable) first copies the original to `recovery_dir()`
-  (`$XDG_STATE_HOME/vix/recovery`, else `~/.local/state/vix/recovery`) as a
-  `*.vixrecover` file (magic line, original path line, original bytes), and
-  deletes the copy after the data is flushed. A copy left behind means the
-  save was interrupted: `pending_recoveries(dir)` lists them and
-  `Recovery::{contents, restore, discard}` act on one. At startup `main`
-  calls `App::notice_interrupted_saves`, which reports the count in the status
-  line (`status.interrupted_saves`); it is opt-in and never part of `App::new`,
-  so tests never read the machine's real recovery directory (tests use
-  `notice_interrupted_saves_in` with a temp directory). Still to
-  do: the Restore / Diff / Discard prompt, which is to share T629's recovery
-  prompt (T629 has not landed).
+  Every in-place write (this, and the fallback below) first copies the
+  original to `recovery_dir()` (`$XDG_STATE_HOME/vix/recovery`, else
+  `~/.local/state/vix/recovery`; under the `isolated-user-dirs` feature the
+  per-process stand-in home, so tests never write the real one) and deletes
+  the copy once the new data is synced. See "When a save fails" and
+  "Interrupted saves" below.
 - `write_atomic_private(path, data)` — same mechanics, but a **new** file
   is always created owner-only (0600 on Unix) regardless of umask (T133).
   For persisted files whose content is inherently sensitive even though
@@ -234,6 +227,95 @@ symlink rather than following it into some other file:
 - `write_private_temp(prefix, data)` — a one-off scratch file in the OS
   temp directory (secrets briefly in transit, e.g. an AI-request payload),
   0600 and `O_EXCL` from creation, unrelated to any of the above.
+
+### When a save fails (T865)
+
+`write_atomic` falls back to writing in place only when the **atomic route is
+unavailable**: the temp file cannot be created (an unwritable directory), the
+rename is refused, or a rename would change hard links or ownership (above).
+A failure to **write or sync the replacement data** into the temp file (a full
+disk, an I/O error, or the `fill` callback's own error) is the save's error:
+the temp is removed, the original is not touched and nothing is retried,
+because the same bytes written in place would fail the same way after
+truncating the file. (Before T865 every atomic error was retried in place.)
+
+An in-place write of an **existing** file never truncates it before a
+**complete, verified recovery copy** exists. The copy is written, synced,
+read back and decoded, and must give back exactly the file's path and bytes;
+only then is it published (renamed to its final name, directory synced) and
+the file truncated. If no copy can be kept (no recovery directory is known,
+it cannot be created, the disk is full), the save fails with the file left
+unchanged and the buffer stays dirty. If the in-place write fails after
+truncating, the original bytes are written back; if even that fails the
+published copy remains for the next start. Writing in place keeps the inode,
+so hard links, owner, group and mode are kept; the copy is `0600` in a `0700`
+directory. `write_in_place_with_recovery(target, data, Some(dir))` has the
+same rules; with `None` it writes with no copy (what `Recovery::restore`
+uses, its record being the safety net).
+
+Tests make chosen steps fail with the `fault-injection` feature
+(`vix_fileops::fault::inject(SaveFault::…)`, thread-local, dev-dependencies
+only): `TempWrite`, `TempSync`, `Rename`, `Backup`, `InPlaceWrite`.
+
+### Interrupted saves (T663, T865)
+
+A recovery record left behind means an in-place save was interrupted.
+Records are written in a **versioned, framed** layout, so any native path and
+any bytes come back exactly:
+
+```text
+VIXRECOVER 2
+path <kind> <length>
+<length bytes of path>
+data <length>
+<length bytes of contents>
+end
+```
+
+`<kind>` is `unix` (raw path bytes: a newline or non-UTF-8 bytes in a name are
+kept), `windows` (UTF-16 code units, little-endian, so unpaired surrogates are
+kept) or `utf8` (other platforms). Lengths are plain decimal. The record is
+first written as `<pid>-<seq>-<name>.vixrecover-partial` and renamed to
+`….vixrecover` only after it validated, so a crash part-way never leaves an
+offerable record. A `.vixrecover` that does not decode in full (cut off,
+bytes after `end`, a bad length) is rejected and never offered; a `-partial`
+file is ignored.
+
+**Legacy records** (before T865: a `VIXRECOVER` line, the path as
+`Path::display`, a newline, the bytes) are still read. The layout is
+ambiguous: a newline in the path moves the split (so the "path" and the
+"contents" both change), and `display` replaces non-UTF-8 bytes. Its path is
+taken as the file's identity only when the line has no U+FFFD, is absolute,
+names an existing regular file, and its file name equals the one in the
+record's own name (`<pid>-<seq>-<file name>.vixrecover`, which the legacy
+writer took from the real path): a newline in a file or directory name
+shows up as a mismatch. What still passes (a directory literally named
+`<x>⏎` beside a file `<x>` whose name repeats the real file's) cannot be told
+apart and is accepted. A framed record names its file whenever the path is
+this platform's and absolute; a record from another platform does not.
+
+`pending_recoveries(dir)` lists the offerable records; `Recovery::read`
+returns a `RecoveryRecord` (`format`, `original: Option<PathBuf>`, the
+`recorded` path for display, `contents`), and `Recovery::{contents, restore,
+restore_to, discard}` act on one. `restore` refuses (`InvalidData`) when the
+record does not establish its file; `restore_to(dest)` writes to a
+destination the person chose.
+
+At startup `main` calls `App::notice_interrupted_saves`, which reports the
+count in the status line (`status.interrupted_saves`) and queues each record
+in T629's recovery prompt (`ConfirmKind::RecoverBackup`): **r** restores the
+copy over the file byte for byte and reloads clean tabs; **d** shows the file
+on disk against the copy in the diff overlay; **x** discards the copy; **n**
+or Esc decides later (offered again next start). When the record does not
+establish its file the prompt says so (`confirm.interrupted_save_unknown`)
+and **r** never writes a guessed path: the copy opens in a new, unsaved
+buffer, so the person chooses where it goes with Save As (Vim's `:recover`
+likewise loads into a buffer you then write), and the record is deleted (the
+buffer's own hot-exit backup takes over). Contents that are not UTF-8 cannot
+become a buffer: that record stays in the recovery directory and the status
+line says where. The notice is opt-in and never part of `App::new`, so tests
+never read the machine's real recovery directory (they use
+`notice_interrupted_saves_in` with a temp directory).
 
 `keybindings.toml` (`vix-keybindings::user_bindings`) is a deliberate
 non-fix: its content (a key token paired with an action id) is never

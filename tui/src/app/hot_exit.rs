@@ -153,6 +153,9 @@ enum Recovery {
     },
     /// The workspace's untitled backups, by session id.
     Untitled(Vec<String>),
+    /// A copy of a file from before an in-place save that never finished
+    /// (T663, T865): the recovery directory's record.
+    InterruptedSave(vix_fileops::Recovery),
 }
 
 /// Hot-exit state held by [`App`].
@@ -651,6 +654,25 @@ impl App {
                 Recovery::Untitled(ids) => {
                     t!("confirm.hot_exit_untitled", count = ids.len()).to_string()
                 }
+                Recovery::InterruptedSave(rec) => {
+                    // Gone or no longer readable (another Vix acted on it).
+                    let Ok(record) = rec.read() else {
+                        self.hot_exit.pending.pop_front();
+                        continue;
+                    };
+                    match &record.original {
+                        Some(path) => t!(
+                            "confirm.interrupted_save",
+                            path = printable(&path.display().to_string())
+                        )
+                        .to_string(),
+                        None => t!(
+                            "confirm.interrupted_save_unknown",
+                            path = printable(&record.recorded)
+                        )
+                        .to_string(),
+                    }
+                }
             };
             self.confirm = Some(Confirm {
                 message,
@@ -678,17 +700,24 @@ impl App {
                 self.hot_exit.pending.pop_front();
                 self.recover(front);
             }
-            KeyCode::Char('d' | 'D') => {
-                if let Recovery::File { path, identity } = &front {
+            KeyCode::Char('d' | 'D') => match &front {
+                Recovery::File { path, identity } => {
                     self.confirm = None;
                     self.show_backup_diff(path, identity);
                 }
-            }
+                Recovery::InterruptedSave(rec) => {
+                    self.confirm = None;
+                    self.show_interrupted_save_diff(rec);
+                }
+                Recovery::Untitled(_) => {}
+            },
             KeyCode::Char('x' | 'X') => {
                 self.confirm = None;
                 self.hot_exit.pending.pop_front();
                 self.discard_backup(&front);
-                self.status = t!("status.hot_exit_discarded").to_string();
+                if !matches!(front, Recovery::InterruptedSave(_)) {
+                    self.status = t!("status.hot_exit_discarded").to_string();
+                }
             }
             KeyCode::Char('n' | 'N') | KeyCode::Esc => {
                 self.confirm = None;
@@ -704,6 +733,10 @@ impl App {
     /// Put a backup back: a file's text into its tab, untitled buffers into
     /// new tabs. Either way the buffer is left dirty — nothing is saved.
     fn recover(&mut self, item: Recovery) {
+        if let Recovery::InterruptedSave(rec) = &item {
+            self.restore_interrupted_save(rec);
+            return;
+        }
         let Some(store) = self.backup_store() else {
             return;
         };
@@ -756,11 +789,19 @@ impl App {
                 }
                 self.status = t!("status.hot_exit_recovered_untitled", count = count).to_string();
             }
+            Recovery::InterruptedSave(_) => {}
         }
     }
 
     /// Delete the backups behind `item`.
     fn discard_backup(&mut self, item: &Recovery) {
+        if let Recovery::InterruptedSave(rec) = item {
+            self.status = match rec.discard() {
+                Ok(()) => t!("status.interrupted_save_discarded").to_string(),
+                Err(e) => t!("status.interrupted_save_failed", error = e.to_string()).to_string(),
+            };
+            return;
+        }
         let Some(store) = self.backup_store() else {
             return;
         };
@@ -774,7 +815,94 @@ impl App {
                     self.remove_backup(&store, OwnedKey::Untitled(workspace.clone(), id.clone()));
                 }
             }
+            Recovery::InterruptedSave(_) => {}
         }
+    }
+
+    /// Queue the interrupted saves recorded in `dir` for the recovery
+    /// prompt (T865), each once.
+    pub(super) fn offer_interrupted_saves(&mut self, dir: &Path) {
+        for rec in vix_fileops::pending_recoveries(dir) {
+            let item = Recovery::InterruptedSave(rec);
+            if !self.hot_exit.pending.contains(&item) {
+                self.hot_exit.pending.push_back(item);
+            }
+        }
+        self.show_next_recovery();
+    }
+
+    /// Restore an interrupted save's copy. A record that names its file
+    /// exactly is written back over it, byte for byte, and clean tabs reload.
+    /// One that cannot (a legacy record whose path is ambiguous, or one from
+    /// another platform) is never written to a guessed path: its text opens
+    /// in a new, unsaved buffer, so the person chooses where it goes with
+    /// Save As. Contents that are not UTF-8 cannot become a buffer, so that
+    /// record stays in the recovery directory.
+    fn restore_interrupted_save(&mut self, rec: &vix_fileops::Recovery) {
+        let record = match rec.read() {
+            Ok(record) => record,
+            Err(e) => {
+                self.status =
+                    t!("status.interrupted_save_failed", error = e.to_string()).to_string();
+                return;
+            }
+        };
+        if let Some(path) = &record.original {
+            self.status = match rec.restore() {
+                Ok(()) => {
+                    self.editor.reload_clean_from_disk();
+                    t!(
+                        "status.interrupted_save_restored",
+                        path = printable(&path.display().to_string())
+                    )
+                    .to_string()
+                }
+                Err(e) => t!("status.interrupted_save_failed", error = e.to_string()).to_string(),
+            };
+            return;
+        }
+        let Ok(text) = String::from_utf8(record.contents) else {
+            let dir = rec
+                .copy
+                .parent()
+                .map_or_else(String::new, |d| d.display().to_string());
+            self.status = t!("status.interrupted_save_not_text", dir = dir).to_string();
+            return;
+        };
+        self.editor.new_tab_with_content(&text);
+        if let Some(tab) = self.editor.active_tab_mut() {
+            tab.dirty = true;
+        }
+        let _ = rec.discard();
+        self.status = t!("status.interrupted_save_opened").to_string();
+    }
+
+    /// Show the file on disk against an interrupted save's copy in the diff
+    /// overlay (an empty left side when the file cannot be read).
+    fn show_interrupted_save_diff(&mut self, rec: &vix_fileops::Recovery) {
+        let Ok(record) = rec.read() else {
+            return;
+        };
+        let current = record
+            .original
+            .as_deref()
+            .and_then(|p| std::fs::read(p).ok())
+            .map_or_default(|b| String::from_utf8_lossy(&b).into_owned());
+        let copy = String::from_utf8_lossy(&record.contents);
+        let lines = crate::diff_view::build(&current, &copy);
+        let name = record
+            .original
+            .as_deref()
+            .and_then(Path::file_name)
+            .map_or_else(
+                || record.recorded.clone(),
+                |n| n.to_string_lossy().into_owned(),
+            );
+        self.diff_view = Some(super::DiffViewState {
+            title: t!("ui.interrupted_save_diff", name = printable(&name)).to_string(),
+            lines,
+            scroll: 0,
+        });
     }
 
     /// Show the file as opened against its backup in the diff overlay.
@@ -814,6 +942,21 @@ impl App {
     pub fn recovery_pending(&self) -> bool {
         !self.hot_exit.pending.is_empty()
     }
+}
+
+/// `text` with control characters (a newline in a file name) escaped, so a
+/// prompt or status line stays on one line.
+fn printable(text: &str) -> String {
+    text.chars()
+        .flat_map(|c| {
+            let escaped: Vec<char> = if c.is_control() {
+                c.escape_default().collect()
+            } else {
+                vec![c]
+            };
+            escaped
+        })
+        .collect()
 }
 
 #[cfg(test)]

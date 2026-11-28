@@ -12,6 +12,9 @@ description = "Filesystem helpers for the explorer's copy / cut / paste / delete
 # directory under the system temporary directory (see `user_dirs`). Only
 # dev-dependencies enable it, so tests can never rewrite the real `~/.config/vix`.
 isolated-user-dirs = []
+# Let tests make chosen steps of a save fail (`vix_fileops::fault`, T865). Only
+# dev-dependencies enable it; without it every injection point is a no-op.
+fault-injection = []
 
 [dependencies]
 confy = { workspace = true }
