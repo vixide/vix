@@ -137,9 +137,14 @@ impl NativePanel {
         }
     }
 
+    /// `create_worktree`: a newly chosen worktree conversation. A saved one
+    /// that never ran a turn (its first attempt failed before the provider
+    /// started) may still create its checkout.
     fn open(conversation: Conversation, root: PathBuf, create_worktree: bool) -> Self {
         let mut panel = Panel::open();
         let messages = &conversation.transcript.messages;
+        let create_worktree =
+            create_worktree || (messages.is_empty() && conversation.transcript.session.is_none());
         let skip = messages.len().minus(SHOWN_MESSAGES);
         for message in messages.iter().skip(skip) {
             match message {
@@ -400,7 +405,7 @@ impl App {
         };
         let mut choices = vec![Choice::New(Provider::Codex), Choice::New(Provider::Claude)];
         #[cfg(feature = "git")]
-        if crate::git::is_repo(&self.root) {
+        if worktree::available(&self.root) {
             choices.extend([
                 Choice::NewWorktree(Provider::Codex),
                 Choice::NewWorktree(Provider::Claude),
@@ -418,10 +423,12 @@ impl App {
                 Choice::Resume(e) => t!(
                     "ui.agent_saved_row",
                     provider = e.provider.name(),
-                    title = e.worktree_branch().map_or_else(
-                        || sanitize(&e.title),
-                        |b| format!("{} · {b}", sanitize(&e.title))
-                    )
+                    title = match e.worktree_branch() {
+                        None => sanitize(&e.title),
+                        // A conversation that never ran a turn has no title.
+                        Some(b) if e.title.is_empty() => b,
+                        Some(b) => format!("{} · {b}", sanitize(&e.title)),
+                    }
                 )
                 .to_string(),
             })
@@ -613,12 +620,25 @@ mod tests {
     }
 
     /// Open the chooser and pick row `row` (0 new Codex, 1 new Claude, 2.. saved).
+    ///
+    /// A provider or Git child that another test forks inherits the lock
+    /// file of a conversation just dropped until it execs, so a reopened one
+    /// can briefly read as locked under load: retry that for up to 30 s.
     fn choose(app: &mut App, row: usize) {
-        app.run_action("ai.agent_conversations");
-        for _ in 0..row {
-            app.on_key(code(KeyCode::Down));
+        let locked = t!("status.agent_conversation_locked").to_string();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            app.status.clear();
+            app.run_action("ai.agent_conversations");
+            for _ in 0..row {
+                app.on_key(code(KeyCode::Down));
+            }
+            app.on_key(code(KeyCode::Enter));
+            if app.native_panel.is_some() || app.status != locked || Instant::now() >= deadline {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(10));
         }
-        app.on_key(code(KeyCode::Enter));
     }
 
     /// Send "one\ntwo" to the scripted provider in `mode`.
@@ -821,6 +841,100 @@ mod tests {
         drop(app);
         fs::remove_dir_all(config).unwrap();
         fs::remove_dir_all(repo).unwrap();
+    }
+
+    /// The worktree rows of the chooser.
+    #[cfg(feature = "git")]
+    fn worktree_rows(app: &mut App) -> usize {
+        app.run_action("ai.agent_conversations");
+        let Some(ChoiceList {
+            purpose: ChoicePurpose::AgentConversations { choices, .. },
+            ..
+        }) = app.choice_list.take()
+        else {
+            panic!("no chooser");
+        };
+        choices
+            .iter()
+            .filter(|c| matches!(c, Choice::NewWorktree(_)))
+            .count()
+    }
+
+    #[cfg(feature = "git")]
+    #[test]
+    fn worktree_rows_need_a_committed_folder_and_a_failed_first_turn_can_retry() {
+        use crate::app::git::tests::{git, repo};
+        let unborn = temp("agents-unborn");
+        git(&unborn, &["init", "-q"]);
+        let config = temp("agent-retry-config");
+        let mut app = app_at(&unborn).with_session_path(config.join("session.toml"));
+        trust(&mut app);
+        assert_eq!(worktree_rows(&mut app), 0);
+        drop(app);
+
+        let repo = repo("agents-retry", &[("worktree-test.txt", "base\n")]);
+        let open = || app_at(&repo).with_session_path(config.join("session.toml"));
+        let mut app = open();
+        trust(&mut app);
+        assert_eq!(worktree_rows(&mut app), 2);
+        choose(&mut app, 2);
+        let checkout = app
+            .native_panel
+            .as_ref()
+            .unwrap()
+            .conversation
+            .worktree()
+            .unwrap();
+        let branch = checkout.file_name().unwrap().to_str().unwrap().to_owned();
+        // Git refuses the first attempt: nothing is created, but the
+        // conversation is saved. Reopened, it may still create its checkout.
+        git(&repo, &["branch", &branch]);
+        app.on_paste("hello");
+        let refused = app.native_panel.as_mut().unwrap().start(|_, _| {
+            panic!("provider started without its worktree");
+        });
+        assert!(refused.is_err());
+        assert!(!checkout.exists());
+        git(&repo, &["branch", "-D", &branch]);
+        drop(app);
+        // Rows: 2 new, 2 new worktree, then the saved conversation that never
+        // ran a turn, titled by its branch. This time Git succeeds but the
+        // provider is missing.
+        let mut app = open();
+        app.run_action("ai.agent_conversations");
+        let rows = &app.choice_list.take().unwrap().panel.rows;
+        assert_eq!(rows[4], format!("Codex · {branch}"));
+        choose(&mut app, 4);
+        app.on_paste("hello");
+        let native = app.native_panel.as_mut().unwrap();
+        assert_eq!(native.conversation.worktree(), Some(checkout.clone()));
+        let missing = native.start(|_, _| Err(io::Error::from(io::ErrorKind::NotFound)));
+        assert!(missing.is_err());
+        assert!(checkout.is_dir(), "Git ran before the provider");
+        drop(app);
+        // Reopened again, it reuses that checkout.
+        let mut app = open();
+        choose(&mut app, 4);
+        assert_eq!(
+            app.native_panel.as_ref().unwrap().conversation.worktree(),
+            Some(checkout.clone())
+        );
+        send_to_fake(&mut app, "new");
+        wait(&mut app, "retry approval", NativePanel::awaiting_approval);
+        app.on_key(code(KeyCode::Esc));
+        wait(&mut app, "retry reply", |p| !p.panel.busy);
+        assert_eq!(
+            errors(app.native_panel.as_ref().unwrap()),
+            Vec::<&str>::new()
+        );
+        assert_eq!(
+            std::fs::read_to_string(checkout.join("worktree-test.txt")).unwrap(),
+            "base\ncodex\n"
+        );
+        drop(app);
+        for dir in [config, repo, unborn] {
+            std::fs::remove_dir_all(dir).unwrap();
+        }
     }
 
     #[cfg(not(feature = "git"))]

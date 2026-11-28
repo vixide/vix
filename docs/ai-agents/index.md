@@ -46,8 +46,9 @@ This is an opt-in build feature, not part of the released binaries.
 
 ## Give a conversation its own Git worktree
 
-In a Git repository, pick **New worktree conversation** for Codex or Claude
-Code. The first prompt starts a new branch at your current commit. Uncommitted
+In a Git repository with at least one commit, pick **New worktree
+conversation** for Codex or Claude Code (the rows are missing in a folder
+that is not committed yet). The first prompt starts a new branch at your current commit. Uncommitted
 edits, untracked files and unsaved Vix buffers stay in your original checkout.
 If you opened a subfolder, the provider starts in its counterpart in the new
 worktree. The ordinary **New conversation** rows use the current folder.

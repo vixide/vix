@@ -185,6 +185,26 @@ fn quit_action_ends_the_loop_request() {
 fn native_agent_conversation_draws_and_accepts_a_draft() {
     let root = scratch("native-agents").canonicalize().unwrap();
     vix::git::run(&root, &["init", "-q"]).unwrap();
+    // Worktree conversations start from a commit.
+    vix::git::run(
+        &root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "seed",
+        ],
+    )
+    .unwrap();
     let mut session = vix::session::Session::default();
     session.set_scripts_trusted(&root.to_string_lossy(), Some(true));
     session.save_to(&root.join("session.toml")).unwrap();

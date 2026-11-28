@@ -441,6 +441,44 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn a_worktree_conversation_keeps_its_checkout_binding_across_a_restart() {
+        let (root, store) = scratch();
+        let plain = store.create(Provider::Codex).unwrap();
+        assert_eq!(plain.worktree(), None);
+        drop(plain);
+        let mut isolated = store.create_worktree(Provider::Claude).unwrap();
+        let checkout = isolated.worktree().unwrap();
+        let branch = checkout.file_name().unwrap().to_str().unwrap().to_owned();
+        let uuid = branch.strip_prefix("vix-agent-").unwrap();
+        assert!(Uuid::parse_str(uuid).is_ok());
+        assert_eq!(checkout.parent(), Some(store.dir()));
+        assert_eq!(
+            isolated.path.file_name().unwrap().to_str().unwrap(),
+            format!("{uuid}.worktree.json")
+        );
+        isolated.save().unwrap();
+        drop(isolated);
+        // A folder named like the checkout is not a conversation.
+        fs::create_dir(&checkout).unwrap();
+        let entries = store.entries().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].worktree_branch().as_deref(),
+            Some(branch.as_str())
+        );
+        let resumed = store.resume(&entries[0]).unwrap();
+        assert_eq!(resumed.worktree(), Some(checkout));
+        assert_eq!(
+            store.resume(&entries[0]).err().map(|e| e.kind()),
+            Some(io::ErrorKind::WouldBlock)
+        );
+        drop(resumed);
+        assert_eq!(Id::parse("x.worktree"), None);
+        assert_eq!(Id::parse(&format!("{uuid}.other")), None);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn the_store_and_its_locks_are_owner_only() {
