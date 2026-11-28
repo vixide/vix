@@ -626,8 +626,10 @@ impl App {
         }
     }
 
-    /// Show the front recovery offer when nothing else is asking.
-    fn show_next_recovery(&mut self) {
+    /// Show the front recovery offer when nothing else is asking. Also run
+    /// when the diff its `d` opened closes, so the offer is back at once
+    /// (T868) rather than on the next tick.
+    pub(super) fn show_next_recovery(&mut self) {
         if self.confirm.is_some()
             || self.diff_view.is_some()
             || self.unsaved.is_some()

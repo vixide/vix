@@ -64,11 +64,15 @@ impl App {
     }
 
     /// Handle a key in the read-only diff view: Esc/`q` closes it, Up/Down and PageUp/PageDown
-    /// scroll (clamped to the last line).
+    /// scroll (clamped to the last line). Closing it brings back a recovery
+    /// prompt whose `d` opened it (T868).
     pub(super) fn diff_view_key(&mut self, key: KeyEvent) {
         let page = usize::from(self.layout.editor.height.max(1));
         match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => self.diff_view = None,
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.diff_view = None;
+                self.show_next_recovery();
+            }
             KeyCode::Up => {
                 if let Some(d) = self.diff_view.as_mut() {
                     d.scroll = d.scroll.minus(1);

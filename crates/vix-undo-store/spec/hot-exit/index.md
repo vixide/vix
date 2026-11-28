@@ -92,7 +92,9 @@ owner-only, since unsaved text may be secret.
 - `r` puts the backup's text into the buffer and leaves it **dirty**: nothing
   is written to the file until the user saves.
 - `d` opens the unified diff overlay (`vix-diff-view`), the file on disk
-  against the backup; when it closes the prompt comes back.
+  against the backup; when it closes (`Esc` or `q`) the same prompt comes
+  back at once, from the key that closed it rather than the next idle tick
+  (T868), so nothing else can slip in first.
 - `x` deletes the backup. `n`/`Esc` keeps it, to be offered on the next open;
   a later edit of the buffer replaces it.
 - Several offers queue and are shown one at a time, after any other open
@@ -100,7 +102,8 @@ owner-only, since unsaved text may be secret.
 - **Interrupted saves** (T663, T865) share this prompt: at startup each
   record `vix-fileops` left from an in-place save that never finished is
   queued, and `r` restores the copy to its file, `d` diffs the file on disk
-  against it, `x` discards it and `n`/`Esc` keeps it. A record whose file
+  against it (closing the diff brings the prompt back, as above), `x`
+  discards it and `n`/`Esc` keeps it. A record whose file
   cannot be established opens in a new unsaved buffer instead of being
   written anywhere. See [vix-fileops](../../../vix-fileops/spec/index.md),
   "Interrupted saves".

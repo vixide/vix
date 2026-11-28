@@ -119,6 +119,73 @@ fn save_as_onto_an_existing_file_asks_before_overwriting() {
     fs::remove_dir_all(&dir).ok();
 }
 
+/// T796: the bytes a cancelled Save As overwrite must leave alone, and a
+/// file name outside Latin script for the prompt to show.
+const KEPT: &[u8] = b"keep\r\n\xff\xfe not UTF-8 \x00\n";
+
+#[test]
+fn cancelling_a_save_as_overwrite_of_a_non_latin_path_keeps_the_file_byte_identical() {
+    let dir = unique_dir("save-as-cancel-non-latin");
+    let target = dir.join("日本語-файл-ملف.txt");
+    fs::write(&target, KEPT).unwrap();
+    let mut app = app_at(&dir);
+    app.editor.new_tab_with_content("new text\n");
+
+    for cancel in [key('n'), esc()] {
+        save_as(&mut app, &target);
+        draw_frame(&mut app, 120, 40);
+        let message = app
+            .confirm
+            .as_ref()
+            .expect("an overwrite confirmation is shown")
+            .message
+            .clone();
+        assert!(message.contains(&target.display().to_string()), "{message}");
+        assert!(!message.contains("%{"), "{message}");
+        // Keys that are not an answer leave it asking.
+        app.on_key(key('o'));
+        assert!(app.confirm.is_some(), "only y, n and Esc answer it");
+        app.on_key(cancel);
+        assert!(app.confirm.is_none());
+        assert_eq!(fs::read(&target).unwrap(), KEPT, "cancel keeps every byte");
+        assert!(
+            app.editor.active_tab().unwrap().path.is_none(),
+            "the buffer did not adopt it"
+        );
+    }
+    fs::remove_dir_all(&dir).ok();
+}
+
+/// T796: the unmappable-character refusal names a non-Latin path, the
+/// encoding and the character, and writes nothing.
+#[test]
+fn an_unmappable_save_of_a_non_latin_path_names_it_and_keeps_the_file() {
+    let dir = unique_dir("unmappable-non-latin");
+    let path = dir.join("café-日本.txt");
+    fs::write(&path, b"caf\xe9\n").unwrap();
+    let mut app = app_at(&dir);
+    app.open_initial(&path);
+    app.editor
+        .active_tab_mut()
+        .unwrap()
+        .editor
+        .set_content("caf\u{e9} \u{65e5}\n");
+    app.editor.active_tab_mut().unwrap().dirty = true;
+    app.run_action("file.save");
+    assert_eq!(fs::read(&path).unwrap(), b"caf\xe9\n");
+    let last = &app
+        .messages
+        .items
+        .last()
+        .expect("an error was reported")
+        .text;
+    for part in ["café-日本.txt", "windows-1252", "\u{65e5}", "U+65E5"] {
+        assert!(last.contains(part), "{part} missing from {last}");
+    }
+    assert!(app.editor.active_tab().unwrap().dirty);
+    fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn save_as_to_a_new_path_saves_without_asking() {
     let dir = unique_dir("save-as-new");
