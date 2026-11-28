@@ -33,7 +33,6 @@ mod screenshot;
 mod startup;
 mod view;
 
-
 use clap::Parser;
 use eframe::egui::{Theme, ViewportBuilder};
 use vix::cli::Cli;

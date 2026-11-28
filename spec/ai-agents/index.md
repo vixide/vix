@@ -47,10 +47,49 @@ sees or stores an API key for them.
    the conversation from the chooser continues it: the next turn resumes the
    provider session.
 
+## Isolated worktrees
+
+With both `ai-agents` and `git`, a trusted local Git workspace also offers
+a new worktree conversation for either provider, when the workspace folder
+is held by the committed `HEAD` (`git cat-file -t HEAD:./` is a tree): a
+repository without a commit, or an untracked or ignored folder, has no
+counterpart to start in and offers none. Selecting one reserves a
+conversation. Sending its first prompt saves it, then creates a linked
+checkout on its own `vix-agent-<UUID>` branch from the workspace's
+committed HEAD (`git worktree add -b <branch> -- <path> HEAD`, into a
+folder Vix has just created exclusively). The working folder for a
+workspace opened below the repository root is the corresponding subfolder.
+The picker and panel identify the worktree. Opening the picker creates
+nothing. Existing conversations use their original folder.
+
+A conversation that has never run a turn (no message and no provider
+session) may create its checkout on any later attempt, also after being
+reopened, as long as nothing exists at its path: a first attempt that Git
+refused does not strand it. When the checkout already exists (Git
+succeeded but the provider did not start), it is verified instead. Once a
+turn has run, a missing checkout is never recreated. If Git refuses to
+create it, the empty folder Vix claimed is removed; partial files never are.
+In the chooser, a saved worktree conversation shows its branch after its
+title (only the branch while it has none). Vix refuses worktree conversations while any variable that redirects Git
+to another repository, index, object store or ref namespace is set
+(`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`,
+`GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`,
+`GIT_NAMESPACE`), as when it was started as an editor from a Git hook. A
+checkout path inside the repository is refused. Git runs on the UI thread,
+like Vix's other Git commands, so creating a checkout of a large
+repository pauses the editor until it is done.
+
+The checkout lives alongside the private transcript and survives closing Vix.
+Its path and branch are derived from the conversation ID. Before each turn,
+Vix verifies the registered worktree, repository, branch and working folder.
+An unavailable worktree or a build without Git can still show the saved
+transcript. Sending fails there and never falls back to the original folder.
+The user controls review, merge and removal through ordinary Git operations.
+
 ## Providers
 
 Each prompt is one *turn*, run by a fresh child process started directly
-(argv, no shell) in the workspace root, speaking newline-delimited JSON on
+(argv, no shell) in the conversation’s working folder, speaking newline-delimited JSON on
 standard input and output.
 
 | | Codex | Claude Code |
@@ -133,6 +172,7 @@ at once.
 
 Conversations live in owner-private files next to the session file:
 `<session file>.agents/<UUID v5 of the canonical workspace>/<conversation UUID>.json`
+(isolated conversations use `<UUID>.worktree.json`)
 holding the provider, its resume ID and the visible messages (user prompts
 and replies; approval payloads and tool lines are not stored), and a small
 `<UUID>.meta` holding the provider and the title, so listing the chooser
@@ -187,6 +227,15 @@ one without an explicit key press.
   close-time interrupts, lock contention and a corrupt transcript in the
   chooser, and sanitized drafts. Waits sleep-poll with a 30 s deadline. No
   test runs the real `codex` or `claude`, or reaches the network.
+- The headless BUI test selects a worktree conversation and checks its branch
+  and draft through real window events.
+- `tui/src/app/native_agents/worktree.rs` tests creation and reuse through
+  symlinked spellings of the temp folder (macOS `/var` and `/private/var`),
+  a detached and a removed checkout, a repository without a commit, an
+  untracked folder, a checkout inside the repository, a branch Git refuses
+  and a planted folder; the App tests run both providers in two checkouts of
+  an open subfolder, hide the rows without a commit, and retry a first turn
+  that Git refused and then one whose provider was missing.
 - The home-page recording `docs/demos/ai-agents.gif`
   (`docs/demos/ai-agents.tape`) is made by hand with the real installed
   programs and the maintainer's own logins.

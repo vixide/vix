@@ -17,16 +17,16 @@ lines and comments.
 |---|---|
 | Workspace crates (`tui/` and `crates/`) | 149 |
 | Desktop GUI crates (`gui/`) | 7 |
-| Lines of Rust in `src/` | 334,874 |
+| Lines of Rust in `src/` | 335,534 |
 | Lines of Rust in `tests/` | 61,518 |
 | Lines of Rust elsewhere (`benches/`, `examples/`, `build.rs`) | 4,432 |
-| Test functions (`#[test]`, `#[tokio::test]`) | 6,953 |
+| Test functions (`#[test]`, `#[tokio::test]`) | 6,960 |
 | Property tests (`#[test]` in `proptest!`) | 131 in 59 blocks |
 | Fuzz targets (`fuzz/fuzz_targets/`) | 17 |
 | Criterion benchmark files (`benches/`) | 7 |
 | Ignored tests (`#[ignore]`) | 8 (none in flaky quarantine) |
 | Lint suppressions in `src/` (`allow`/`expect` attributes) | 172 |
-| Translation keys (`crates/vix-i18n/locales/`) | 4,061 in 12 files |
+| Translation keys (`crates/vix-i18n/locales/`) | 4,063 in 12 files |
 
 ## Crates per layer
 
@@ -44,38 +44,38 @@ each crate is listed in [Crate Layers](crate-layers.md).
 
 ## Translations
 
-4,061 keys; a locale missing a key falls back to `en`. Locales with only a
+4,063 keys; a locale missing a key falls back to `en`. Locales with only a
 few keys are deliberate partial catalogs.
 
 | Locale | Keys | Missing | Complete |
 |---|---|---|---|
-| `ar` | 4,061 | 0 | 100.0% |
-| `bn` | 4,061 | 0 | 100.0% |
-| `cy` | 4,061 | 0 | 100.0% |
-| `de` | 4,061 | 0 | 100.0% |
-| `en` | 4,061 | 0 | 100.0% |
-| `es` | 4,061 | 0 | 100.0% |
-| `fr` | 4,061 | 0 | 100.0% |
-| `ga` | 4,061 | 0 | 100.0% |
-| `gd` | 4,061 | 0 | 100.0% |
-| `hi` | 4,061 | 0 | 100.0% |
-| `ja` | 4,061 | 0 | 100.0% |
-| `pl` | 4,061 | 0 | 100.0% |
-| `pt` | 4,061 | 0 | 100.0% |
-| `ru` | 4,061 | 0 | 100.0% |
-| `zh` | 4,061 | 0 | 100.0% |
-| `tlh` | 11 | 4,050 | 0.2% |
-| `sjn` | 9 | 4,052 | 0.2% |
-| `el` | 5 | 4,056 | 0.1% |
-| `fa` | 5 | 4,056 | 0.1% |
-| `id` | 5 | 4,056 | 0.1% |
-| `it` | 5 | 4,056 | 0.1% |
-| `ko` | 5 | 4,056 | 0.1% |
-| `nl` | 5 | 4,056 | 0.1% |
-| `th` | 5 | 4,056 | 0.1% |
-| `tr` | 5 | 4,056 | 0.1% |
-| `uk` | 5 | 4,056 | 0.1% |
-| `vi` | 5 | 4,056 | 0.1% |
+| `ar` | 4,063 | 0 | 100.0% |
+| `bn` | 4,063 | 0 | 100.0% |
+| `cy` | 4,063 | 0 | 100.0% |
+| `de` | 4,063 | 0 | 100.0% |
+| `en` | 4,063 | 0 | 100.0% |
+| `es` | 4,063 | 0 | 100.0% |
+| `fr` | 4,063 | 0 | 100.0% |
+| `ga` | 4,063 | 0 | 100.0% |
+| `gd` | 4,063 | 0 | 100.0% |
+| `hi` | 4,063 | 0 | 100.0% |
+| `ja` | 4,063 | 0 | 100.0% |
+| `pl` | 4,063 | 0 | 100.0% |
+| `pt` | 4,063 | 0 | 100.0% |
+| `ru` | 4,063 | 0 | 100.0% |
+| `zh` | 4,063 | 0 | 100.0% |
+| `tlh` | 11 | 4,052 | 0.2% |
+| `sjn` | 9 | 4,054 | 0.2% |
+| `el` | 5 | 4,058 | 0.1% |
+| `fa` | 5 | 4,058 | 0.1% |
+| `id` | 5 | 4,058 | 0.1% |
+| `it` | 5 | 4,058 | 0.1% |
+| `ko` | 5 | 4,058 | 0.1% |
+| `nl` | 5 | 4,058 | 0.1% |
+| `th` | 5 | 4,058 | 0.1% |
+| `tr` | 5 | 4,058 | 0.1% |
+| `uk` | 5 | 4,058 | 0.1% |
+| `vi` | 5 | 4,058 | 0.1% |
 
 ## Allowlists
 
@@ -101,7 +101,7 @@ file of the crate, property tests included.
 | `vix-acp` | 2,652 | 273 | 48 | 0 | 0 |
 | `vix-action-catalog` | 1,088 | 0 | 4 | 0 | 0 |
 | `vix-affix` | 135 | 0 | 3 | 0 | 0 |
-| `vix-ai-agents` | 1,318 | 0 | 17 | 0 | 0 |
+| `vix-ai-agents` | 1,423 | 0 | 18 | 0 | 0 |
 | `vix-ai-core` | 830 | 158 | 30 | 0 | 0 |
 | `vix-ai-diff` | 342 | 0 | 9 | 0 | 0 |
 | `vix-ai-panel` | 246 | 0 | 4 | 0 | 0 |
@@ -232,7 +232,7 @@ file of the crate, property tests included.
 | `vix-theme-model` | 928 | 0 | 11 | 0 | 0 |
 | `vix-time-zone-model` | 2,743 | 0 | 4 | 0 | 0 |
 | `vix-todo-tree` | 477 | 0 | 8 | 0 | 0 |
-| `vix-tui` | 111,437 | 43,278 | 2,582 | 0 | 7 |
+| `vix-tui` | 111,969 | 43,278 | 2,588 | 0 | 7 |
 | `vix-tutor` | 498 | 0 | 14 | 0 | 0 |
 | `vix-undo-store` | 1,100 | 0 | 17 | 0 | 0 |
 | `vix-undo-tree-panel` | 499 | 0 | 7 | 0 | 0 |
@@ -252,8 +252,8 @@ file of the crate, property tests included.
 
 | Crate | src | tests | Test fns | Property tests | Ignored |
 |---|---|---|---|---|---|
-| `vix-bui` | 3,744 | 0 | 63 | 0 | 0 |
-| `vix-egui` | 1,898 | 0 | 17 | 0 | 0 |
+| `vix-bui` | 3,768 | 0 | 63 | 0 | 0 |
+| `vix-egui` | 1,897 | 0 | 17 | 0 | 0 |
 | `vix-gpui` | 1,703 | 0 | 16 | 0 | 0 |
 | `vix-gtk4` | 2,287 | 0 | 23 | 0 | 0 |
 | `vix-iced` | 2,324 | 0 | 21 | 0 | 0 |

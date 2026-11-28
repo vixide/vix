@@ -27,14 +27,53 @@ pub struct Transcript {
     pub messages: Vec<Message>,
 }
 
+/// The filename is also the durable checkout binding. Older Vix versions
+/// only recognize plain UUID stems, so cannot resume an isolated thread
+/// in the original workspace.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct Id {
+    uuid: Uuid,
+    isolated: bool,
+}
+
+impl Id {
+    fn parse(stem: &str) -> Option<Self> {
+        let uuid = stem.strip_suffix(".worktree");
+        Some(Self {
+            uuid: Uuid::parse_str(uuid.unwrap_or(stem)).ok()?,
+            isolated: uuid.is_some(),
+        })
+    }
+
+    fn stem(self) -> String {
+        if self.isolated {
+            format!("{}.worktree", self.uuid)
+        } else {
+            self.uuid.to_string()
+        }
+    }
+
+    fn branch(self) -> Option<String> {
+        self.isolated.then(|| format!("vix-agent-{}", self.uuid))
+    }
+}
+
 /// A saved conversation's opaque local identifier and first user prompt.
 #[derive(Debug, Clone)]
 pub struct Entry {
-    id: Uuid,
+    id: Id,
     /// Provider that owns the conversation.
     pub provider: Provider,
     /// First user prompt, abbreviated to one line.
     pub title: String,
+}
+
+impl Entry {
+    /// The dedicated branch of an isolated conversation.
+    #[must_use]
+    pub fn worktree_branch(&self) -> Option<String> {
+        self.id.branch()
+    }
 }
 
 /// The private directory of one workspace.
@@ -75,7 +114,7 @@ impl Store {
             let Some(id) = path
                 .file_stem()
                 .and_then(|s| s.to_str())
-                .and_then(|s| Uuid::parse_str(s).ok())
+                .and_then(Id::parse)
             else {
                 continue;
             };
@@ -105,8 +144,24 @@ impl Store {
     /// # Errors
     /// Its private directory or lock could not be opened.
     pub fn create(&self, provider: Provider) -> io::Result<Conversation> {
+        self.create_with(provider, false)
+    }
+
+    /// Reserve a new ID for a conversation in a dedicated Git worktree.
+    /// The host provisions the checkout before launching a provider.
+    ///
+    /// # Errors
+    /// Its private directory or lock could not be opened.
+    pub fn create_worktree(&self, provider: Provider) -> io::Result<Conversation> {
+        self.create_with(provider, true)
+    }
+
+    fn create_with(&self, provider: Provider, isolated: bool) -> io::Result<Conversation> {
         self.lock(
-            Uuid::new_v4(),
+            Id {
+                uuid: Uuid::new_v4(),
+                isolated,
+            },
             Transcript {
                 provider,
                 session: None,
@@ -136,9 +191,10 @@ impl Store {
 
     /// Take the conversation's writer lock. The directories are owner-only
     /// (0700) and the lock file 0600 on Unix.
-    fn lock(&self, id: Uuid, transcript: Transcript) -> io::Result<Conversation> {
+    fn lock(&self, id: Id, transcript: Transcript) -> io::Result<Conversation> {
         private_dir(&self.0)?;
-        let lock_path = self.0.join(format!("{id}.lock"));
+        let stem = id.stem();
+        let lock_path = self.0.join(format!("{stem}.lock"));
         let mut options = File::options();
         options.write(true).create(true).truncate(false);
         #[cfg(unix)]
@@ -152,7 +208,8 @@ impl Store {
             fs::TryLockError::Error(e) => e,
         })?;
         Ok(Conversation {
-            path: self.0.join(format!("{id}.json")),
+            id,
+            path: self.0.join(format!("{stem}.json")),
             lock_path,
             transcript,
             meta: None,
@@ -220,6 +277,7 @@ fn read_meta(path: &Path) -> Option<Meta> {
 /// A transcript and its exclusive writer lock. Dropping it releases the lock,
 /// and removes the lock file of a conversation that was never saved.
 pub struct Conversation {
+    id: Id,
     path: PathBuf,
     lock_path: PathBuf,
     /// The chooser entry last written, to rewrite it only when it changes.
@@ -230,6 +288,15 @@ pub struct Conversation {
 }
 
 impl Conversation {
+    /// The isolated checkout beside the transcript, or `None` for an
+    /// ordinary conversation. Its final component is also its branch name.
+    #[must_use]
+    pub fn worktree(&self) -> Option<PathBuf> {
+        self.id
+            .branch()
+            .map(|branch| self.path.with_file_name(branch))
+    }
+
     /// Atomically persist this conversation with private file permissions,
     /// and its chooser entry when that changed.
     ///
@@ -371,6 +438,44 @@ mod tests {
         let lock = saved.lock_path.clone();
         drop(saved);
         assert!(lock.exists(), "a saved conversation keeps its lock file");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_worktree_conversation_keeps_its_checkout_binding_across_a_restart() {
+        let (root, store) = scratch();
+        let plain = store.create(Provider::Codex).unwrap();
+        assert_eq!(plain.worktree(), None);
+        drop(plain);
+        let mut isolated = store.create_worktree(Provider::Claude).unwrap();
+        let checkout = isolated.worktree().unwrap();
+        let branch = checkout.file_name().unwrap().to_str().unwrap().to_owned();
+        let uuid = branch.strip_prefix("vix-agent-").unwrap();
+        assert!(Uuid::parse_str(uuid).is_ok());
+        assert_eq!(checkout.parent(), Some(store.dir()));
+        assert_eq!(
+            isolated.path.file_name().unwrap().to_str().unwrap(),
+            format!("{uuid}.worktree.json")
+        );
+        isolated.save().unwrap();
+        drop(isolated);
+        // A folder named like the checkout is not a conversation.
+        fs::create_dir(&checkout).unwrap();
+        let entries = store.entries().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].worktree_branch().as_deref(),
+            Some(branch.as_str())
+        );
+        let resumed = store.resume(&entries[0]).unwrap();
+        assert_eq!(resumed.worktree(), Some(checkout));
+        assert_eq!(
+            store.resume(&entries[0]).err().map(|e| e.kind()),
+            Some(io::ErrorKind::WouldBlock)
+        );
+        drop(resumed);
+        assert_eq!(Id::parse("x.worktree"), None);
+        assert_eq!(Id::parse(&format!("{uuid}.other")), None);
         fs::remove_dir_all(root).unwrap();
     }
 

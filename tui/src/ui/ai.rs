@@ -161,6 +161,15 @@ pub(super) fn draw_native_conversation(app: &mut App, frame: &mut Frame, area: R
     } else {
         name.to_owned()
     };
+    let title = match native
+        .conversation
+        .worktree()
+        .as_deref()
+        .and_then(|p| p.file_name())
+    {
+        Some(branch) => format!("{title} · {}", branch.to_string_lossy()),
+        None => title,
+    };
     let hint = if native.awaiting_approval() {
         t!("ui.agent_decision")
     } else if native.stop_armed {

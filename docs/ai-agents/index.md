@@ -44,6 +44,25 @@ This is an opt-in build feature, not part of the released binaries.
    same menu to continue where you left off; the agent resumes its own
    session.
 
+## Give a conversation its own Git worktree
+
+In a Git repository with at least one commit, pick **New worktree
+conversation** for Codex or Claude Code (the rows are missing in a folder
+that is not committed yet). The first prompt starts a new branch at your current commit. Uncommitted
+edits, untracked files and unsaved Vix buffers stay in your original checkout.
+If you opened a subfolder, the provider starts in its counterpart in the new
+worktree. The ordinary **New conversation** rows use the current folder.
+
+The conversation panel shows its `vix-agent-<UUID>` branch. Close the panel
+and select its saved conversation in the original workspace to continue with
+the same files. Use **Git → Worktree → List…** or `git worktree list` to find
+the checkout and review or commit edits there. Merge the branch when ready.
+The checkout persists until you remove it. Removing it or switching its
+branch prevents further turns in that conversation.
+
+Worktrees require the default `git` feature alongside `ai-agents`. The
+checkout lives beside the private conversation file, outside the repository.
+
 ## What to know
 
 - **The agent can change your files.** It runs in the folder with its own
