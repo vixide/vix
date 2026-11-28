@@ -21,8 +21,8 @@
 //! live outside `src/` and are not scanned.
 //!
 //! 3. **Every `#[ignore]` says why** (T831, `spec/test` "Flaky tests"), in
-//!    every Rust file of `tui/`, `crates/*/` and `gui/*/` (`src/` and
-//!    `tests/`, test code included): a bare `#[ignore]` fails, and a
+//!    every Rust file of `tui/`, `crates/*/` and `gui/*/` (`src/`, `tests/`,
+//!    `examples/` and `benches/`, test code included; T863): a bare `#[ignore]` fails, and a
 //!    quarantined flaky test must read `#[ignore = "flaky: T<n>, <reason>"]`
 //!    with `T<n>` an open task in `tasks.md`, so a quarantine cannot outlive
 //!    the work that is meant to end it.
@@ -494,9 +494,9 @@ fn untranslated_sinks(src: &Source) -> Vec<(usize, String)> {
 }
 
 /// The directories rule 3 reads under each package directory.
-const IGNORE_DIRS: &[&str] = &["src", "tests"];
+const IGNORE_DIRS: &[&str] = &["src", "tests", "examples", "benches"];
 
-/// Every `.rs` file under `src/` and `tests/` of `tui/`, `crates/*/` and
+/// Every `.rs` file under `src/`, `tests/`, `examples/` and `benches/` of `tui/`, `crates/*/` and
 /// `gui/*/`, test code included: `(repository-relative path, text)`.
 fn all_rust_sources(root: &Path) -> Vec<(String, String)> {
     let mut packages = vec![root.join("tui")];
@@ -721,6 +721,14 @@ fn every_ignored_test_says_why() {
     let open = open_tasks(&tasks);
     let sources = all_rust_sources(root);
     assert!(sources.len() > 400, "only {} files scanned", sources.len());
+    // An example or a benchmark can hold a test too (T863): the scan must
+    // reach both kinds of directory, which the workspace has today.
+    for dir in ["/examples/", "/benches/"] {
+        assert!(
+            sources.iter().any(|(rel, _)| rel.contains(dir)),
+            "no file under {dir} scanned"
+        );
+    }
     let mut offenders = Vec::new();
     let mut seen = 0usize;
     for (rel, text) in &sources {

@@ -85,9 +85,13 @@ Because the bundle was initialized with `fallback = "en"`, a key that has **no
 value for the active language** falls back to its English value rather than
 showing a blank or the raw key. This is deliberate: every language is selectable
 immediately, and translation coverage can be filled in incrementally without ever
-leaving gaps in the UI. As of writing, English is complete and the other
-languages range from partially to fully translated; untranslated keys simply read
-in English until someone adds them.
+leaving gaps in the UI. English is complete, and so are the 14 core locales
+(`es fr de cy ga gd pl pt ru ar hi bn zh ja`): `tui/tests/i18n_keys.rs`
+(`core_locales_translate_every_key`, T863) fails when any key lacks a non-empty
+string in one of them, so a new key lands with all 14 translations. The other
+locales are partial catalogs, held only to a non-regressing floor
+(`LOCALE_FLOORS`); their untranslated keys simply read in English until someone
+adds them.
 
 ## Available languages
 

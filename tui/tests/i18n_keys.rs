@@ -316,7 +316,7 @@ fn every_call_site_fills_the_placeholders_its_string_declares() {
 ///
 /// Only the 14 core locales (`es`/`fr`/`de`/`cy`/`ga`/`gd`/`pl`/`pt`/`ru`/
 /// `ar`/`hi`/`bn`/`zh`/`ja`, 100% covered as of T148(b)'s backfill) get a
-/// real floor here. `tlh`/`sjn` (Klingon/Sindarin) and
+/// real floor here; `core_locales_translate_every_key` holds them at 100%. `tlh`/`sjn` (Klingon/Sindarin) and
 /// `el`/`fa`/`id`/`it`/`ko`/`nl`/`th`/`tr`/`uk`/`vi` sit at single-digit
 /// entry counts — an easter egg and an experimental seed batch
 /// respectively, neither a real coverage commitment yet — so they're
@@ -431,6 +431,43 @@ fn i18n_coverage_report_and_floor() {
         "locale coverage regressed below its floor in tests/i18n_keys.rs \
          (lower LOCALE_FLOORS only if the drop is deliberate, e.g. a removed \
          key, never to paper over a real regression): {regressed:#?}"
+    );
+}
+
+/// The 14 core locales, which translate every key (T863). The
+/// [`LOCALE_FLOORS`] ratchet alone cannot hold them there: a floor is only
+/// bumped by hand after a backfill, so it sat at 2,418 while the catalog grew
+/// past 4,000 keys, and four new keys shipped with English only in every core
+/// locale without the floor noticing.
+const CORE_LOCALES: &[&str] = &[
+    "es", "fr", "de", "cy", "ga", "gd", "pl", "pt", "ru", "ar", "hi", "bn", "zh", "ja",
+];
+
+#[test]
+fn core_locales_translate_every_key() {
+    let root = workspace_root();
+    let entries = catalog_entries(&root);
+    assert!(entries.len() > 1000, "catalog looks truncated");
+    let mut missing = Vec::new();
+    for (key, entry) in &entries {
+        let absent: Vec<&str> = CORE_LOCALES
+            .iter()
+            .copied()
+            .filter(|locale| {
+                entry
+                    .get(*locale)
+                    .and_then(serde_norway::Value::as_str)
+                    .is_none_or(|s| s.trim().is_empty())
+            })
+            .collect();
+        if !absent.is_empty() {
+            missing.push(format!("{key}: {}", absent.join(" ")));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "these keys have no text in a core locale, so they would read in English \
+         there; add a translation for each locale listed: {missing:#?}"
     );
 }
 
