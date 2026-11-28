@@ -17,10 +17,10 @@ lines and comments.
 |---|---|
 | Workspace crates (`tui/` and `crates/`) | 149 |
 | Desktop GUI crates (`gui/`) | 7 |
-| Lines of Rust in `src/` | 335,540 |
-| Lines of Rust in `tests/` | 61,815 |
+| Lines of Rust in `src/` | 335,672 |
+| Lines of Rust in `tests/` | 62,020 |
 | Lines of Rust elsewhere (`benches/`, `examples/`, `build.rs`) | 4,432 |
-| Test functions (`#[test]`, `#[tokio::test]`) | 6,967 |
+| Test functions (`#[test]`, `#[tokio::test]`) | 6,968 |
 | Property tests (`#[test]` in `proptest!`) | 131 in 59 blocks |
 | Fuzz targets (`fuzz/fuzz_targets/`) | 17 |
 | Criterion benchmark files (`benches/`) | 7 |
@@ -232,7 +232,7 @@ file of the crate, property tests included.
 | `vix-theme-model` | 928 | 0 | 11 | 0 | 0 |
 | `vix-time-zone-model` | 2,743 | 0 | 4 | 0 | 0 |
 | `vix-todo-tree` | 477 | 0 | 8 | 0 | 0 |
-| `vix-tui` | 111,975 | 43,575 | 2,595 | 0 | 7 |
+| `vix-tui` | 112,107 | 43,780 | 2,596 | 0 | 7 |
 | `vix-tutor` | 498 | 0 | 14 | 0 | 0 |
 | `vix-undo-store` | 1,100 | 0 | 17 | 0 | 0 |
 | `vix-undo-tree-panel` | 499 | 0 | 7 | 0 | 0 |
