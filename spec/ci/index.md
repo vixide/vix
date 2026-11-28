@@ -578,7 +578,9 @@ crate is removed (`RUSTSEC-2024-0436`, `paste`, left the tree in 2026-11).
 ## Generated reference (T305)
 
 `docs/reference/actions.md`, `docs/reference/settings.md`,
-`docs/reference/keybindings-shared.md`, and one
+`docs/reference/keybindings-shared.md`, `docs/reference/crate-layers.md`,
+`docs/reference/quality-metrics.md` (T833, see
+[`spec/test`](../test/index.md#quality-metrics-t833)), and one
 `docs/reference/keybindings-<keymap>.md` per keymap are generated, not
 hand-maintained: `cargo run --example list_commands -- --write`
 (`tui/examples/list_commands.rs`, grown from a plain command lister into this

@@ -653,5 +653,9 @@ name = "crate_layering"
 path = "tests/crate_layering.rs"
 
 [[test]]
+name = "quality_metrics"
+path = "tests/quality_metrics.rs"
+
+[[test]]
 name = "secret_scan"
 path = "tests/secret_scan.rs"

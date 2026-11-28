@@ -11,7 +11,10 @@
 //! `docs/reference/keybindings-<keymap>.md` per keymap plus a
 //! `keybindings-shared.md` for the bindings every keymap shares, and
 //! `docs/reference/crate-layers.md` (T833: every workspace crate's layer,
-//! direct workspace dependencies and dependent count, from `cargo metadata`).
+//! direct workspace dependencies and dependent count, from `cargo metadata`),
+//! and `docs/reference/quality-metrics.md` (T833: lines, tests, property
+//! tests, fuzz targets, ignored tests, translation completeness and allowlist
+//! sizes, read from the source tree as text).
 //!
 //! Run with: `cargo run --example list_commands`            (print, as before)
 //!       or: `cargo run --example list_commands -- --write` (regenerate docs/reference/)
@@ -31,6 +34,8 @@ vix_i18n::surface!();
 
 #[path = "../tests/support/crate_graph.rs"]
 mod crate_graph;
+#[path = "../tests/support/quality_metrics.rs"]
+mod quality_metrics;
 
 use std::fmt::Write as _;
 use std::fs;
@@ -85,9 +90,14 @@ fn write_reference_docs(root: &Path) {
         &out_dir.join("keybindings-shared.md"),
         &render_shared_keybindings(),
     );
+    let graph = crate_graph::workspace().graph;
     write(
         &out_dir.join("crate-layers.md"),
-        &crate_graph::render_layers_report(&crate_graph::workspace().graph),
+        &crate_graph::render_layers_report(&graph),
+    );
+    write(
+        &out_dir.join("quality-metrics.md"),
+        &quality_metrics::render(root, &crate_graph::layers(&graph)),
     );
     for keymap in KEYMAPS {
         write(
@@ -96,7 +106,7 @@ fn write_reference_docs(root: &Path) {
         );
     }
     println!(
-        "Wrote docs/reference/{{actions,settings,keybindings-shared,crate-layers}}.md and {} keybindings-<keymap>.md files",
+        "Wrote docs/reference/{{actions,settings,keybindings-shared,crate-layers,quality-metrics}}.md and {} keybindings-<keymap>.md files",
         KEYMAPS.len()
     );
 }
