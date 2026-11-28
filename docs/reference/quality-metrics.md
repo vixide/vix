@@ -18,9 +18,9 @@ lines and comments.
 | Workspace crates (`tui/` and `crates/`) | 149 |
 | Desktop GUI crates (`gui/`) | 7 |
 | Lines of Rust in `src/` | 333,394 |
-| Lines of Rust in `tests/` | 60,829 |
+| Lines of Rust in `tests/` | 60,874 |
 | Lines of Rust elsewhere (`benches/`, `examples/`, `build.rs`) | 4,432 |
-| Test functions (`#[test]`, `#[tokio::test]`) | 6,923 |
+| Test functions (`#[test]`, `#[tokio::test]`) | 6,924 |
 | Property tests (`#[test]` in `proptest!`) | 131 in 59 blocks |
 | Fuzz targets (`fuzz/fuzz_targets/`) | 17 |
 | Criterion benchmark files (`benches/`) | 7 |
@@ -49,21 +49,21 @@ few keys are deliberate partial catalogs.
 
 | Locale | Keys | Missing | Complete |
 |---|---|---|---|
+| `ar` | 4,049 | 0 | 100.0% |
+| `bn` | 4,049 | 0 | 100.0% |
+| `cy` | 4,049 | 0 | 100.0% |
+| `de` | 4,049 | 0 | 100.0% |
 | `en` | 4,049 | 0 | 100.0% |
-| `ar` | 4,045 | 4 | 99.9% |
-| `bn` | 4,045 | 4 | 99.9% |
-| `cy` | 4,045 | 4 | 99.9% |
-| `de` | 4,045 | 4 | 99.9% |
-| `es` | 4,045 | 4 | 99.9% |
-| `fr` | 4,045 | 4 | 99.9% |
-| `ga` | 4,045 | 4 | 99.9% |
-| `gd` | 4,045 | 4 | 99.9% |
-| `hi` | 4,045 | 4 | 99.9% |
-| `ja` | 4,045 | 4 | 99.9% |
-| `pl` | 4,045 | 4 | 99.9% |
-| `pt` | 4,045 | 4 | 99.9% |
-| `ru` | 4,045 | 4 | 99.9% |
-| `zh` | 4,045 | 4 | 99.9% |
+| `es` | 4,049 | 0 | 100.0% |
+| `fr` | 4,049 | 0 | 100.0% |
+| `ga` | 4,049 | 0 | 100.0% |
+| `gd` | 4,049 | 0 | 100.0% |
+| `hi` | 4,049 | 0 | 100.0% |
+| `ja` | 4,049 | 0 | 100.0% |
+| `pl` | 4,049 | 0 | 100.0% |
+| `pt` | 4,049 | 0 | 100.0% |
+| `ru` | 4,049 | 0 | 100.0% |
+| `zh` | 4,049 | 0 | 100.0% |
 | `tlh` | 11 | 4,038 | 0.2% |
 | `sjn` | 9 | 4,040 | 0.2% |
 | `el` | 5 | 4,044 | 0.1% |
@@ -232,7 +232,7 @@ file of the crate, property tests included.
 | `vix-theme-model` | 928 | 0 | 11 | 0 | 0 |
 | `vix-time-zone-model` | 2,743 | 0 | 4 | 0 | 0 |
 | `vix-todo-tree` | 477 | 0 | 8 | 0 | 0 |
-| `vix-tui` | 110,923 | 42,589 | 2,563 | 0 | 7 |
+| `vix-tui` | 110,923 | 42,634 | 2,564 | 0 | 7 |
 | `vix-tutor` | 498 | 0 | 14 | 0 | 0 |
 | `vix-undo-store` | 1,100 | 0 | 17 | 0 | 0 |
 | `vix-undo-tree-panel` | 499 | 0 | 7 | 0 | 0 |

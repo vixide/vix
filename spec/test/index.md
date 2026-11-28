@@ -323,8 +323,9 @@ next line is skipped rather than reported with half of them.
   job, which is waiting for it anyway, so the rule would forbid nothing that
   matters. Revisit it if a shared multi-task runtime appears.
 
-- **Every `#[ignore]` says why** (T831). Every `.rs` file under `src/` or
-  `tests/` of `tui/`, `crates/*/` and `gui/*/`, test code included, is read
+- **Every `#[ignore]` says why** (T831, T863). Every `.rs` file under `src/`,
+  `tests/`, `examples/` or `benches/` of `tui/`, `crates/*/` and `gui/*/`,
+  test code included, is read
   for `#[ignore]` attributes: a bare one or an empty reason fails, and a
   reason starting with `flaky` must read `flaky: T<n>, <reason>` with
   `T<n>` an open (`- [ ]`) task in `tasks.md`, so ticking the task while the
