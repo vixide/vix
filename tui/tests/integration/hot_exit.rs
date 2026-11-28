@@ -278,6 +278,42 @@ fn a_legacy_interrupted_save_is_restored_on_restart() {
     fs::remove_dir_all(&dir).ok();
 }
 
+/// T868: closing the diff that `d` opened from an interrupted-save prompt
+/// brings the prompt straight back, with no tick and no new startup notice;
+/// `q` closes it the same way as Esc.
+#[test]
+fn closing_an_interrupted_save_diff_brings_the_prompt_back() {
+    let (dir, file) = project("interrupted-diff-back", "damaged");
+    let file = fs::canonicalize(&file).unwrap();
+    let recovery = dir.join("recovery");
+    fs::create_dir_all(&recovery).unwrap();
+    fs::write(
+        recovery.join("8-0-notes.txt.vixrecover"),
+        format!("VIXRECOVER\n{}\nold\n", file.display()),
+    )
+    .unwrap();
+    let mut app = app_in(&dir);
+    app.notice_interrupted_saves_in(&recovery);
+    let asked = interrupted_prompt(&app);
+    for close in [esc(), key('q')] {
+        app.on_key(key('d'));
+        assert!(app.diff_view.is_some(), "d shows the diff");
+        assert!(!prompt_open(&app), "the diff is on top");
+        app.on_key(close);
+        assert!(app.diff_view.is_none(), "the diff closed");
+        assert_eq!(interrupted_prompt(&app), asked, "the same offer is back");
+    }
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        "damaged",
+        "nothing restored yet"
+    );
+    app.on_key(key('r'));
+    assert_eq!(fs::read_to_string(&file).unwrap(), "old\n");
+    assert!(!app.recovery_pending());
+    fs::remove_dir_all(&dir).ok();
+}
+
 /// A newline in a Unix file name: the record a real failed save leaves
 /// brings back the same file and the same bytes.
 #[test]
