@@ -191,9 +191,16 @@ pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
+    // T864 (PQ-04): a plan made from an incomplete file list says so, above
+    // the hint, since `y`/Enter then refuse and only `!` applies.
+    let partial = app.replace_review.as_ref().is_some_and(|r| r.partial);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(u16::from(partial)),
+            Constraint::Length(1),
+        ])
         .split(inner);
     let view_h = usize::from(chunk(&chunks, 0).height);
     let start = rc.scroll.min(rc.lines.len().minus(1));
@@ -205,11 +212,18 @@ pub(super) fn draw_replace_confirm(app: &App, frame: &mut Frame, area: Rect) {
         .map(|l| Line::from(Span::raw(l.clone())))
         .collect();
     frame.render_widget(Paragraph::new(lines), chunk(&chunks, 0));
+    if partial {
+        let warning = Line::from(Span::styled(
+            t!("ui.replace_partial_scope").to_string(),
+            theme::title(true),
+        ));
+        frame.render_widget(Paragraph::new(warning), chunk(&chunks, 1));
+    }
     let hint = Line::from(Span::styled(
         t!("ui.replace_confirm_hint").to_string(),
         theme::dim(),
     ));
-    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 1));
+    frame.render_widget(Paragraph::new(hint), chunk(&chunks, 2));
 }
 
 /// The T211 apply-diff-back-to-sources confirm step, mirroring

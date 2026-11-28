@@ -238,6 +238,49 @@ is written until the user confirms with `y`/`Enter`; `n`/`Esc` cancels (`↑`/`�
 scroll the file list). On confirm the planned text is written and open buffers are
 synced. Files over 2 MB and binary files are skipped, and results are capped.
 
+### Scope and display cap (T864, PQ-04)
+
+The panel's hit list is a **presentation** limit: it stops at 5,000 rows.
+Replace All's **scope** is separate and complete: every file in the workspace
+file index that the panel's path filter allows and whose current text (an
+open buffer's, else the file's) has a line the pattern matches, found by a
+scan of its own (`App::text_replace_scope`; a remote workspace reads file by
+file, since its search tool stops after 50,000 lines). The same size (2 MB),
+encoding, binary, ignore and path-filter rules as the search apply. The
+preview lists every file with its own count and the title gives the total, so
+two files of 5,001 matching lines each preview as 10,002 replacements in 2
+files even though the panel shows 5,000 hits.
+
+When the file list itself is incomplete (the index is still being built in
+the background, or was cut short at its 150,000-file cap), the preview says
+so on a warning line and `y`/Enter refuse with that message: `!` applies to
+the listed files only, a deliberate choice of partial scope (`!` as in Vim's
+"force" commands). `!` also applies an ordinary preview.
+
+### Bound to the previewed version (T864, PQ-01)
+
+Each planned target records a fingerprint of the exact text its rewrite was
+computed from. On confirm, the text the rewrite would replace is read again —
+the dirty buffer for a file open with unsaved edits, otherwise the file
+through the authority — and the target is written only while it still holds
+that text (`App::apply_reviewed`, shared with Structural Replace in Workspace
+and the editable search results):
+
+- **Changed since the preview** (edited on disk, or a dirty buffer edited
+  again): skipped with a warning naming it. After the other targets are
+  applied, the changed ones are planned again from their current text and a
+  refreshed preview opens for just those, so the user reviews what will now
+  be written (`y` applies, `n`/Esc leaves them alone).
+- **Deleted since the preview**: reported and never recreated.
+- **Read-only tab**: refused, as before (T653).
+- **Dirty buffer**: changed in memory only, left dirty (T653).
+
+The status line and Messages report what was actually replaced: the sum of
+the per-file counts of the targets written, and how many files, not the
+preview's totals. A content fingerprint rather than a modification time is
+used because a rewrite within the clock's resolution, or one that keeps the
+size, must still count as a change.
+
 **Path filters** narrow the file set by regex against each file's workspace-relative
 path: **Include path** (only matching paths are searched) and **Exclude path**
 (matching paths are skipped). `Tab` cycles Find → (Replace) → Include path →

@@ -17,16 +17,16 @@ lines and comments.
 |---|---|
 | Workspace crates (`tui/` and `crates/`) | 149 |
 | Desktop GUI crates (`gui/`) | 7 |
-| Lines of Rust in `src/` | 333,394 |
-| Lines of Rust in `tests/` | 60,874 |
+| Lines of Rust in `src/` | 333,762 |
+| Lines of Rust in `tests/` | 61,174 |
 | Lines of Rust elsewhere (`benches/`, `examples/`, `build.rs`) | 4,432 |
-| Test functions (`#[test]`, `#[tokio::test]`) | 6,924 |
+| Test functions (`#[test]`, `#[tokio::test]`) | 6,932 |
 | Property tests (`#[test]` in `proptest!`) | 131 in 59 blocks |
 | Fuzz targets (`fuzz/fuzz_targets/`) | 17 |
 | Criterion benchmark files (`benches/`) | 7 |
 | Ignored tests (`#[ignore]`) | 8 (none in flaky quarantine) |
 | Lint suppressions in `src/` (`allow`/`expect` attributes) | 171 |
-| Translation keys (`crates/vix-i18n/locales/`) | 4,049 in 12 files |
+| Translation keys (`crates/vix-i18n/locales/`) | 4,053 in 12 files |
 
 ## Crates per layer
 
@@ -44,38 +44,38 @@ each crate is listed in [Crate Layers](crate-layers.md).
 
 ## Translations
 
-4,049 keys; a locale missing a key falls back to `en`. Locales with only a
+4,053 keys; a locale missing a key falls back to `en`. Locales with only a
 few keys are deliberate partial catalogs.
 
 | Locale | Keys | Missing | Complete |
 |---|---|---|---|
-| `ar` | 4,049 | 0 | 100.0% |
-| `bn` | 4,049 | 0 | 100.0% |
-| `cy` | 4,049 | 0 | 100.0% |
-| `de` | 4,049 | 0 | 100.0% |
-| `en` | 4,049 | 0 | 100.0% |
-| `es` | 4,049 | 0 | 100.0% |
-| `fr` | 4,049 | 0 | 100.0% |
-| `ga` | 4,049 | 0 | 100.0% |
-| `gd` | 4,049 | 0 | 100.0% |
-| `hi` | 4,049 | 0 | 100.0% |
-| `ja` | 4,049 | 0 | 100.0% |
-| `pl` | 4,049 | 0 | 100.0% |
-| `pt` | 4,049 | 0 | 100.0% |
-| `ru` | 4,049 | 0 | 100.0% |
-| `zh` | 4,049 | 0 | 100.0% |
-| `tlh` | 11 | 4,038 | 0.2% |
-| `sjn` | 9 | 4,040 | 0.2% |
-| `el` | 5 | 4,044 | 0.1% |
-| `fa` | 5 | 4,044 | 0.1% |
-| `id` | 5 | 4,044 | 0.1% |
-| `it` | 5 | 4,044 | 0.1% |
-| `ko` | 5 | 4,044 | 0.1% |
-| `nl` | 5 | 4,044 | 0.1% |
-| `th` | 5 | 4,044 | 0.1% |
-| `tr` | 5 | 4,044 | 0.1% |
-| `uk` | 5 | 4,044 | 0.1% |
-| `vi` | 5 | 4,044 | 0.1% |
+| `ar` | 4,053 | 0 | 100.0% |
+| `bn` | 4,053 | 0 | 100.0% |
+| `cy` | 4,053 | 0 | 100.0% |
+| `de` | 4,053 | 0 | 100.0% |
+| `en` | 4,053 | 0 | 100.0% |
+| `es` | 4,053 | 0 | 100.0% |
+| `fr` | 4,053 | 0 | 100.0% |
+| `ga` | 4,053 | 0 | 100.0% |
+| `gd` | 4,053 | 0 | 100.0% |
+| `hi` | 4,053 | 0 | 100.0% |
+| `ja` | 4,053 | 0 | 100.0% |
+| `pl` | 4,053 | 0 | 100.0% |
+| `pt` | 4,053 | 0 | 100.0% |
+| `ru` | 4,053 | 0 | 100.0% |
+| `zh` | 4,053 | 0 | 100.0% |
+| `tlh` | 11 | 4,042 | 0.2% |
+| `sjn` | 9 | 4,044 | 0.2% |
+| `el` | 5 | 4,048 | 0.1% |
+| `fa` | 5 | 4,048 | 0.1% |
+| `id` | 5 | 4,048 | 0.1% |
+| `it` | 5 | 4,048 | 0.1% |
+| `ko` | 5 | 4,048 | 0.1% |
+| `nl` | 5 | 4,048 | 0.1% |
+| `th` | 5 | 4,048 | 0.1% |
+| `tr` | 5 | 4,048 | 0.1% |
+| `uk` | 5 | 4,048 | 0.1% |
+| `vi` | 5 | 4,048 | 0.1% |
 
 ## Allowlists
 
@@ -232,7 +232,7 @@ file of the crate, property tests included.
 | `vix-theme-model` | 928 | 0 | 11 | 0 | 0 |
 | `vix-time-zone-model` | 2,743 | 0 | 4 | 0 | 0 |
 | `vix-todo-tree` | 477 | 0 | 8 | 0 | 0 |
-| `vix-tui` | 110,923 | 42,634 | 2,564 | 0 | 7 |
+| `vix-tui` | 111,291 | 42,934 | 2,572 | 0 | 7 |
 | `vix-tutor` | 498 | 0 | 14 | 0 | 0 |
 | `vix-undo-store` | 1,100 | 0 | 17 | 0 | 0 |
 | `vix-undo-tree-panel` | 499 | 0 | 7 | 0 | 0 |

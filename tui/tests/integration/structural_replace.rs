@@ -254,3 +254,38 @@ fn structural_replace_workspace_with_no_matches_reports_status() {
 
     fs::remove_dir_all(&dir).ok();
 }
+
+/// T864 (PQ-01): the workspace flow is bound to the previewed version: a
+/// file edited after the preview is not overwritten, and is offered again.
+#[test]
+fn structural_replace_workspace_skips_a_file_edited_after_the_preview() {
+    let dir = unique_dir("structural-replace-workspace-drift");
+    fs::write(dir.join("a.txt"), "add(1, 2);\n").unwrap();
+    fs::write(dir.join("b.txt"), "add(3, 4);\n").unwrap();
+    let mut app = app_at(&dir);
+    app.run_action("edit.structural_replace_workspace");
+    type_str(&mut app, "add($X, $Y)");
+    app.on_key(keycode(KeyCode::Enter));
+    type_str(&mut app, "sum($X, $Y)");
+    app.on_key(keycode(KeyCode::Enter));
+    assert!(app.replace_confirm.is_some());
+
+    fs::write(dir.join("a.txt"), "add(1, 2);\nadd(7, 8);\n").unwrap();
+    app.on_key(key('y'));
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "add(1, 2);\nadd(7, 8);\n"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("b.txt")).unwrap(),
+        "sum(3, 4);\n"
+    );
+    let rc = app.replace_confirm.as_ref().expect("a.txt offered again");
+    assert_eq!(rc.lines, vec!["a.txt (2)".to_string()]);
+    app.on_key(key('y'));
+    assert_eq!(
+        fs::read_to_string(dir.join("a.txt")).unwrap(),
+        "sum(1, 2);\nsum(7, 8);\n"
+    );
+    fs::remove_dir_all(&dir).ok();
+}

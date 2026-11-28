@@ -4730,8 +4730,14 @@ fn workspace_replace_reports_a_bad_regex_and_skips_unwritable_files() {
     assert!(a.replace_confirm.is_none());
     // A planned file whose directory vanished is reported, not written.
     let ghost = dir.join("gone/dir/x.txt");
-    let changed = a.apply_file_plan(&[(ghost.clone(), "new".to_string())]);
-    assert_eq!(changed.len(), 0);
+    let mut review = crate::app::replace_guard::ReplaceReview::new(
+        crate::app::replace_guard::ReviewOrigin::Text,
+        false,
+    );
+    review.push(1, "old");
+    let applied = a.apply_reviewed(&[(ghost.clone(), "new".to_string())], &review);
+    assert_eq!(applied.files.len(), 0);
+    assert!(!ghost.exists(), "a vanished target is not recreated");
     assert!(
         a.messages
             .items
